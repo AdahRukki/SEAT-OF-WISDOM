@@ -1,15 +1,284 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { 
+  loginSchema, 
+  insertUserSchema, 
+  insertClassSchema, 
+  insertSubjectSchema,
+  addScoreSchema,
+  insertStudentSchema
+} from "@shared/schema";
+import jwt from "jsonwebtoken";
+import { Request, Response, NextFunction } from "express";
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+
+// Middleware for authentication
+const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const user = await storage.getUserById(decoded.userId);
+    
+    if (!user) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    (req as any).user = user;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: "Invalid token" });
+  }
+};
+
+// Middleware for admin-only routes
+const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+  const user = (req as any).user;
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  // Authentication routes
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = loginSchema.parse(req.body);
+      const user = await storage.authenticateUser(email, password);
+      
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
+      
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
+  // Get current user
+  app.get('/api/auth/me', authenticate, async (req, res) => {
+    const user = (req as any).user;
+    res.json({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role
+    });
+  });
+
+  // Admin routes - User management
+  app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const userData = insertUserSchema.parse(req.body);
+      const user = await storage.createUser(userData);
+      res.json(user);
+    } catch (error) {
+      console.error("Create user error:", error);
+      res.status(400).json({ error: "Failed to create user" });
+    }
+  });
+
+  // Admin routes - Class management
+  app.get('/api/admin/classes', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const classes = await storage.getAllClasses();
+      res.json(classes);
+    } catch (error) {
+      console.error("Get classes error:", error);
+      res.status(500).json({ error: "Failed to fetch classes" });
+    }
+  });
+
+  app.post('/api/admin/classes', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const classData = insertClassSchema.parse(req.body);
+      const newClass = await storage.createClass(classData);
+      res.json(newClass);
+    } catch (error) {
+      console.error("Create class error:", error);
+      res.status(400).json({ error: "Failed to create class" });
+    }
+  });
+
+  // Admin routes - Subject management
+  app.get('/api/admin/subjects', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const subjects = await storage.getAllSubjects();
+      res.json(subjects);
+    } catch (error) {
+      console.error("Get subjects error:", error);
+      res.status(500).json({ error: "Failed to fetch subjects" });
+    }
+  });
+
+  app.post('/api/admin/subjects', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const subjectData = insertSubjectSchema.parse(req.body);
+      const subject = await storage.createSubject(subjectData);
+      res.json(subject);
+    } catch (error) {
+      console.error("Create subject error:", error);
+      res.status(400).json({ error: "Failed to create subject" });
+    }
+  });
+
+  // Admin routes - Assign subject to class
+  app.post('/api/admin/classes/:classId/subjects/:subjectId', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId, subjectId } = req.params;
+      await storage.assignSubjectToClass(classId, subjectId);
+      res.json({ message: "Subject assigned to class successfully" });
+    } catch (error) {
+      console.error("Assign subject error:", error);
+      res.status(400).json({ error: "Failed to assign subject to class" });
+    }
+  });
+
+  // Admin routes - Student management
+  app.post('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const studentData = insertStudentSchema.parse(req.body);
+      const student = await storage.createStudent(studentData);
+      res.json(student);
+    } catch (error) {
+      console.error("Create student error:", error);
+      res.status(400).json({ error: "Failed to create student" });
+    }
+  });
+
+  app.get('/api/admin/classes/:classId/students', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId } = req.params;
+      const students = await storage.getStudentsByClass(classId);
+      res.json(students);
+    } catch (error) {
+      console.error("Get students error:", error);
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  // Student routes
+  app.get('/api/student/profile', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const student = await storage.getStudentByUserId(user.id);
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+
+      res.json(student);
+    } catch (error) {
+      console.error("Get student profile error:", error);
+      res.status(500).json({ error: "Failed to fetch student profile" });
+    }
+  });
+
+  app.get('/api/student/assessments', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const { term = "First Term", session = "2024/2025" } = req.query;
+      const student = await storage.getStudentByUserId(user.id);
+      
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+
+      const assessments = await storage.getStudentAssessments(
+        student.id, 
+        term as string, 
+        session as string
+      );
+      
+      res.json(assessments);
+    } catch (error) {
+      console.error("Get student assessments error:", error);
+      res.status(500).json({ error: "Failed to fetch assessments" });
+    }
+  });
+
+  // Admin/Teacher routes - Assessment management
+  app.post('/api/assessments', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const assessmentData = addScoreSchema.parse(req.body);
+      
+      // Get student's class info
+      const student = await storage.getStudentByUserId(assessmentData.studentId);
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const assessment = await storage.createOrUpdateAssessment({
+        studentId: assessmentData.studentId,
+        subjectId: assessmentData.subjectId,
+        classId: student.classId,
+        term: assessmentData.term,
+        session: assessmentData.session,
+        firstCA: assessmentData.firstCA?.toString(),
+        secondCA: assessmentData.secondCA?.toString(),
+        exam: assessmentData.exam?.toString()
+      });
+
+      res.json(assessment);
+    } catch (error) {
+      console.error("Create/update assessment error:", error);
+      res.status(400).json({ error: "Failed to save assessment" });
+    }
+  });
+
+  // Report card template routes
+  app.get('/api/admin/report-templates', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const templates = await storage.getReportCardTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Get report templates error:", error);
+      res.status(500).json({ error: "Failed to fetch report templates" });
+    }
+  });
+
+  app.get('/api/report-template/default', authenticate, async (req, res) => {
+    try {
+      const template = await storage.getDefaultReportCardTemplate();
+      res.json(template || null);
+    } catch (error) {
+      console.error("Get default template error:", error);
+      res.status(500).json({ error: "Failed to fetch default template" });
+    }
+  });
 
   const httpServer = createServer(app);
-
   return httpServer;
 }

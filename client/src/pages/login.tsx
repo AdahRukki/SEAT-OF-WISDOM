@@ -3,9 +3,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { GraduationCap, Loader2 } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { GraduationCap } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -13,21 +14,23 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      await login({ email, password });
       toast({
-        title: "Success",
+        title: "Login Successful",
         description: "Welcome back!",
       });
+      navigate("/");
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Invalid email or password. Please try again.",
+        title: "Login Failed",
+        description: error instanceof Error ? error.message : "Please check your credentials and try again.",
         variant: "destructive",
       });
     } finally {
@@ -36,68 +39,56 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <Card className="w-full max-w-md">
-        <CardContent className="pt-6">
-          <div className="text-center mb-8">
-            <div className="bg-blue-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <GraduationCap className="text-white h-8 w-8" />
+        <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <div className="p-3 bg-blue-600 rounded-full">
+              <GraduationCap className="h-8 w-8 text-white" />
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900">Student Score Tracker</h1>
-            <p className="text-gray-600 mt-2">Sign in to manage your students</p>
           </div>
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <Label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </Label>
+          <CardTitle className="text-2xl font-bold">School Management System</CardTitle>
+          <CardDescription>
+            Sign in to access your dashboard
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
               <Input
-                type="email"
                 id="email"
-                placeholder="teacher@school.edu"
+                type="email"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full"
                 required
+                disabled={isLoading}
               />
             </div>
-            
-            <div>
-              <Label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </Label>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
               <Input
-                type="password"
                 id="password"
-                placeholder="••••••••"
+                type="password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full"
                 required
+                disabled={isLoading}
               />
             </div>
-            
-            <Button 
-              type="submit" 
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing In...
-                </>
-              ) : (
-                "Sign In"
-              )}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Signing in..." : "Sign In"}
             </Button>
           </form>
           
-          <div className="mt-6 text-center">
-            <a href="#" className="text-blue-600 hover:text-blue-700 text-sm">
-              Forgot your password?
-            </a>
+          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <h3 className="font-semibold text-sm mb-2">Demo Accounts:</h3>
+            <div className="text-xs space-y-1">
+              <p><strong>Admin:</strong> admin@school.com / password123</p>
+              <p><strong>Student:</strong> student@school.com / password123</p>
+            </div>
           </div>
         </CardContent>
       </Card>
