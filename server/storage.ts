@@ -1,4 +1,5 @@
 import {
+  schools,
   users,
   students,
   classes,
@@ -6,6 +7,7 @@ import {
   classSubjects,
   assessments,
   reportCardTemplates,
+  type School,
   type User,
   type Student,
   type Class,
@@ -29,6 +31,10 @@ export interface IStorage {
   authenticateUser(email: string, password: string): Promise<User | null>;
   getUserById(id: string): Promise<User | undefined>;
   
+  // School operations
+  getAllSchools(): Promise<School[]>;
+  getSchoolById(id: string): Promise<School | undefined>;
+  
   // Admin operations
   createUser(userData: InsertUser): Promise<User>;
   createStudent(studentData: InsertStudent): Promise<Student>;
@@ -36,11 +42,14 @@ export interface IStorage {
   createSubject(subjectData: InsertSubject): Promise<Subject>;
   assignSubjectToClass(classId: string, subjectId: string): Promise<void>;
   
-  // Data retrieval
-  getAllClasses(): Promise<Class[]>;
+  // Data retrieval (school-aware)
+  getAllClasses(schoolId?: string): Promise<Class[]>;
   getAllSubjects(): Promise<Subject[]>;
   getStudentsByClass(classId: string): Promise<StudentWithDetails[]>;
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
+  getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
+  getClassSubjects(classId: string): Promise<Subject[]>;
+  getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
   
   // Assessment operations
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
@@ -103,7 +112,19 @@ export class DatabaseStorage implements IStorage {
     await db.insert(classSubjects).values({ classId, subjectId });
   }
 
-  async getAllClasses(): Promise<Class[]> {
+  async getAllSchools(): Promise<School[]> {
+    return await db.select().from(schools);
+  }
+
+  async getSchoolById(id: string): Promise<School | undefined> {
+    const [school] = await db.select().from(schools).where(eq(schools.id, id));
+    return school || undefined;
+  }
+
+  async getAllClasses(schoolId?: string): Promise<Class[]> {
+    if (schoolId) {
+      return await db.select().from(classes).where(eq(classes.schoolId, schoolId));
+    }
     return await db.select().from(classes);
   }
 
@@ -233,12 +254,18 @@ export class DatabaseStorage implements IStorage {
     return template || undefined;
   }
 
-  async getAllStudentsWithDetails(): Promise<StudentWithDetails[]> {
-    const studentsData = await db
+  async getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]> {
+    let query = db
       .select()
       .from(students)
       .leftJoin(users, eq(students.userId, users.id))
       .leftJoin(classes, eq(students.classId, classes.id));
+
+    if (schoolId) {
+      query = query.where(eq(classes.schoolId, schoolId));
+    }
+
+    const studentsData = await query;
 
     return studentsData.map(({ students: student, users: user, classes: classData }) => ({
       ...student,

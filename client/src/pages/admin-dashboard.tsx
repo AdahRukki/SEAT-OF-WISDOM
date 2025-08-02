@@ -1,34 +1,65 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle 
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, BookOpen, GraduationCap, LogOut } from "lucide-react";
-import type { Class, Subject, Student, StudentWithDetails } from "@shared/schema";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from "@/components/ui/dialog";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { 
+  Plus, 
+  Users, 
+  GraduationCap, 
+  BookOpen, 
+  FileText,
+  Building,
+  LogOut,
+  User,
+  School
+} from "lucide-react";
+import type { 
+  Class, 
+  Subject, 
+  StudentWithDetails,
+  School as SchoolType 
+} from "@shared/schema";
 
 export default function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Dialog states
+  // State for dialogs
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
-  const [isSubjectDialogOpen, setIsSubjectDialogOpen] = useState(false);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
 
   // Form states
   const [className, setClassName] = useState("");
   const [classDescription, setClassDescription] = useState("");
-  const [subjectName, setSubjectName] = useState("");
-  const [subjectCode, setSubjectCode] = useState("");
-  const [subjectDescription, setSubjectDescription] = useState("");
 
   // Student form states
   const [studentFirstName, setStudentFirstName] = useState("");
@@ -38,16 +69,43 @@ export default function AdminDashboard() {
   const [studentId, setStudentId] = useState("");
   const [selectedClassId, setSelectedClassId] = useState("");
 
+  // School selection for main admin
+  const [selectedSchoolId, setSelectedSchoolId] = useState("");
+
   // Scores management states
   const [scoresClassId, setScoresClassId] = useState("");
   const [scoresSubjectId, setScoresSubjectId] = useState("");
   const [scoresTerm, setScoresTerm] = useState("First Term");
   const [scoresSession, setScoresSession] = useState("2024/2025");
+  const [scoreInputs, setScoreInputs] = useState<{[key: string]: {firstCA: string, secondCA: string, exam: string}}>({});
 
-  // Queries
-  const { data: classes = [] } = useQuery<Class[]>({ queryKey: ['/api/admin/classes'] });
+  // Set initial school for sub-admin or first school for main admin
+  useEffect(() => {
+    if (user?.role === 'sub-admin' && user.schoolId) {
+      setSelectedSchoolId(user.schoolId);
+    }
+  }, [user]);
+
+  // School-aware queries
+  const queryParams = user?.role === 'admin' && selectedSchoolId ? `?schoolId=${selectedSchoolId}` : '';
+  
+  const { data: schools = [] } = useQuery<SchoolType[]>({ 
+    queryKey: ['/api/admin/schools'],
+    enabled: user?.role === 'admin'
+  });
+
+  const { data: classes = [] } = useQuery<Class[]>({ 
+    queryKey: ['/api/admin/classes', selectedSchoolId],
+    queryFn: () => apiRequest(`/api/admin/classes${queryParams}`),
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+  });
+
   const { data: subjects = [] } = useQuery<Subject[]>({ queryKey: ['/api/admin/subjects'] });
-  const { data: allStudents = [] } = useQuery<StudentWithDetails[]>({ queryKey: ['/api/admin/students'] });
+  const { data: allStudents = [] } = useQuery<StudentWithDetails[]>({ 
+    queryKey: ['/api/admin/students', selectedSchoolId],
+    queryFn: () => apiRequest(`/api/admin/students${queryParams}`),
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+  });
   
   // Class subjects query
   const { data: classSubjects = [] } = useQuery<Subject[]>({ 
@@ -63,151 +121,203 @@ export default function AdminDashboard() {
 
   // Mutations
   const createClassMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string }) => {
-      const response = await apiRequest('POST', '/api/admin/classes', data);
-      return response.json();
+    mutationFn: async (classData: any) => {
+      return apiRequest('/api/admin/classes', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          ...classData, 
+          schoolId: selectedSchoolId || user?.schoolId 
+        })
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
+      toast({ title: "Success", description: "Class created successfully" });
       setIsClassDialogOpen(false);
       setClassName("");
       setClassDescription("");
-      toast({ title: "Success", description: "Class created successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create class", variant: "destructive" });
     }
   });
 
-  const createSubjectMutation = useMutation({
-    mutationFn: async (data: { name: string; code: string; description?: string }) => {
-      const response = await apiRequest('POST', '/api/admin/subjects', data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/subjects'] });
-      setIsSubjectDialogOpen(false);
-      setSubjectName("");
-      setSubjectCode("");
-      setSubjectDescription("");
-      toast({ title: "Success", description: "Subject created successfully" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create subject", variant: "destructive" });
-    }
-  });
-
   const createStudentMutation = useMutation({
-    mutationFn: async (data: {
-      user: { email: string; password: string; firstName: string; lastName: string; role: string };
-      student: { studentId: string; classId: string };
-    }) => {
-      // First create the user
-      const userResponse = await apiRequest('POST', '/api/admin/users', data.user);
-      const user = await userResponse.json();
-      
-      // Then create the student record
-      const studentResponse = await apiRequest('POST', '/api/admin/students', {
-        ...data.student,
-        userId: user.id
+    mutationFn: async (studentData: any) => {
+      return apiRequest('/api/admin/students', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...studentData,
+          schoolId: selectedSchoolId || user?.schoolId
+        })
       });
-      return studentResponse.json();
     },
     onSuccess: () => {
-      setIsStudentDialogOpen(false);
-      setStudentFirstName("");
-      setStudentLastName("");
-      setStudentEmail("");
-      setStudentPassword("");
-      setStudentId("");
-      setSelectedClassId("");
       toast({ title: "Success", description: "Student created successfully" });
+      setIsStudentDialogOpen(false);
+      resetStudentForm();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create student", variant: "destructive" });
     }
   });
 
-  const handleCreateClass = () => {
-    createClassMutation.mutate({
-      name: className,
-      description: classDescription || undefined
-    });
-  };
-
-  const handleCreateSubject = () => {
-    createSubjectMutation.mutate({
-      name: subjectName,
-      code: subjectCode,
-      description: subjectDescription || undefined
-    });
-  };
-
-  const handleCreateStudent = () => {
-    if (!selectedClassId) {
-      toast({ title: "Error", description: "Please select a class", variant: "destructive" });
-      return;
+  // Score update mutation
+  const updateScoresMutation = useMutation({
+    mutationFn: async (scoresData: any[]) => {
+      return apiRequest('/api/admin/scores/bulk-update', {
+        method: 'POST',
+        body: JSON.stringify({ scores: scoresData })
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Scores updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/assessments'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update scores", variant: "destructive" });
     }
+  });
 
-    createStudentMutation.mutate({
-      user: {
-        email: studentEmail,
-        password: studentPassword,
-        firstName: studentFirstName,
-        lastName: studentLastName,
-        role: "student"
-      },
-      student: {
-        studentId,
-        classId: selectedClassId
-      }
-    });
+  const resetStudentForm = () => {
+    setStudentFirstName("");
+    setStudentLastName("");
+    setStudentEmail("");
+    setStudentPassword("");
+    setStudentId("");
+    setSelectedClassId("");
   };
+
+  const handleScoreChange = (studentId: string, field: string, value: string) => {
+    setScoreInputs(prev => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleSaveAllScores = () => {
+    const scoresData = Object.entries(scoreInputs).map(([studentId, scores]) => ({
+      studentId,
+      subjectId: scoresSubjectId,
+      classId: scoresClassId,
+      term: scoresTerm,
+      session: scoresSession,
+      firstCA: parseInt(scores.firstCA) || 0,
+      secondCA: parseInt(scores.secondCA) || 0,
+      exam: parseInt(scores.exam) || 0
+    }));
+
+    updateScoresMutation.mutate(scoresData);
+  };
+
+  const calculateGrade = (total: number) => {
+    if (total >= 80) return 'A';
+    if (total >= 70) return 'B';
+    if (total >= 60) return 'C';
+    if (total >= 50) return 'D';
+    return 'F';
+  };
+
+  if (!user) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 shadow-sm border-b">
+      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-3">
-              <GraduationCap className="h-8 w-8 text-blue-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Dashboard</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Welcome back, {user?.firstName} {user?.lastName}
-                </p>
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <School className="h-8 w-8 text-blue-600" />
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Sunshine Academy
+                  </h1>
+                  <p className="text-sm text-gray-500">
+                    {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
+                  </p>
+                </div>
               </div>
+              
+              {/* School Selector for Main Admin */}
+              {user.role === 'admin' && (
+                <div className="flex items-center space-x-2">
+                  <Label className="text-sm font-medium">School:</Label>
+                  <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+                    <SelectTrigger className="w-64">
+                      <SelectValue placeholder="Select a school branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {schools.map((school) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
-            <Button onClick={logout} variant="outline" className="flex items-center space-x-2">
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </Button>
+
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
+                <User className="h-4 w-4" />
+                <span>{user.firstName} {user.lastName}</span>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = '/api/auth/logout'}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="classes">Classes</TabsTrigger>
-            <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
             <TabsTrigger value="scores">Manage Scores</TabsTrigger>
+            <TabsTrigger value="reports">Report Cards</TabsTrigger>
           </TabsList>
 
+          {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{allStudents.length}</div>
+                  <p className="text-xs text-muted-foreground">Across all classes</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Classes</CardTitle>
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                  <GraduationCap className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{classes.length}</div>
+                  <p className="text-xs text-muted-foreground">Active classes</p>
                 </CardContent>
               </Card>
+
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Subjects</CardTitle>
@@ -215,279 +325,259 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{subjects.length}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">System Status</CardTitle>
-                  <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">Online</div>
+                  <p className="text-xs text-muted-foreground">Available subjects</p>
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
 
-          <TabsContent value="classes" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Manage Classes</h2>
-              <Dialog open={isClassDialogOpen} onOpenChange={setIsClassDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="flex items-center space-x-2">
-                    <Plus className="h-4 w-4" />
-                    <span>Add Class</span>
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create New Class</DialogTitle>
-                    <DialogDescription>Add a new class to the system.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="class-name">Class Name</Label>
-                      <Input
-                        id="class-name"
-                        value={className}
-                        onChange={(e) => setClassName(e.target.value)}
-                        placeholder="e.g., Grade 5A"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="class-description">Description (Optional)</Label>
-                      <Input
-                        id="class-description"
-                        value={classDescription}
-                        onChange={(e) => setClassDescription(e.target.value)}
-                        placeholder="Class description"
-                      />
-                    </div>
-                    <Button 
-                      onClick={handleCreateClass} 
-                      disabled={!className || createClassMutation.isPending}
-                    >
-                      {createClassMutation.isPending ? "Creating..." : "Create Class"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {classes.map((classItem) => (
-                <Card key={classItem.id}>
-                  <CardHeader>
-                    <CardTitle className="text-lg">{classItem.name}</CardTitle>
-                    {classItem.description && (
-                      <CardDescription>{classItem.description}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-500">
-                      Created: {new Date(classItem.createdAt!).toLocaleDateString()}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="subjects" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Manage Subjects</h2>
-              <Dialog open={isSubjectDialogOpen} onOpenChange={setIsSubjectDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="flex items-center space-x-2">
-                    <Plus className="h-4 w-4" />
-                    <span>Add Subject</span>
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create New Subject</DialogTitle>
-                    <DialogDescription>Add a new subject to the system.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="subject-name">Subject Name</Label>
-                      <Input
-                        id="subject-name"
-                        value={subjectName}
-                        onChange={(e) => setSubjectName(e.target.value)}
-                        placeholder="e.g., Mathematics"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="subject-code">Subject Code</Label>
-                      <Input
-                        id="subject-code"
-                        value={subjectCode}
-                        onChange={(e) => setSubjectCode(e.target.value)}
-                        placeholder="e.g., MATH"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="subject-description">Description (Optional)</Label>
-                      <Input
-                        id="subject-description"
-                        value={subjectDescription}
-                        onChange={(e) => setSubjectDescription(e.target.value)}
-                        placeholder="Subject description"
-                      />
-                    </div>
-                    <Button 
-                      onClick={handleCreateSubject} 
-                      disabled={!subjectName || !subjectCode || createSubjectMutation.isPending}
-                    >
-                      {createSubjectMutation.isPending ? "Creating..." : "Create Subject"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subjects.map((subject) => (
-                <Card key={subject.id}>
-                  <CardHeader>
-                    <CardTitle className="text-lg">{subject.name}</CardTitle>
-                    <CardDescription>Code: {subject.code}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {subject.description && (
-                      <p className="text-sm mb-2">{subject.description}</p>
-                    )}
-                    <p className="text-sm text-gray-500">
-                      Created: {new Date(subject.createdAt!).toLocaleDateString()}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="students" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Manage Students</h2>
-              <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="flex items-center space-x-2">
-                    <Plus className="h-4 w-4" />
-                    <span>Add Student</span>
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Create New Student</DialogTitle>
-                    <DialogDescription>Add a new student to the system.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="student-first-name">First Name</Label>
-                        <Input
-                          id="student-first-name"
-                          value={studentFirstName}
-                          onChange={(e) => setStudentFirstName(e.target.value)}
-                          placeholder="John"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="student-last-name">Last Name</Label>
-                        <Input
-                          id="student-last-name"
-                          value={studentLastName}
-                          onChange={(e) => setStudentLastName(e.target.value)}
-                          placeholder="Doe"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="student-email">Email</Label>
-                      <Input
-                        id="student-email"
-                        type="email"
-                        value={studentEmail}
-                        onChange={(e) => setStudentEmail(e.target.value)}
-                        placeholder="john.doe@example.com"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="student-password">Password</Label>
-                      <Input
-                        id="student-password"
-                        type="password"
-                        value={studentPassword}
-                        onChange={(e) => setStudentPassword(e.target.value)}
-                        placeholder="student password"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="student-id">Student ID</Label>
-                      <Input
-                        id="student-id"
-                        value={studentId}
-                        onChange={(e) => setStudentId(e.target.value)}
-                        placeholder="STU001"
-                      />
-                    </div>
-                    <div>
-                      <Label>Class</Label>
-                      <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a class" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {classes.map((classItem) => (
-                            <SelectItem key={classItem.id} value={classItem.id}>
-                              {classItem.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button 
-                      onClick={handleCreateStudent} 
-                      disabled={
-                        !studentFirstName || !studentLastName || !studentEmail || 
-                        !studentPassword || !studentId || !selectedClassId || 
-                        createStudentMutation.isPending
-                      }
-                      className="w-full"
-                    >
-                      {createStudentMutation.isPending ? "Creating..." : "Create Student"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-            
+            {/* Classes Overview */}
             <Card>
-              <CardHeader>
-                <CardTitle>Student Management</CardTitle>
-                <CardDescription>
-                  Students are organized by class. Select a class to view and manage students.
-                </CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Classes Overview</CardTitle>
+                  <CardDescription>
+                    Manage classes and view student distribution
+                  </CardDescription>
+                </div>
+                <Dialog open={isClassDialogOpen} onOpenChange={setIsClassDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Class
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create New Class</DialogTitle>
+                      <DialogDescription>
+                        Add a new class to the system
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="class-name">Class Name</Label>
+                        <Input
+                          id="class-name"
+                          value={className}
+                          onChange={(e) => setClassName(e.target.value)}
+                          placeholder="e.g., Grade 5A"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="class-description">Description</Label>
+                        <Textarea
+                          id="class-description"
+                          value={classDescription}
+                          onChange={(e) => setClassDescription(e.target.value)}
+                          placeholder="Class description..."
+                        />
+                      </div>
+                      <Button 
+                        onClick={() => createClassMutation.mutate({ name: className, description: classDescription })}
+                        disabled={!className || createClassMutation.isPending}
+                        className="w-full"
+                      >
+                        {createClassMutation.isPending ? "Creating..." : "Create Class"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-500">
-                  Total Classes: {classes.length}
-                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {classes.map((classItem) => {
+                    const studentsInClass = allStudents.filter(s => s.classId === classItem.id);
+                    return (
+                      <Card key={classItem.id} className="hover:shadow-md transition-shadow">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-lg">{classItem.name}</CardTitle>
+                          <CardDescription>{classItem.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <Users className="h-4 w-4 text-gray-500" />
+                              <span className="text-sm font-medium">{studentsInClass.length} students</span>
+                            </div>
+                            <Button variant="outline" size="sm">
+                              View Details
+                            </Button>
+                          </div>
+                          {studentsInClass.length > 0 && (
+                            <div className="mt-3 pt-3 border-t">
+                              <p className="text-xs text-gray-500 mb-1">Students:</p>
+                              <div className="space-y-1">
+                                {studentsInClass.slice(0, 3).map((student) => (
+                                  <div key={student.id} className="text-xs text-gray-700 dark:text-gray-300">
+                                    {student.user.firstName} {student.user.lastName} ({student.studentId})
+                                  </div>
+                                ))}
+                                {studentsInClass.length > 3 && (
+                                  <div className="text-xs text-gray-500">
+                                    +{studentsInClass.length - 3} more...
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Students Tab */}
+          <TabsContent value="students" className="space-y-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Student Management</CardTitle>
+                  <CardDescription>
+                    Add and manage student accounts and information
+                  </CardDescription>
+                </div>
+                <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Student
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Create New Student</DialogTitle>
+                      <DialogDescription>
+                        Add a new student to the system
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="student-firstname">First Name</Label>
+                          <Input
+                            id="student-firstname"
+                            value={studentFirstName}
+                            onChange={(e) => setStudentFirstName(e.target.value)}
+                            placeholder="John"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="student-lastname">Last Name</Label>
+                          <Input
+                            id="student-lastname"
+                            value={studentLastName}
+                            onChange={(e) => setStudentLastName(e.target.value)}
+                            placeholder="Doe"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="student-email">Email</Label>
+                        <Input
+                          id="student-email"
+                          type="email"
+                          value={studentEmail}
+                          onChange={(e) => setStudentEmail(e.target.value)}
+                          placeholder="john.doe@student.com"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="student-password">Password</Label>
+                        <Input
+                          id="student-password"
+                          type="password"
+                          value={studentPassword}
+                          onChange={(e) => setStudentPassword(e.target.value)}
+                          placeholder="password123"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="student-id">Student ID</Label>
+                        <Input
+                          id="student-id"
+                          value={studentId}
+                          onChange={(e) => setStudentId(e.target.value)}
+                          placeholder="STU001"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="student-class">Class</Label>
+                        <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a class" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {classes.map((classItem) => (
+                              <SelectItem key={classItem.id} value={classItem.id}>
+                                {classItem.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button 
+                        onClick={() => createStudentMutation.mutate({
+                          firstName: studentFirstName,
+                          lastName: studentLastName,
+                          email: studentEmail,
+                          password: studentPassword,
+                          studentId: studentId,
+                          classId: selectedClassId
+                        })}
+                        disabled={!studentFirstName || !studentLastName || !studentEmail || !selectedClassId || createStudentMutation.isPending}
+                        className="w-full"
+                      >
+                        {createStudentMutation.isPending ? "Creating..." : "Create Student"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Class</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {allStudents.map((student) => (
+                        <tr key={student.id}>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {student.user.firstName} {student.user.lastName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {student.studentId}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {student.user.email}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {student.class.name}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Scores Management Tab */}
           <TabsContent value="scores" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Manage Student Scores</h2>
-            </div>
-            
             <Card>
               <CardHeader>
                 <CardTitle>Score Entry System</CardTitle>
                 <CardDescription>
-                  Enter and manage student assessment scores for all subjects and terms.
+                  Enter and manage student assessment scores (1st CA: 20 marks, 2nd CA: 20 marks, Exam: 60 marks)
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -548,9 +638,9 @@ export default function AdminDashboard() {
                         <tr>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
                           <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">1st CA (30)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">2nd CA (30)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Exam (70)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">1st CA (20)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">2nd CA (20)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Exam (60)</th>
                           <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Total (100)</th>
                           <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Grade</th>
                         </tr>
@@ -560,9 +650,13 @@ export default function AdminDashboard() {
                           .filter(student => student.classId === scoresClassId)
                           .map((student) => {
                             const assessment = classAssessments.find(a => a.studentId === student.id);
-                            const total = assessment ? 
-                              Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0) : 0;
-                            const grade = total >= 80 ? 'A' : total >= 60 ? 'B' : total >= 50 ? 'C' : total >= 40 ? 'D' : 'F';
+                            const currentScores = scoreInputs[student.id] || {};
+                            
+                            const firstCA = parseInt(currentScores.firstCA) || assessment?.firstCA || 0;
+                            const secondCA = parseInt(currentScores.secondCA) || assessment?.secondCA || 0;
+                            const exam = parseInt(currentScores.exam) || assessment?.exam || 0;
+                            const total = firstCA + secondCA + exam;
+                            const grade = calculateGrade(total);
                             
                             return (
                               <tr key={student.id}>
@@ -576,9 +670,10 @@ export default function AdminDashboard() {
                                   <Input
                                     type="number"
                                     min="0"
-                                    max="30"
+                                    max="20"
                                     className="w-16 h-8 text-center"
-                                    defaultValue={assessment?.firstCA || ''}
+                                    value={currentScores.firstCA || assessment?.firstCA || ''}
+                                    onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
                                     placeholder="0"
                                   />
                                 </td>
@@ -586,9 +681,10 @@ export default function AdminDashboard() {
                                   <Input
                                     type="number"
                                     min="0"
-                                    max="30"
+                                    max="20"
                                     className="w-16 h-8 text-center"
-                                    defaultValue={assessment?.secondCA || ''}
+                                    value={currentScores.secondCA || assessment?.secondCA || ''}
+                                    onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
                                     placeholder="0"
                                   />
                                 </td>
@@ -596,9 +692,10 @@ export default function AdminDashboard() {
                                   <Input
                                     type="number"
                                     min="0"
-                                    max="70"
+                                    max="60"
                                     className="w-16 h-8 text-center"
-                                    defaultValue={assessment?.exam || ''}
+                                    value={currentScores.exam || assessment?.exam || ''}
+                                    onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
                                     placeholder="0"
                                   />
                                 </td>
@@ -622,8 +719,12 @@ export default function AdminDashboard() {
                       </tbody>
                     </table>
                     <div className="p-4 bg-gray-50 dark:bg-gray-800">
-                      <Button className="w-full">
-                        Save All Scores
+                      <Button 
+                        className="w-full"
+                        onClick={handleSaveAllScores}
+                        disabled={updateScoresMutation.isPending}
+                      >
+                        {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
                       </Button>
                     </div>
                   </div>
@@ -641,8 +742,31 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Report Cards Tab */}
+          <TabsContent value="reports">
+            <Card>
+              <CardHeader>
+                <CardTitle>Report Card Management</CardTitle>
+                <CardDescription>
+                  Generate and manage student report cards
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    Report Card System
+                  </h3>
+                  <p className="text-gray-500">
+                    Report card generation and printing functionality will be available here.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
-      </div>
+      </main>
     </div>
   );
 }

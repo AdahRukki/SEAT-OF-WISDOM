@@ -36,11 +36,20 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
-// Middleware for admin-only routes
+// Middleware for admin-only routes (admin or sub-admin)
 const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   const user = (req as any).user;
-  if (user.role !== 'admin') {
+  if (user.role !== 'admin' && user.role !== 'sub-admin') {
     return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+};
+
+// Middleware for main admin only (access to all schools)
+const requireMainAdmin = (req: Request, res: Response, next: NextFunction) => {
+  const user = (req as any).user;
+  if (user.role !== 'admin') {
+    return res.status(403).json({ error: "Main admin access required" });
   }
   next();
 };
@@ -82,8 +91,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      role: user.role
+      role: user.role,
+      schoolId: user.schoolId
     });
+  });
+
+  // Get all schools (main admin only)
+  app.get('/api/admin/schools', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const schools = await storage.getAllSchools();
+      res.json(schools);
+    } catch (error) {
+      console.error("Get schools error:", error);
+      res.status(500).json({ error: "Failed to fetch schools" });
+    }
   });
 
   // Admin routes - User management
@@ -101,7 +122,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin routes - Class management
   app.get('/api/admin/classes', authenticate, requireAdmin, async (req, res) => {
     try {
-      const classes = await storage.getAllClasses();
+      const user = (req as any).user;
+      const schoolId = req.query.schoolId as string || user.schoolId;
+      
+      // Sub-admin can only see their school's classes
+      if (user.role === 'sub-admin' && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied to this school's data" });
+      }
+      
+      const classes = await storage.getAllClasses(schoolId);
       res.json(classes);
     } catch (error) {
       console.error("Get classes error:", error);
@@ -177,10 +206,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all students (admin only)
+  // Get all students (admin only, school-aware)
   app.get('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
     try {
-      const students = await storage.getAllStudentsWithDetails();
+      const user = (req as any).user;
+      const schoolId = req.query.schoolId as string || user.schoolId;
+      
+      // Sub-admin can only see their school's students
+      if (user.role === 'sub-admin' && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied to this school's data" });
+      }
+      
+      const students = await storage.getAllStudentsWithDetails(schoolId);
       res.json(students);
     } catch (error) {
       console.error("Get all students error:", error);
@@ -214,6 +251,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get class assessments error:", error);
       res.status(500).json({ error: "Failed to fetch assessments" });
+    }
+  });
+
+  // Bulk score update endpoint
+  app.post('/api/admin/scores/bulk-update', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { scores } = req.body;
+      const results = [];
+      
+      for (const scoreData of scores) {
+        const total = (scoreData.firstCA || 0) + (scoreData.secondCA || 0) + (scoreData.exam || 0);
+        const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
+        
+        const assessment = await storage.createOrUpdateAssessment({
+          ...scoreData,
+          total,
+          grade
+        });
+        results.push(assessment);
+      }
+      
+      res.json({ message: "Scores updated successfully", results });
+    } catch (error) {
+      console.error("Bulk score update error:", error);
+      res.status(500).json({ error: "Failed to update scores" });
     }
   });
 

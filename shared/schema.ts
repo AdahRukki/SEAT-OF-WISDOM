@@ -14,11 +14,23 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
+// Schools table (for multiple branches)
+export const schools = pgTable("schools", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 200 }).notNull(),
+  address: text("address"),
+  phone: varchar("phone", { length: 20 }),
+  email: varchar("email", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Classes table
 export const classes = pgTable("classes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
+  schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -41,14 +53,15 @@ export const classSubjects = pgTable("class_subjects", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Users table (for both admins and students)
+// Users table (for admins, sub-admins, and students)
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: varchar("password", { length: 255 }).notNull(),
   firstName: varchar("first_name", { length: 100 }).notNull(),
   lastName: varchar("last_name", { length: 100 }).notNull(),
-  role: varchar("role", { length: 20 }).notNull().default("student"), // admin, student
+  role: varchar("role", { length: 20 }).notNull().default("student"), // admin, sub-admin, student
+  schoolId: uuid("school_id").references(() => schools.id), // sub-admins and students are tied to specific schools
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -101,7 +114,16 @@ export const reportCardTemplates = pgTable("report_card_templates", {
 });
 
 // Relations
-export const classesRelations = relations(classes, ({ many }) => ({
+export const schoolsRelations = relations(schools, ({ many }) => ({
+  classes: many(classes),
+  users: many(users),
+}));
+
+export const classesRelations = relations(classes, ({ one, many }) => ({
+  school: one(schools, {
+    fields: [classes.schoolId],
+    references: [schools.id],
+  }),
   students: many(students),
   subjects: many(classSubjects),
   assessments: many(assessments),
@@ -124,6 +146,10 @@ export const classSubjectsRelations = relations(classSubjects, ({ one }) => ({
 }));
 
 export const usersRelations = relations(users, ({ one }) => ({
+  school: one(schools, {
+    fields: [users.schoolId],
+    references: [schools.id],
+  }),
   student: one(students),
 }));
 
@@ -155,6 +181,7 @@ export const assessmentsRelations = relations(assessments, ({ one }) => ({
 }));
 
 // Zod schemas
+export const insertSchoolSchema = createInsertSchema(schools);
 export const insertClassSchema = createInsertSchema(classes);
 export const insertSubjectSchema = createInsertSchema(subjects);
 export const insertUserSchema = createInsertSchema(users);
@@ -173,12 +200,15 @@ export const addScoreSchema = z.object({
   subjectId: z.string(),
   term: z.string(),
   session: z.string(),
-  firstCA: z.number().min(0).max(30).optional(),
-  secondCA: z.number().min(0).max(30).optional(),
-  exam: z.number().min(0).max(70).optional(),
+  firstCA: z.number().min(0).max(20).optional(),
+  secondCA: z.number().min(0).max(20).optional(),
+  exam: z.number().min(0).max(60).optional(),
 });
 
 // Types
+export type School = typeof schools.$inferSelect;
+export type InsertSchool = z.infer<typeof insertSchoolSchema>;
+
 export type Class = typeof classes.$inferSelect;
 export type InsertClass = z.infer<typeof insertClassSchema>;
 
