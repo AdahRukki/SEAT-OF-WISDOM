@@ -96,7 +96,7 @@ export default function Dashboard() {
               <GraduationCap className="text-white h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Student Score Tracker</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Seat of Wisdom Academy</h1>
               <p className="text-sm text-gray-600">Offline Mode - Data saved locally</p>
             </div>
           </div>

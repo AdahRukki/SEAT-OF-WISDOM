@@ -1,8 +1,8 @@
-# Student Score Tracker
+# Seat of Wisdom Academy
 
 ## Overview
 
-A comprehensive multi-branch school management system for **Seat of Wisdom Academy** built with React (frontend) and Express (backend) featuring complete student score tracking, administrative controls, and Firebase database integration. The application supports 4 school branches (School 1, School 2, School 3, School 4) with role-based access for admin (all schools), sub-admin (single school), and student roles. Features 20+20+60 scoring system, offline-first functionality with Firebase sync, and professional report card generation.
+A comprehensive multi-branch academy management system for **Seat of Wisdom Academy** built with React (frontend) and Express (backend) featuring complete student score tracking, administrative controls, and Firebase database integration. The application supports 4 school branches (School 1, School 2, School 3, School 4) with role-based access for admin (all schools), sub-admin (single school), and student roles. Features 20+20+60 scoring system, offline-first functionality with Firebase sync, and professional report card generation.
 
 ## User Preferences
 
@@ -34,12 +34,12 @@ Preferred communication style: Simple, everyday language.
 - **Security**: Password hashing, token validation, and secure session management
 
 ### Data Schema
-- **User Management**: Complete user system with roles (admin/student) and authentication
-- **Academic Structure**: Classes, subjects, and class-subject relationships
-- **Student Records**: Student profiles linked to users and classes
-- **Assessment System**: First CA, Second CA, and Exam scores with automatic total calculation
-- **Report Cards**: Printable report cards with comprehensive academic summaries
-- **Database Relations**: Properly normalized PostgreSQL schema with foreign key constraints
+- **User Management**: Complete user system with roles (admin/sub-admin/student) and authentication
+- **Multi-Branch Structure**: Schools, classes, subjects, and class-subject relationships with branch isolation
+- **Student Records**: Student profiles linked to users, classes, and specific school branches
+- **Assessment System**: 20+20+60 scoring system (1st CA, 2nd CA, Exam) with automatic total calculation and grading
+- **Report Cards**: Printable report cards with comprehensive academic summaries for Seat of Wisdom Academy
+- **Database Relations**: Properly normalized PostgreSQL schema with Firebase sync capabilities
 
 ### Development Environment
 - **Monorepo Structure**: Shared schemas and types between client and server

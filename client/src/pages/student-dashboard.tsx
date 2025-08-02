@@ -51,7 +51,7 @@ export default function StudentDashboard() {
             <div className="flex items-center space-x-3">
               <GraduationCap className="h-8 w-8 text-blue-600" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Student Dashboard</h1>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Welcome back, {user?.firstName} {user?.lastName}
                 </p>

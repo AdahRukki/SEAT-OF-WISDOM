@@ -371,7 +371,13 @@ async function seedDatabase() {
 }
 
 // Run seeding if this file is executed directly
-if (require.main === module) {
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+if (process.argv[1] === __filename) {
   seedDatabase()
     .then(() => {
       console.log("Seeding completed successfully!");
