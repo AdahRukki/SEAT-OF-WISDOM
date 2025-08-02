@@ -68,6 +68,8 @@ export default function AdminDashboard() {
   // State for dialogs
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
+  const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
+  const [selectedClassForDetails, setSelectedClassForDetails] = useState<Class | null>(null);
 
   // Form states
   const [className, setClassName] = useState("");
@@ -149,6 +151,13 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/assessments', scoresClassId, scoresSubjectId, scoresTerm, scoresSession],
     queryFn: () => apiRequest(`/api/admin/assessments?classId=${scoresClassId}&subjectId=${scoresSubjectId}&term=${scoresTerm}&session=${scoresSession}`),
     enabled: !!scoresClassId && !!scoresSubjectId
+  });
+
+  // Class students query for details view
+  const { data: classStudents = [] } = useQuery<StudentWithDetails[]>({ 
+    queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'],
+    queryFn: () => apiRequest(`/api/admin/classes/${selectedClassForDetails?.id}/students`),
+    enabled: !!selectedClassForDetails?.id
   });
 
   // Mutations
@@ -280,6 +289,11 @@ export default function AdminDashboard() {
     if (total >= 60) return 'C';
     if (total >= 50) return 'D';
     return 'F';
+  };
+
+  const openClassDetails = (classItem: Class) => {
+    setSelectedClassForDetails(classItem);
+    setIsClassDetailsDialogOpen(true);
   };
 
   if (!user) {
@@ -491,7 +505,11 @@ export default function AdminDashboard() {
                               <Users className="h-4 w-4 text-gray-500" />
                               <span className="text-sm font-medium">{studentsInClass.length} students</span>
                             </div>
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => openClassDetails(classItem)}
+                            >
                               View Details
                             </Button>
                           </div>
@@ -885,6 +903,66 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Class Details Dialog */}
+        <Dialog open={isClassDetailsDialogOpen} onOpenChange={setIsClassDetailsDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Class Details: {selectedClassForDetails?.name}</DialogTitle>
+              <DialogDescription>
+                {selectedClassForDetails?.description}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Students in this Class</h3>
+                <div className="flex items-center space-x-2">
+                  <Users className="h-4 w-4" />
+                  <span className="text-sm text-gray-600">{classStudents.length} students</span>
+                </div>
+              </div>
+              
+              {classStudents.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Parent Contact</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {classStudents.map((student) => (
+                        <tr key={student.id}>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                            {student.studentId}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {student.user.firstName} {student.user.lastName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {student.user.email}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            {student.parentContact || 'Not provided'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>No students enrolled in this class yet.</p>
+                  <p className="text-sm">Add students to see them here.</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
