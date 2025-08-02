@@ -204,9 +204,9 @@ export default function AdminDashboard() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Student created successfully" });
-      setIsStudentDialogOpen(false);
-      resetStudentForm();
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'] });
+      handleStudentCreated();
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create student", variant: "destructive" });
@@ -236,6 +236,15 @@ export default function AdminDashboard() {
     setStudentPassword("");
     setStudentId("");
     setSelectedClassId("");
+  };
+
+  const handleStudentCreated = () => {
+    resetStudentForm();
+    setIsStudentDialogOpen(false);
+    // If we came from class details, return to class details
+    if (selectedClassForDetails) {
+      setIsClassDetailsDialogOpen(true);
+    }
   };
 
   // Auto-generate student ID in SOWA format
@@ -334,7 +343,7 @@ export default function AdminDashboard() {
                     {schools.map((school) => (
                       <SelectItem key={school.id} value={school.id}>
                         <div className="flex items-center space-x-2">
-                          <Building2 className="h-4 w-4" />
+                          <Building className="h-4 w-4" />
                           <span>{school.name}</span>
                         </div>
                       </SelectItem>
@@ -396,7 +405,7 @@ export default function AdminDashboard() {
                   size="sm"
                   onClick={() => setSelectedSchoolId("")}
                 >
-                  <Building2 className="h-4 w-4 mr-2" />
+                  <Building className="h-4 w-4 mr-2" />
                   Change School
                 </Button>
               )}
@@ -979,9 +988,22 @@ export default function AdminDashboard() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Students in this Class</h3>
-                <div className="flex items-center space-x-2">
-                  <Users className="h-4 w-4" />
-                  <span className="text-sm text-gray-600">{classStudents.length} students</span>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-2">
+                    <Users className="h-4 w-4" />
+                    <span className="text-sm text-gray-600">{classStudents.length} students</span>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    onClick={() => {
+                      setSelectedClassId(selectedClassForDetails?.id || "");
+                      setIsStudentDialogOpen(true);
+                      setIsClassDetailsDialogOpen(false);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Student
+                  </Button>
                 </div>
               </div>
               
