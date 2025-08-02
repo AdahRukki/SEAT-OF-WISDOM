@@ -36,7 +36,7 @@ function AppRoutes() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      {user?.role === 'admin' ? (
+      {(user?.role === 'admin' || user?.role === 'sub-admin') ? (
         <>
           <Route path="/" component={AdminDashboard} />
           <Route path="/admin" component={AdminDashboard} />
