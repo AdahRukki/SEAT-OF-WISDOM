@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { firebaseSync } from "@/lib/firebase-sync";
 import { 
   Card, 
   CardContent, 
@@ -122,16 +123,21 @@ export default function AdminDashboard() {
   // Mutations
   const createClassMutation = useMutation({
     mutationFn: async (classData: any) => {
-      return apiRequest('/api/admin/classes', {
+      const newClass = await apiRequest('/api/admin/classes', {
         method: 'POST',
         body: JSON.stringify({ 
           ...classData, 
           schoolId: selectedSchoolId || user?.schoolId 
         })
       });
+      
+      // Sync to Firebase
+      await firebaseSync.syncClass(newClass);
+      
+      return newClass;
     },
     onSuccess: () => {
-      toast({ title: "Success", description: "Class created successfully" });
+      toast({ title: "Success", description: "Class created and synced to Firebase" });
       setIsClassDialogOpen(false);
       setClassName("");
       setClassDescription("");
@@ -144,16 +150,21 @@ export default function AdminDashboard() {
 
   const createStudentMutation = useMutation({
     mutationFn: async (studentData: any) => {
-      return apiRequest('/api/admin/students', {
+      const newStudent = await apiRequest('/api/admin/students', {
         method: 'POST',
         body: JSON.stringify({
           ...studentData,
           schoolId: selectedSchoolId || user?.schoolId
         })
       });
+      
+      // Sync to Firebase
+      await firebaseSync.syncStudent(newStudent);
+      
+      return newStudent;
     },
     onSuccess: () => {
-      toast({ title: "Success", description: "Student created successfully" });
+      toast({ title: "Success", description: "Student created and synced to Firebase" });
       setIsStudentDialogOpen(false);
       resetStudentForm();
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
@@ -166,13 +177,18 @@ export default function AdminDashboard() {
   // Score update mutation
   const updateScoresMutation = useMutation({
     mutationFn: async (scoresData: any[]) => {
-      return apiRequest('/api/admin/scores/bulk-update', {
+      const results = await apiRequest('/api/admin/scores/bulk-update', {
         method: 'POST',
         body: JSON.stringify({ scores: scoresData })
       });
+      
+      // Sync assessments to Firebase
+      await firebaseSync.bulkSyncAssessments(results.results);
+      
+      return results;
     },
     onSuccess: () => {
-      toast({ title: "Success", description: "Scores updated successfully" });
+      toast({ title: "Success", description: "Scores updated and synced to Firebase" });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/assessments'] });
     },
     onError: () => {
@@ -237,7 +253,7 @@ export default function AdminDashboard() {
                 <School className="h-8 w-8 text-blue-600" />
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                    Sunshine Academy
+                    Seat of Wisdom Academy
                   </h1>
                   <p className="text-sm text-gray-500">
                     {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}

@@ -19,7 +19,7 @@ import {
 import bcrypt from "bcrypt";
 
 async function seedDatabase() {
-  console.log("Starting comprehensive database seeding...");
+  console.log("Starting comprehensive database seeding for Seat of Wisdom Academy...");
 
   try {
     // Clear existing data first
@@ -33,34 +33,34 @@ async function seedDatabase() {
     await db.delete(reportCardTemplates);
     console.log("✓ Cleared existing data");
 
-    // Create 4 school branches
-    const [mainCampus, eastBranch, westBranch, northBranch] = await db.insert(schools).values([
+    // Create 4 school branches for Seat of Wisdom Academy
+    const [school1, school2, school3, school4] = await db.insert(schools).values([
       {
-        name: "Sunshine Academy - Main Campus",
-        address: "123 Education Street, Central District",
+        name: "School 1",
+        address: "123 Education Street, Branch 1 District",
         phone: "+234-801-234-5678",
-        email: "main@sunshine-academy.edu"
+        email: "school1@seatofwisdom.edu"
       },
       {
-        name: "Sunshine Academy - East Branch",
-        address: "456 Learning Avenue, East District",
+        name: "School 2",
+        address: "456 Learning Avenue, Branch 2 District",
         phone: "+234-802-345-6789",
-        email: "east@sunshine-academy.edu"
+        email: "school2@seatofwisdom.edu"
       },
       {
-        name: "Sunshine Academy - West Branch", 
-        address: "789 Knowledge Road, West District",
+        name: "School 3", 
+        address: "789 Knowledge Road, Branch 3 District",
         phone: "+234-803-456-7890",
-        email: "west@sunshine-academy.edu"
+        email: "school3@seatofwisdom.edu"
       },
       {
-        name: "Sunshine Academy - North Branch",
-        address: "321 Wisdom Lane, North District", 
+        name: "School 4",
+        address: "321 Wisdom Lane, Branch 4 District", 
         phone: "+234-804-567-8901",
-        email: "north@sunshine-academy.edu"
+        email: "school4@seatofwisdom.edu"
       }
     ]).returning();
-    console.log("✓ Created 4 school branches");
+    console.log("✓ Created 4 school branches for Seat of Wisdom Academy");
 
     // Create users with proper hashed passwords
     const hashedPassword = await bcrypt.hash("password123", 10);
@@ -68,7 +68,7 @@ async function seedDatabase() {
     // Create 1 main admin (access to all schools)
     const [mainAdmin] = await db.insert(users).values([
       {
-        email: "admin@sunshine-academy.edu",
+        email: "admin@seatofwisdom.edu",
         password: hashedPassword,
         firstName: "Super",
         lastName: "Administrator",
@@ -78,38 +78,38 @@ async function seedDatabase() {
     ]).returning();
 
     // Create 4 sub-admins (one for each branch)
-    const [eastAdmin, westAdmin, northAdmin, mainBranchAdmin] = await db.insert(users).values([
+    const [admin1, admin2, admin3, admin4] = await db.insert(users).values([
       {
-        email: "east.admin@sunshine-academy.edu",
+        email: "admin1@seatofwisdom.edu",
         password: hashedPassword,
-        firstName: "East",
+        firstName: "School 1",
         lastName: "Administrator",
         role: "sub-admin",
-        schoolId: eastBranch.id
+        schoolId: school1.id
       },
       {
-        email: "west.admin@sunshine-academy.edu",
+        email: "admin2@seatofwisdom.edu",
         password: hashedPassword,
-        firstName: "West",
+        firstName: "School 2",
         lastName: "Administrator",
         role: "sub-admin",
-        schoolId: westBranch.id
+        schoolId: school2.id
       },
       {
-        email: "north.admin@sunshine-academy.edu",
+        email: "admin3@seatofwisdom.edu",
         password: hashedPassword,
-        firstName: "North",
+        firstName: "School 3",
         lastName: "Administrator",
         role: "sub-admin",
-        schoolId: northBranch.id
+        schoolId: school3.id
       },
       {
-        email: "main.admin@sunshine-academy.edu",
+        email: "admin4@seatofwisdom.edu",
         password: hashedPassword,
-        firstName: "Main",
+        firstName: "School 4",
         lastName: "Administrator",
         role: "sub-admin",
-        schoolId: mainCampus.id
+        schoolId: school4.id
       }
     ]).returning();
     console.log("✓ Created admin accounts");
@@ -152,38 +152,38 @@ async function seedDatabase() {
     // Create classes for each school branch
     const allClasses = [];
     
-    // Main Campus classes
-    const mainClasses = await db.insert(classes).values([
-      { name: "Grade 5A", description: "Primary 5 class A", schoolId: mainCampus.id },
-      { name: "Grade 5B", description: "Primary 5 class B", schoolId: mainCampus.id },
-      { name: "Grade 6A", description: "Primary 6 class A", schoolId: mainCampus.id },
-      { name: "Grade 6B", description: "Primary 6 class B", schoolId: mainCampus.id }
+    // School 1 classes
+    const school1Classes = await db.insert(classes).values([
+      { name: "Grade 5A", description: "Primary 5 class A", schoolId: school1.id },
+      { name: "Grade 5B", description: "Primary 5 class B", schoolId: school1.id },
+      { name: "Grade 6A", description: "Primary 6 class A", schoolId: school1.id },
+      { name: "Grade 6B", description: "Primary 6 class B", schoolId: school1.id }
     ]).returning();
-    allClasses.push(...mainClasses);
+    allClasses.push(...school1Classes);
 
-    // East Branch classes  
-    const eastClasses = await db.insert(classes).values([
-      { name: "Grade 4A", description: "Primary 4 class A", schoolId: eastBranch.id },
-      { name: "Grade 4B", description: "Primary 4 class B", schoolId: eastBranch.id },
-      { name: "Grade 5A", description: "Primary 5 class A", schoolId: eastBranch.id }
+    // School 2 classes  
+    const school2Classes = await db.insert(classes).values([
+      { name: "Grade 4A", description: "Primary 4 class A", schoolId: school2.id },
+      { name: "Grade 4B", description: "Primary 4 class B", schoolId: school2.id },
+      { name: "Grade 5A", description: "Primary 5 class A", schoolId: school2.id }
     ]).returning();
-    allClasses.push(...eastClasses);
+    allClasses.push(...school2Classes);
 
-    // West Branch classes
-    const westClasses = await db.insert(classes).values([
-      { name: "Grade 3A", description: "Primary 3 class A", schoolId: westBranch.id },
-      { name: "Grade 3B", description: "Primary 3 class B", schoolId: westBranch.id },
-      { name: "Grade 4A", description: "Primary 4 class A", schoolId: westBranch.id }
+    // School 3 classes
+    const school3Classes = await db.insert(classes).values([
+      { name: "Grade 3A", description: "Primary 3 class A", schoolId: school3.id },
+      { name: "Grade 3B", description: "Primary 3 class B", schoolId: school3.id },
+      { name: "Grade 4A", description: "Primary 4 class A", schoolId: school3.id }
     ]).returning();
-    allClasses.push(...westClasses);
+    allClasses.push(...school3Classes);
 
-    // North Branch classes
-    const northClasses = await db.insert(classes).values([
-      { name: "Grade 2A", description: "Primary 2 class A", schoolId: northBranch.id },
-      { name: "Grade 2B", description: "Primary 2 class B", schoolId: northBranch.id },
-      { name: "Grade 3A", description: "Primary 3 class A", schoolId: northBranch.id }
+    // School 4 classes
+    const school4Classes = await db.insert(classes).values([
+      { name: "Grade 2A", description: "Primary 2 class A", schoolId: school4.id },
+      { name: "Grade 2B", description: "Primary 2 class B", schoolId: school4.id },
+      { name: "Grade 3A", description: "Primary 3 class A", schoolId: school4.id }
     ]).returning();
-    allClasses.push(...northClasses);
+    allClasses.push(...school4Classes);
     console.log("✓ Created classes for all branches");
 
     // Assign subjects to all classes
@@ -203,18 +203,15 @@ async function seedDatabase() {
     console.log("✓ Assigned subjects to classes");
 
     // Create sample students for each school
-    const studentUsers = [];
-    const studentRecords = [];
-
-    // Main Campus students
-    const mainStudentUsers = await db.insert(users).values([
+    // School 1 students
+    const school1StudentUsers = await db.insert(users).values([
       {
         email: "john.doe@student.com",
         password: hashedPassword,
         firstName: "John",
         lastName: "Doe",
         role: "student",
-        schoolId: mainCampus.id
+        schoolId: school1.id
       },
       {
         email: "jane.smith@student.com",
@@ -222,7 +219,7 @@ async function seedDatabase() {
         firstName: "Jane",
         lastName: "Smith",
         role: "student",
-        schoolId: mainCampus.id
+        schoolId: school1.id
       },
       {
         email: "mike.johnson@student.com",
@@ -230,40 +227,40 @@ async function seedDatabase() {
         firstName: "Mike",
         lastName: "Johnson",
         role: "student",
-        schoolId: mainCampus.id
+        schoolId: school1.id
       }
     ]).returning();
 
-    const mainStudents = await db.insert(students).values([
+    const school1Students = await db.insert(students).values([
       {
-        userId: mainStudentUsers[0].id,
-        classId: mainClasses[0].id, // Grade 5A
-        studentId: "MAIN001",
+        userId: school1StudentUsers[0].id,
+        classId: school1Classes[0].id, // Grade 5A
+        studentId: "SOW001",
         parentContact: "+234-701-111-1111"
       },
       {
-        userId: mainStudentUsers[1].id,
-        classId: mainClasses[0].id, // Grade 5A
-        studentId: "MAIN002", 
+        userId: school1StudentUsers[1].id,
+        classId: school1Classes[0].id, // Grade 5A
+        studentId: "SOW002", 
         parentContact: "+234-701-111-2222"
       },
       {
-        userId: mainStudentUsers[2].id,
-        classId: mainClasses[1].id, // Grade 5B
-        studentId: "MAIN003",
+        userId: school1StudentUsers[2].id,
+        classId: school1Classes[1].id, // Grade 5B
+        studentId: "SOW003",
         parentContact: "+234-701-111-3333"
       }
     ]).returning();
 
-    // East Branch students
-    const eastStudentUsers = await db.insert(users).values([
+    // School 2 students
+    const school2StudentUsers = await db.insert(users).values([
       {
         email: "alice.wilson@student.com",
         password: hashedPassword,
         firstName: "Alice",
         lastName: "Wilson",
         role: "student",
-        schoolId: eastBranch.id
+        schoolId: school2.id
       },
       {
         email: "bob.brown@student.com",
@@ -271,108 +268,101 @@ async function seedDatabase() {
         firstName: "Bob",
         lastName: "Brown",
         role: "student",
-        schoolId: eastBranch.id
+        schoolId: school2.id
       }
     ]).returning();
 
-    const eastStudents = await db.insert(students).values([
+    const school2Students = await db.insert(students).values([
       {
-        userId: eastStudentUsers[0].id,
-        classId: eastClasses[0].id, // Grade 4A
-        studentId: "EAST001",
+        userId: school2StudentUsers[0].id,
+        classId: school2Classes[0].id, // Grade 4A
+        studentId: "SOW004",
         parentContact: "+234-702-222-1111"
       },
       {
-        userId: eastStudentUsers[1].id,
-        classId: eastClasses[1].id, // Grade 4B
-        studentId: "EAST002",
+        userId: school2StudentUsers[1].id,
+        classId: school2Classes[1].id, // Grade 4B
+        studentId: "SOW005",
         parentContact: "+234-702-222-2222"
       }
     ]).returning();
 
     console.log("✓ Created sample students");
 
-    // Create sample assessments for first term
+    // Create sample assessments for first term (20+20+60 system)
     const sampleAssessments = [];
-    const allStudents = [...mainStudents, ...eastStudents];
+    const allStudents = [...school1Students, ...school2Students];
 
     for (const student of allStudents) {
       for (const subject of allSubjects.slice(0, 3)) { // Math, English, Science only
+        const firstCA = Math.floor(Math.random() * 15) + 5; // 5-20
+        const secondCA = Math.floor(Math.random() * 15) + 5; // 5-20
+        const exam = Math.floor(Math.random() * 40) + 20; // 20-60
+        const total = firstCA + secondCA + exam;
+        const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
+
         sampleAssessments.push({
           studentId: student.id,
           subjectId: subject.id,
           classId: student.classId,
           term: "First Term",
           session: "2024/2025",
-          firstCA: Math.floor(Math.random() * 16) + 5, // 5-20
-          secondCA: Math.floor(Math.random() * 16) + 5, // 5-20
-          exam: Math.floor(Math.random() * 41) + 20, // 20-60
-          total: 0, // Will be calculated
-          grade: "A"
+          firstCA,
+          secondCA,
+          exam,
+          total,
+          grade
         });
       }
     }
 
-    // Calculate totals and grades
-    sampleAssessments.forEach(assessment => {
-      const total = (assessment.firstCA || 0) + (assessment.secondCA || 0) + (assessment.exam || 0);
-      assessment.total = total;
-      assessment.grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
-    });
-
     await db.insert(assessments).values(sampleAssessments);
-    console.log("✓ Created sample assessments");
+    console.log("✓ Created sample assessments with 20+20+60 scoring system");
 
     // Create default report card template
     await db.insert(reportCardTemplates).values([
       {
-        name: "Sunshine Academy Default Template",
-        schoolName: "Sunshine Academy",
-        schoolAddress: "Education Excellence Center",
-        headerConfig: JSON.stringify({
-          showLogo: true,
-          showSession: true,
-          showTerm: true
-        }),
-        gradesConfig: JSON.stringify({
-          A: { min: 80, max: 100, remark: "Excellent" },
-          B: { min: 70, max: 79, remark: "Very Good" },
-          C: { min: 60, max: 69, remark: "Good" },
-          D: { min: 50, max: 59, remark: "Fair" },
-          F: { min: 0, max: 49, remark: "Poor" }
-        }),
-        footerConfig: JSON.stringify({
-          principalName: "Dr. Sarah Johnson",
-          showSignature: true
-        }),
-        isDefault: true
+        name: "Seat of Wisdom Academy Standard Report Card",
+        description: "Standard report card template for all branches",
+        isDefault: true,
+        template: JSON.stringify({
+          header: {
+            schoolName: "Seat of Wisdom Academy",
+            logoUrl: "/assets/school-logo.png",
+            address: "Nigeria",
+            phone: "+234-800-WISDOM",
+            email: "info@seatofwisdom.edu"
+          },
+          gradeScale: {
+            A: "80-100 (Excellent)",
+            B: "70-79 (Very Good)", 
+            C: "60-69 (Good)",
+            D: "50-59 (Satisfactory)",
+            F: "0-49 (Needs Improvement)"
+          },
+          assessmentStructure: {
+            firstCA: { name: "1st CA", maxMarks: 20 },
+            secondCA: { name: "2nd CA", maxMarks: 20 },
+            exam: { name: "Exam", maxMarks: 60 },
+            total: { name: "Total", maxMarks: 100 }
+          }
+        })
       }
     ]);
-    console.log("✓ Created report card template");
+    console.log("✓ Created default report card template");
 
     console.log("\n🎉 Database seeding completed successfully!");
-    console.log("\n📚 Demo Accounts Created:");
-    console.log("=".repeat(50));
-    console.log("Main Admin (Access to all schools):");
-    console.log("  Email: admin@sunshine-academy.edu");
-    console.log("  Password: password123");
-    console.log("  Role: admin");
-    console.log("");
-    console.log("Sub-Admins (School-specific access):");
-    console.log("  East Branch: east.admin@sunshine-academy.edu");
-    console.log("  West Branch: west.admin@sunshine-academy.edu");
-    console.log("  North Branch: north.admin@sunshine-academy.edu");
-    console.log("  Main Campus: main.admin@sunshine-academy.edu");
-    console.log("  Password: password123");
-    console.log("  Role: sub-admin");
-    console.log("");
-    console.log("Sample Students:");
-    console.log("  john.doe@student.com (Main Campus)");
-    console.log("  jane.smith@student.com (Main Campus)");
-    console.log("  alice.wilson@student.com (East Branch)");
-    console.log("  Password: password123");
-    console.log("  Role: student");
-    console.log("=".repeat(50));
+    console.log("\n📋 Demo Accounts Created:");
+    console.log("Main Admin: admin@seatofwisdom.edu / password123");
+    console.log("School 1 Admin: admin1@seatofwisdom.edu / password123");
+    console.log("School 2 Admin: admin2@seatofwisdom.edu / password123");
+    console.log("School 3 Admin: admin3@seatofwisdom.edu / password123");
+    console.log("School 4 Admin: admin4@seatofwisdom.edu / password123");
+    console.log("Student: john.doe@student.com / password123");
+    console.log("Student: alice.wilson@student.com / password123");
+    console.log("\n🏫 Schools: School 1, School 2, School 3, School 4");
+    console.log("📚 Subjects: Mathematics, English, Science, Social Studies, Arts, French");
+    console.log("🎯 Scoring System: 1st CA (20) + 2nd CA (20) + Exam (60) = Total (100)");
 
   } catch (error) {
     console.error("❌ Seeding failed:", error);
@@ -381,10 +371,10 @@ async function seedDatabase() {
 }
 
 // Run seeding if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
   seedDatabase()
     .then(() => {
-      console.log("Seeding completed!");
+      console.log("Seeding completed successfully!");
       process.exit(0);
     })
     .catch((error) => {

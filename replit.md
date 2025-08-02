@@ -2,7 +2,7 @@
 
 ## Overview
 
-A comprehensive school management system built with React (frontend) and Express (backend) featuring complete student score tracking, administrative controls, and report card generation. The application provides both admin and student dashboards with JWT authentication, PostgreSQL database storage, and professional report card printing capabilities.
+A comprehensive multi-branch school management system for **Seat of Wisdom Academy** built with React (frontend) and Express (backend) featuring complete student score tracking, administrative controls, and Firebase database integration. The application supports 4 school branches (School 1, School 2, School 3, School 4) with role-based access for admin (all schools), sub-admin (single school), and student roles. Features 20+20+60 scoring system, offline-first functionality with Firebase sync, and professional report card generation.
 
 ## User Preferences
 

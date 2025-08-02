@@ -1,195 +1,342 @@
 import { 
   collection, 
   doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
   addDoc, 
   updateDoc, 
-  deleteDoc, 
-  getDocs, 
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
   serverTimestamp,
-  writeBatch 
+  enableNetwork,
+  disableNetwork,
+  writeBatch
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { getLocalData, saveLocalData, clearPendingChanges } from "./storage";
-import { Student } from "@shared/schema";
+import type { 
+  School, 
+  User, 
+  Class, 
+  Subject, 
+  Student, 
+  Assessment,
+  StudentWithDetails 
+} from "@shared/schema";
 
-export interface SyncResult {
-  success: boolean;
-  message: string;
-  details?: {
-    added: number;
-    updated: number;
-    deleted: number;
-    downloaded: number;
-  };
-}
+// Collection names
+const COLLECTIONS = {
+  schools: 'schools',
+  users: 'users', 
+  classes: 'classes',
+  subjects: 'subjects',
+  students: 'students',
+  assessments: 'assessments',
+  syncQueue: 'syncQueue'
+};
 
-// Sync local changes to Firebase
-export const syncToFirebase = async (): Promise<SyncResult> => {
-  try {
-    const localData = getLocalData();
-    const { pendingChanges } = localData;
+// Firebase sync manager
+export class FirebaseSync {
+  private isOnline = navigator.onLine;
+  private syncQueue: any[] = [];
+
+  constructor() {
+    // Monitor online status
+    window.addEventListener('online', this.handleOnline.bind(this));
+    window.addEventListener('offline', this.handleOffline.bind(this));
+  }
+
+  private async handleOnline() {
+    this.isOnline = true;
+    await enableNetwork(db);
+    await this.processSyncQueue();
+  }
+
+  private async handleOffline() {
+    this.isOnline = false;
+    await disableNetwork(db);
+  }
+
+  // Queue operations for offline sync
+  private queueOperation(operation: string, collection: string, data: any, id?: string) {
+    this.syncQueue.push({
+      operation,
+      collection,
+      data,
+      id,
+      timestamp: new Date().toISOString()
+    });
     
+    // Store in localStorage for persistence
+    localStorage.setItem('firebaseSyncQueue', JSON.stringify(this.syncQueue));
+  }
+
+  // Process queued operations when back online
+  private async processSyncQueue() {
+    const stored = localStorage.getItem('firebaseSyncQueue');
+    if (stored) {
+      this.syncQueue = JSON.parse(stored);
+    }
+
     const batch = writeBatch(db);
-    let operationCount = 0;
-    
-    // Add new students
-    const addedStudents: any[] = [];
-    for (const student of pendingChanges.added) {
-      const docRef = doc(collection(db, "students"));
-      const studentData = {
-        name: student.name,
-        email: student.email,
-        class: student.class,
-        scores: student.scores,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      };
-      batch.set(docRef, studentData);
-      addedStudents.push({ localId: student.id, firebaseId: docRef.id, data: studentData });
-      operationCount++;
+    let batchCount = 0;
+
+    for (const item of this.syncQueue) {
+      try {
+        const docRef = item.id 
+          ? doc(db, item.collection, item.id)
+          : doc(collection(db, item.collection));
+
+        switch (item.operation) {
+          case 'create':
+          case 'update':
+            batch.set(docRef, {
+              ...item.data,
+              lastModified: serverTimestamp(),
+              syncedAt: serverTimestamp()
+            }, { merge: true });
+            break;
+          case 'delete':
+            batch.delete(docRef);
+            break;
+        }
+
+        batchCount++;
+        
+        // Firebase batch limit is 500
+        if (batchCount >= 500) {
+          await batch.commit();
+          batchCount = 0;
+        }
+      } catch (error) {
+        console.error('Sync operation failed:', error);
+      }
     }
-    
-    // Update existing students
-    for (const student of pendingChanges.updated) {
-      // For updated students, we need to find them by matching data since we don't have Firebase IDs
-      // This is a limitation of offline-first approach - we'll handle this in the full sync
-      operationCount++;
-    }
-    
-    // Delete students (similar issue - we need Firebase IDs)
-    for (const studentId of pendingChanges.deleted) {
-      operationCount++;
-    }
-    
-    // Commit the batch
-    if (operationCount > 0) {
+
+    if (batchCount > 0) {
       await batch.commit();
     }
-    
-    // Update local data with Firebase IDs for new students
-    const updatedLocalData = getLocalData();
-    addedStudents.forEach(({ localId, firebaseId }) => {
-      const studentIndex = updatedLocalData.students.findIndex(s => s.id === localId);
-      if (studentIndex >= 0) {
-        updatedLocalData.students[studentIndex].id = firebaseId;
-      }
-    });
-    
-    clearPendingChanges();
-    
-    return {
-      success: true,
-      message: "Successfully synced to Firebase",
-      details: {
-        added: pendingChanges.added.length,
-        updated: pendingChanges.updated.length,
-        deleted: pendingChanges.deleted.length,
-        downloaded: 0
-      }
-    };
-  } catch (error: any) {
-    console.error("Sync to Firebase failed:", error);
-    return {
-      success: false,
-      message: `Sync failed: ${error.message || "Unknown error"}`
-    };
-  }
-};
 
-// Download data from Firebase and merge with local
-export const syncFromFirebase = async (): Promise<SyncResult> => {
-  try {
-    const querySnapshot = await getDocs(collection(db, "students"));
-    const firebaseStudents: Student[] = [];
-    
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      firebaseStudents.push({
-        id: doc.id,
-        name: data.name,
-        email: data.email,
-        class: data.class,
-        scores: data.scores || [],
-        createdAt: data.createdAt?.toDate() || new Date(),
-        updatedAt: data.updatedAt?.toDate() || new Date()
-      });
-    });
-    
-    const localData = getLocalData();
-    
-    // Merge strategy: Firebase data overwrites local for existing students
-    // New local students are preserved
-    const mergedStudents = [...firebaseStudents];
-    
-    // Add local students that don't exist in Firebase
-    localData.students.forEach(localStudent => {
-      const existsInFirebase = firebaseStudents.some(fbStudent => 
-        fbStudent.email === localStudent.email && fbStudent.name === localStudent.name
+    // Clear sync queue
+    this.syncQueue = [];
+    localStorage.removeItem('firebaseSyncQueue');
+  }
+
+  // Schools
+  async syncSchool(school: School): Promise<void> {
+    if (!this.isOnline) {
+      this.queueOperation('update', COLLECTIONS.schools, school, school.id);
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.schools, school.id), {
+        ...school,
+        lastModified: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error('Failed to sync school:', error);
+      this.queueOperation('update', COLLECTIONS.schools, school, school.id);
+    }
+  }
+
+  async getSchools(): Promise<School[]> {
+    try {
+      const snapshot = await getDocs(collection(db, COLLECTIONS.schools));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as School));
+    } catch (error) {
+      console.error('Failed to get schools from Firebase:', error);
+      return [];
+    }
+  }
+
+  // Users
+  async syncUser(user: User): Promise<void> {
+    if (!this.isOnline) {
+      this.queueOperation('update', COLLECTIONS.users, user, user.id);
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.users, user.id), {
+        ...user,
+        password: undefined, // Never sync passwords to Firebase
+        lastModified: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error('Failed to sync user:', error);
+      this.queueOperation('update', COLLECTIONS.users, user, user.id);
+    }
+  }
+
+  // Classes
+  async syncClass(classData: Class): Promise<void> {
+    if (!this.isOnline) {
+      this.queueOperation('update', COLLECTIONS.classes, classData, classData.id);
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.classes, classData.id), {
+        ...classData,
+        lastModified: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error('Failed to sync class:', error);
+      this.queueOperation('update', COLLECTIONS.classes, classData, classData.id);
+    }
+  }
+
+  async getClassesBySchool(schoolId: string): Promise<Class[]> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.classes),
+        where("schoolId", "==", schoolId),
+        orderBy("name")
       );
-      
-      if (!existsInFirebase) {
-        mergedStudents.push(localStudent);
-      }
-    });
-    
-    // Update local storage
-    const updatedData = {
-      ...localData,
-      students: mergedStudents,
-      lastSyncDate: new Date().toISOString()
-    };
-    
-    saveLocalData(updatedData);
-    
-    return {
-      success: true,
-      message: "Successfully downloaded from Firebase",
-      details: {
-        added: 0,
-        updated: 0,
-        deleted: 0,
-        downloaded: firebaseStudents.length
-      }
-    };
-  } catch (error: any) {
-    console.error("Sync from Firebase failed:", error);
-    return {
-      success: false,
-      message: `Download failed: ${error.message || "Unknown error"}`
-    };
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Class));
+    } catch (error) {
+      console.error('Failed to get classes from Firebase:', error);
+      return [];
+    }
   }
-};
 
-// Full bi-directional sync
-export const fullSync = async (): Promise<SyncResult> => {
-  try {
-    // First, upload local changes
-    const uploadResult = await syncToFirebase();
-    if (!uploadResult.success) {
-      return uploadResult;
+  // Students
+  async syncStudent(student: Student): Promise<void> {
+    if (!this.isOnline) {
+      this.queueOperation('update', COLLECTIONS.students, student, student.id);
+      return;
     }
-    
-    // Then, download any updates from Firebase
-    const downloadResult = await syncFromFirebase();
-    if (!downloadResult.success) {
-      return downloadResult;
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.students, student.id), {
+        ...student,
+        lastModified: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error('Failed to sync student:', error);
+      this.queueOperation('update', COLLECTIONS.students, student, student.id);
     }
-    
-    return {
-      success: true,
-      message: "Full sync completed successfully",
-      details: {
-        added: uploadResult.details?.added || 0,
-        updated: uploadResult.details?.updated || 0,
-        deleted: uploadResult.details?.deleted || 0,
-        downloaded: downloadResult.details?.downloaded || 0
-      }
-    };
-  } catch (error: any) {
-    console.error("Full sync failed:", error);
-    return {
-      success: false,
-      message: `Full sync failed: ${error.message || "Unknown error"}`
-    };
   }
-};
+
+  async getStudentsBySchool(schoolId: string): Promise<StudentWithDetails[]> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.students),
+        where("schoolId", "==", schoolId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudentWithDetails));
+    } catch (error) {
+      console.error('Failed to get students from Firebase:', error);
+      return [];
+    }
+  }
+
+  // Assessments
+  async syncAssessment(assessment: Assessment): Promise<void> {
+    if (!this.isOnline) {
+      this.queueOperation('update', COLLECTIONS.assessments, assessment, assessment.id);
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, COLLECTIONS.assessments, assessment.id!), {
+        ...assessment,
+        lastModified: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error('Failed to sync assessment:', error);
+      this.queueOperation('update', COLLECTIONS.assessments, assessment, assessment.id);
+    }
+  }
+
+  async getAssessments(classId: string, subjectId: string, term: string, session: string): Promise<Assessment[]> {
+    try {
+      const q = query(
+        collection(db, COLLECTIONS.assessments),
+        where("classId", "==", classId),
+        where("subjectId", "==", subjectId),
+        where("term", "==", term),
+        where("session", "==", session)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Assessment));
+    } catch (error) {
+      console.error('Failed to get assessments from Firebase:', error);
+      return [];
+    }
+  }
+
+  // Real-time listeners
+  subscribeToSchools(callback: (schools: School[]) => void) {
+    return onSnapshot(collection(db, COLLECTIONS.schools), (snapshot) => {
+      const schools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as School));
+      callback(schools);
+    });
+  }
+
+  subscribeToClassesBySchool(schoolId: string, callback: (classes: Class[]) => void) {
+    const q = query(
+      collection(db, COLLECTIONS.classes),
+      where("schoolId", "==", schoolId)
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+      const classes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Class));
+      callback(classes);
+    });
+  }
+
+  subscribeToStudentsBySchool(schoolId: string, callback: (students: StudentWithDetails[]) => void) {
+    const q = query(
+      collection(db, COLLECTIONS.students),
+      where("schoolId", "==", schoolId)
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+      const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudentWithDetails));
+      callback(students);
+    });
+  }
+
+  // Bulk sync operations
+  async bulkSyncAssessments(assessments: Assessment[]): Promise<void> {
+    if (!this.isOnline) {
+      assessments.forEach(assessment => {
+        this.queueOperation('update', COLLECTIONS.assessments, assessment, assessment.id);
+      });
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      
+      assessments.forEach(assessment => {
+        const docRef = assessment.id 
+          ? doc(db, COLLECTIONS.assessments, assessment.id)
+          : doc(collection(db, COLLECTIONS.assessments));
+          
+        batch.set(docRef, {
+          ...assessment,
+          lastModified: serverTimestamp()
+        }, { merge: true });
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Failed to bulk sync assessments:', error);
+      // Queue individually if batch fails
+      assessments.forEach(assessment => {
+        this.queueOperation('update', COLLECTIONS.assessments, assessment, assessment.id);
+      });
+    }
+  }
+}
+
+// Export singleton instance
+export const firebaseSync = new FirebaseSync();
