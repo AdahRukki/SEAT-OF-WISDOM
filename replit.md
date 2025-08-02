@@ -36,7 +36,7 @@ Preferred communication style: Simple, everyday language.
 ### Data Schema
 - **User Management**: Complete user system with roles (admin/sub-admin/student) and authentication
 - **Multi-Branch Structure**: Schools, classes, subjects, and class-subject relationships with branch isolation
-- **Student Records**: Student profiles linked to users, classes, and specific school branches
+- **Student Records**: Student profiles linked to users, classes, and specific school branches with SOWA/0001 ID pattern
 - **Assessment System**: 20+20+60 scoring system (1st CA, 2nd CA, Exam) with automatic total calculation and grading
 - **Report Cards**: Printable report cards with comprehensive academic summaries for Seat of Wisdom Academy
 - **Database Relations**: Properly normalized PostgreSQL schema with Firebase sync capabilities

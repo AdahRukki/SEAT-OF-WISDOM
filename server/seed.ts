@@ -235,19 +235,19 @@ async function seedDatabase() {
       {
         userId: school1StudentUsers[0].id,
         classId: school1Classes[0].id, // Grade 5A
-        studentId: "SOW001",
+        studentId: "SOWA/0001",
         parentContact: "+234-701-111-1111"
       },
       {
         userId: school1StudentUsers[1].id,
         classId: school1Classes[0].id, // Grade 5A
-        studentId: "SOW002", 
+        studentId: "SOWA/0002", 
         parentContact: "+234-701-111-2222"
       },
       {
         userId: school1StudentUsers[2].id,
         classId: school1Classes[1].id, // Grade 5B
-        studentId: "SOW003",
+        studentId: "SOWA/0003",
         parentContact: "+234-701-111-3333"
       }
     ]).returning();
@@ -276,13 +276,13 @@ async function seedDatabase() {
       {
         userId: school2StudentUsers[0].id,
         classId: school2Classes[0].id, // Grade 4A
-        studentId: "SOW004",
+        studentId: "SOWA/0004",
         parentContact: "+234-702-222-1111"
       },
       {
         userId: school2StudentUsers[1].id,
         classId: school2Classes[1].id, // Grade 4B
-        studentId: "SOW005",
+        studentId: "SOWA/0005",
         parentContact: "+234-702-222-2222"
       }
     ]).returning();
@@ -363,6 +363,7 @@ async function seedDatabase() {
     console.log("\n🏫 Schools: School 1, School 2, School 3, School 4");
     console.log("📚 Subjects: Mathematics, English, Science, Social Studies, Arts, French");
     console.log("🎯 Scoring System: 1st CA (20) + 2nd CA (20) + Exam (60) = Total (100)");
+    console.log("📋 Student ID Pattern: SOWA/0001, SOWA/0002, etc.");
 
   } catch (error) {
     console.error("❌ Seeding failed:", error);
