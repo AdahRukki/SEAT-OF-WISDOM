@@ -181,12 +181,12 @@ export const assessmentsRelations = relations(assessments, ({ one }) => ({
 }));
 
 // Zod schemas
-export const insertSchoolSchema = createInsertSchema(schools);
-export const insertClassSchema = createInsertSchema(classes);
-export const insertSubjectSchema = createInsertSchema(subjects);
-export const insertUserSchema = createInsertSchema(users);
-export const insertStudentSchema = createInsertSchema(students);
-export const insertAssessmentSchema = createInsertSchema(assessments);
+export const insertSchoolSchema = createInsertSchema(schools).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertClassSchema = createInsertSchema(classes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStudentSchema = createInsertSchema(students).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertAssessmentSchema = createInsertSchema(assessments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertReportCardTemplateSchema = createInsertSchema(reportCardTemplates);
 
 // Additional validation schemas
