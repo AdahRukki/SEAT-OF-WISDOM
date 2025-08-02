@@ -57,3 +57,93 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+/* Print styles for report cards */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+  
+  .report-card {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    color: black !important;
+    background: white !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+  }
+  
+  .report-card h1 {
+    font-size: 24px !important;
+    text-align: center !important;
+    margin-bottom: 20px !important;
+    color: black !important;
+  }
+  
+  .report-card h2 {
+    font-size: 18px !important;
+    margin: 15px 0 10px 0 !important;
+    color: black !important;
+  }
+  
+  .report-card table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin: 15px 0 !important;
+  }
+  
+  .report-card table th,
+  .report-card table td {
+    border: 1px solid black !important;
+    padding: 8px !important;
+    text-align: left !important;
+    color: black !important;
+    background: white !important;
+  }
+  
+  .report-card table th {
+    background: #f5f5f5 !important;
+    font-weight: bold !important;
+  }
+  
+  .report-card .student-info {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 15px !important;
+    margin: 20px 0 !important;
+    padding: 15px !important;
+    border: 2px solid black !important;
+  }
+  
+  .report-card .summary {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 15px !important;
+    margin: 20px 0 !important;
+    padding: 15px !important;
+    border: 1px solid black !important;
+  }
+  
+  .report-card .summary div {
+    text-align: center !important;
+  }
+  
+  .report-card .grade-badge {
+    display: inline-block !important;
+    padding: 2px 6px !important;
+    border: 1px solid black !important;
+    background: white !important;
+    color: black !important;
+  }
+  
+  @page {
+    margin: 0.5in;
+    size: A4;
+  }
+}

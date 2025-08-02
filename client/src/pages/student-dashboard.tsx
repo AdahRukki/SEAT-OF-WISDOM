@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { GraduationCap, LogOut, BookOpen, Trophy, User } from "lucide-react";
+import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer } from "lucide-react";
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
 
 export default function StudentDashboard() {
@@ -246,15 +246,36 @@ export default function StudentDashboard() {
           <TabsContent value="report" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Report Card</CardTitle>
-                <CardDescription>
-                  Your comprehensive academic report for {selectedTerm}, {selectedSession}
-                </CardDescription>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Report Card</CardTitle>
+                    <CardDescription>
+                      Your comprehensive academic report for {selectedTerm}, {selectedSession}
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    onClick={() => window.print()} 
+                    className="no-print"
+                    variant="outline"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Report
+                  </Button>
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="report-card">
                 <div className="space-y-6">
+                  {/* School Header for Print */}
+                  <div className="hidden print-only">
+                    <h1 className="text-center text-2xl font-bold mb-4">STUDENT REPORT CARD</h1>
+                    <div className="text-center mb-6">
+                      <p className="text-lg font-semibold">Academic Session: {selectedSession}</p>
+                      <p className="text-lg font-semibold">Term: {selectedTerm}</p>
+                    </div>
+                  </div>
+
                   {/* Student Info */}
-                  <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="student-info grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                     <div>
                       <p className="text-sm text-gray-500">Student Name</p>
                       <p className="font-semibold">{user?.firstName} {user?.lastName}</p>
@@ -268,8 +289,8 @@ export default function StudentDashboard() {
                       <p className="font-semibold">{profile?.class?.name}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-500">Session</p>
-                      <p className="font-semibold">{selectedSession}</p>
+                      <p className="text-sm text-gray-500">Term</p>
+                      <p className="font-semibold">{selectedTerm}, {selectedSession}</p>
                     </div>
                   </div>
 
@@ -308,9 +329,9 @@ export default function StudentDashboard() {
                                 {total}
                               </td>
                               <td className="px-4 py-3 text-sm text-center">
-                                <Badge className={`${calculateGrade(total).color} text-white`}>
+                                <span className={`grade-badge inline-block px-2 py-1 rounded text-xs font-medium ${calculateGrade(total).color} text-white`}>
                                   {grade}
-                                </Badge>
+                                </span>
                               </td>
                             </tr>
                           );
@@ -320,7 +341,7 @@ export default function StudentDashboard() {
                   </div>
 
                   {/* Summary */}
-                  <div className="grid grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <div className="summary grid grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                     <div className="text-center">
                       <p className="text-sm text-gray-600 dark:text-gray-400">Overall Average</p>
                       <p className="text-2xl font-bold text-blue-600">{overallAverage}%</p>
