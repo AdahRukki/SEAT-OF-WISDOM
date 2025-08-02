@@ -114,10 +114,20 @@ export class DatabaseStorage implements IStorage {
       
       // Get existing classes for this school to generate next number
       const existingClasses = await db.select().from(classes).where(eq(classes.schoolId, classData.schoolId!));
-      const nextNumber = (existingClasses.length + 1).toString().padStart(2, '0');
+      const nextNumber = (existingClasses.length + 1).toString();
       
-      // Create readable ID: SCH1-CLS01, SCH2-CLS02, etc.
-      classData.id = `SCH${schoolNumber}-CLS${nextNumber}`;
+      // Extract class type from name (J.S.S -> JSS, Senior -> SS, etc.)
+      let classPrefix = 'CLS';
+      if (classData.name?.toLowerCase().includes('j.s.s') || classData.name?.toLowerCase().includes('junior')) {
+        classPrefix = 'JSS';
+      } else if (classData.name?.toLowerCase().includes('senior') || classData.name?.toLowerCase().includes('s.s.s')) {
+        classPrefix = 'SS';
+      } else if (classData.name?.toLowerCase().includes('primary')) {
+        classPrefix = 'PRI';
+      }
+      
+      // Create readable ID: SCH1-JSS1, SCH2-SS2, etc.
+      classData.id = `SCH${schoolNumber}-${classPrefix}${nextNumber}`;
     }
     
     const [classRecord] = await db
