@@ -38,6 +38,7 @@ import {
   BookOpen, 
   FileText,
   Building,
+  Building2,
   LogOut,
   User,
   School,
@@ -301,6 +302,67 @@ export default function AdminDashboard() {
     return <div>Loading...</div>;
   }
 
+  // Show school selector screen for main admin who hasn't selected a school yet
+  if (user.role === 'admin' && !selectedSchoolId) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="max-w-md w-full mx-auto">
+          <Card className="shadow-lg">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <img 
+                  src={logoImage} 
+                  alt="Seat of Wisdom Academy Logo" 
+                  className="h-16 w-16 object-contain rounded-md" 
+                />
+              </div>
+              <CardTitle className="text-2xl font-bold">Seat of Wisdom Academy</CardTitle>
+              <CardDescription>
+                Welcome, {user.firstName}! Select a school branch to manage.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="school-select" className="text-sm font-medium">
+                  Choose School Branch
+                </Label>
+                <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a school branch to manage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {schools.map((school) => (
+                      <SelectItem key={school.id} value={school.id}>
+                        <div className="flex items-center space-x-2">
+                          <Building2 className="h-4 w-4" />
+                          <span>{school.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => {
+                    // Logout functionality
+                    window.location.href = '/api/logout';
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -320,27 +382,23 @@ export default function AdminDashboard() {
                   </h1>
                   <p className="text-sm text-gray-500">
                     {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
+                    {selectedSchoolId && schools.find(s => s.id === selectedSchoolId) && (
+                      <span> - {schools.find(s => s.id === selectedSchoolId)?.name}</span>
+                    )}
                   </p>
                 </div>
               </div>
               
-              {/* School Selector for Main Admin */}
-              {user.role === 'admin' && (
-                <div className="flex items-center space-x-2">
-                  <Label className="text-sm font-medium">School:</Label>
-                  <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
-                    <SelectTrigger className="w-64">
-                      <SelectValue placeholder="Select a school branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {schools.map((school) => (
-                        <SelectItem key={school.id} value={school.id}>
-                          {school.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {/* Change School Button for Main Admin */}
+              {user.role === 'admin' && selectedSchoolId && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setSelectedSchoolId("")}
+                >
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Change School
+                </Button>
               )}
             </div>
 
