@@ -16,6 +16,10 @@ Preferred communication style: Simple, everyday language.
 - ✅ Added "View Details" feature for classes to show enrolled students
 - ✅ Updated dashboard logo to use custom logo image (4oWHptM_1754171230437.gif)
 - ✅ Firebase sync working as backup system with PostgreSQL as primary database
+- ✅ Improved school switching with clean dropdown and card-based selection
+- ✅ Simplified overview to show only students and classes counts
+- ✅ Added "Add Student" button in class details modal with return flow
+- ✅ Database already properly structured with schools → classes hierarchy
 
 ## System Architecture
 
