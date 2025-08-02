@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { firebaseSync } from "@/lib/offline-firebase-sync";
+import { useFirebaseSync } from "@/hooks/use-firebase-sync";
 import { 
   Card, 
   CardContent, 
@@ -87,6 +88,9 @@ export default function AdminDashboard() {
 
   // School selection for main admin
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
+
+  // Enable Firebase real-time sync for the selected school
+  useFirebaseSync(selectedSchoolId);
 
   // Scores management states
   const [scoresClassId, setScoresClassId] = useState("");
