@@ -156,10 +156,10 @@ export default function AdminDashboard() {
     mutationFn: async (classData: any) => {
       const newClass = await apiRequest('/api/admin/classes', {
         method: 'POST',
-        body: JSON.stringify({ 
+        body: { 
           ...classData, 
           schoolId: selectedSchoolId || user?.schoolId 
-        })
+        }
       });
       
       // Sync to Firebase
@@ -183,10 +183,7 @@ export default function AdminDashboard() {
     mutationFn: async (studentData: any) => {
       const newStudent = await apiRequest('/api/admin/students', {
         method: 'POST',
-        body: JSON.stringify({
-          ...studentData,
-          schoolId: selectedSchoolId || user?.schoolId
-        })
+        body: studentData
       });
       
       // Sync to Firebase
@@ -195,7 +192,7 @@ export default function AdminDashboard() {
       return newStudent;
     },
     onSuccess: () => {
-      toast({ title: "Success", description: "Student created and synced to Firebase" });
+      toast({ title: "Success", description: "Student created successfully" });
       setIsStudentDialogOpen(false);
       resetStudentForm();
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
@@ -205,23 +202,15 @@ export default function AdminDashboard() {
     }
   });
 
-  // Score update mutation
   const updateScoresMutation = useMutation({
-    mutationFn: async (scoresData: any[]) => {
-      const results = await apiRequest('/api/admin/scores/bulk-update', {
+    mutationFn: async (data: any) => {
+      return await apiRequest('/api/admin/assessments', {
         method: 'POST',
-        body: JSON.stringify({ scores: scoresData })
+        body: data
       });
-      
-      // Sync assessments to Firebase
-      for (const assessment of results.results) {
-        await firebaseSync.saveAssessment(assessment);
-      }
-      
-      return results;
     },
     onSuccess: () => {
-      toast({ title: "Success", description: "Scores updated and synced to Firebase" });
+      toast({ title: "Success", description: "Scores updated successfully" });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/assessments'] });
     },
     onError: () => {
