@@ -91,6 +91,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createStudent(studentData: InsertStudent): Promise<Student> {
+    // Auto-generate student ID if not provided
+    if (!studentData.studentId) {
+      const existingStudents = await db.select().from(students);
+      const nextNumber = (existingStudents.length + 1).toString().padStart(4, '0');
+      studentData.studentId = `SOWA/${nextNumber}`;
+    }
+    
     const [student] = await db
       .insert(students)
       .values(studentData)

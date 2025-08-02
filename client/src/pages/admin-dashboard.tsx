@@ -43,7 +43,9 @@ import {
   School,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import type { 
   Class, 
@@ -59,6 +61,9 @@ export default function AdminDashboard() {
   
   // Firebase sync status
   const [syncStatus, setSyncStatus] = useState(firebaseSync.getSyncStatus());
+  
+  // Password visibility
+  const [showPassword, setShowPassword] = useState(false);
 
   // State for dialogs
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
@@ -232,6 +237,28 @@ export default function AdminDashboard() {
     setStudentId("");
     setSelectedClassId("");
   };
+
+  // Auto-generate student ID in SOWA format
+  const generateStudentId = async () => {
+    try {
+      // Get count of existing students to determine next ID
+      const nextNumber = (allStudents.length + 1).toString().padStart(4, '0');
+      const newId = `SOWA/${nextNumber}`;
+      setStudentId(newId);
+    } catch (error) {
+      console.error('Error generating student ID:', error);
+      // Fallback to timestamp-based ID
+      const timestamp = Date.now().toString().slice(-4);
+      setStudentId(`SOWA/${timestamp}`);
+    }
+  };
+
+  // Auto-generate student ID when dialog opens
+  useEffect(() => {
+    if (isStudentDialogOpen && !studentId) {
+      generateStudentId();
+    }
+  }, [isStudentDialogOpen, allStudents.length]);
 
   const handleScoreChange = (studentId: string, field: string, value: string) => {
     setScoreInputs(prev => ({
@@ -562,22 +589,49 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <Label htmlFor="student-password">Password</Label>
-                        <Input
-                          id="student-password"
-                          type="password"
-                          value={studentPassword}
-                          onChange={(e) => setStudentPassword(e.target.value)}
-                          placeholder="password123"
-                        />
+                        <div className="relative">
+                          <Input
+                            id="student-password"
+                            type={showPassword ? "text" : "password"}
+                            value={studentPassword}
+                            onChange={(e) => setStudentPassword(e.target.value)}
+                            placeholder="Enter password"
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                       <div>
-                        <Label htmlFor="student-id">Student ID</Label>
-                        <Input
-                          id="student-id"
-                          value={studentId}
-                          onChange={(e) => setStudentId(e.target.value)}
-                          placeholder="STU001"
-                        />
+                        <Label htmlFor="student-id">Student ID (Auto-generated)</Label>
+                        <div className="flex space-x-2">
+                          <Input
+                            id="student-id"
+                            value={studentId}
+                            readOnly
+                            placeholder="SOWA/0001"
+                            className="bg-gray-50"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={generateStudentId}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                       <div>
                         <Label htmlFor="student-class">Class</Label>
@@ -603,7 +657,7 @@ export default function AdminDashboard() {
                           studentId: studentId,
                           classId: selectedClassId
                         })}
-                        disabled={!studentFirstName || !studentLastName || !studentEmail || !selectedClassId || createStudentMutation.isPending}
+                        disabled={!studentFirstName || !studentLastName || !studentEmail || !studentPassword || !selectedClassId || createStudentMutation.isPending}
                         className="w-full"
                       >
                         {createStudentMutation.isPending ? "Creating..." : "Create Student"}
