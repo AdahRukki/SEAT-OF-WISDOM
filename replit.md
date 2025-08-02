@@ -28,10 +28,11 @@ Preferred communication style: Simple, everyday language.
 - **Development**: Hot reloading with tsx and Vite middleware integration
 
 ### Authentication & Authorization
-- **Authentication**: JWT-based authentication with bcrypt password hashing
+- **Authentication**: Firebase Authentication with JWT tokens and local fallback
+- **Main Admin**: adahrukki@gmail.com (Firebase authenticated)
 - **Session Handling**: Express sessions with PostgreSQL store
-- **Role-based Access**: Admin and student roles with protected routes
-- **Security**: Password hashing, token validation, and secure session management
+- **Role-based Access**: Admin (all schools), sub-admin (single school), student roles with protected routes
+- **Security**: Firebase Auth integration, password hashing, token validation, and secure session management
 
 ### Data Schema
 - **User Management**: Complete user system with roles (admin/sub-admin/student) and authentication

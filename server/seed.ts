@@ -65,13 +65,13 @@ async function seedDatabase() {
     // Create users with proper hashed passwords
     const hashedPassword = await bcrypt.hash("password123", 10);
 
-    // Create 1 main admin (access to all schools)
+    // Create 1 main admin (access to all schools) - Firebase authenticated
     const [mainAdmin] = await db.insert(users).values([
       {
-        email: "admin@seatofwisdom.edu",
+        email: "adahrukki@gmail.com",
         password: hashedPassword,
-        firstName: "Super",
-        lastName: "Administrator",
+        firstName: "Ada",
+        lastName: "Hrukki",
         role: "admin",
         schoolId: null // Main admin has access to all schools
       }
@@ -353,7 +353,7 @@ async function seedDatabase() {
 
     console.log("\n🎉 Database seeding completed successfully!");
     console.log("\n📋 Demo Accounts Created:");
-    console.log("Main Admin: admin@seatofwisdom.edu / password123");
+    console.log("Main Admin: adahrukki@gmail.com / password123 (Firebase Auth)");
     console.log("School 1 Admin: admin1@seatofwisdom.edu / password123");
     console.log("School 2 Admin: admin2@seatofwisdom.edu / password123");
     console.log("School 3 Admin: admin3@seatofwisdom.edu / password123");
