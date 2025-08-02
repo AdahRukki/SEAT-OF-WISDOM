@@ -1,55 +1,82 @@
-# Firebase Password Reset Setup Guide
+# Firebase Setup Instructions for Seat of Wisdom Academy
 
-## Why you're not receiving emails
+## Overview
+The system now uses **Firebase as the primary database** with offline-first functionality. Data is automatically saved to Firebase when online and stored locally when offline, then synced when connection is restored.
 
-The password reset emails won't work until you properly configure Firebase Authentication in your Firebase Console.
+## 🔥 Firebase Configuration Required
 
-## Step-by-step setup:
+### 1. Create Firebase Project
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Create new project named "Seat of Wisdom Academy"
+3. Enable Firestore Database in production mode
+4. Enable Authentication with Email/Password
 
-### 1. Go to Firebase Console
-- Visit https://console.firebase.google.com/
-- Select your project (or create one if you haven't)
+### 2. Get Configuration Keys
+Navigate to Project Settings and copy these values:
+- `projectId` 
+- `apiKey`
+- `appId`
 
-### 2. Enable Authentication
-- In the left sidebar, click "Authentication"
-- Click "Get started" if it's not already enabled
+### 3. Add Secrets to Replit
+Add these environment variables in Replit Secrets:
+```
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_API_KEY=your-api-key  
+VITE_FIREBASE_APP_ID=your-app-id
+```
 
-### 3. Enable Email/Password Sign-in
-- Go to the "Sign-in method" tab
-- Click on "Email/Password"
-- Enable both toggles:
-  - ✅ Email/Password
-  - ✅ Email link (passwordless sign-in)
-- Click "Save"
+### 4. Firestore Database Structure
+The system creates these collections automatically:
+- `schools` - School branch data
+- `classes` - Class information for each school
+- `students` - Student profiles with SOWA/0001 IDs
+- `assessments` - Score data (20+20+60 system)
+- `subjects` - Academic subjects
+- `users` - Authentication and user roles
 
-### 4. Add the user account
-- Go to the "Users" tab in Authentication
-- Click "Add user"
-- Email: `adahrukki@gmail.com`
-- Create a password (you can reset it later)
-- Click "Add user"
+## 📱 Offline-First Features
 
-### 5. Configure authorized domains
-- Go to "Settings" → "Authorized domains"
-- Your Replit domain should already be there
-- If not, add: `your-repl-name.replit.dev`
+### ✅ What Works Offline:
+- View existing student data
+- Create new students and classes  
+- Enter assessment scores
+- Generate report cards
+- All data queued for sync
 
-### 6. Test the reset
-- Go back to your login page
-- Click "Forgot your password?"
-- Enter `adahrukki@gmail.com`
-- Check your Gmail inbox (and spam folder)
+### 🔄 Automatic Sync When Online:
+- Uploads all offline changes to Firebase
+- Downloads latest data from other users
+- Real-time updates across devices
+- Conflict resolution for simultaneous edits
 
-## Alternative: Use demo accounts for now
+### 🔍 Sync Status Indicator:
+- **Green 🟢**: Online and synced with Firebase
+- **Orange 🟠**: Offline mode, changes saved locally
+- **Blue Number**: Shows pending sync operations
+- **Refresh Button**: Manual sync trigger
 
-While setting up Firebase, you can use these working accounts:
-- **School Admin:** admin1@seatofwisdom.edu / password123
-- **Student:** john.doe@student.com / password123
+## 🚀 Benefits
 
-## Troubleshooting
+1. **No Data Loss**: Works completely offline
+2. **Real-Time Sync**: Multiple admins can work simultaneously  
+3. **Cloud Backup**: All data automatically backed up to Firebase
+4. **Cross-Device**: Access from any device with same data
+5. **Automatic Updates**: Changes appear instantly on other devices
 
-If still not working:
-1. Check browser console for Firebase errors
-2. Verify your Firebase project ID in secrets
-3. Make sure the email exists in Firebase Users tab
-4. Check Gmail spam folder
+## 🔧 Technical Details
+
+- **Local Storage**: IndexedDB for offline data persistence
+- **Sync Queue**: Operations queued and processed when online
+- **Conflict Resolution**: Last-write-wins with timestamp comparison
+- **Error Handling**: Automatic retry with exponential backoff
+- **Performance**: Minimal impact, syncs in background
+
+## 📋 Admin Features
+
+The admin dashboard shows:
+- Live sync status in header
+- Number of pending sync operations
+- Manual sync button for immediate upload
+- Visual indicators for online/offline state
+
+All data operations (students, classes, scores) automatically use Firebase with offline fallback.

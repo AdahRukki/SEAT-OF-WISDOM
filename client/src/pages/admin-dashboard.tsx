@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { firebaseSync } from "@/lib/firebase-sync";
+import { firebaseSync } from "@/lib/offline-firebase-sync";
 import { 
   Card, 
   CardContent, 
@@ -40,7 +40,10 @@ import {
   Building,
   LogOut,
   User,
-  School
+  School,
+  Wifi,
+  WifiOff,
+  RefreshCw
 } from "lucide-react";
 import type { 
   Class, 
@@ -53,6 +56,9 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Firebase sync status
+  const [syncStatus, setSyncStatus] = useState(firebaseSync.getSyncStatus());
 
   // State for dialogs
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
@@ -86,6 +92,14 @@ export default function AdminDashboard() {
       setSelectedSchoolId(user.schoolId);
     }
   }, [user]);
+
+  // Update sync status periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSyncStatus(firebaseSync.getSyncStatus());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // School-aware queries
   const queryParams = user?.role === 'admin' && selectedSchoolId ? `?schoolId=${selectedSchoolId}` : '';
@@ -132,7 +146,7 @@ export default function AdminDashboard() {
       });
       
       // Sync to Firebase
-      await firebaseSync.syncClass(newClass);
+      await firebaseSync.saveClass(newClass);
       
       return newClass;
     },
@@ -159,7 +173,7 @@ export default function AdminDashboard() {
       });
       
       // Sync to Firebase
-      await firebaseSync.syncStudent(newStudent);
+      await firebaseSync.saveStudent(newStudent);
       
       return newStudent;
     },
@@ -183,7 +197,9 @@ export default function AdminDashboard() {
       });
       
       // Sync assessments to Firebase
-      await firebaseSync.bulkSyncAssessments(results.results);
+      for (const assessment of results.results) {
+        await firebaseSync.saveAssessment(assessment);
+      }
       
       return results;
     },
@@ -282,6 +298,38 @@ export default function AdminDashboard() {
             </div>
 
             <div className="flex items-center space-x-4">
+              {/* Firebase Sync Status */}
+              <div className="flex items-center space-x-2">
+                <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
+                  syncStatus.isOnline 
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                    : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+                }`}>
+                  {syncStatus.isOnline ? (
+                    <Wifi className="h-3 w-3" />
+                  ) : (
+                    <WifiOff className="h-3 w-3" />
+                  )}
+                  <span>
+                    {syncStatus.isOnline ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+                {syncStatus.queueLength > 0 && (
+                  <div className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full text-xs">
+                    {syncStatus.queueLength} pending sync
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => firebaseSync.forcSync()}
+                  disabled={!syncStatus.isOnline || syncStatus.syncInProgress}
+                  className="h-8 w-8 p-0"
+                >
+                  <RefreshCw className={`h-4 w-4 ${syncStatus.syncInProgress ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              
               <div className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
                 <User className="h-4 w-4" />
                 <span>{user.firstName} {user.lastName}</span>
