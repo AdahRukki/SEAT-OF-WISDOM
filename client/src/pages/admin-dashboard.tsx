@@ -540,12 +540,12 @@ export default function AdminDashboard() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="class-description">Description</Label>
+                        <Label htmlFor="class-description">Description (Optional)</Label>
                         <Textarea
                           id="class-description"
                           value={classDescription}
                           onChange={(e) => setClassDescription(e.target.value)}
-                          placeholder="Class description..."
+                          placeholder="Optional description for this class..."
                         />
                       </div>
                       <Button 
@@ -567,7 +567,9 @@ export default function AdminDashboard() {
                       <Card key={classItem.id} className="hover:shadow-md transition-shadow">
                         <CardHeader className="pb-3">
                           <CardTitle className="text-lg">{classItem.name}</CardTitle>
-                          <CardDescription>{classItem.description}</CardDescription>
+                          <CardDescription>
+                            {classItem.description || `Class in ${classItem.school?.name || 'Unknown School'}`}
+                          </CardDescription>
                         </CardHeader>
                         <CardContent>
                           <div className="flex items-center justify-between">

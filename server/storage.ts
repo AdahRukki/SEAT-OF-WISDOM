@@ -44,7 +44,7 @@ export interface IStorage {
   assignSubjectToClass(classId: string, subjectId: string): Promise<void>;
   
   // Data retrieval (school-aware)
-  getAllClasses(schoolId?: string): Promise<Class[]>;
+  getAllClasses(schoolId?: string): Promise<(Class & { school: School })[]>;
   getAllSubjects(): Promise<Subject[]>;
   getStudentsByClass(classId: string): Promise<StudentWithDetails[]>;
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
@@ -134,11 +134,29 @@ export class DatabaseStorage implements IStorage {
     return school || undefined;
   }
 
-  async getAllClasses(schoolId?: string): Promise<Class[]> {
+  async getAllClasses(schoolId?: string): Promise<(Class & { school: School })[]> {
+    const baseQuery = db.select({
+      id: classes.id,
+      name: classes.name,
+      description: classes.description,
+      schoolId: classes.schoolId,
+      createdAt: classes.createdAt,
+      updatedAt: classes.updatedAt,
+      school: {
+        id: schools.id,
+        name: schools.name,
+        address: schools.address,
+        phone: schools.phone,
+        email: schools.email,
+        createdAt: schools.createdAt,
+        updatedAt: schools.updatedAt,
+      }
+    }).from(classes).innerJoin(schools, eq(classes.schoolId, schools.id));
+    
     if (schoolId) {
-      return await db.select().from(classes).where(eq(classes.schoolId, schoolId));
+      return await baseQuery.where(eq(classes.schoolId, schoolId));
     }
-    return await db.select().from(classes);
+    return await baseQuery;
   }
 
   async getAllSubjects(): Promise<Subject[]> {
