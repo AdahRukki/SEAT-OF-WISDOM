@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { firebaseSync } from "@/lib/offline-firebase-sync";
 import { useFirebaseSync } from "@/hooks/use-firebase-sync";
+import { checkFirebaseData } from "@/utils/check-firebase";
 import { 
   Card, 
   CardContent, 
@@ -91,6 +92,11 @@ export default function AdminDashboard() {
 
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
+
+  // Check Firebase data on mount
+  useEffect(() => {
+    checkFirebaseData();
+  }, []);
 
   // Scores management states
   const [scoresClassId, setScoresClassId] = useState("");
