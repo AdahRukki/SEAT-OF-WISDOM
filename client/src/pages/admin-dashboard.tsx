@@ -327,29 +327,32 @@ export default function AdminDashboard() {
               </div>
               <CardTitle className="text-2xl font-bold">Seat of Wisdom Academy</CardTitle>
               <CardDescription>
-                Welcome, {user.firstName}! Select a school branch to manage.
+                Welcome back, {user.firstName}! Choose which school branch you'd like to manage today.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
+              <div className="space-y-3">
                 <Label htmlFor="school-select" className="text-sm font-medium">
-                  Choose School Branch
+                  Available School Branches
                 </Label>
-                <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a school branch to manage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {schools.map((school) => (
-                      <SelectItem key={school.id} value={school.id}>
-                        <div className="flex items-center space-x-2">
-                          <Building className="h-4 w-4" />
-                          <span>{school.name}</span>
+                <div className="grid gap-2">
+                  {schools.map((school) => (
+                    <Button
+                      key={school.id}
+                      variant="outline"
+                      className="w-full justify-start h-auto p-4 hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                      onClick={() => setSelectedSchoolId(school.id)}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Building className="h-5 w-5 text-blue-600" />
+                        <div className="text-left">
+                          <div className="font-medium">{school.name}</div>
+                          <div className="text-xs text-gray-500">Click to manage this branch</div>
                         </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
               </div>
               
               <div className="pt-4 border-t">
@@ -391,23 +394,32 @@ export default function AdminDashboard() {
                   </h1>
                   <p className="text-sm text-gray-500">
                     {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
-                    {selectedSchoolId && schools.find(s => s.id === selectedSchoolId) && (
-                      <span> - {schools.find(s => s.id === selectedSchoolId)?.name}</span>
-                    )}
                   </p>
                 </div>
               </div>
               
-              {/* Change School Button for Main Admin */}
+              {/* Active School Display for Main Admin */}
               {user.role === 'admin' && selectedSchoolId && (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setSelectedSchoolId("")}
-                >
-                  <Building className="h-4 w-4 mr-2" />
-                  Change School
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+                    <SelectTrigger className="w-48">
+                      <div className="flex items-center space-x-2">
+                        <Building className="h-4 w-4" />
+                        <SelectValue />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {schools.map((school) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          <div className="flex items-center space-x-2">
+                            <Building className="h-4 w-4" />
+                            <span>{school.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
             </div>
 
