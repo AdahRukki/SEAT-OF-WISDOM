@@ -111,26 +111,38 @@ export default function AdminDashboard() {
 
   const { data: classes = [] } = useQuery<Class[]>({ 
     queryKey: ['/api/admin/classes', selectedSchoolId],
-    queryFn: () => apiRequest(`/api/admin/classes${queryParams}`),
+    queryFn: () => {
+      const url = user?.role === 'admin' && selectedSchoolId 
+        ? `/api/admin/classes?schoolId=${selectedSchoolId}`
+        : '/api/admin/classes';
+      return apiRequest(url);
+    },
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
 
   const { data: subjects = [] } = useQuery<Subject[]>({ queryKey: ['/api/admin/subjects'] });
   const { data: allStudents = [] } = useQuery<StudentWithDetails[]>({ 
     queryKey: ['/api/admin/students', selectedSchoolId],
-    queryFn: () => apiRequest(`/api/admin/students${queryParams}`),
+    queryFn: () => {
+      const url = user?.role === 'admin' && selectedSchoolId 
+        ? `/api/admin/students?schoolId=${selectedSchoolId}`
+        : '/api/admin/students';
+      return apiRequest(url);
+    },
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
   
   // Class subjects query
   const { data: classSubjects = [] } = useQuery<Subject[]>({ 
     queryKey: ['/api/admin/classes', scoresClassId, 'subjects'],
+    queryFn: () => apiRequest(`/api/admin/classes/${scoresClassId}/subjects`),
     enabled: !!scoresClassId 
   });
 
   // Class assessments query
   const { data: classAssessments = [] } = useQuery<any[]>({ 
     queryKey: ['/api/admin/assessments', scoresClassId, scoresSubjectId, scoresTerm, scoresSession],
+    queryFn: () => apiRequest(`/api/admin/assessments?classId=${scoresClassId}&subjectId=${scoresSubjectId}&term=${scoresTerm}&session=${scoresSession}`),
     enabled: !!scoresClassId && !!scoresSubjectId
   });
 
