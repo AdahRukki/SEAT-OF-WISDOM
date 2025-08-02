@@ -177,6 +177,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all students (admin only)
+  app.get('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const students = await storage.getAllStudentsWithDetails();
+      res.json(students);
+    } catch (error) {
+      console.error("Get all students error:", error);
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  // Get class subjects (admin only)
+  app.get('/api/admin/classes/:classId/subjects', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId } = req.params;
+      const subjects = await storage.getClassSubjects(classId);
+      res.json(subjects);
+    } catch (error) {
+      console.error("Get class subjects error:", error);
+      res.status(500).json({ error: "Failed to fetch class subjects" });
+    }
+  });
+
+  // Get assessments for class and subject
+  app.get('/api/admin/assessments', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId, subjectId, term, session } = req.query;
+      const assessments = await storage.getClassAssessments(
+        classId as string,
+        subjectId as string,
+        term as string,
+        session as string
+      );
+      res.json(assessments);
+    } catch (error) {
+      console.error("Get class assessments error:", error);
+      res.status(500).json({ error: "Failed to fetch assessments" });
+    }
+  });
+
   // Student routes
   app.get('/api/student/profile', authenticate, async (req, res) => {
     try {

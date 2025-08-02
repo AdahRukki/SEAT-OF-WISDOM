@@ -38,9 +38,28 @@ export default function AdminDashboard() {
   const [studentId, setStudentId] = useState("");
   const [selectedClassId, setSelectedClassId] = useState("");
 
+  // Scores management states
+  const [scoresClassId, setScoresClassId] = useState("");
+  const [scoresSubjectId, setScoresSubjectId] = useState("");
+  const [scoresTerm, setScoresTerm] = useState("First Term");
+  const [scoresSession, setScoresSession] = useState("2024/2025");
+
   // Queries
   const { data: classes = [] } = useQuery<Class[]>({ queryKey: ['/api/admin/classes'] });
   const { data: subjects = [] } = useQuery<Subject[]>({ queryKey: ['/api/admin/subjects'] });
+  const { data: allStudents = [] } = useQuery<StudentWithDetails[]>({ queryKey: ['/api/admin/students'] });
+  
+  // Class subjects query
+  const { data: classSubjects = [] } = useQuery<Subject[]>({ 
+    queryKey: ['/api/admin/classes', scoresClassId, 'subjects'],
+    enabled: !!scoresClassId 
+  });
+
+  // Class assessments query
+  const { data: classAssessments = [] } = useQuery<any[]>({ 
+    queryKey: ['/api/admin/assessments', scoresClassId, scoresSubjectId, scoresTerm, scoresSession],
+    enabled: !!scoresClassId && !!scoresSubjectId
+  });
 
   // Mutations
   const createClassMutation = useMutation({
@@ -170,11 +189,12 @@ export default function AdminDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="classes">Classes</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="students">Students</TabsTrigger>
+            <TabsTrigger value="scores">Manage Scores</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -454,6 +474,170 @@ export default function AdminDashboard() {
                 <p className="text-sm text-gray-500">
                   Total Classes: {classes.length}
                 </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="scores" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Manage Student Scores</h2>
+            </div>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Score Entry System</CardTitle>
+                <CardDescription>
+                  Enter and manage student assessment scores for all subjects and terms.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div>
+                    <Label>Select Class</Label>
+                    <Select value={scoresClassId} onValueChange={setScoresClassId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classes.map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Select Subject</Label>
+                    <Select value={scoresSubjectId} onValueChange={setScoresSubjectId} disabled={!scoresClassId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classSubjects.map((subject) => (
+                          <SelectItem key={subject.id} value={subject.id}>
+                            {subject.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Term & Session</Label>
+                    <Select value={`${scoresTerm}-${scoresSession}`} onValueChange={(value) => {
+                      const [term, session] = value.split('-');
+                      setScoresTerm(term.replace('_', ' '));
+                      setScoresSession(session);
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select term" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="First Term-2024/2025">First Term 2024/2025</SelectItem>
+                        <SelectItem value="Second Term-2024/2025">Second Term 2024/2025</SelectItem>
+                        <SelectItem value="Third Term-2024/2025">Third Term 2024/2025</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {scoresClassId && scoresSubjectId ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">1st CA (30)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">2nd CA (30)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Exam (70)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Total (100)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Grade</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {allStudents
+                          .filter(student => student.classId === scoresClassId)
+                          .map((student) => {
+                            const assessment = classAssessments.find(a => a.studentId === student.id);
+                            const total = assessment ? 
+                              Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0) : 0;
+                            const grade = total >= 80 ? 'A' : total >= 60 ? 'B' : total >= 50 ? 'C' : total >= 40 ? 'D' : 'F';
+                            
+                            return (
+                              <tr key={student.id}>
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                  {student.user.firstName} {student.user.lastName}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
+                                  {student.studentId}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    className="w-16 h-8 text-center"
+                                    defaultValue={assessment?.firstCA || ''}
+                                    placeholder="0"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="30"
+                                    className="w-16 h-8 text-center"
+                                    defaultValue={assessment?.secondCA || ''}
+                                    placeholder="0"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="70"
+                                    className="w-16 h-8 text-center"
+                                    defaultValue={assessment?.exam || ''}
+                                    placeholder="0"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900 dark:text-white">
+                                  {total}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                    grade === 'A' ? 'bg-green-500' : 
+                                    grade === 'B' ? 'bg-blue-500' : 
+                                    grade === 'C' ? 'bg-yellow-500' : 
+                                    grade === 'D' ? 'bg-orange-500' : 'bg-red-500'
+                                  } text-white`}>
+                                    {grade}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        }
+                      </tbody>
+                    </table>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800">
+                      <Button className="w-full">
+                        Save All Scores
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                      Select Class and Subject
+                    </h3>
+                    <p className="text-gray-500">
+                      Choose a class and subject above to view and manage student scores.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

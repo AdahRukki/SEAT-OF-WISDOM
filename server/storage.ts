@@ -232,6 +232,58 @@ export class DatabaseStorage implements IStorage {
       .where(eq(reportCardTemplates.isDefault, true));
     return template || undefined;
   }
+
+  async getAllStudentsWithDetails(): Promise<StudentWithDetails[]> {
+    const studentsData = await db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id));
+
+    return studentsData.map(({ students: student, users: user, classes: classData }) => ({
+      ...student,
+      user: user!,
+      class: classData!,
+      assessments: [] // Will be populated separately if needed
+    }));
+  }
+
+  async getClassSubjects(classId: string): Promise<Subject[]> {
+    const subjectsData = await db
+      .select()
+      .from(subjects)
+      .innerJoin(classSubjects, eq(subjects.id, classSubjects.subjectId))
+      .where(eq(classSubjects.classId, classId));
+
+    return subjectsData.map(({ subjects: subject }) => subject);
+  }
+
+  async getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
+    const assessmentsData = await db
+      .select()
+      .from(assessments)
+      .leftJoin(students, eq(assessments.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(
+        and(
+          eq(assessments.classId, classId),
+          eq(assessments.subjectId, subjectId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+
+    return assessmentsData.map(({ assessments: assessment, students: student, users: user, classes: classData }) => ({
+      ...assessment,
+      student: {
+        ...student!,
+        user: user!,
+        class: classData!,
+        assessments: [] // Will be populated separately if needed
+      }
+    }));
+  }
 }
 
 export const storage = new DatabaseStorage();

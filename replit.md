@@ -2,7 +2,7 @@
 
 ## Overview
 
-A full-stack student management application built with React (frontend) and Express (backend) for tracking student information and scores. The application allows educators to manage student records, add scores, and view performance analytics with a clean, modern interface using shadcn/ui components and Firebase for authentication and data storage.
+A comprehensive school management system built with React (frontend) and Express (backend) featuring complete student score tracking, administrative controls, and report card generation. The application provides both admin and student dashboards with JWT authentication, PostgreSQL database storage, and professional report card printing capabilities.
 
 ## User Preferences
 
@@ -28,14 +28,18 @@ Preferred communication style: Simple, everyday language.
 - **Development**: Hot reloading with tsx and Vite middleware integration
 
 ### Authentication & Authorization
-- **Provider**: Firebase Authentication
-- **Session Handling**: Firebase Auth state management with React context
-- **Protected Routes**: Authentication-based route protection using custom auth hooks
+- **Authentication**: JWT-based authentication with bcrypt password hashing
+- **Session Handling**: Express sessions with PostgreSQL store
+- **Role-based Access**: Admin and student roles with protected routes
+- **Security**: Password hashing, token validation, and secure session management
 
 ### Data Schema
-- **Student Entity**: Core entity with fields for name, email, class, scores array, and timestamps
-- **Score Tracking**: Array-based score storage with validation (0-100 range)
-- **Validation**: Shared Zod schemas between frontend and backend for consistency
+- **User Management**: Complete user system with roles (admin/student) and authentication
+- **Academic Structure**: Classes, subjects, and class-subject relationships
+- **Student Records**: Student profiles linked to users and classes
+- **Assessment System**: First CA, Second CA, and Exam scores with automatic total calculation
+- **Report Cards**: Printable report cards with comprehensive academic summaries
+- **Database Relations**: Properly normalized PostgreSQL schema with foreign key constraints
 
 ### Development Environment
 - **Monorepo Structure**: Shared schemas and types between client and server
