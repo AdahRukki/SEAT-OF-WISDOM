@@ -1,57 +1,25 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocalStudents } from "@/hooks/use-local-students";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { AddStudentModal } from "@/components/add-student-modal";
 import { StudentRow } from "@/components/student-row";
-import { GraduationCap, Plus, Users, TrendingUp, Trophy, AlertTriangle, Search, ChevronDown, User } from "lucide-react";
-import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { GraduationCap, Plus, Users, TrendingUp, Trophy, AlertTriangle, Search, ChevronDown, User, Cloud, CloudOff, RefreshCw } from "lucide-react";
 import { Student } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
-  const [students, setStudents] = useState<Student[]>([]);
+  const { students, loading, syncStatus } = useLocalStudents();
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-
-  useEffect(() => {
-    if (!user) return;
-
-    const q = query(collection(db, "students"), orderBy("name"));
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        const studentsData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate(),
-          updatedAt: doc.data().updatedAt?.toDate(),
-        })) as Student[];
-        
-        setStudents(studentsData);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching students:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load students. Please try again.",
-          variant: "destructive",
-        });
-        setLoading(false);
-      }
-    );
-
-    return unsubscribe;
-  }, [user, toast]);
 
   useEffect(() => {
     let filtered = [...students];
@@ -100,15 +68,10 @@ export default function Dashboard() {
     }).length,
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to sign out. Please try again.",
-        variant: "destructive",
-      });
+  const handleClearData = () => {
+    if (confirm("Are you sure you want to clear all local data? This cannot be undone.")) {
+      localStorage.clear();
+      window.location.reload();
     }
   };
 
@@ -134,11 +97,38 @@ export default function Dashboard() {
             </div>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Student Score Tracker</h1>
-              <p className="text-sm text-gray-600">Welcome, {user?.email}</p>
+              <p className="text-sm text-gray-600">Offline Mode - Data saved locally</p>
             </div>
           </div>
           
           <div className="flex items-center space-x-4">
+            {/* Sync Status */}
+            <div className="flex items-center space-x-2 px-3 py-1 rounded-lg bg-gray-100">
+              {syncStatus.isOnline ? (
+                <Cloud className="h-4 w-4 text-green-600" />
+              ) : (
+                <CloudOff className="h-4 w-4 text-gray-500" />
+              )}
+              <span className="text-sm text-gray-600">
+                {syncStatus.isOnline ? "Online" : "Offline"}
+              </span>
+              {syncStatus.pendingCount > 0 && (
+                <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">
+                  {syncStatus.pendingCount} pending
+                </span>
+              )}
+            </div>
+
+            <Button 
+              onClick={() => setShowSyncModal(true)}
+              variant="outline"
+              size="sm"
+              className="border-gray-300"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Sync
+            </Button>
+
             <Button 
               onClick={() => setShowAddModal(true)}
               className="bg-blue-600 hover:bg-blue-700"
@@ -163,10 +153,10 @@ export default function Dashboard() {
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border">
                   <div className="py-1">
                     <button
-                      onClick={handleLogout}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      onClick={handleClearData}
+                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                     >
-                      Sign Out
+                      Clear All Data
                     </button>
                   </div>
                 </div>
@@ -321,6 +311,42 @@ export default function Dashboard() {
         isOpen={showAddModal} 
         onClose={() => setShowAddModal(false)} 
       />
+      
+      {/* Simple Sync Modal */}
+      {showSyncModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96">
+            <h3 className="text-lg font-semibold mb-4">Sync with Firebase</h3>
+            <p className="text-gray-600 mb-4">
+              {syncStatus.pendingCount > 0 
+                ? `You have ${syncStatus.pendingCount} pending changes. Would you like to sync them to Firebase?`
+                : "Your data is up to date. You can still sync to backup your data."
+              }
+            </p>
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowSyncModal(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  toast({
+                    title: "Sync Feature",
+                    description: "Firebase sync will be available once you complete the Firebase setup.",
+                  });
+                  setShowSyncModal(false);
+                }}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                Sync Now
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

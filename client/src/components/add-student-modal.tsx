@@ -4,8 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { db } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useLocalStudents } from "@/hooks/use-local-students";
 import { insertStudentSchema } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
@@ -23,6 +22,7 @@ export function AddStudentModal({ isOpen, onClose }: AddStudentModalProps) {
     initialScore: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const { addStudent } = useLocalStudents();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -39,15 +39,11 @@ export function AddStudentModal({ isOpen, onClose }: AddStudentModalProps) {
         scores,
       });
 
-      await addDoc(collection(db, "students"), {
-        ...validatedData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      await addStudent(validatedData);
 
       toast({
         title: "Success",
-        description: "Student added successfully!",
+        description: "Student added successfully! (Saved locally)",
       });
 
       setFormData({ name: "", email: "", class: "", initialScore: "" });

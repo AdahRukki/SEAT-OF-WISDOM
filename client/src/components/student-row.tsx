@@ -4,8 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Edit, PlusCircle, Eye } from "lucide-react";
 import { Student } from "@shared/schema";
-import { db } from "@/lib/firebase";
-import { doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { useLocalStudents } from "@/hooks/use-local-students";
 import { useToast } from "@/hooks/use-toast";
 
 interface StudentRowProps {
@@ -16,6 +15,7 @@ export function StudentRow({ student }: StudentRowProps) {
   const [showAddScore, setShowAddScore] = useState(false);
   const [newScore, setNewScore] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { addScore } = useLocalStudents();
   const { toast } = useToast();
 
   const getInitials = (name: string) => {
@@ -62,15 +62,11 @@ export function StudentRow({ student }: StudentRowProps) {
     setIsLoading(true);
 
     try {
-      const studentRef = doc(db, "students", student.id);
-      await updateDoc(studentRef, {
-        scores: arrayUnion(score),
-        updatedAt: serverTimestamp(),
-      });
+      await addScore(student.id, score);
 
       toast({
         title: "Success",
-        description: "Score added successfully!",
+        description: "Score added successfully! (Saved locally)",
       });
 
       setNewScore("");
