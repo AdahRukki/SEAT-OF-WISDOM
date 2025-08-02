@@ -8,6 +8,15 @@ A comprehensive multi-branch academy management system for **Seat of Wisdom Acad
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**August 2, 2025**
+- ✅ Removed all placeholder data from database (students, classes, users, assessments)
+- ✅ Fixed main admin authentication (adahrukki@gmail.com / password123)
+- ✅ Added "View Details" feature for classes to show enrolled students
+- ✅ Updated dashboard logo to use custom logo image (4oWHptM_1754171230437.gif)
+- ✅ Firebase sync working as backup system with PostgreSQL as primary database
+
 ## System Architecture
 
 ### Frontend Architecture

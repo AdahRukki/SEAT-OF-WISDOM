@@ -47,6 +47,7 @@ import {
   Eye,
   EyeOff
 } from "lucide-react";
+import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { 
   Class, 
   Subject, 
@@ -308,7 +309,11 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <School className="h-8 w-8 text-blue-600" />
+                <img 
+                  src={logoImage} 
+                  alt="Seat of Wisdom Academy Logo" 
+                  className="h-10 w-10 object-contain rounded-md" 
+                />
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 dark:text-white">
                     Seat of Wisdom Academy
