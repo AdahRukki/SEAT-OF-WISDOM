@@ -112,10 +112,6 @@ export class DatabaseStorage implements IStorage {
       const school = await this.getSchoolById(classData.schoolId!);
       const schoolNumber = school?.name.match(/School (\d+)/)?.[1] || '1';
       
-      // Get existing classes for this school to generate next number
-      const existingClasses = await db.select().from(classes).where(eq(classes.schoolId, classData.schoolId!));
-      const nextNumber = (existingClasses.length + 1).toString();
-      
       // Extract class type from name (J.S.S -> JSS, Senior -> SS, etc.)
       let classPrefix = 'CLS';
       if (classData.name?.toLowerCase().includes('j.s.s') || classData.name?.toLowerCase().includes('junior')) {
@@ -124,6 +120,22 @@ export class DatabaseStorage implements IStorage {
         classPrefix = 'SS';
       } else if (classData.name?.toLowerCase().includes('primary')) {
         classPrefix = 'PRI';
+      }
+      
+      // Get existing classes for this school and prefix to find next available number
+      const existingClasses = await db.select().from(classes).where(eq(classes.schoolId, classData.schoolId!));
+      const existingNumbers = existingClasses
+        .filter(c => c.id.startsWith(`SCH${schoolNumber}-${classPrefix}`))
+        .map(c => {
+          const match = c.id.match(/(\d+)$/);
+          return match ? parseInt(match[1]) : 0;
+        })
+        .filter(n => n > 0);
+      
+      // Find next available number
+      let nextNumber = 1;
+      while (existingNumbers.includes(nextNumber)) {
+        nextNumber++;
       }
       
       // Create readable ID: SCH1-JSS1, SCH2-SS2, etc.
