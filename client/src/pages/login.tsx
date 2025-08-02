@@ -159,6 +159,12 @@ export default function Login() {
                   <p><strong>School Admin:</strong> admin1@seatofwisdom.edu / password123</p>
                   <p><strong>Student:</strong> john.doe@student.com / password123</p>
                 </div>
+                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-4 border-blue-400">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    <strong>Note:</strong> To receive password reset emails for adahrukki@gmail.com, 
+                    you need to set up Firebase Authentication in your Firebase Console.
+                  </p>
+                </div>
               </div>
             </>
           ) : (
