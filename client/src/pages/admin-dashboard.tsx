@@ -568,11 +568,9 @@ export default function AdminDashboard() {
                         <CardHeader className="pb-3">
                           <div className="flex items-center justify-between">
                             <CardTitle className="text-lg">{classItem.name}</CardTitle>
-                            {classItem.readableId && (
-                              <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                {classItem.readableId}
-                              </span>
-                            )}
+                            <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                              {classItem.id}
+                            </span>
                           </div>
                           <CardDescription>
                             {classItem.description || `Class in ${classItem.school?.name || 'Unknown School'}`}

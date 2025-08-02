@@ -27,8 +27,7 @@ export const schools = pgTable("schools", {
 
 // Classes table
 export const classes = pgTable("classes", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  readableId: varchar("readable_id", { length: 50 }).unique(), // Human-readable ID like "SCH1-JSS1"
+  id: varchar("id", { length: 50 }).primaryKey(), // Human-readable ID like "SCH1-JSS1"
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
@@ -72,7 +71,7 @@ export const users = pgTable("users", {
 export const students = pgTable("students", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  classId: uuid("class_id").notNull().references(() => classes.id),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id),
   studentId: varchar("student_id", { length: 50 }).notNull().unique(), // e.g., "STU001"
   dateOfBirth: timestamp("date_of_birth"),
   parentContact: varchar("parent_contact", { length: 255 }),
@@ -86,7 +85,7 @@ export const assessments = pgTable("assessments", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   subjectId: uuid("subject_id").notNull().references(() => subjects.id, { onDelete: "cascade" }),
-  classId: uuid("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
   term: varchar("term", { length: 20 }).notNull(), // "First Term", "Second Term", "Third Term"
   session: varchar("session", { length: 20 }).notNull(), // "2024/2025"
   firstCA: decimal("first_ca", { precision: 5, scale: 2 }).default("0"),
