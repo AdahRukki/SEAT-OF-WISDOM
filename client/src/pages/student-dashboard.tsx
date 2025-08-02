@@ -263,7 +263,8 @@ export default function StudentDashboard() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="report-card">
+              <CardContent>
+                <div className="report-card">
                 <div className="space-y-6">
                   {/* School Header for Print */}
                   <div className="hidden print-only">
@@ -357,6 +358,7 @@ export default function StudentDashboard() {
                       <p className="text-2xl font-bold text-blue-600">{assessments.length}</p>
                     </div>
                   </div>
+                </div>
                 </div>
               </CardContent>
             </Card>

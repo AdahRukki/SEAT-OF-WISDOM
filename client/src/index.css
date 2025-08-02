@@ -60,15 +60,22 @@
 
 /* Print styles for report cards */
 @media print {
-  .no-print {
-    display: none !important;
+  /* Hide everything by default */
+  * {
+    visibility: hidden !important;
   }
   
-  .print-only {
-    display: block !important;
+  /* Show only the report card content */
+  .report-card,
+  .report-card * {
+    visibility: visible !important;
   }
   
+  /* Position the report card to fill the page */
   .report-card {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
@@ -77,6 +84,18 @@
     background: white !important;
     font-size: 12px !important;
     line-height: 1.4 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  
+  .print-only {
+    display: block !important;
+    visibility: visible !important;
   }
   
   .report-card h1 {
