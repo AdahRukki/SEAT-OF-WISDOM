@@ -566,7 +566,14 @@ export default function AdminDashboard() {
                     return (
                       <Card key={classItem.id} className="hover:shadow-md transition-shadow">
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-lg">{classItem.name}</CardTitle>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg">{classItem.name}</CardTitle>
+                            {classItem.readableId && (
+                              <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                {classItem.readableId}
+                              </span>
+                            )}
+                          </div>
                           <CardDescription>
                             {classItem.description || `Class in ${classItem.school?.name || 'Unknown School'}`}
                           </CardDescription>

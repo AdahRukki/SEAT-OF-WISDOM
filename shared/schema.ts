@@ -28,6 +28,7 @@ export const schools = pgTable("schools", {
 // Classes table
 export const classes = pgTable("classes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  readableId: varchar("readable_id", { length: 50 }).unique(), // Human-readable ID like "SCH1-JSS1"
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),

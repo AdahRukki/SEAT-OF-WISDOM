@@ -106,6 +106,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createClass(classData: InsertClass): Promise<Class> {
+    // Auto-generate human-readable class ID if not provided
+    if (!classData.readableId) {
+      // Get school info to create readable ID
+      const school = await this.getSchoolById(classData.schoolId!);
+      const schoolNumber = school?.name.match(/School (\d+)/)?.[1] || '1';
+      
+      // Get existing classes for this school to generate next number
+      const existingClasses = await db.select().from(classes).where(eq(classes.schoolId, classData.schoolId!));
+      const nextNumber = (existingClasses.length + 1).toString().padStart(2, '0');
+      
+      // Create readable ID: SCH1-CLS01, SCH2-CLS02, etc.
+      classData.readableId = `SCH${schoolNumber}-CLS${nextNumber}`;
+    }
+    
     const [classRecord] = await db
       .insert(classes)
       .values(classData)
@@ -137,6 +151,7 @@ export class DatabaseStorage implements IStorage {
   async getAllClasses(schoolId?: string): Promise<(Class & { school: School })[]> {
     const baseQuery = db.select({
       id: classes.id,
+      readableId: classes.readableId,
       name: classes.name,
       description: classes.description,
       schoolId: classes.schoolId,
