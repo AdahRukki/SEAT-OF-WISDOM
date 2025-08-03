@@ -188,7 +188,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllSchools(): Promise<School[]> {
-    return await db.select().from(schools).orderBy(asc(schools.name));
+    return await db.select().from(schools).orderBy(asc(schools.sortOrder), asc(schools.name));
   }
 
   async updateSchool(schoolId: string, updateData: { name?: string; address?: string; phone?: string; email?: string }): Promise<School> {
