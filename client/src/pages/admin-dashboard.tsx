@@ -709,34 +709,37 @@ export default function AdminDashboard() {
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-              margin: 15px; 
-              line-height: 1.4; 
+              margin: 10px; 
+              line-height: 1.2; 
               color: #333;
               background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-              min-height: 100vh;
+              font-size: 12px;
             }
             .report-container {
               background: white;
               max-width: 210mm;
+              min-height: 297mm;
+              max-height: 297mm;
               margin: 0 auto;
-              padding: 20px;
-              border-radius: 10px;
+              padding: 15px;
+              border-radius: 8px;
               box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+              overflow: hidden;
             }
             .header {
               text-align: center;
-              margin-bottom: 25px;
-              border-bottom: 3px solid #2563eb;
-              padding-bottom: 15px;
+              margin-bottom: 15px;
+              border-bottom: 2px solid #2563eb;
+              padding-bottom: 10px;
               background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
               color: white;
-              border-radius: 8px;
-              padding: 20px;
+              border-radius: 6px;
+              padding: 12px;
             }
             .school-logo {
-              width: 60px;
-              height: 60px;
-              margin: 0 auto 10px;
+              width: 40px;
+              height: 40px;
+              margin: 0 auto 6px;
               background: white;
               border-radius: 50%;
               display: flex;
@@ -744,74 +747,77 @@ export default function AdminDashboard() {
               justify-content: center;
               font-weight: bold;
               color: #2563eb;
+              font-size: 10px;
             }
             .school-name { 
-              font-size: 22px; 
+              font-size: 16px; 
               font-weight: bold; 
-              margin-bottom: 5px;
+              margin-bottom: 3px;
               text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
             }
             .school-subtitle {
-              font-size: 12px;
-              margin-bottom: 3px;
+              font-size: 10px;
+              margin-bottom: 2px;
               opacity: 0.9;
             }
             .school-motto {
-              font-size: 11px;
+              font-size: 9px;
               font-style: italic;
               opacity: 0.8;
             }
             .student-header {
               display: grid;
               grid-template-columns: 2fr 1fr 2fr;
-              gap: 15px;
-              margin-bottom: 20px;
+              gap: 10px;
+              margin-bottom: 12px;
               background: #f8fafc;
-              padding: 15px;
-              border-radius: 8px;
-              border-left: 4px solid #2563eb;
+              padding: 10px;
+              border-radius: 6px;
+              border-left: 3px solid #2563eb;
             }
             .student-info, .attendance-info, .academic-info {
               background: white;
-              padding: 12px;
-              border-radius: 6px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              padding: 8px;
+              border-radius: 4px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             }
             .info-title {
               font-weight: bold;
               color: #2563eb;
-              margin-bottom: 8px;
-              font-size: 13px;
+              margin-bottom: 5px;
+              font-size: 10px;
               text-transform: uppercase;
               border-bottom: 1px solid #e2e8f0;
-              padding-bottom: 4px;
+              padding-bottom: 2px;
             }
             .info-item {
-              font-size: 11px;
-              margin-bottom: 3px;
+              font-size: 9px;
+              margin-bottom: 2px;
             }
             .grades-table {
               width: 100%;
               border-collapse: collapse;
-              margin-bottom: 20px;
+              margin-bottom: 12px;
               background: white;
-              border-radius: 8px;
+              border-radius: 6px;
               overflow: hidden;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+              box-shadow: 0 2px 6px rgba(0,0,0,0.1);
             }
             .grades-table th {
               background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
               color: white;
-              padding: 12px 8px;
+              padding: 6px 4px;
               text-align: center;
               font-weight: bold;
-              font-size: 11px;
+              font-size: 8px;
+              line-height: 1.1;
             }
             .grades-table td {
               border: 1px solid #e2e8f0;
-              padding: 8px;
+              padding: 4px 3px;
               text-align: center;
-              font-size: 11px;
+              font-size: 8px;
+              line-height: 1.1;
             }
             .grades-table tbody tr:nth-child(even) {
               background-color: #f8fafc;
@@ -821,8 +827,11 @@ export default function AdminDashboard() {
             }
             .subject-name {
               text-align: left !important;
-              padding-left: 12px !important;
+              padding-left: 6px !important;
               font-weight: 500;
+              font-size: 8px !important;
+              max-width: 120px;
+              word-wrap: break-word;
             }
             .total-score {
               font-weight: bold;
@@ -840,101 +849,110 @@ export default function AdminDashboard() {
             .grade-f { background-color: #ef4444; }
             .cumulative-section {
               background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-              padding: 15px;
-              border-radius: 8px;
-              margin-bottom: 20px;
+              padding: 10px;
+              border-radius: 6px;
+              margin-bottom: 12px;
               border: 1px solid #cbd5e1;
             }
             .cumulative-header {
               font-weight: bold;
               color: #2563eb;
-              margin-bottom: 10px;
+              margin-bottom: 6px;
               text-align: center;
-              font-size: 14px;
+              font-size: 11px;
             }
             .cumulative-stats {
               display: grid;
               grid-template-columns: repeat(5, 1fr);
-              gap: 10px;
+              gap: 6px;
               text-align: center;
-              margin-bottom: 10px;
+              margin-bottom: 6px;
             }
             .stat-item {
               background: white;
-              padding: 8px;
-              border-radius: 6px;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+              padding: 4px;
+              border-radius: 4px;
+              box-shadow: 0 1px 2px rgba(0,0,0,0.1);
             }
             .stat-label {
-              font-size: 10px;
+              font-size: 7px;
               color: #64748b;
-              margin-bottom: 2px;
+              margin-bottom: 1px;
             }
             .stat-value {
-              font-size: 12px;
+              font-size: 9px;
               font-weight: bold;
               color: #2563eb;
             }
             .comments-section {
               display: grid;
               grid-template-columns: 1fr 1fr;
-              gap: 15px;
-              margin-bottom: 20px;
+              gap: 10px;
+              margin-bottom: 12px;
             }
             .comment-box {
               background: white;
-              padding: 12px;
-              border-radius: 6px;
+              padding: 8px;
+              border-radius: 4px;
               border: 1px solid #e2e8f0;
-              min-height: 80px;
+              min-height: 50px;
             }
             .comment-title {
               font-weight: bold;
               color: #2563eb;
-              margin-bottom: 8px;
-              font-size: 12px;
+              margin-bottom: 4px;
+              font-size: 9px;
             }
             .comment-text {
-              font-size: 11px;
+              font-size: 8px;
               color: #4b5563;
               font-style: italic;
             }
             .signature-section {
               display: grid;
               grid-template-columns: 1fr 1fr 1fr;
-              gap: 30px;
-              margin-top: 30px;
+              gap: 15px;
+              margin-top: 10px;
             }
             .signature {
               text-align: center;
-              border-top: 2px solid #2563eb;
-              padding-top: 8px;
-              font-size: 11px;
+              border-top: 1px solid #2563eb;
+              padding-top: 4px;
+              font-size: 8px;
               font-weight: bold;
               color: #2563eb;
             }
             .grading-scale {
               background: white;
-              padding: 10px;
-              border-radius: 6px;
-              margin-top: 10px;
+              padding: 6px;
+              border-radius: 4px;
+              margin-top: 6px;
               border: 1px solid #e2e8f0;
             }
             .scale-title {
               font-weight: bold;
-              margin-bottom: 5px;
-              font-size: 11px;
+              margin-bottom: 3px;
+              font-size: 8px;
               color: #2563eb;
             }
             .scale-item {
-              font-size: 10px;
-              margin-bottom: 2px;
+              font-size: 7px;
+              margin-bottom: 1px;
               display: flex;
               justify-content: space-between;
             }
             @media print {
-              body { margin: 0; background: white; }
-              .report-container { box-shadow: none; }
+              body { margin: 0; background: white; font-size: 11px; }
+              .report-container { 
+                box-shadow: none; 
+                max-height: none;
+                min-height: auto;
+                page-break-inside: avoid;
+              }
+              * { 
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+              }
             }
           </style>
         </head>
@@ -1050,12 +1068,12 @@ export default function AdminDashboard() {
                   <div class="stat-value">${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</div>
                 </div>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; font-size: 11px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; font-size: 8px;">
                 <div>No of Sub.: <strong>${subjects.length}</strong></div>
                 <div>Total Obtained: <strong>${totalMarks}</strong></div>
                 <div>Result Status: <strong>${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</strong></div>
               </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; font-size: 11px; margin-top: 5px;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; font-size: 8px; margin-top: 3px;">
                 <div>Total Obtainable: <strong>${subjects.length * 100}</strong></div>
                 <div>Average Mark: <strong>${subjects.length ? (totalMarks / (subjects.length * 100) * 100).toFixed(2) : '0.00'} (%)</strong></div>
                 <div>Next Term Fee: <strong>Nil</strong></div>
@@ -1074,14 +1092,14 @@ export default function AdminDashboard() {
               <div class="comment-box">
                 <div class="comment-title">CLASS TEACHER'S COMMENT:</div>
                 <div class="comment-text">Calm and regular in school</div>
-                <div style="margin-top: 15px; font-size: 10px;">
+                <div style="margin-top: 8px; font-size: 7px;">
                   <strong>CLASS TEACHER'S NAME:</strong> Nil
                 </div>
               </div>
               <div class="comment-box">
                 <div class="comment-title">THE HEAD'S REMARK:</div>
                 <div class="comment-text">Good result. Work hard!</div>
-                <div style="margin-top: 15px; text-align: center; border: 1px dashed #cbd5e1; padding: 20px; font-size: 10px; color: #64748b;">
+                <div style="margin-top: 8px; text-align: center; border: 1px dashed #cbd5e1; padding: 10px; font-size: 7px; color: #64748b;">
                   HEAD TEACHER'S STAMP
                 </div>
               </div>
