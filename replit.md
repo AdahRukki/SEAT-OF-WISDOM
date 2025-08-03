@@ -11,6 +11,13 @@ Preferred communication style: Simple, everyday language.
 ## Recent Changes
 
 **August 3, 2025**
+- ✅ **STUDENT PASSWORD CHANGE FEATURE COMPLETED** - Students can now change their passwords securely
+- ✅ **SECURITY TAB ADDED TO STUDENT DASHBOARD** - New dedicated security section with password change form
+- ✅ **PASSWORD VALIDATION** - Full form validation with current password verification and confirmation matching
+- ✅ **PASSWORD VISIBILITY TOGGLES** - Eye/EyeOff icons for showing/hiding password fields
+- ✅ **SECURE BACKEND ENDPOINT** - `/api/auth/change-password` with proper authentication and validation
+- ✅ **PASSWORD SECURITY TIPS** - User-friendly security guidelines displayed in the interface
+- ✅ **REPORT CARD SINGLE-PAGE OPTIMIZATION** - All report card content fits on one page with full subject names
 - ✅ **SCHOOL EDITING SYSTEM COMPLETED** - Schools can now be edited with proper database persistence
 - ✅ **SCHOOL ORDER CONSISTENCY FIXED** - Schools maintain 1,2,3,4 order after editing (ordered by name)
 - ✅ **INDIVIDUAL SCHOOL LOGOS REMOVED** - Single global academy logo system only

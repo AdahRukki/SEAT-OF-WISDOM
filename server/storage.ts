@@ -31,6 +31,8 @@ export interface IStorage {
   authenticateUser(email: string, password: string): Promise<User | null>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  verifyPassword(email: string, password: string): Promise<boolean>;
+  updateUserPassword(userId: string, newPassword: string): Promise<void>;
   
   // School operations
   getAllSchools(): Promise<School[]>;
@@ -83,6 +85,24 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user || undefined;
+  }
+
+  async verifyPassword(email: string, password: string): Promise<boolean> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    if (!user) return false;
+    
+    return await bcrypt.compare(password, user.password);
+  }
+
+  async updateUserPassword(userId: string, newPassword: string): Promise<void> {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db
+      .update(users)
+      .set({ 
+        password: hashedPassword,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId));
   }
 
   async createUser(userData: InsertUser): Promise<User> {

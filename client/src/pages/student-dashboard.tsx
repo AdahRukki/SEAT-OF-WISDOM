@@ -1,20 +1,35 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
+import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
+import { changePasswordSchema } from "@shared/schema";
+import type { z } from "zod";
+
+type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedTerm, setSelectedTerm] = useState("First Term");
   const [selectedSession, setSelectedSession] = useState("2024/2025");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
@@ -42,6 +57,47 @@ export default function StudentDashboard() {
 
   const overallAverage = calculateOverallAverage();
   const overallGrade = calculateGrade(overallAverage);
+
+  // Password change form
+  const passwordForm = useForm<ChangePasswordForm>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
+
+  // Password change mutation
+  const changePasswordMutation = useMutation({
+    mutationFn: async (data: ChangePasswordForm) => {
+      return apiRequest('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Password changed successfully!",
+      });
+      passwordForm.reset();
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to change password",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onPasswordSubmit = (data: ChangePasswordForm) => {
+    changePasswordMutation.mutate(data);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -95,11 +151,12 @@ export default function StudentDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="scores">My Scores</TabsTrigger>
             <TabsTrigger value="report">Report Card</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -402,29 +459,29 @@ export default function StudentDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Full Name</Label>
+                      <label className="text-sm font-medium text-gray-500">Full Name</label>
                       <p className="text-lg font-semibold">{user?.firstName} {user?.lastName}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Email</Label>
+                      <label className="text-sm font-medium text-gray-500">Email</label>
                       <p className="text-lg">{user?.email}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Student ID</Label>
+                      <label className="text-sm font-medium text-gray-500">Student ID</label>
                       <p className="text-lg font-semibold">{profile?.studentId}</p>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Class</Label>
+                      <label className="text-sm font-medium text-gray-500">Class</label>
                       <p className="text-lg font-semibold">{profile?.class?.name}</p>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Account Status</Label>
+                      <label className="text-sm font-medium text-gray-500">Account Status</label>
                       <Badge className="bg-green-500 text-white">Active</Badge>
                     </div>
                     <div>
-                      <Label className="text-sm font-medium text-gray-500">Joined</Label>
+                      <label className="text-sm font-medium text-gray-500">Joined</label>
                       <p className="text-lg">
                         {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'N/A'}
                       </p>
@@ -434,12 +491,166 @@ export default function StudentDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="security" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Change Password
+                </CardTitle>
+                <CardDescription>Update your account password for security</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...passwordForm}>
+                  <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
+                    <FormField
+                      control={passwordForm.control}
+                      name="currentPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Current Password</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input
+                                type={showCurrentPassword ? "text" : "password"}
+                                placeholder="Enter current password"
+                                {...field}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                              >
+                                {showCurrentPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={passwordForm.control}
+                      name="newPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>New Password</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input
+                                type={showNewPassword ? "text" : "password"}
+                                placeholder="Enter new password (min 6 characters)"
+                                {...field}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                              >
+                                {showNewPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={passwordForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Confirm New Password</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input
+                                type={showConfirmPassword ? "text" : "password"}
+                                placeholder="Confirm your new password"
+                                {...field}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              >
+                                {showConfirmPassword ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="flex gap-2 pt-4">
+                      <Button 
+                        type="submit" 
+                        disabled={changePasswordMutation.isPending}
+                        className="flex items-center gap-2"
+                      >
+                        {changePasswordMutation.isPending ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            Updating...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-4 w-4" />
+                            Update Password
+                          </>
+                        )}
+                      </Button>
+                      <Button 
+                        type="button" 
+                        variant="outline"
+                        onClick={() => {
+                          passwordForm.reset();
+                          setShowCurrentPassword(false);
+                          setShowNewPassword(false);
+                          setShowConfirmPassword(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+
+                <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Password Security Tips:</h4>
+                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                    <li>• Use at least 6 characters</li>
+                    <li>• Include letters, numbers, and special characters</li>
+                    <li>• Don't use personal information</li>
+                    <li>• Keep your password confidential</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
     </div>
   );
-}
-
-function Label({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <label className={className}>{children}</label>;
 }

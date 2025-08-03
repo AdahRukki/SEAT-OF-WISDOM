@@ -9,7 +9,8 @@ import {
   insertClassSchema, 
   insertSubjectSchema,
   addScoreSchema,
-  insertStudentSchema
+  insertStudentSchema,
+  changePasswordSchema
 } from "@shared/schema";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
@@ -812,6 +813,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get logo error:", error);
       res.status(500).json({ error: "Failed to get logo" });
+    }
+  });
+
+  // Change password endpoint (for students and other users)
+  app.post('/api/auth/change-password', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const passwordData = changePasswordSchema.parse(req.body);
+
+      // Verify current password
+      const isCurrentPasswordValid = await storage.verifyPassword(user.email, passwordData.currentPassword);
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({ error: "Current password is incorrect" });
+      }
+
+      // Update password
+      await storage.updateUserPassword(user.id, passwordData.newPassword);
+
+      res.json({ message: "Password updated successfully" });
+    } catch (error) {
+      console.error("Change password error:", error);
+      if (error.issues) {
+        return res.status(400).json({ error: error.issues[0].message });
+      }
+      res.status(500).json({ error: "Failed to change password" });
     }
   });
 
