@@ -548,7 +548,7 @@ export default function AdminDashboard() {
       const response = await fetch('/api/assessments/upload', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: formData
       });
@@ -606,7 +606,7 @@ export default function AdminDashboard() {
       const response = await fetch(`/api/assessments/template/${scoresClassId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
 
