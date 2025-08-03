@@ -1025,157 +1025,18 @@ export default function AdminDashboard() {
                     Add and manage student accounts and information
                   </CardDescription>
                 </div>
-                <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <DialogTrigger asChild>
-                        <Button>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Student
-                        </Button>
-                      </DialogTrigger>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Create new student account with auto-generated SOWA ID</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Create New Student</DialogTitle>
-                      <DialogDescription>
-                        Add a new student to the system
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="student-firstname">First Name</Label>
-                          <Input
-                            id="student-firstname"
-                            value={studentFirstName}
-                            onChange={(e) => setStudentFirstName(e.target.value)}
-                            placeholder="John"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="student-lastname">Last Name</Label>
-                          <Input
-                            id="student-lastname"
-                            value={studentLastName}
-                            onChange={(e) => setStudentLastName(e.target.value)}
-                            placeholder="Doe"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="student-email">Email</Label>
-                        <Input
-                          id="student-email"
-                          type="email"
-                          value={studentEmail}
-                          onChange={(e) => setStudentEmail(e.target.value)}
-                          placeholder="john.doe@student.com"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="student-password">Password</Label>
-                        <div className="relative">
-                          <Input
-                            id="student-password"
-                            type={showPassword ? "text" : "password"}
-                            value={studentPassword}
-                            onChange={(e) => setStudentPassword(e.target.value)}
-                            placeholder="Enter password"
-                            className="pr-10"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                            onClick={() => setShowPassword(!showPassword)}
-                          >
-                            {showPassword ? (
-                              <EyeOff className="h-4 w-4" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="student-id">Student ID (Auto-generated)</Label>
-                        <div className="flex space-x-2">
-                          <Input
-                            id="student-id"
-                            value={studentId}
-                            readOnly
-                            placeholder="SOWA/0001"
-                            className="bg-gray-50"
-                          />
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={generateStudentId}
-                              >
-                                <RefreshCw className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Generate a new random SOWA student ID</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="student-class">
-                          Class 
-                          {selectedClassId && (
-                            <span className="text-xs text-green-600 ml-2">
-                              (Pre-selected from class details)
-                            </span>
-                          )}
-                        </Label>
-                        <Select value={selectedClassId} onValueChange={setSelectedClassId}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a class" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {classes.map((classItem) => (
-                              <SelectItem key={classItem.id} value={classItem.id}>
-                                {classItem.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            onClick={() => createStudentMutation.mutate({
-                              firstName: studentFirstName,
-                              lastName: studentLastName,
-                              email: studentEmail,
-                              password: studentPassword,
-                              studentId: studentId,
-                              classId: selectedClassId
-                            })}
-                            disabled={!studentFirstName || !studentLastName || !studentEmail || !studentPassword || !selectedClassId || createStudentMutation.isPending}
-                            className="w-full"
-                          >
-                            {createStudentMutation.isPending ? "Creating..." : "Create Student"}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Create student account and enroll in selected class</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button onClick={() => setIsStudentDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Student
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Create new student account with auto-generated SOWA ID</p>
+                  </TooltipContent>
+                </Tooltip>
+
               </CardHeader>
               <CardContent>
                 <div className="border rounded-lg overflow-hidden">
@@ -1707,6 +1568,7 @@ export default function AdminDashboard() {
                         const classId = selectedClassForDetails?.id || "";
                         setSelectedClassId(classId);
                         console.log("Setting selected class ID from class details:", classId);
+                        console.log("Opening student dialog with pre-selected class");
                         
                         // Generate a new student ID for this new student
                         generateStudentId();
@@ -1714,6 +1576,8 @@ export default function AdminDashboard() {
                         // Open the student dialog and close class details
                         setIsStudentDialogOpen(true);
                         setIsClassDetailsDialogOpen(false);
+                        
+                        console.log("Student dialog should now be open:", true);
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
@@ -1983,6 +1847,146 @@ export default function AdminDashboard() {
                   {createSubjectMutation.isPending ? "Creating..." : "Create Subject"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Global Student Dialog - can be opened from anywhere */}
+        <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Student</DialogTitle>
+              <DialogDescription>
+                Add a new student to the system
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="student-firstname">First Name</Label>
+                  <Input
+                    id="student-firstname"
+                    value={studentFirstName}
+                    onChange={(e) => setStudentFirstName(e.target.value)}
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="student-lastname">Last Name</Label>
+                  <Input
+                    id="student-lastname"
+                    value={studentLastName}
+                    onChange={(e) => setStudentLastName(e.target.value)}
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="student-email">Email</Label>
+                <Input
+                  id="student-email"
+                  type="email"
+                  value={studentEmail}
+                  onChange={(e) => setStudentEmail(e.target.value)}
+                  placeholder="john.doe@student.com"
+                />
+              </div>
+              <div>
+                <Label htmlFor="student-password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="student-password"
+                    type={showPassword ? "text" : "password"}
+                    value={studentPassword}
+                    onChange={(e) => setStudentPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="student-id">Student ID (Auto-generated)</Label>
+                <div className="flex space-x-2">
+                  <Input
+                    id="student-id"
+                    value={studentId}
+                    readOnly
+                    placeholder="SOWA/0001"
+                    className="bg-gray-50"
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={generateStudentId}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Generate a new random SOWA student ID</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="student-class">
+                  Class 
+                  {selectedClassId && (
+                    <span className="text-xs text-green-600 ml-2">
+                      (Pre-selected from class details)
+                    </span>
+                  )}
+                </Label>
+                <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((classItem) => (
+                      <SelectItem key={classItem.id} value={classItem.id}>
+                        {classItem.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={() => createStudentMutation.mutate({
+                      firstName: studentFirstName,
+                      lastName: studentLastName,
+                      email: studentEmail,
+                      password: studentPassword,
+                      studentId: studentId,
+                      classId: selectedClassId
+                    })}
+                    disabled={!studentFirstName || !studentLastName || !studentEmail || !studentPassword || !selectedClassId || createStudentMutation.isPending}
+                    className="w-full"
+                  >
+                    {createStudentMutation.isPending ? "Creating..." : "Create Student"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Create student account and enroll in selected class</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </DialogContent>
         </Dialog>
