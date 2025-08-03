@@ -684,12 +684,15 @@ export default function AdminDashboard() {
                 </Tooltip>
               )}
 
-              {/* User Info - Simplified on mobile */}
-              <div className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300">
+              {/* User Info - Clickable Profile Link */}
+              <a 
+                href="/profile"
+                className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+              >
                 <User className="h-4 w-4" />
                 <span className="hidden md:inline">{user.firstName} {user.lastName}</span>
                 <span className="md:hidden text-xs">{user.firstName}</span>
-              </div>
+              </a>
               
               {/* Logout Button - Icon only on mobile */}
               <Tooltip>

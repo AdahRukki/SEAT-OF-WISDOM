@@ -1,0 +1,242 @@
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { ArrowLeft, User, Mail, Calendar, Shield, Building } from "lucide-react";
+import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import type { School } from "@shared/schema";
+
+export default function Profile() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Get school name for sub-admin users
+  const { data: schools = [] } = useQuery<School[]>({
+    queryKey: ['/api/admin/schools'],
+    enabled: user?.role === 'sub-admin' && !!(user as any).schoolId
+  });
+
+  const userSchool = schools.find(school => school.id === (user as any)?.schoolId);
+
+  if (!user) {
+    return <div>Loading...</div>;
+  }
+
+  const handleGoBack = () => {
+    if (user.role === 'admin' || user.role === 'sub-admin') {
+      setLocation('/');
+    } else {
+      setLocation('/student');
+    }
+  };
+
+  const getRoleBadgeVariant = (role: string) => {
+    switch (role) {
+      case 'admin': return 'default';
+      case 'sub-admin': return 'secondary';
+      case 'student': return 'outline';
+      default: return 'outline';
+    }
+  };
+
+  const getRoleDisplayName = (role: string) => {
+    switch (role) {
+      case 'admin': return 'Main Administrator';
+      case 'sub-admin': return 'School Administrator';
+      case 'student': return 'Student';
+      default: return role;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleGoBack}
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </div>
+
+        {/* Profile Card */}
+        <Card>
+          <CardHeader className="text-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mx-auto mb-4 flex items-center justify-center">
+              <User className="h-10 w-10 text-white" />
+            </div>
+            <CardTitle className="text-2xl">{user.firstName} {user.lastName}</CardTitle>
+            <CardDescription className="flex items-center justify-center gap-2">
+              <Badge variant={getRoleBadgeVariant(user.role)}>
+                {getRoleDisplayName(user.role)}
+              </Badge>
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            {/* Personal Information */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Personal Information
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <Mail className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm text-gray-500">Email Address</p>
+                    <p className="font-medium">{user.email}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <User className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm text-gray-500">Full Name</p>
+                    <p className="font-medium">{user.firstName} {user.lastName}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <Shield className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm text-gray-500">Account Role</p>
+                    <p className="font-medium">{getRoleDisplayName(user.role)}</p>
+                  </div>
+                </div>
+
+                {/* Show school for sub-admin */}
+                {user.role === 'sub-admin' && userSchool && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <Building className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm text-gray-500">Assigned School</p>
+                      <p className="font-medium">{userSchool.name}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show student ID for students */}
+                {user.role === 'student' && (user as any).studentId && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <User className="h-4 w-4 text-gray-500" />
+                    <div>
+                      <p className="text-sm text-gray-500">Student ID</p>
+                      <p className="font-medium">{(user as any).studentId}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Account Information */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Account Information
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm text-gray-500">Account Created</p>
+                    <p className="font-medium">
+                      {(user as any).createdAt ? new Date((user as any).createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      }) : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <div>
+                    <p className="text-sm text-gray-500">Last Updated</p>
+                    <p className="font-medium">
+                      {(user as any).updatedAt ? new Date((user as any).updatedAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      }) : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Permissions */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Permissions & Access
+              </h3>
+              <div className="space-y-2">
+                {user.role === 'admin' && (
+                  <>
+                    <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                      <span className="text-sm">Manage all schools</span>
+                      <Badge variant="outline" className="text-green-600 border-green-600">✓ Enabled</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                      <span className="text-sm">User management</span>
+                      <Badge variant="outline" className="text-green-600 border-green-600">✓ Enabled</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                      <span className="text-sm">System configuration</span>
+                      <Badge variant="outline" className="text-green-600 border-green-600">✓ Enabled</Badge>
+                    </div>
+                  </>
+                )}
+                
+                {user.role === 'sub-admin' && (
+                  <>
+                    <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                      <span className="text-sm">Manage assigned school</span>
+                      <Badge variant="outline" className="text-blue-600 border-blue-600">✓ Enabled</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                      <span className="text-sm">Student management</span>
+                      <Badge variant="outline" className="text-blue-600 border-blue-600">✓ Enabled</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                      <span className="text-sm">System-wide access</span>
+                      <Badge variant="outline" className="text-gray-500 border-gray-400">✗ Restricted</Badge>
+                    </div>
+                  </>
+                )}
+
+                {user.role === 'student' && (
+                  <>
+                    <div className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                      <span className="text-sm">View academic records</span>
+                      <Badge variant="outline" className="text-purple-600 border-purple-600">✓ Enabled</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                      <span className="text-sm">Access report cards</span>
+                      <Badge variant="outline" className="text-purple-600 border-purple-600">✓ Enabled</Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                      <span className="text-sm">Administrative functions</span>
+                      <Badge variant="outline" className="text-gray-500 border-gray-400">✗ Restricted</Badge>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -53,14 +53,28 @@ export default function StudentDashboard() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Welcome back, {user?.firstName} {user?.lastName}
+                  Welcome back, <a 
+                    href="/profile"
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  >
+                    {user?.firstName} {user?.lastName}
+                  </a>
                 </p>
               </div>
             </div>
-            <Button onClick={logout} variant="outline" className="flex items-center space-x-2">
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </Button>
+            <div className="flex items-center space-x-2">
+              <a 
+                href="/profile"
+                className="flex items-center space-x-1 px-3 py-1 bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors text-sm"
+              >
+                <User className="h-4 w-4" />
+                <span>Profile</span>
+              </a>
+              <Button onClick={logout} variant="outline" className="flex items-center space-x-2">
+                <LogOut className="h-4 w-4" />
+                <span>Logout</span>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
