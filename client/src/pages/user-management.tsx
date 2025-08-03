@@ -71,6 +71,8 @@ export default function UserManagement() {
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUserForDeletion, setSelectedUserForDeletion] = useState<User | null>(null);
+  const [isDeleteUserDialogOpen, setIsDeleteUserDialogOpen] = useState(false);
   
   // Form states for sub-admin creation
   const [firstName, setFirstName] = useState("");
@@ -156,6 +158,31 @@ export default function UserManagement() {
       toast({
         title: "Error",
         description: "Failed to upload logo",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return apiRequest(`/api/admin/users/${userId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setIsDeleteUserDialogOpen(false);
+      setSelectedUserForDeletion(null);
+      toast({
+        title: "Success",
+        description: "User deleted successfully"
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete user",
         variant: "destructive"
       });
     }
@@ -475,6 +502,27 @@ export default function UserManagement() {
                               <p>Edit user details and permissions</p>
                             </TooltipContent>
                           </Tooltip>
+                          {/* Delete button - Only show for non-admin users */}
+                          {user.role !== 'admin' && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedUserForDeletion(user);
+                                    setIsDeleteUserDialogOpen(true);
+                                  }}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Delete this user account</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -704,6 +752,56 @@ export default function UserManagement() {
             </Button>
           </div>
         </DialogContent>
+        </Dialog>
+        
+        {/* Delete User Confirmation Dialog */}
+        <Dialog open={isDeleteUserDialogOpen} onOpenChange={setIsDeleteUserDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Delete User</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this user? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedUserForDeletion && (
+              <div className="py-4">
+                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <UserIcon className="h-4 w-4 text-red-600" />
+                    <span className="font-medium text-red-800">
+                      {selectedUserForDeletion.firstName} {selectedUserForDeletion.lastName}
+                    </span>
+                  </div>
+                  <p className="text-sm text-red-700">{selectedUserForDeletion.email}</p>
+                  <Badge className={`${getRoleBadgeColor(selectedUserForDeletion.role)} text-white mt-2`}>
+                    {selectedUserForDeletion.role}
+                  </Badge>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end space-x-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsDeleteUserDialogOpen(false);
+                  setSelectedUserForDeletion(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => {
+                  if (selectedUserForDeletion) {
+                    deleteUserMutation.mutate(selectedUserForDeletion.id);
+                  }
+                }}
+                disabled={deleteUserMutation.isPending}
+              >
+                {deleteUserMutation.isPending ? 'Deleting...' : 'Delete User'}
+              </Button>
+            </div>
+          </DialogContent>
         </Dialog>
       </div>
       </div>

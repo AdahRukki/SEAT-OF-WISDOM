@@ -39,6 +39,7 @@ export interface IStorage {
   // Admin operations
   getAllUsers(): Promise<(User & { school?: School })[]>;
   createUser(userData: InsertUser): Promise<User>;
+  deleteUser(userId: string): Promise<void>;
   updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School>;
   createStudent(studentData: InsertStudent): Promise<Student>;
   createClass(classData: InsertClass): Promise<Class>;
@@ -90,6 +91,18 @@ export class DatabaseStorage implements IStorage {
       .values({ ...userData, password: hashedPassword })
       .returning();
     return user;
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, userId));
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, userId));
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, userId));
   }
 
   async createStudent(studentData: InsertStudent): Promise<Student> {
