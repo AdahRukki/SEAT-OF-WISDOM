@@ -468,6 +468,33 @@ export default function AdminDashboard() {
   }, [isStudentDialogOpen, allStudents.length]);
 
   const handleScoreChange = (studentId: string, field: string, value: string) => {
+    // Validate score limits based on field type
+    let numValue = parseInt(value) || 0;
+    let maxScore = 20; // Default for CA
+    
+    if (field === 'exam') {
+      maxScore = 60;
+    }
+    
+    // Enforce limits
+    if (numValue > maxScore) {
+      toast({ 
+        title: "Invalid Score", 
+        description: `Maximum score for ${field === 'exam' ? 'Exam' : 'CA'} is ${maxScore}`, 
+        variant: "destructive" 
+      });
+      return; // Don't update the input
+    }
+    
+    if (numValue < 0) {
+      toast({ 
+        title: "Invalid Score", 
+        description: "Score cannot be negative", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
     setScoreInputs(prev => ({
       ...prev,
       [studentId]: {
