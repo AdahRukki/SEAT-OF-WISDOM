@@ -391,26 +391,27 @@ export default function AdminDashboard() {
       <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
+            {/* Left side - Logo and School Info */}
+            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+              <div className="flex items-center space-x-2 min-w-0">
                 <img 
                   src={logoImage} 
                   alt="Seat of Wisdom Academy Logo" 
-                  className="h-10 w-10 object-contain rounded-md" 
+                  className="h-8 w-8 sm:h-10 sm:w-10 object-contain rounded-md flex-shrink-0" 
                 />
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                <div className="min-w-0">
+                  <h1 className="text-sm sm:text-xl font-bold text-gray-900 dark:text-white truncate">
                     Seat of Wisdom Academy
                   </h1>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
                     {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
                   </p>
                 </div>
               </div>
               
-              {/* Active School Display for Main Admin */}
+              {/* Active School Display for Main Admin - Hidden on mobile */}
               {user.role === 'admin' && selectedSchoolId && (
-                <div className="flex items-center space-x-2">
+                <div className="hidden lg:flex items-center space-x-2">
                   <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
                     <SelectTrigger className="w-48">
                       <div className="flex items-center space-x-2">
@@ -430,10 +431,11 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            <div className="flex items-center space-x-4">
-              {/* Firebase Sync Status */}
-              <div className="flex items-center space-x-2">
-                <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs ${
+            {/* Right side - Status and User Actions */}
+            <div className="flex items-center space-x-1 sm:space-x-4">
+              {/* Firebase Sync Status - Simplified on mobile */}
+              <div className="flex items-center space-x-1 sm:space-x-2">
+                <div className={`flex items-center space-x-1 px-1 sm:px-2 py-1 rounded-full text-xs ${
                   syncStatus.isOnline 
                     ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
                     : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
@@ -443,13 +445,13 @@ export default function AdminDashboard() {
                   ) : (
                     <WifiOff className="h-3 w-3" />
                   )}
-                  <span>
+                  <span className="hidden sm:inline">
                     {syncStatus.isOnline ? 'Online' : 'Offline'}
                   </span>
                 </div>
                 {syncStatus.queueLength > 0 && (
-                  <div className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full text-xs">
-                    {syncStatus.queueLength} pending sync
+                  <div className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-1 sm:px-2 py-1 rounded-full text-xs hidden sm:block">
+                    {syncStatus.queueLength} pending
                   </div>
                 )}
                 <Button
@@ -459,51 +461,77 @@ export default function AdminDashboard() {
                   disabled={!syncStatus.isOnline || syncStatus.syncInProgress}
                   className="h-8 w-8 p-0"
                 >
-                  <RefreshCw className={`h-4 w-4 ${syncStatus.syncInProgress ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${syncStatus.syncInProgress ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
               
-              {/* Navigation to User Management */}
+              {/* Navigation to User Management - Icon only on mobile */}
               {user.role === 'admin' && (
                 <a
                   href="/users"
-                  className="inline-flex items-center gap-2 px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
+                  className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
                 >
                   <Users className="w-4 h-4" />
-                  Users
+                  <span className="hidden sm:inline">Users</span>
                 </a>
               )}
 
-              <div className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
+              {/* User Info - Simplified on mobile */}
+              <div className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300">
                 <User className="h-4 w-4" />
-                <span>{user.firstName} {user.lastName}</span>
+                <span className="hidden md:inline">{user.firstName} {user.lastName}</span>
+                <span className="md:hidden text-xs">{user.firstName}</span>
               </div>
+              
+              {/* Logout Button - Icon only on mobile */}
               <Button 
                 variant="outline" 
                 size="sm"
                 onClick={() => window.location.href = '/api/auth/logout'}
+                className="px-2 sm:px-4"
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline sm:ml-2">Logout</span>
               </Button>
             </div>
           </div>
+          
+          {/* Mobile School Selector - Shown below header on mobile for admin */}
+          {user.role === 'admin' && selectedSchoolId && (
+            <div className="lg:hidden pb-3 border-t border-gray-200 dark:border-gray-700 pt-3">
+              <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+                <SelectTrigger className="w-full">
+                  <div className="flex items-center space-x-2">
+                    <Building className="h-4 w-4" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {schools.map((school) => (
+                    <SelectItem key={school.id} value={school.id}>
+                      {school.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="students">Students</TabsTrigger>
-            <TabsTrigger value="scores">Manage Scores</TabsTrigger>
-            <TabsTrigger value="reports">Report Cards</TabsTrigger>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="students" className="text-xs sm:text-sm">Students</TabsTrigger>
+            <TabsTrigger value="scores" className="text-xs sm:text-sm">Scores</TabsTrigger>
+            <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Students</CardTitle>

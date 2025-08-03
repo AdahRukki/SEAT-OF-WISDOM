@@ -199,19 +199,70 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">User Management</h1>
-        <p className="text-muted-foreground">
-          Manage users, create sub-admins, and configure school settings
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+              <div className="flex items-center space-x-2 min-w-0">
+                <img 
+                  src={logoImage} 
+                  alt="Seat of Wisdom Academy Logo" 
+                  className="h-8 w-8 sm:h-10 sm:w-10 object-contain rounded-md flex-shrink-0" 
+                />
+                <div className="min-w-0">
+                  <h1 className="text-sm sm:text-xl font-bold text-gray-900 dark:text-white truncate">
+                    User Management
+                  </h1>
+                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
+                    Manage system users and administrators
+                  </p>
+                </div>
+              </div>
+            </div>
 
-      <Tabs defaultValue="users" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="users">All Users</TabsTrigger>
-          <TabsTrigger value="schools">School Settings</TabsTrigger>
-        </TabsList>
+            <div className="flex items-center space-x-1 sm:space-x-4">
+              <a
+                href="/"
+                className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </a>
+              
+              <div className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300">
+                <User className="h-4 w-4" />
+                <span className="hidden md:inline">{user?.firstName} {user?.lastName}</span>
+                <span className="md:hidden text-xs">{user?.firstName}</span>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = '/api/auth/logout'}
+                className="px-2 sm:px-4"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline sm:ml-2">Logout</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto p-4 sm:p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground">
+            Manage users, create sub-admins, and configure school settings
+          </p>
+        </div>
+
+        <Tabs defaultValue="users" className="space-y-4 sm:space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="users" className="text-sm">All Users</TabsTrigger>
+            <TabsTrigger value="schools" className="text-sm">School Settings</TabsTrigger>
+          </TabsList>
 
         <TabsContent value="users" className="space-y-6">
           {/* Actions Bar */}
@@ -488,7 +539,7 @@ export default function UserManagement() {
             ))}
           </div>
         </TabsContent>
-      </Tabs>
+        </Tabs>
 
       {/* User Profile Dialog */}
       <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
@@ -544,6 +595,7 @@ export default function UserManagement() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
