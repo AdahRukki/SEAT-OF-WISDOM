@@ -23,7 +23,7 @@ import {
   type StudentWithDetails
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -188,7 +188,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllSchools(): Promise<School[]> {
-    return await db.select().from(schools);
+    return await db.select().from(schools).orderBy(asc(schools.name));
   }
 
   async updateSchool(schoolId: string, updateData: { name?: string; address?: string; phone?: string; email?: string }): Promise<School> {
