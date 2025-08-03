@@ -335,6 +335,39 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getStudentByStudentId(studentId: string): Promise<(Student & { user: User }) | undefined> {
+    const [result] = await db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .where(eq(students.studentId, studentId));
+    
+    if (!result || !result.students || !result.users) {
+      return undefined;
+    }
+    
+    return {
+      ...result.students,
+      user: result.users
+    };
+  }
+
+  async getStudentsByClass(classId: string): Promise<(Student & { user: User })[]> {
+    const results = await db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .where(eq(students.classId, classId))
+      .orderBy(asc(students.studentId));
+    
+    return results
+      .filter(result => result.students && result.users)
+      .map(result => ({
+        ...result.students!,
+        user: result.users!
+      }));
+  }
+
   async createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment> {
     console.log("[DEBUG] Storage createOrUpdateAssessment called with:", assessmentData);
     console.log("[DEBUG] ClassId specifically:", assessmentData.classId);

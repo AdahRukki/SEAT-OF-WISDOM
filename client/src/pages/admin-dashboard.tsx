@@ -43,6 +43,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Plus, 
   Save,
+  Download,
   Users, 
   GraduationCap, 
   BookOpen, 
@@ -518,6 +519,125 @@ export default function AdminDashboard() {
     }));
 
     updateScoresMutation.mutate(scoresData);
+  };
+
+  // Handle Excel file upload
+  const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!scoresClassId || !scoresSubjectId) {
+      toast({
+        title: "Error",
+        description: "Please select class and subject first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const [term, session] = scoresTermSession.split('-');
+    
+    const formData = new FormData();
+    formData.append('excelFile', file);
+    formData.append('classId', scoresClassId);
+    formData.append('subjectId', scoresSubjectId);
+    formData.append('term', term);
+    formData.append('session', session);
+
+    try {
+      const response = await fetch('/api/assessments/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed');
+      }
+
+      toast({
+        title: "Excel Upload Success",
+        description: `${result.successCount} students processed successfully${result.errorCount > 0 ? `, ${result.errorCount} errors` : ''}`,
+      });
+
+      if (result.errors && result.errors.length > 0) {
+        console.warn("Upload errors:", result.errors);
+        toast({
+          title: "Upload Warnings",
+          description: `${result.errors.slice(0, 3).join(', ')}${result.errors.length > 3 ? '...' : ''}`,
+          variant: "destructive"
+        });
+      }
+
+      // Refresh assessments
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId: scoresSubjectId }] 
+      });
+
+    } catch (error) {
+      console.error("Excel upload error:", error);
+      toast({
+        title: "Upload Error",
+        description: error instanceof Error ? error.message : "Failed to upload Excel file",
+        variant: "destructive"
+      });
+    }
+
+    // Reset file input
+    event.target.value = '';
+  };
+
+  // Handle download template
+  const handleDownloadTemplate = async () => {
+    if (!scoresClassId) {
+      toast({
+        title: "Error",
+        description: "Please select a class first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/assessments/template/${scoresClassId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download template');
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scores_template_${scoresClassId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Template Downloaded",
+        description: "Excel template downloaded with student IDs",
+      });
+
+    } catch (error) {
+      console.error("Template download error:", error);
+      toast({
+        title: "Download Error",
+        description: "Failed to download template",
+        variant: "destructive"
+      });
+    }
   };
 
   const calculateGrade = (total: number) => {
@@ -1179,7 +1299,7 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-end">
+                  <div className="flex flex-col gap-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button 
@@ -1195,6 +1315,50 @@ export default function AdminDashboard() {
                         <p>Save all entered scores for the selected class and subject</p>
                       </TooltipContent>
                     </Tooltip>
+                    <div className="flex gap-1">
+                      <input
+                        type="file"
+                        id="excel-upload"
+                        accept=".xlsx,.xls,.csv"
+                        style={{ display: 'none' }}
+                        onChange={handleExcelUpload}
+                      />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => document.getElementById('excel-upload')?.click()}
+                            disabled={!scoresClassId || !scoresSubjectId}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                          >
+                            <Upload className="h-4 w-4 mr-1" />
+                            Upload
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Upload scores from Excel file (XLSX, XLS, CSV)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={handleDownloadTemplate}
+                            disabled={!scoresClassId}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Template
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Download Excel template with student IDs</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
                 </div>
 

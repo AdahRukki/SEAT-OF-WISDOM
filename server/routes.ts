@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import multer from "multer";
+import * as XLSX from "xlsx";
 import { 
   loginSchema, 
   insertUserSchema, 
@@ -13,6 +15,26 @@ import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+
+// Configure multer for file uploads
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv' // .csv
+    ];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel (.xlsx, .xls) and CSV files are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 // Middleware for authentication
 const authenticate = async (req: Request, res: Response, next: NextFunction) => {
@@ -573,6 +595,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create/update assessment error:", error);
       res.status(400).json({ error: "Failed to save assessment" });
+    }
+  });
+
+  // Excel upload for bulk score updates
+  app.post('/api/assessments/upload', authenticate, upload.single('excelFile'), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const { classId, subjectId, term, session } = req.body;
+      if (!classId || !subjectId || !term || !session) {
+        return res.status(400).json({ 
+          error: "Missing required fields: classId, subjectId, term, session" 
+        });
+      }
+
+      // Parse Excel file
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet);
+
+      console.log("[DEBUG] Excel data parsed:", data);
+
+      // Process each row
+      const results = [];
+      const errors = [];
+
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i] as any;
+        try {
+          // Map Excel columns to our data structure
+          // Expected columns: Student ID, First CA, Second CA, Exam
+          const studentId = row['Student ID'] || row['student_id'] || row['studentId'];
+          const firstCA = parseFloat(row['First CA'] || row['first_ca'] || row['firstCA'] || '0');
+          const secondCA = parseFloat(row['Second CA'] || row['second_ca'] || row['secondCA'] || '0');
+          const exam = parseFloat(row['Exam'] || row['exam'] || '0');
+
+          if (!studentId) {
+            errors.push(`Row ${i + 2}: Missing student ID`);
+            continue;
+          }
+
+          // Find student by studentId (SOWA/0001 format)
+          const student = await storage.getStudentByStudentId(studentId);
+          if (!student) {
+            errors.push(`Row ${i + 2}: Student ${studentId} not found`);
+            continue;
+          }
+
+          // Validate scores
+          if (firstCA < 0 || firstCA > 20) {
+            errors.push(`Row ${i + 2}: First CA must be between 0-20`);
+            continue;
+          }
+          if (secondCA < 0 || secondCA > 20) {
+            errors.push(`Row ${i + 2}: Second CA must be between 0-20`);
+            continue;
+          }
+          if (exam < 0 || exam > 60) {
+            errors.push(`Row ${i + 2}: Exam must be between 0-60`);
+            continue;
+          }
+
+          // Create or update assessment
+          const assessment = await storage.createOrUpdateAssessment({
+            studentId: student.id,
+            subjectId,
+            classId,
+            term,
+            session,
+            firstCA: firstCA.toString(),
+            secondCA: secondCA.toString(),
+            exam: exam.toString()
+          });
+
+          results.push({
+            studentId,
+            studentName: `${student.user.firstName} ${student.user.lastName}`,
+            firstCA,
+            secondCA,
+            exam,
+            total: firstCA + secondCA + exam,
+            status: 'success'
+          });
+
+        } catch (error) {
+          console.error(`Error processing row ${i + 2}:`, error);
+          errors.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
+        }
+      }
+
+      res.json({
+        message: `Processed ${results.length} students successfully`,
+        successCount: results.length,
+        errorCount: errors.length,
+        results,
+        errors
+      });
+
+    } catch (error) {
+      console.error("Excel upload error:", error);
+      res.status(500).json({ error: "Failed to process Excel file" });
+    }
+  });
+
+  // Download Excel template for bulk score upload
+  app.get('/api/assessments/template/:classId', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { classId } = req.params;
+      
+      // Get students from the class
+      const studentsInClass = await storage.getStudentsByClass(classId);
+      
+      // Create Excel template with student IDs
+      const templateData = studentsInClass.map(student => ({
+        'Student ID': student.studentId,
+        'Student Name': `${student.user.firstName} ${student.user.lastName}`,
+        'First CA': '',
+        'Second CA': '',
+        'Exam': ''
+      }));
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      
+      // Set column widths
+      ws['!cols'] = [
+        { width: 15 }, // Student ID
+        { width: 25 }, // Student Name
+        { width: 12 }, // First CA
+        { width: 12 }, // Second CA
+        { width: 12 }  // Exam
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Scores Template');
+
+      // Generate buffer
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      // Set headers for download
+      res.set({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="scores_template_${classId}.xlsx"`,
+        'Content-Length': buffer.length
+      });
+
+      res.send(buffer);
+
+    } catch (error) {
+      console.error("Template download error:", error);
+      res.status(500).json({ error: "Failed to generate template" });
     }
   });
 
