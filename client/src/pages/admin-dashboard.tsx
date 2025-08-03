@@ -110,6 +110,7 @@ export default function AdminDashboard() {
 
   // New subject creation states
   const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectDescription, setNewSubjectDescription] = useState("");
 
   // Enable Firebase real-time sync for the selected school
@@ -359,7 +360,7 @@ export default function AdminDashboard() {
 
   // Create new subject mutation
   const createSubjectMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string }) => {
+    mutationFn: async (data: { name: string; code: string; description?: string }) => {
       return await apiRequest('/api/admin/subjects', {
         method: 'POST',
         body: data
@@ -372,6 +373,7 @@ export default function AdminDashboard() {
       });
       // Reset form
       setNewSubjectName("");
+      setNewSubjectCode("");
       setNewSubjectDescription("");
       setIsNewSubjectDialogOpen(false);
       // Refresh subjects list
@@ -1879,10 +1881,37 @@ export default function AdminDashboard() {
                   id="subject-name"
                   type="text"
                   value={newSubjectName}
-                  onChange={(e) => setNewSubjectName(e.target.value)}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    setNewSubjectName(name);
+                    // Auto-generate code from name
+                    const code = name
+                      .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters
+                      .split(' ')
+                      .map(word => word.slice(0, 3).toUpperCase())
+                      .join('')
+                      .slice(0, 10); // Limit to 10 characters
+                    setNewSubjectCode(code);
+                  }}
                   placeholder="e.g., Physics, Chemistry, Literature"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
+              </div>
+              
+              <div>
+                <label htmlFor="subject-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Subject Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="subject-code"
+                  type="text"
+                  value={newSubjectCode}
+                  onChange={(e) => setNewSubjectCode(e.target.value.toUpperCase().slice(0, 10))}
+                  placeholder="e.g., PHY, CHEM, LIT"
+                  maxLength={10}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">Auto-generated from subject name, but you can edit it</p>
               </div>
               
               <div>
@@ -1905,6 +1934,7 @@ export default function AdminDashboard() {
                   onClick={() => {
                     setIsNewSubjectDialogOpen(false);
                     setNewSubjectName("");
+                    setNewSubjectCode("");
                     setNewSubjectDescription("");
                   }}
                 >
@@ -1912,14 +1942,15 @@ export default function AdminDashboard() {
                 </Button>
                 <Button
                   onClick={() => {
-                    if (newSubjectName.trim()) {
+                    if (newSubjectName.trim() && newSubjectCode.trim()) {
                       createSubjectMutation.mutate({
                         name: newSubjectName.trim(),
+                        code: newSubjectCode.trim(),
                         description: newSubjectDescription.trim() || undefined
                       });
                     }
                   }}
-                  disabled={!newSubjectName.trim() || createSubjectMutation.isPending}
+                  disabled={!newSubjectName.trim() || !newSubjectCode.trim() || createSubjectMutation.isPending}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   {createSubjectMutation.isPending ? (
