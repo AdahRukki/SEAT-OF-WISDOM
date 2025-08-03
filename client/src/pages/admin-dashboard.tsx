@@ -670,25 +670,7 @@ export default function AdminDashboard() {
                 </Button>
               </div>
               
-              {/* Logo Upload Button - Only for admin */}
-              {user.role === 'admin' && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsLogoUploadDialogOpen(true)}
-                      className="px-2 sm:px-4"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span className="hidden sm:inline sm:ml-2">Logo</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Upload and change the academy logo</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
+
 
               {/* Navigation to User Management - Icon only on mobile */}
               {user.role === 'admin' && (
@@ -768,11 +750,12 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
             <TabsTrigger value="students" className="text-xs sm:text-sm">Students</TabsTrigger>
             <TabsTrigger value="scores" className="text-xs sm:text-sm">Scores</TabsTrigger>
             <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
+            <TabsTrigger value="settings" className="text-xs sm:text-sm">Settings</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -1419,9 +1402,116 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
-        </Tabs>
 
-        {/* Class Details Dialog */}
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Academy Settings</CardTitle>
+                <CardDescription>
+                  Configure academy-wide settings and branding
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Logo Management Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium">Academy Logo</h3>
+                      <p className="text-sm text-gray-500">Upload and manage the academy logo displayed across the system</p>
+                    </div>
+                    <Button
+                      onClick={() => setIsLogoUploadDialogOpen(true)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Upload Logo
+                    </Button>
+                  </div>
+                  
+                  {/* Current Logo Preview */}
+                  <div className="flex items-center space-x-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex-shrink-0">
+                      <img 
+                        src={logoImage} 
+                        alt="Current Academy Logo" 
+                        className="h-16 w-16 object-contain rounded-md border border-gray-200" 
+                      />
+                    </div>
+                    <div>
+                      <p className="font-medium">Current Logo</p>
+                      <p className="text-sm text-gray-500">This logo appears in all headers and reports</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* School Management Section */}
+                <div className="border-t pt-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-medium">School Branches</h3>
+                      <p className="text-sm text-gray-500">Manage the academy's branch locations</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {schools?.map((school, index) => (
+                        <div key={school.id} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium">{school.name}</h4>
+                            <Badge variant="outline">Branch {index + 1}</Badge>
+                          </div>
+                          <p className="text-sm text-gray-500 mb-3">{school.description || 'No description'}</p>
+                          <div className="flex space-x-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                setEditingSchool(school);
+                                setIsSchoolEditDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="w-3 h-3 mr-1" />
+                              Edit
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* System Information */}
+                <div className="border-t pt-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-medium">System Information</h3>
+                      <p className="text-sm text-gray-500">Academy management system details</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">{allStudents.length}</div>
+                        <p className="text-sm text-gray-600">Total Students</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">{classes.length}</div>
+                        <p className="text-sm text-gray-600">Active Classes</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="text-2xl font-bold text-purple-600">{schools?.length || 0}</div>
+                        <p className="text-sm text-gray-600">School Branches</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+        </Tabs>
+      </main>
+
+      {/* Class Details Dialog */}
         <Dialog open={isClassDetailsDialogOpen} onOpenChange={setIsClassDetailsDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
@@ -1551,7 +1641,6 @@ export default function AdminDashboard() {
             </div>
           </DialogContent>
         </Dialog>
-      </main>
       </div>
     </TooltipProvider>
   );
