@@ -53,6 +53,7 @@ import {
   Edit,
   Trash2,
   Upload,
+  RefreshCw,
   ArrowLeft,
   Image,
   User as UserIcon,
@@ -132,16 +133,12 @@ export default function UserManagement() {
     }
   });
 
-  // Upload logo mutation
+  // Upload logo mutation - Global academy logo
   const uploadLogoMutation = useMutation({
-    mutationFn: async (data: { schoolId: string; logoFile: File }) => {
-      const formData = new FormData();
-      formData.append('logo', data.logoFile);
-      formData.append('schoolId', data.schoolId);
-      
-      return apiRequest('/api/admin/schools/logo', {
+    mutationFn: async (logoUrl: string) => {
+      return apiRequest('/api/admin/logo', {
         method: 'POST',
-        body: formData
+        body: { logoUrl }
       });
     },
     onSuccess: () => {
@@ -151,13 +148,15 @@ export default function UserManagement() {
       setLogoPreview("");
       toast({
         title: "Success",
-        description: "School logo uploaded successfully"
+        description: "Academy logo uploaded successfully for all schools"
       });
+      // Refresh page to show new logo everywhere
+      window.location.reload();
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to upload logo",
+        description: "Failed to upload academy logo",
         variant: "destructive"
       });
     }
@@ -691,18 +690,24 @@ export default function UserManagement() {
                           </Button>
                           <Button
                             onClick={() => {
-                              if (logoFile) {
-                                toast({
-                                  title: "Logo Upload",
-                                  description: "Logo upload feature coming soon!"
-                                });
-                                setLogoFile(null);
-                                setLogoPreview("");
+                              if (logoFile && logoPreview) {
+                                uploadLogoMutation.mutate(logoPreview);
                               }
                             }}
-                            disabled={!logoFile}
+                            disabled={!logoFile || uploadLogoMutation.isPending}
+                            className="bg-blue-600 hover:bg-blue-700"
                           >
-                            Upload Logo
+                            {uploadLogoMutation.isPending ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Uploading...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="h-4 w-4 mr-2" />
+                                Upload Logo
+                              </>
+                            )}
                           </Button>
                         </div>
                       </DialogContent>
