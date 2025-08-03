@@ -111,7 +111,7 @@ export default function UserManagement() {
     }) => {
       return apiRequest('/api/admin/users', {
         method: 'POST',
-        body: JSON.stringify({...data, role: 'sub-admin'})
+        body: {...data, role: 'sub-admin'}
       });
     },
     onSuccess: () => {
