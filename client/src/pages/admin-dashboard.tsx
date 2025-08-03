@@ -113,13 +113,6 @@ export default function AdminDashboard() {
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectDescription, setNewSubjectDescription] = useState("");
 
-  // School editing states
-  const [editingSchool, setEditingSchool] = useState<SchoolType | null>(null);
-  const [isSchoolEditDialogOpen, setIsSchoolEditDialogOpen] = useState(false);
-
-  // Student form states (missing parent contact)
-  const [studentParentContact, setStudentParentContact] = useState("");
-
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
 
@@ -222,7 +215,7 @@ export default function AdminDashboard() {
         method: 'POST',
         body: { 
           ...classData, 
-          schoolId: selectedSchoolId || (user as any)?.schoolId 
+          schoolId: selectedSchoolId || user?.schoolId 
         }
       });
       
@@ -972,7 +965,7 @@ export default function AdminDashboard() {
                             </span>
                           </div>
                           <CardDescription>
-                            {classItem.description || `Class in ${classItem.schoolId || 'Unknown School'}`}
+                            {classItem.description || `Class in ${classItem.school?.name || 'Unknown School'}`}
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -1146,10 +1139,7 @@ export default function AdminDashboard() {
                             </span>
                           )}
                         </Label>
-                        <Select key={selectedClassId} value={selectedClassId} onValueChange={(value) => {
-                          console.log("Class selection changed to:", value);
-                          setSelectedClassId(value);
-                        }}>
+                        <Select value={selectedClassId} onValueChange={setSelectedClassId}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a class" />
                           </SelectTrigger>
@@ -1161,11 +1151,6 @@ export default function AdminDashboard() {
                             ))}
                           </SelectContent>
                         </Select>
-                        {selectedClassId && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Selected: {classes.find(c => c.id === selectedClassId)?.name}
-                          </p>
-                        )}
                       </div>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1589,7 +1574,7 @@ export default function AdminDashboard() {
                             <h4 className="font-medium">{school.name}</h4>
                             <Badge variant="outline">Branch {index + 1}</Badge>
                           </div>
-                          <p className="text-sm text-gray-500 mb-3">{school.address || 'No address'}</p>
+                          <p className="text-sm text-gray-500 mb-3">{school.description || 'No description'}</p>
                           <div className="flex space-x-2">
                             <Button 
                               size="sm" 
@@ -1711,30 +1696,24 @@ export default function AdminDashboard() {
                     <Button 
                       size="sm" 
                       onClick={() => {
-                        // Close class details first
-                        setIsClassDetailsDialogOpen(false);
+                        // Reset student form first
+                        setStudentFirstName("");
+                        setStudentLastName("");
+                        setStudentEmail("");
+                        setStudentPassword("");
+                        setStudentId("");
                         
-                        // Use setTimeout to ensure the state change happens after dialog close
-                        setTimeout(() => {
-                          // Reset student form
-                          setStudentFirstName("");
-                          setStudentLastName("");
-                          setStudentEmail("");
-                          setStudentPassword("");
-                          setStudentId("");
-                          
-                          // Set the selected class from the current class details
-                          const classId = selectedClassForDetails?.id || "";
-                          const className = selectedClassForDetails?.name || "";
-                          console.log("Pre-selecting class:", classId, className);
-                          setSelectedClassId(classId);
-                          
-                          // Generate a new student ID for this new student
-                          generateStudentId();
-                          
-                          // Open the student dialog
-                          setIsStudentDialogOpen(true);
-                        }, 50);
+                        // Set the selected class from the current class details
+                        const classId = selectedClassForDetails?.id || "";
+                        setSelectedClassId(classId);
+                        console.log("Setting selected class ID from class details:", classId);
+                        
+                        // Generate a new student ID for this new student
+                        generateStudentId();
+                        
+                        // Open the student dialog and close class details
+                        setIsStudentDialogOpen(true);
+                        setIsClassDetailsDialogOpen(false);
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
