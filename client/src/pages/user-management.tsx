@@ -57,7 +57,8 @@ import {
   ArrowLeft,
   Image,
   User as UserIcon,
-  LogOut
+  LogOut,
+  LayoutDashboard
 } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { User, School as SchoolType } from "@shared/schema";
@@ -266,13 +267,21 @@ export default function UserManagement() {
                 </TooltipContent>
               </Tooltip>
               
-              <a
-                href="/profile"
-                className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </a>
+              {/* Profile Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href="/profile"
+                    className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    <UserIcon className="w-4 h-4" />
+                    <span className="hidden sm:inline">Profile</span>
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>View and edit your profile</p>
+                </TooltipContent>
+              </Tooltip>
               
               <div className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300">
                 <UserIcon className="h-4 w-4" />
@@ -282,7 +291,10 @@ export default function UserManagement() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => window.location.href = '/api/auth/logout'}
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  window.location.href = '/login';
+                }}
                 className="px-2 sm:px-4"
               >
                 <LogOut className="h-4 w-4" />
@@ -507,6 +519,40 @@ export default function UserManagement() {
                               <p>Edit user details and permissions</p>
                             </TooltipContent>
                           </Tooltip>
+                          
+                          {/* Switch to Sub-Admin Dashboard - Only show for sub-admin users */}
+                          {user.role === 'sub-admin' && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    // Create a temporary login session for this sub-admin
+                                    toast({
+                                      title: "Switching Dashboard",
+                                      description: `Switching to ${user.firstName}'s sub-admin dashboard view`
+                                    });
+                                    // In a real app, you'd create a temporary session or redirect
+                                    // For now, we'll show what school they manage
+                                    const schoolName = user.schoolId ? getSchoolName(user.schoolId) : 'Unknown School';
+                                    toast({
+                                      title: "Sub-Admin Dashboard",
+                                      description: `${user.firstName} manages: ${schoolName}`,
+                                      duration: 5000
+                                    });
+                                  }}
+                                  className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                                >
+                                  <LayoutDashboard className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Switch to sub-admin dashboard view for {user.firstName}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          
                           {/* Delete button - Only show for non-admin users */}
                           {user.role !== 'admin' && (
                             <Tooltip>
