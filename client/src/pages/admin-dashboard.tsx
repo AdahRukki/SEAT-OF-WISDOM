@@ -113,6 +113,13 @@ export default function AdminDashboard() {
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectDescription, setNewSubjectDescription] = useState("");
 
+  // School editing states
+  const [editingSchool, setEditingSchool] = useState<SchoolType | null>(null);
+  const [isSchoolEditDialogOpen, setIsSchoolEditDialogOpen] = useState(false);
+
+  // Student form states (missing parent contact)
+  const [studentParentContact, setStudentParentContact] = useState("");
+
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
 
@@ -215,7 +222,7 @@ export default function AdminDashboard() {
         method: 'POST',
         body: { 
           ...classData, 
-          schoolId: selectedSchoolId || user?.schoolId 
+          schoolId: selectedSchoolId || (user as any)?.schoolId 
         }
       });
       
@@ -965,7 +972,7 @@ export default function AdminDashboard() {
                             </span>
                           </div>
                           <CardDescription>
-                            {classItem.description || `Class in ${classItem.school?.name || 'Unknown School'}`}
+                            {classItem.description || `Class in ${classItem.schoolId || 'Unknown School'}`}
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -1582,7 +1589,7 @@ export default function AdminDashboard() {
                             <h4 className="font-medium">{school.name}</h4>
                             <Badge variant="outline">Branch {index + 1}</Badge>
                           </div>
-                          <p className="text-sm text-gray-500 mb-3">{school.description || 'No description'}</p>
+                          <p className="text-sm text-gray-500 mb-3">{school.address || 'No address'}</p>
                           <div className="flex space-x-2">
                             <Button 
                               size="sm" 
