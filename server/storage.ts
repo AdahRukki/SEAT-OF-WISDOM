@@ -337,6 +337,7 @@ export class DatabaseStorage implements IStorage {
 
   async createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment> {
     console.log("[DEBUG] Storage createOrUpdateAssessment called with:", assessmentData);
+    console.log("[DEBUG] ClassId specifically:", assessmentData.classId);
     
     // Check if assessment already exists
     const [existing] = await db

@@ -200,6 +200,7 @@ export const loginSchema = z.object({
 export const addScoreSchema = z.object({
   studentId: z.string(),
   subjectId: z.string(),
+  classId: z.string(),
   term: z.string(),
   session: z.string(),
   firstCA: z.number().min(0).max(20).optional(),

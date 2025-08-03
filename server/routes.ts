@@ -556,6 +556,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const assessmentData = addScoreSchema.parse(req.body);
       
       console.log("[DEBUG] Assessment data received:", assessmentData);
+      console.log("[DEBUG] Frontend classId being sent:", req.body.classId);
       
       const assessment = await storage.createOrUpdateAssessment({
         studentId: assessmentData.studentId,
