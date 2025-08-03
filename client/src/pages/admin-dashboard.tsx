@@ -1139,14 +1139,12 @@ export default function AdminDashboard() {
                             </span>
                           )}
                         </Label>
-                        <Select value={selectedClassId} onValueChange={(value) => {
+                        <Select key={selectedClassId} value={selectedClassId} onValueChange={(value) => {
                           console.log("Class selection changed to:", value);
                           setSelectedClassId(value);
                         }}>
                           <SelectTrigger>
-                            <SelectValue placeholder={selectedClassId ? 
-                              classes.find(c => c.id === selectedClassId)?.name || "Select a class" 
-                              : "Select a class"} />
+                            <SelectValue placeholder="Select a class" />
                           </SelectTrigger>
                           <SelectContent>
                             {classes.map((classItem) => (
@@ -1706,31 +1704,30 @@ export default function AdminDashboard() {
                     <Button 
                       size="sm" 
                       onClick={() => {
-                        // Reset student form first
-                        setStudentFirstName("");
-                        setStudentLastName("");
-                        setStudentEmail("");
-                        setStudentPassword("");
-                        setStudentId("");
-                        
-                        // Set the selected class from the current class details
-                        const classId = selectedClassForDetails?.id || "";
-                        const className = selectedClassForDetails?.name || "";
-                        setSelectedClassId(classId);
-                        console.log("Setting selected class ID from class details:", classId, "Class name:", className);
-                        console.log("Current selectedClassId state before opening dialog:", selectedClassId);
-                        
-                        // Generate a new student ID for this new student
-                        generateStudentId();
-                        
-                        // Open the student dialog and close class details
-                        setIsStudentDialogOpen(true);
+                        // Close class details first
                         setIsClassDetailsDialogOpen(false);
                         
-                        // Debug: Log what happens after state change
+                        // Use setTimeout to ensure the state change happens after dialog close
                         setTimeout(() => {
-                          console.log("selectedClassId after dialog opened:", selectedClassId);
-                        }, 100);
+                          // Reset student form
+                          setStudentFirstName("");
+                          setStudentLastName("");
+                          setStudentEmail("");
+                          setStudentPassword("");
+                          setStudentId("");
+                          
+                          // Set the selected class from the current class details
+                          const classId = selectedClassForDetails?.id || "";
+                          const className = selectedClassForDetails?.name || "";
+                          console.log("Pre-selecting class:", classId, className);
+                          setSelectedClassId(classId);
+                          
+                          // Generate a new student ID for this new student
+                          generateStudentId();
+                          
+                          // Open the student dialog
+                          setIsStudentDialogOpen(true);
+                        }, 50);
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
