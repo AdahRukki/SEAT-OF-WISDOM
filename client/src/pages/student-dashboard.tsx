@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer } from "lucide-react";
+import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
 
 export default function StudentDashboard() {
@@ -49,10 +50,16 @@ export default function StudentDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-3">
-              <GraduationCap className="h-8 w-8 text-blue-600" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex items-center space-x-3">
+                  <img 
+                    src={logoImage} 
+                    alt="Seat of Wisdom Academy Logo" 
+                    className="h-8 w-8 object-contain rounded-md flex-shrink-0" 
+                  />
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</h1>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-gray-400 ml-11">
                   Welcome back, <a 
                     href="/profile"
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
