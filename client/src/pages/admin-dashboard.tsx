@@ -34,6 +34,12 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { 
+  Tooltip, 
+  TooltipContent, 
+  TooltipProvider, 
+  TooltipTrigger 
+} from "@/components/ui/tooltip";
+import { 
   Plus, 
   Users, 
   GraduationCap, 
@@ -508,9 +514,10 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+    <TooltipProvider>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        {/* Header */}
+        <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Left side - Logo and School Info */}
@@ -589,13 +596,20 @@ export default function AdminDashboard() {
               
               {/* Navigation to User Management - Icon only on mobile */}
               {user.role === 'admin' && (
-                <a
-                  href="/users"
-                  className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
-                >
-                  <Users className="w-4 h-4" />
-                  <span className="hidden sm:inline">Users</span>
-                </a>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href="/users"
+                      className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
+                    >
+                      <Users className="w-4 h-4" />
+                      <span className="hidden sm:inline">Users</span>
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Manage users, create sub-admins, and configure school settings</p>
+                  </TooltipContent>
+                </Tooltip>
               )}
 
               {/* User Info - Simplified on mobile */}
@@ -606,15 +620,22 @@ export default function AdminDashboard() {
               </div>
               
               {/* Logout Button - Icon only on mobile */}
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => window.location.href = '/api/auth/logout'}
-                className="px-2 sm:px-4"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline sm:ml-2">Logout</span>
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.location.href = '/api/auth/logout'}
+                    className="px-2 sm:px-4"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span className="hidden sm:inline sm:ml-2">Logout</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Sign out of your administrator account</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
           
@@ -687,12 +708,19 @@ export default function AdminDashboard() {
                   </CardDescription>
                 </div>
                 <Dialog open={isClassDialogOpen} onOpenChange={setIsClassDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Class
-                    </Button>
-                  </DialogTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Class
+                        </Button>
+                      </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Create a new class with name and description</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>Create New Class</DialogTitle>
@@ -753,13 +781,20 @@ export default function AdminDashboard() {
                               <Users className="h-4 w-4 text-gray-500" />
                               <span className="text-sm font-medium">{studentsInClass.length} students</span>
                             </div>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => openClassDetails(classItem)}
-                            >
-                              View Details
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => openClassDetails(classItem)}
+                                >
+                                  View Details
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>View enrolled students and manage class details</p>
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                           {studentsInClass.length > 0 && (
                             <div className="mt-3 pt-3 border-t">
@@ -798,12 +833,19 @@ export default function AdminDashboard() {
                   </CardDescription>
                 </div>
                 <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Student
-                    </Button>
-                  </DialogTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Student
+                        </Button>
+                      </DialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Create new student account with auto-generated SOWA ID</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <DialogContent className="max-w-md">
                     <DialogHeader>
                       <DialogTitle>Create New Student</DialogTitle>
@@ -878,14 +920,21 @@ export default function AdminDashboard() {
                             placeholder="SOWA/0001"
                             className="bg-gray-50"
                           />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={generateStudentId}
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={generateStudentId}
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Generate a new random SOWA student ID</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
                       </div>
                       <div>
@@ -903,20 +952,27 @@ export default function AdminDashboard() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button 
-                        onClick={() => createStudentMutation.mutate({
-                          firstName: studentFirstName,
-                          lastName: studentLastName,
-                          email: studentEmail,
-                          password: studentPassword,
-                          studentId: studentId,
-                          classId: selectedClassId
-                        })}
-                        disabled={!studentFirstName || !studentLastName || !studentEmail || !studentPassword || !selectedClassId || createStudentMutation.isPending}
-                        className="w-full"
-                      >
-                        {createStudentMutation.isPending ? "Creating..." : "Create Student"}
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            onClick={() => createStudentMutation.mutate({
+                              firstName: studentFirstName,
+                              lastName: studentLastName,
+                              email: studentEmail,
+                              password: studentPassword,
+                              studentId: studentId,
+                              classId: selectedClassId
+                            })}
+                            disabled={!studentFirstName || !studentLastName || !studentEmail || !studentPassword || !selectedClassId || createStudentMutation.isPending}
+                            className="w-full"
+                          >
+                            {createStudentMutation.isPending ? "Creating..." : "Create Student"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Create student account and enroll in selected class</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -1104,13 +1160,20 @@ export default function AdminDashboard() {
                       </tbody>
                     </table>
                     <div className="p-4 bg-gray-50 dark:bg-gray-800">
-                      <Button 
-                        className="w-full"
-                        onClick={handleSaveAllScores}
-                        disabled={updateScoresMutation.isPending}
-                      >
-                        {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            className="w-full"
+                            onClick={handleSaveAllScores}
+                            disabled={updateScoresMutation.isPending}
+                          >
+                            {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Save all entered scores to the database</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 ) : (
@@ -1328,6 +1391,7 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
       </main>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

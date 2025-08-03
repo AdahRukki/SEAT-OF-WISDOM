@@ -47,8 +47,11 @@ import {
   Edit,
   Trash2,
   Upload,
-  Image
+  Image,
+  ArrowLeft,
+  User as UserIcon
 } from "lucide-react";
+import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { User, School as SchoolType } from "@shared/schema";
 
 export default function UserManagement() {
@@ -232,7 +235,7 @@ export default function UserManagement() {
               </a>
               
               <div className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300">
-                <User className="h-4 w-4" />
+                <UserIcon className="h-4 w-4" />
                 <span className="hidden md:inline">{user?.firstName} {user?.lastName}</span>
                 <span className="md:hidden text-xs">{user?.firstName}</span>
               </div>
