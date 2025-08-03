@@ -201,12 +201,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = (req as any).user;
       const schoolId = req.query.schoolId as string || user.schoolId;
       
+      console.log(`[DEBUG] Classes request - User role: ${user.role}, User schoolId: ${user.schoolId}, Query schoolId: ${req.query.schoolId}, Final schoolId: ${schoolId}`);
+      
       // Sub-admin can only see their school's classes
       if (user.role === 'sub-admin' && schoolId !== user.schoolId) {
         return res.status(403).json({ error: "Access denied to this school's data" });
       }
       
       const classes = await storage.getAllClasses(schoolId);
+      console.log(`[DEBUG] Found ${classes.length} classes for schoolId: ${schoolId}`);
+      
       res.json(classes);
     } catch (error) {
       console.error("Get classes error:", error);
