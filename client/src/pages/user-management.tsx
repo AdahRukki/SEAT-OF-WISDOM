@@ -43,6 +43,7 @@ import {
   UserPlus,
   Settings,
   Eye,
+  EyeOff,
   Edit,
   Trash2,
   Upload,
@@ -71,6 +72,9 @@ export default function UserManagement() {
   // Logo upload state
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
+  
+  // Password visibility state
+  const [showPassword, setShowPassword] = useState(false);
 
   // Queries
   const { data: users = [] } = useQuery<User[]>({
@@ -95,8 +99,7 @@ export default function UserManagement() {
     }) => {
       return apiRequest('/api/admin/users', {
         method: 'POST',
-        body: JSON.stringify(data),
-        headers: { 'Content-Type': 'application/json' }
+        body: JSON.stringify(data)
       });
     },
     onSuccess: () => {
@@ -266,13 +269,29 @@ export default function UserManagement() {
                   </div>
                   <div>
                     <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter password"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="school">Assign to School</Label>

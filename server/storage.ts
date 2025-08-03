@@ -201,7 +201,7 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(row => ({
       ...row,
-      school: row.school.id ? row.school : undefined
+      school: row.school && row.school.id ? row.school : undefined
     }));
   }
 

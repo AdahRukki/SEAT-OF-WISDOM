@@ -49,7 +49,7 @@ export const subjects = pgTable("subjects", {
 // Class-Subject mapping table
 export const classSubjects = pgTable("class_subjects", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  classId: uuid("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
   subjectId: uuid("subject_id").notNull().references(() => subjects.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
