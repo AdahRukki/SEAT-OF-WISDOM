@@ -90,10 +90,10 @@ export const assessments = pgTable("assessments", {
   classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
   term: varchar("term", { length: 20 }).notNull(), // "First Term", "Second Term", "Third Term"
   session: varchar("session", { length: 20 }).notNull(), // "2024/2025"
-  firstCA: decimal("first_ca", { precision: 5, scale: 2 }).default("0"),
-  secondCA: decimal("second_ca", { precision: 5, scale: 2 }).default("0"),
-  exam: decimal("exam", { precision: 5, scale: 2 }).default("0"),
-  total: decimal("total", { precision: 5, scale: 2 }).default("0"),
+  firstCA: integer("first_ca").default(0),
+  secondCA: integer("second_ca").default(0),
+  exam: integer("exam").default(0),
+  total: integer("total").default(0),
   grade: varchar("grade", { length: 2 }),
   remark: text("remark"),
   createdAt: timestamp("created_at").defaultNow(),

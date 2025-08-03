@@ -396,7 +396,7 @@ export class DatabaseStorage implements IStorage {
         .update(assessments)
         .set({
           ...assessmentData,
-          total: String(total),
+          total,
           grade,
           updatedAt: new Date()
         })
@@ -409,7 +409,7 @@ export class DatabaseStorage implements IStorage {
         .insert(assessments)
         .values({
           ...assessmentData,
-          total: String(total),
+          total,
           grade
         })
         .returning();
