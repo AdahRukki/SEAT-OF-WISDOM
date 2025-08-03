@@ -317,6 +317,128 @@ export default function AdminDashboard() {
     setIsClassDetailsDialogOpen(true);
   };
 
+  // Report card generation function
+  const generateReportCard = (student: any) => {
+    // Create a printable report card
+    const reportWindow = window.open('', '_blank');
+    if (!reportWindow) return;
+
+    const reportHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Report Card - ${student.user.firstName} ${student.user.lastName}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+            .school-name { color: #2563eb; font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+            .student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+            .info-section { border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+            .grades-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            .grades-table th, .grades-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+            .grades-table th { background-color: #f5f5f5; font-weight: bold; }
+            .footer { text-align: center; margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
+            .signature-section { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 40px; }
+            .signature { text-align: center; border-top: 1px solid #333; padding-top: 5px; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+            <div>COMPREHENSIVE ACADEMIC REPORT CARD</div>
+            <div style="font-size: 14px; color: #666;">${scoresTerm} - Academic Session ${scoresSession}</div>
+          </div>
+
+          <div class="student-info">
+            <div class="info-section">
+              <h3 style="margin-top: 0;">Student Information</h3>
+              <p><strong>Name:</strong> ${student.user.firstName} ${student.user.lastName}</p>
+              <p><strong>Student ID:</strong> ${student.studentId}</p>
+              <p><strong>Class:</strong> ${student.class.name}</p>
+              <p><strong>Email:</strong> ${student.user.email}</p>
+            </div>
+            <div class="info-section">
+              <h3 style="margin-top: 0;">Academic Session</h3>
+              <p><strong>Term:</strong> ${scoresTerm}</p>
+              <p><strong>Session:</strong> ${scoresSession}</p>
+              <p><strong>School:</strong> ${student.class.school?.name || 'Seat of Wisdom Academy'}</p>
+              <p><strong>Report Date:</strong> ${new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          <table class="grades-table">
+            <thead>
+              <tr>
+                <th>SUBJECT</th>
+                <th>1st CA<br>(20 marks)</th>
+                <th>2nd CA<br>(20 marks)</th>
+                <th>EXAM<br>(60 marks)</th>
+                <th>TOTAL<br>(100 marks)</th>
+                <th>GRADE</th>
+                <th>REMARK</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${subjects.map(subject => {
+                const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+                const firstCA = assessment?.firstCA || 0;
+                const secondCA = assessment?.secondCA || 0;
+                const exam = assessment?.exam || 0;
+                const total = firstCA + secondCA + exam;
+                const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
+                const remark = total >= 80 ? 'Excellent' : total >= 70 ? 'Very Good' : total >= 60 ? 'Good' : total >= 50 ? 'Pass' : 'Fail';
+                
+                return `
+                  <tr>
+                    <td>${subject.name}</td>
+                    <td>${firstCA}</td>
+                    <td>${secondCA}</td>
+                    <td>${exam}</td>
+                    <td><strong>${total}</strong></td>
+                    <td><strong>${grade}</strong></td>
+                    <td>${remark}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <div style="margin-bottom: 20px;">
+              <p><strong>Grading Scale:</strong> A (80-100) | B (70-79) | C (60-69) | D (50-59) | F (0-49)</p>
+              <p><strong>Assessment Structure:</strong> 1st CA: 20 marks | 2nd CA: 20 marks | Examination: 60 marks</p>
+            </div>
+            
+            <div class="signature-section">
+              <div class="signature">
+                <div>Class Teacher</div>
+              </div>
+              <div class="signature">
+                <div>Principal</div>
+              </div>
+              <div class="signature">
+                <div>Parent/Guardian</div>
+              </div>
+            </div>
+            
+            <p style="margin-top: 30px; font-size: 12px; color: #666;">
+              This report card is generated electronically by Seat of Wisdom Academy Management System
+            </p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    reportWindow.document.write(reportHTML);
+    reportWindow.document.close();
+    
+    // Auto-print after a short delay
+    setTimeout(() => {
+      reportWindow.print();
+    }, 500);
+  };
+
   if (!user) {
     return <div>Loading...</div>;
   }
@@ -1007,24 +1129,127 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Report Cards Tab */}
-          <TabsContent value="reports">
+          <TabsContent value="reports" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Report Card Management</CardTitle>
+                <CardTitle>Report Card Generation</CardTitle>
                 <CardDescription>
-                  Generate and manage student report cards
+                  Generate and print comprehensive report cards for students
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8">
-                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    Report Card System
-                  </h3>
-                  <p className="text-gray-500">
-                    Report card generation and printing functionality will be available here.
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div>
+                    <Label>Select Class</Label>
+                    <Select value={scoresClassId} onValueChange={setScoresClassId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classes.map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Term</Label>
+                    <Select value={scoresTerm} onValueChange={setScoresTerm}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select term" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="First Term">First Term</SelectItem>
+                        <SelectItem value="Second Term">Second Term</SelectItem>
+                        <SelectItem value="Third Term">Third Term</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Session</Label>
+                    <Select value={scoresSession} onValueChange={setScoresSession}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2024/2025">2024/2025</SelectItem>
+                        <SelectItem value="2023/2024">2023/2024</SelectItem>
+                        <SelectItem value="2022/2023">2022/2023</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+
+                {scoresClassId ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Available Report Cards</h3>
+                      <Button 
+                        onClick={() => {
+                          // Generate bulk report cards
+                          const studentsInClass = allStudents.filter(s => s.classId === scoresClassId);
+                          studentsInClass.forEach(student => {
+                            generateReportCard(student);
+                          });
+                        }}
+                        disabled={!scoresClassId}
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Generate All Reports
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {allStudents
+                        .filter(student => student.classId === scoresClassId)
+                        .map((student) => (
+                          <Card key={student.id} className="hover:shadow-md transition-shadow">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base">
+                                {student.user.firstName} {student.user.lastName}
+                              </CardTitle>
+                              <CardDescription>
+                                ID: {student.studentId}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-3">
+                                <div className="flex justify-between text-sm">
+                                  <span>Class:</span>
+                                  <span className="font-medium">{student.class.name}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                  <span>Term:</span>
+                                  <span className="font-medium">{scoresTerm}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                  <span>Session:</span>
+                                  <span className="font-medium">{scoresSession}</span>
+                                </div>
+                                <Button 
+                                  variant="outline" 
+                                  className="w-full"
+                                  onClick={() => generateReportCard(student)}
+                                >
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Generate Report
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">
+                      Select a class to view available report cards
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
