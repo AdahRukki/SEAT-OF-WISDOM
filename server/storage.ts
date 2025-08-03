@@ -385,17 +385,19 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
+    const total = Number(assessmentData.firstCA || 0) + 
+                  Number(assessmentData.secondCA || 0) + 
+                  Number(assessmentData.exam || 0);
+    const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
+
     if (existing) {
       // Update existing assessment
       const [updated] = await db
         .update(assessments)
         .set({
           ...assessmentData,
-          total: String(
-            Number(assessmentData.firstCA || 0) +
-            Number(assessmentData.secondCA || 0) +
-            Number(assessmentData.exam || 0)
-          ),
+          total: String(total),
+          grade,
           updatedAt: new Date()
         })
         .where(eq(assessments.id, existing.id))
@@ -407,11 +409,8 @@ export class DatabaseStorage implements IStorage {
         .insert(assessments)
         .values({
           ...assessmentData,
-          total: String(
-            Number(assessmentData.firstCA || 0) +
-            Number(assessmentData.secondCA || 0) +
-            Number(assessmentData.exam || 0)
-          )
+          total: String(total),
+          grade
         })
         .returning();
       return assessment;

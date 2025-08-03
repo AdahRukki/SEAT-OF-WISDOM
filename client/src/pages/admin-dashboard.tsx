@@ -1420,9 +1420,10 @@ export default function AdminDashboard() {
                             const assessment = classAssessments.find(a => a.studentId === student.id);
                             const currentScores = scoreInputs[student.id] || {};
                             
-                            const firstCA = parseInt(currentScores.firstCA) || assessment?.firstCA || 0;
-                            const secondCA = parseInt(currentScores.secondCA) || assessment?.secondCA || 0;
-                            const exam = parseInt(currentScores.exam) || assessment?.exam || 0;
+                            // Convert to numbers properly, handling both string and number inputs
+                            const firstCA = Number(currentScores.firstCA || assessment?.firstCA || 0);
+                            const secondCA = Number(currentScores.secondCA || assessment?.secondCA || 0);
+                            const exam = Number(currentScores.exam || assessment?.exam || 0);
                             const total = firstCA + secondCA + exam;
                             const grade = calculateGrade(total);
                             

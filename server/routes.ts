@@ -586,9 +586,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         classId: assessmentData.classId,
         term: assessmentData.term,
         session: assessmentData.session,
-        firstCA: assessmentData.firstCA?.toString(),
-        secondCA: assessmentData.secondCA?.toString(),
-        exam: assessmentData.exam?.toString()
+        firstCA: assessmentData.firstCA,
+        secondCA: assessmentData.secondCA,
+        exam: assessmentData.exam
       });
 
       res.json(assessment);
@@ -672,9 +672,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             classId,
             term,
             session,
-            firstCA: firstCA.toString(),
-            secondCA: secondCA.toString(),
-            exam: exam.toString()
+            firstCA,
+            secondCA,
+            exam
           });
 
           results.push({
