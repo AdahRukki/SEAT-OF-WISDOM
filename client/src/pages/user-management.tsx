@@ -1,0 +1,530 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Users,
+  UserPlus,
+  Settings,
+  Eye,
+  Edit,
+  Trash2,
+  Upload,
+  Image
+} from "lucide-react";
+import type { User, School as SchoolType } from "@shared/schema";
+
+export default function UserManagement() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // State for dialogs
+  const [isCreateSubAdminDialogOpen, setIsCreateSubAdminDialogOpen] = useState(false);
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
+  const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  
+  // Form states for sub-admin creation
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  
+  // Logo upload state
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string>("");
+
+  // Queries
+  const { data: users = [] } = useQuery<User[]>({
+    queryKey: ['/api/admin/users'],
+    enabled: user?.role === 'admin'
+  });
+
+  const { data: schools = [] } = useQuery<SchoolType[]>({
+    queryKey: ['/api/admin/schools'],
+    enabled: user?.role === 'admin'
+  });
+
+  // Create sub-admin mutation
+  const createSubAdminMutation = useMutation({
+    mutationFn: async (data: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      password: string;
+      schoolId: string;
+      role: string;
+    }) => {
+      return apiRequest('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: { 'Content-Type': 'application/json' }
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      setIsCreateSubAdminDialogOpen(false);
+      resetSubAdminForm();
+      toast({
+        title: "Success",
+        description: "Sub-admin created successfully"
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create sub-admin",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Upload logo mutation
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (data: { schoolId: string; logoFile: File }) => {
+      const formData = new FormData();
+      formData.append('logo', data.logoFile);
+      formData.append('schoolId', data.schoolId);
+      
+      return apiRequest('/api/admin/schools/logo', {
+        method: 'POST',
+        body: formData
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/schools'] });
+      setIsLogoUploadDialogOpen(false);
+      setLogoFile(null);
+      setLogoPreview("");
+      toast({
+        title: "Success",
+        description: "School logo uploaded successfully"
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to upload logo",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const resetSubAdminForm = () => {
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setPassword("");
+    setSelectedSchoolId("");
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setLogoPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'admin': return 'bg-red-500';
+      case 'sub-admin': return 'bg-blue-500';
+      case 'student': return 'bg-green-500';
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const getSchoolName = (schoolId: string) => {
+    return schools.find(s => s.id === schoolId)?.name || 'Unknown School';
+  };
+
+  if (user?.role !== 'admin') {
+    return (
+      <div className="container mx-auto p-6">
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-center text-muted-foreground">
+              Access denied. Only main administrators can access this page.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">User Management</h1>
+        <p className="text-muted-foreground">
+          Manage users, create sub-admins, and configure school settings
+        </p>
+      </div>
+
+      <Tabs defaultValue="users" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="users">All Users</TabsTrigger>
+          <TabsTrigger value="schools">School Settings</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="users" className="space-y-6">
+          {/* Actions Bar */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              <span className="text-lg font-semibold">
+                {users.length} Total Users
+              </span>
+            </div>
+            <Dialog open={isCreateSubAdminDialogOpen} onOpenChange={setIsCreateSubAdminDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Add Sub-Admin
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create Sub-Administrator</DialogTitle>
+                  <DialogDescription>
+                    Create a new sub-admin who will manage a specific school branch
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="Enter first name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Enter last name"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter email address"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter password"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="school">Assign to School</Label>
+                    <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select school" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {schools.map(school => (
+                          <SelectItem key={school.id} value={school.id}>
+                            {school.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" onClick={() => setIsCreateSubAdminDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      createSubAdminMutation.mutate({
+                        firstName,
+                        lastName,
+                        email,
+                        password,
+                        schoolId: selectedSchoolId,
+                        role: 'sub-admin'
+                      });
+                    }}
+                    disabled={createSubAdminMutation.isPending || !firstName || !lastName || !email || !password || !selectedSchoolId}
+                  >
+                    {createSubAdminMutation.isPending ? "Creating..." : "Create Sub-Admin"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* Users Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Users Overview</CardTitle>
+              <CardDescription>
+                View and manage all system users
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>School</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">
+                        {user.firstName} {user.lastName}
+                      </TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        <Badge className={`${getRoleBadgeColor(user.role)} text-white`}>
+                          {user.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {user.schoolId ? getSchoolName(user.schoolId) : 'All Schools'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={user.isActive ? 'default' : 'secondary'}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setIsProfileDialogOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button variant="outline" size="sm">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="schools" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {schools.map((school) => (
+              <Card key={school.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-xl">{school.name}</CardTitle>
+                      <CardDescription>{school.address}</CardDescription>
+                    </div>
+                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                      {school.logoUrl ? (
+                        <img
+                          src={school.logoUrl}
+                          alt={`${school.name} logo`}
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                      ) : (
+                        <Image className="w-8 h-8 text-gray-400" />
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    {school.phone && <p>Phone: {school.phone}</p>}
+                    {school.email && <p>Email: {school.email}</p>}
+                  </div>
+                  <div className="mt-4">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full">
+                          <Upload className="w-4 h-4 mr-2" />
+                          Upload Logo
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Upload School Logo</DialogTitle>
+                          <DialogDescription>
+                            Upload a logo for {school.name}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                          <div>
+                            <Label htmlFor="logo">Logo Image</Label>
+                            <Input
+                              id="logo"
+                              type="file"
+                              accept="image/*"
+                              onChange={handleLogoFileChange}
+                            />
+                          </div>
+                          {logoPreview && (
+                            <div className="mt-4">
+                              <Label>Preview</Label>
+                              <div className="mt-2 w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                                <img
+                                  src={logoPreview}
+                                  alt="Logo preview"
+                                  className="w-full h-full object-cover rounded-lg"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex justify-end gap-3">
+                          <Button variant="outline">Cancel</Button>
+                          <Button
+                            onClick={() => {
+                              if (logoFile) {
+                                uploadLogoMutation.mutate({
+                                  schoolId: school.id,
+                                  logoFile
+                                });
+                              }
+                            }}
+                            disabled={!logoFile || uploadLogoMutation.isPending}
+                          >
+                            {uploadLogoMutation.isPending ? "Uploading..." : "Upload Logo"}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* User Profile Dialog */}
+      <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>User Profile</DialogTitle>
+            <DialogDescription>
+              View detailed user information
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="grid gap-6 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Name</Label>
+                  <p className="text-base">{selectedUser.firstName} {selectedUser.lastName}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Email</Label>
+                  <p className="text-base">{selectedUser.email}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Role</Label>
+                  <Badge className={`${getRoleBadgeColor(selectedUser.role)} text-white`}>
+                    {selectedUser.role}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">School</Label>
+                  <p className="text-base">
+                    {selectedUser.schoolId ? getSchoolName(selectedUser.schoolId) : 'All Schools'}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                  <Badge variant={selectedUser.isActive ? 'default' : 'secondary'}>
+                    {selectedUser.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Created</Label>
+                  <p className="text-base">
+                    {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : 'Unknown'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setIsProfileDialogOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

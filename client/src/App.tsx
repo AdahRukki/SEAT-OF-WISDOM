@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import Login from "@/pages/login";
 import AdminDashboard from "@/pages/admin-dashboard";
 import StudentDashboard from "@/pages/student-dashboard";
+import UserManagement from "@/pages/user-management";
 import NotFound from "@/pages/not-found";
 
 function AppRoutes() {
@@ -40,6 +41,7 @@ function AppRoutes() {
         <>
           <Route path="/" component={AdminDashboard} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/users" component={UserManagement} />
         </>
       ) : (
         <>

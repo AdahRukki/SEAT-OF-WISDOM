@@ -21,6 +21,7 @@ export const schools = pgTable("schools", {
   address: text("address"),
   phone: varchar("phone", { length: 20 }),
   email: varchar("email", { length: 255 }),
+  logoUrl: varchar("logo_url", { length: 500 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

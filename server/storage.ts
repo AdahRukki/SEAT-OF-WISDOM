@@ -37,7 +37,9 @@ export interface IStorage {
   getSchoolById(id: string): Promise<School | undefined>;
   
   // Admin operations
+  getAllUsers(): Promise<(User & { school?: School })[]>;
   createUser(userData: InsertUser): Promise<User>;
+  updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School>;
   createStudent(studentData: InsertStudent): Promise<Student>;
   createClass(classData: InsertClass): Promise<Class>;
   createSubject(subjectData: InsertSubject): Promise<Subject>;
@@ -168,6 +170,48 @@ export class DatabaseStorage implements IStorage {
   async getSchoolById(id: string): Promise<School | undefined> {
     const [school] = await db.select().from(schools).where(eq(schools.id, id));
     return school || undefined;
+  }
+
+  async getAllUsers(): Promise<(User & { school?: School })[]> {
+    const result = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        password: users.password,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        role: users.role,
+        schoolId: users.schoolId,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        school: {
+          id: schools.id,
+          name: schools.name,
+          address: schools.address,
+          phone: schools.phone,
+          email: schools.email,
+          logoUrl: schools.logoUrl,
+          createdAt: schools.createdAt,
+          updatedAt: schools.updatedAt,
+        }
+      })
+      .from(users)
+      .leftJoin(schools, eq(users.schoolId, schools.id));
+
+    return result.map(row => ({
+      ...row,
+      school: row.school.id ? row.school : undefined
+    }));
+  }
+
+  async updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School> {
+    const [school] = await db
+      .update(schools)
+      .set({ logoUrl, updatedAt: new Date() })
+      .where(eq(schools.id, schoolId))
+      .returning();
+    return school;
   }
 
   async getAllClasses(schoolId?: string): Promise<(Class & { school: School })[]> {

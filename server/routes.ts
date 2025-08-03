@@ -221,6 +221,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Users routes
+  app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const userData = insertUserSchema.parse(req.body);
+      const newUser = await storage.createUser(userData);
+      res.json(newUser);
+    } catch (error) {
+      console.error("Create user error:", error);
+      res.status(400).json({ error: "Failed to create user" });
+    }
+  });
+
+  // School logo upload route
+  app.post('/api/admin/schools/logo', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { schoolId, logoUrl } = req.body;
+      
+      if (!schoolId || !logoUrl) {
+        return res.status(400).json({ error: "School ID and logo URL are required" });
+      }
+
+      const updatedSchool = await storage.updateSchoolLogo(schoolId, logoUrl);
+      res.json(updatedSchool);
+    } catch (error) {
+      console.error("Logo upload error:", error);
+      res.status(400).json({ error: "Failed to upload logo" });
+    }
+  });
+
   // Admin routes - Student management
   app.post('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
     try {

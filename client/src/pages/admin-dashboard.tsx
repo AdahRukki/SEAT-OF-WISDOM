@@ -463,6 +463,17 @@ export default function AdminDashboard() {
                 </Button>
               </div>
               
+              {/* Navigation to User Management */}
+              {user.role === 'admin' && (
+                <a
+                  href="/users"
+                  className="inline-flex items-center gap-2 px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
+                >
+                  <Users className="w-4 h-4" />
+                  Users
+                </a>
+              )}
+
               <div className="flex items-center space-x-2 text-sm text-gray-700 dark:text-gray-300">
                 <User className="h-4 w-4" />
                 <span>{user.firstName} {user.lastName}</span>
