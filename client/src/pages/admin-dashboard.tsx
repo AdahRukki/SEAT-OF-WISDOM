@@ -105,6 +105,12 @@ export default function AdminDashboard() {
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
 
+  // Queries - Move queries to the top to avoid initialization issues
+  const { data: schools = [] } = useQuery<SchoolType[]>({ 
+    queryKey: ['/api/admin/schools'],
+    enabled: user?.role === 'admin'
+  });
+
   // Check Firebase data on mount
   useEffect(() => {
     checkFirebaseData();
@@ -139,15 +145,7 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Queries
-  const { data: schools = [] } = useQuery<SchoolType[]>({ 
-    queryKey: ['/api/admin/schools'],
-    enabled: user?.role === 'admin'
-  });
-
-  // School-aware queries
-  const queryParams = user?.role === 'admin' && selectedSchoolId ? `?schoolId=${selectedSchoolId}` : '';
-
+  // School-aware queries  
   const { data: classes = [] } = useQuery<Class[]>({ 
     queryKey: ['/api/admin/classes', selectedSchoolId],
     queryFn: () => {
