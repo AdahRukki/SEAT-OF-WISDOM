@@ -122,6 +122,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Update user profile
+  app.put("/api/auth/profile", authenticate, async (req, res) => {
+    try {
+      const { firstName, lastName, email } = req.body;
+      
+      if (!firstName || !lastName || !email) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      const userId = (req as any).user.id;
+      const updatedUser = await storage.updateUserProfile(userId, {
+        firstName,
+        lastName,
+        email
+      });
+
+      res.json({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        role: updatedUser.role,
+        schoolId: updatedUser.schoolId
+      });
+    } catch (error) {
+      console.error("Profile update error:", error);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
   // Get all schools (main admin only)
   app.get('/api/admin/schools', authenticate, requireMainAdmin, async (req, res) => {
     try {
