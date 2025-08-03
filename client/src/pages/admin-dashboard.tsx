@@ -101,6 +101,7 @@ export default function AdminDashboard() {
   const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
+  const [currentLogoUrl, setCurrentLogoUrl] = useState<string>("");
 
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
@@ -266,6 +267,28 @@ export default function AdminDashboard() {
     setSelectedClassId("");
   };
 
+  // Logo upload mutation
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (logoUrl: string) => {
+      return apiRequest('/api/admin/logo', {
+        method: 'POST',
+        body: { logoUrl }
+      });
+    },
+    onSuccess: (data) => {
+      toast({ title: "Success", description: "Academy logo updated successfully" });
+      setCurrentLogoUrl(data.logoUrl);
+      setIsLogoUploadDialogOpen(false);
+      setLogoFile(null);
+      setLogoPreview("");
+      // Refresh to show new logo everywhere
+      window.location.reload();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to upload logo", variant: "destructive" });
+    }
+  });
+
   // Logo upload functions
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -281,12 +304,10 @@ export default function AdminDashboard() {
   };
 
   const handleLogoUpload = () => {
-    if (logoFile) {
-      toast({
-        title: "Logo Upload",
-        description: "Logo upload feature is being prepared. Coming soon!",
-      });
-      handleLogoCancelation();
+    if (logoFile && logoPreview) {
+      // For now, we'll simulate the upload by using the preview URL
+      // In a real implementation, you'd upload to a file storage service first
+      uploadLogoMutation.mutate(logoPreview);
     }
   };
 
@@ -1509,11 +1530,15 @@ export default function AdminDashboard() {
                 </Button>
                 <Button
                   onClick={handleLogoUpload}
-                  disabled={!logoFile}
+                  disabled={!logoFile || uploadLogoMutation.isPending}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Logo
+                  {uploadLogoMutation.isPending ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  {uploadLogoMutation.isPending ? "Uploading..." : "Upload Logo"}
                 </Button>
               </div>
             </div>

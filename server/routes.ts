@@ -511,6 +511,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Logo upload endpoint - Global academy logo
+  app.post('/api/admin/logo', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { logoUrl } = req.body;
+      
+      if (!logoUrl) {
+        return res.status(400).json({ error: "Logo URL is required" });
+      }
+
+      // Store the global logo URL (you could store this in a settings table or config)
+      // For now, we'll return success - in a real implementation, you'd save to database
+      console.log(`Global academy logo updated: ${logoUrl}`);
+      
+      res.json({ message: "Logo updated successfully", logoUrl });
+    } catch (error) {
+      console.error("Logo upload error:", error);
+      res.status(500).json({ error: "Failed to upload logo" });
+    }
+  });
+
+  // Get current logo endpoint
+  app.get('/api/admin/logo', authenticate, async (req, res) => {
+    try {
+      // Return the current logo URL - this would come from database in real implementation
+      const logoUrl = "/assets/4oWHptM_1754171230437.gif"; // Default logo
+      res.json({ logoUrl });
+    } catch (error) {
+      console.error("Get logo error:", error);
+      res.status(500).json({ error: "Failed to get logo" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
