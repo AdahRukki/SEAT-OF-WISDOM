@@ -561,8 +561,9 @@ export default function AdminDashboard() {
                   variant="outline" 
                   className="w-full"
                   onClick={() => {
-                    // Logout functionality
-                    window.location.href = '/api/logout';
+                    // Clear local token and redirect to login
+                    localStorage.removeItem('token');
+                    window.location.href = '/login';
                   }}
                 >
                   <LogOut className="h-4 w-4 mr-2" />
@@ -721,7 +722,11 @@ export default function AdminDashboard() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => window.location.href = '/api/auth/logout'}
+                    onClick={() => {
+                      // Clear local token and redirect to login
+                      localStorage.removeItem('token');
+                      window.location.href = '/login';
+                    }}
                     className="px-2 sm:px-4"
                   >
                     <LogOut className="h-4 w-4" />

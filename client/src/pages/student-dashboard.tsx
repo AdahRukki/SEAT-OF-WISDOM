@@ -11,7 +11,7 @@ import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer } from "lucide-r
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
 
 export default function StudentDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [selectedTerm, setSelectedTerm] = useState("First Term");
   const [selectedSession, setSelectedSession] = useState("2024/2025");
 
@@ -70,7 +70,14 @@ export default function StudentDashboard() {
                 <User className="h-4 w-4" />
                 <span>Profile</span>
               </a>
-              <Button onClick={logout} variant="outline" className="flex items-center space-x-2">
+              <Button 
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  window.location.href = '/login';
+                }} 
+                variant="outline" 
+                className="flex items-center space-x-2"
+              >
                 <LogOut className="h-4 w-4" />
                 <span>Logout</span>
               </Button>
