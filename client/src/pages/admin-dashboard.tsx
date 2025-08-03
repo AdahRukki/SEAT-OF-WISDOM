@@ -1131,7 +1131,14 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       <div>
-                        <Label htmlFor="student-class">Class</Label>
+                        <Label htmlFor="student-class">
+                          Class 
+                          {selectedClassId && (
+                            <span className="text-xs text-green-600 ml-2">
+                              (Pre-selected from class details)
+                            </span>
+                          )}
+                        </Label>
                         <Select value={selectedClassId} onValueChange={setSelectedClassId}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a class" />
@@ -1689,7 +1696,24 @@ export default function AdminDashboard() {
                     <Button 
                       size="sm" 
                       onClick={() => {
-                        setSelectedClassId(selectedClassForDetails?.id || "");
+                        // Reset student form first
+                        setStudentFirstName("");
+                        setStudentLastName("");
+                        setStudentEmail("");
+                        setStudentPassword("");
+                        setStudentParentContact("");
+                        setStudentAddress("");
+                        setStudentId("");
+                        
+                        // Set the selected class from the current class details
+                        const classId = selectedClassForDetails?.id || "";
+                        setSelectedClassId(classId);
+                        console.log("Setting selected class ID from class details:", classId);
+                        
+                        // Generate a new student ID for this new student
+                        generateStudentId();
+                        
+                        // Open the student dialog and close class details
                         setIsStudentDialogOpen(true);
                         setIsClassDetailsDialogOpen(false);
                       }}
