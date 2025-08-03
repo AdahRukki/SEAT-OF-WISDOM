@@ -54,7 +54,8 @@ import {
   WifiOff,
   RefreshCw,
   Eye,
-  EyeOff
+  EyeOff,
+  Upload
 } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { 
