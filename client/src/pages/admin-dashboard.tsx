@@ -591,6 +591,43 @@ export default function AdminDashboard() {
     event.target.value = '';
   };
 
+  // Handle Enter key navigation for score inputs
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentStudentId: string, currentField: 'firstCA' | 'secondCA' | 'exam') => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      const studentsInClass = allStudents.filter(student => student.classId === scoresClassId);
+      const currentIndex = studentsInClass.findIndex(student => student.id === currentStudentId);
+      
+      // Navigate based on current field and position
+      if (currentField === 'firstCA') {
+        // Move to next student's firstCA field
+        if (currentIndex < studentsInClass.length - 1) {
+          const nextStudentId = studentsInClass[currentIndex + 1].id;
+          const nextField = document.querySelector(`input[data-student-id="${nextStudentId}"][data-field="firstCA"]`) as HTMLInputElement;
+          nextField?.focus();
+          nextField?.select();
+        }
+      } else if (currentField === 'secondCA') {
+        // Move to next student's secondCA field  
+        if (currentIndex < studentsInClass.length - 1) {
+          const nextStudentId = studentsInClass[currentIndex + 1].id;
+          const nextField = document.querySelector(`input[data-student-id="${nextStudentId}"][data-field="secondCA"]`) as HTMLInputElement;
+          nextField?.focus();
+          nextField?.select();
+        }
+      } else if (currentField === 'exam') {
+        // Move to next student's exam field
+        if (currentIndex < studentsInClass.length - 1) {
+          const nextStudentId = studentsInClass[currentIndex + 1].id;
+          const nextField = document.querySelector(`input[data-student-id="${nextStudentId}"][data-field="exam"]`) as HTMLInputElement;
+          nextField?.focus();
+          nextField?.select();
+        }
+      }
+    }
+  };
+
   // Handle download template
   const handleDownloadTemplate = async () => {
     if (!scoresClassId) {
@@ -1405,6 +1442,9 @@ export default function AdminDashboard() {
                                     className="w-16 h-8 text-center"
                                     value={currentScores.firstCA || assessment?.firstCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
+                                    data-student-id={student.id}
+                                    data-field="firstCA"
                                     placeholder="0"
                                   />
                                 </td>
@@ -1416,6 +1456,9 @@ export default function AdminDashboard() {
                                     className="w-16 h-8 text-center"
                                     value={currentScores.secondCA || assessment?.secondCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
+                                    data-student-id={student.id}
+                                    data-field="secondCA"
                                     placeholder="0"
                                   />
                                 </td>
@@ -1427,6 +1470,9 @@ export default function AdminDashboard() {
                                     className="w-16 h-8 text-center"
                                     value={currentScores.exam || assessment?.exam || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
+                                    data-student-id={student.id}
+                                    data-field="exam"
                                     placeholder="0"
                                   />
                                 </td>
