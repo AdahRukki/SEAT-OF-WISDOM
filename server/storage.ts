@@ -45,6 +45,7 @@ export interface IStorage {
   createClass(classData: InsertClass): Promise<Class>;
   createSubject(subjectData: InsertSubject): Promise<Subject>;
   assignSubjectToClass(classId: string, subjectId: string): Promise<void>;
+  removeSubjectFromClass(classId: string, subjectId: string): Promise<void>;
   
   // Data retrieval (school-aware)
   getAllClasses(schoolId?: string): Promise<(Class & { school: School })[]>;
@@ -185,6 +186,15 @@ export class DatabaseStorage implements IStorage {
 
   async assignSubjectToClass(classId: string, subjectId: string): Promise<void> {
     await db.insert(classSubjects).values({ classId, subjectId });
+  }
+
+  async removeSubjectFromClass(classId: string, subjectId: string): Promise<void> {
+    await db.delete(classSubjects).where(
+      and(
+        eq(classSubjects.classId, classId),
+        eq(classSubjects.subjectId, subjectId)
+      )
+    );
   }
 
   async getAllSchools(): Promise<School[]> {

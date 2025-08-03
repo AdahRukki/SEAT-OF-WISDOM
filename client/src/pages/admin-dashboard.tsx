@@ -83,6 +83,7 @@ export default function AdminDashboard() {
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
+  const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
   const [selectedClassForDetails, setSelectedClassForDetails] = useState<Class | null>(null);
 
   // Form states
@@ -173,7 +174,14 @@ export default function AdminDashboard() {
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
   
-  // Class subjects query
+  // Class subjects query for selected class in details dialog
+  const { data: selectedClassSubjects = [] } = useQuery<Subject[]>({ 
+    queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'subjects'],
+    queryFn: () => apiRequest(`/api/admin/classes/${selectedClassForDetails?.id}/subjects`),
+    enabled: !!selectedClassForDetails?.id 
+  });
+
+  // Class subjects query for scores
   const { data: classSubjects = [] } = useQuery<Subject[]>({ 
     queryKey: ['/api/admin/classes', scoresClassId, 'subjects'],
     queryFn: () => apiRequest(`/api/admin/classes/${scoresClassId}/subjects`),
@@ -289,6 +297,58 @@ export default function AdminDashboard() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to upload logo", variant: "destructive" });
+    }
+  });
+
+  // Remove subject from class mutation
+  const removeSubjectMutation = useMutation({
+    mutationFn: async ({ classId, subjectId }: { classId: string; subjectId: string }) => {
+      return await apiRequest(`/api/admin/classes/${classId}/subjects/${subjectId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Success", 
+        description: "Subject removed from class successfully" 
+      });
+      // Invalidate queries to refresh the data
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'subjects'] 
+      });
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to remove subject from class", 
+        variant: "destructive" 
+      });
+    }
+  });
+
+  // Add subject to class mutation
+  const addSubjectMutation = useMutation({
+    mutationFn: async ({ classId, subjectId }: { classId: string; subjectId: string }) => {
+      return await apiRequest(`/api/admin/classes/${classId}/subjects/${subjectId}`, {
+        method: 'POST'
+      });
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Success", 
+        description: "Subject added to class successfully" 
+      });
+      // Invalidate queries to refresh the data
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'subjects'] 
+      });
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to add subject to class", 
+        variant: "destructive" 
+      });
     }
   });
 
@@ -1531,13 +1591,7 @@ export default function AdminDashboard() {
                   <Button 
                     size="sm" 
                     variant="outline"
-                    onClick={() => {
-                      // Add subject management functionality
-                      toast({
-                        title: "Subject Management",
-                        description: "Feature to add/remove subjects from this class",
-                      });
-                    }}
+                    onClick={() => setIsSubjectManagementDialogOpen(true)}
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Manage Subjects
@@ -1546,7 +1600,7 @@ export default function AdminDashboard() {
                 
                 {/* Display current subjects */}
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {subjects.slice(0, 6).map((subject) => (
+                  {selectedClassSubjects.map((subject) => (
                     <div key={subject.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
                       <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
                         {subject.name}
@@ -1556,18 +1610,21 @@ export default function AdminDashboard() {
                         variant="ghost" 
                         className="h-6 w-6 p-0 text-blue-600 hover:text-red-600"
                         onClick={() => {
-                          toast({
-                            title: "Remove Subject",
-                            description: `Remove ${subject.name} from this class`,
-                          });
+                          if (selectedClassForDetails?.id) {
+                            removeSubjectMutation.mutate({
+                              classId: selectedClassForDetails.id,
+                              subjectId: subject.id
+                            });
+                          }
                         }}
+                        disabled={removeSubjectMutation.isPending}
                       >
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
                   ))}
                 </div>
-                {subjects.length === 0 && (
+                {selectedClassSubjects.length === 0 && (
                   <div className="text-center py-4 text-gray-500">
                     <BookOpen className="h-8 w-8 mx-auto mb-2 text-gray-300" />
                     <p className="text-sm">No subjects assigned to this class yet.</p>
@@ -1693,6 +1750,59 @@ export default function AdminDashboard() {
                     <Upload className="h-4 w-4 mr-2" />
                   )}
                   {uploadLogoMutation.isPending ? "Uploading..." : "Upload Logo"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Subject Management Dialog */}
+        <Dialog open={isSubjectManagementDialogOpen} onOpenChange={setIsSubjectManagementDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Manage Subjects for {selectedClassForDetails?.name}</DialogTitle>
+              <DialogDescription>
+                Add or remove subjects from this class
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium">Available Subjects</h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {subjects
+                  .filter(subject => !selectedClassSubjects.some(cs => cs.id === subject.id))
+                  .map((subject) => (
+                    <div key={subject.id} className="flex items-center justify-between p-2 border rounded">
+                      <span className="text-sm">{subject.name}</span>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          if (selectedClassForDetails?.id) {
+                            addSubjectMutation.mutate({
+                              classId: selectedClassForDetails.id,
+                              subjectId: subject.id
+                            });
+                          }
+                        }}
+                        disabled={addSubjectMutation.isPending}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+              {subjects.filter(subject => !selectedClassSubjects.some(cs => cs.id === subject.id)).length === 0 && (
+                <div className="text-center py-4 text-gray-500">
+                  <p className="text-sm">All subjects are already assigned to this class.</p>
+                </div>
+              )}
+              <div className="flex justify-end pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsSubjectManagementDialogOpen(false)}
+                >
+                  Done
                 </Button>
               </div>
             </div>

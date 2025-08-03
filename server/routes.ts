@@ -259,6 +259,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get subjects for a specific class
+  app.get('/api/admin/classes/:classId/subjects', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId } = req.params;
+      const subjects = await storage.getClassSubjects(classId);
+      res.json(subjects);
+    } catch (error) {
+      console.error("Get class subjects error:", error);
+      res.status(500).json({ error: "Failed to fetch class subjects" });
+    }
+  });
+
   // Admin routes - Assign subject to class
   app.post('/api/admin/classes/:classId/subjects/:subjectId', authenticate, requireAdmin, async (req, res) => {
     try {
@@ -268,6 +280,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Assign subject error:", error);
       res.status(400).json({ error: "Failed to assign subject to class" });
+    }
+  });
+
+  // Remove subject from class
+  app.delete('/api/admin/classes/:classId/subjects/:subjectId', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId, subjectId } = req.params;
+      await storage.removeSubjectFromClass(classId, subjectId);
+      res.json({ message: "Subject removed from class successfully" });
+    } catch (error) {
+      console.error("Remove subject error:", error);
+      res.status(400).json({ error: "Failed to remove subject from class" });
     }
   });
 
