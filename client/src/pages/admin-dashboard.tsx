@@ -260,17 +260,23 @@ export default function AdminDashboard() {
   });
 
   const updateScoresMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return await apiRequest('/api/admin/assessments', {
-        method: 'POST',
-        body: data
-      });
+    mutationFn: async (scoresArray: any[]) => {
+      // Send scores individually to the single assessment endpoint
+      const promises = scoresArray.map(scoreData => 
+        apiRequest('/api/admin/assessments', {
+          method: 'POST',
+          body: scoreData
+        })
+      );
+      return await Promise.all(promises);
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Scores updated successfully" });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/assessments'] });
+      setScoreInputs({}); // Clear the input state after successful save
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Score update error:", error);
       toast({ title: "Error", description: "Failed to update scores", variant: "destructive" });
     }
   });

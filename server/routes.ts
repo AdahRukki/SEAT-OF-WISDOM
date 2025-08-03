@@ -225,11 +225,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Sync to Firebase after successful creation
       try {
-        await import('../client/src/lib/firebase-sync.js').then(module => {
-          if (module.syncToFirebase?.class) {
-            module.syncToFirebase.class(newClass);
-          }
-        });
+        const firebaseSync = await import('../client/src/lib/firebase-sync.js');
+        if (firebaseSync && typeof firebaseSync.syncClassToFirebase === 'function') {
+          await firebaseSync.syncClassToFirebase(newClass);
+        }
       } catch (syncError) {
         console.warn("Firebase sync failed:", syncError);
       }
@@ -380,7 +379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!classData) {
           return res.status(400).json({ error: "Invalid class selected" });
         }
-        schoolId = classData.schoolId;
+        schoolId = classData.schoolId!;
       } else {
         // Sub-admin: use their assigned school
         schoolId = user.schoolId;
@@ -556,16 +555,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const assessmentData = addScoreSchema.parse(req.body);
       
-      // Get student's class info
-      const student = await storage.getStudentByUserId(assessmentData.studentId);
-      if (!student) {
-        return res.status(404).json({ error: "Student not found" });
-      }
-
       const assessment = await storage.createOrUpdateAssessment({
         studentId: assessmentData.studentId,
         subjectId: assessmentData.subjectId,
-        classId: student.classId,
+        classId: assessmentData.classId,
         term: assessmentData.term,
         session: assessmentData.session,
         firstCA: assessmentData.firstCA?.toString(),
