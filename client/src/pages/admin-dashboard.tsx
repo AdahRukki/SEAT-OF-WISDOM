@@ -1122,7 +1122,24 @@ export default function AdminDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div>
+                    <Label>Term & Session</Label>
+                    <Select value={`${scoresTerm}-${scoresSession}`} onValueChange={(value) => {
+                      const [term, session] = value.split('-');
+                      setScoresTerm(term.replace('_', ' '));
+                      setScoresSession(session);
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select term" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="First Term-2024/2025">First Term 2024/2025</SelectItem>
+                        <SelectItem value="Second Term-2024/2025">Second Term 2024/2025</SelectItem>
+                        <SelectItem value="Third Term-2024/2025">Third Term 2024/2025</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div>
                     <Label>Select Class</Label>
                     <Select value={scoresClassId} onValueChange={setScoresClassId}>
@@ -1140,7 +1157,15 @@ export default function AdminDashboard() {
                   </div>
                   <div>
                     <Label>Select Subject</Label>
-                    <Select value={scoresSubjectId} onValueChange={setScoresSubjectId} disabled={!scoresClassId}>
+                    <Select value={scoresSubjectId} onValueChange={(subjectId) => {
+                      setScoresSubjectId(subjectId);
+                      // Auto-refresh assessments when subject changes
+                      if (scoresClassId && subjectId) {
+                        queryClient.invalidateQueries({ 
+                          queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId }] 
+                        });
+                      }
+                    }} disabled={!scoresClassId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Choose a subject" />
                       </SelectTrigger>
@@ -1153,22 +1178,22 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label>Term & Session</Label>
-                    <Select value={`${scoresTerm}-${scoresSession}`} onValueChange={(value) => {
-                      const [term, session] = value.split('-');
-                      setScoresTerm(term.replace('_', ' '));
-                      setScoresSession(session);
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select term" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="First Term-2024/2025">First Term 2024/2025</SelectItem>
-                        <SelectItem value="Second Term-2024/2025">Second Term 2024/2025</SelectItem>
-                        <SelectItem value="Third Term-2024/2025">Third Term 2024/2025</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="flex items-end">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          onClick={handleSaveAllScores} 
+                          disabled={!scoresClassId || !scoresSubjectId || Object.keys(scoreInputs).length === 0}
+                          className="w-full"
+                        >
+                          <Save className="h-4 w-4 mr-2" />
+                          Save All Scores
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Save all entered scores for the selected class and subject</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
 
