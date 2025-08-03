@@ -671,7 +671,7 @@ export default function AdminDashboard() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <a
-                      href="/user-management"
+                      href="/users"
                       className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
                     >
                       <Users className="w-4 h-4" />

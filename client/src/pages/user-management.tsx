@@ -53,8 +53,8 @@ import {
   Edit,
   Trash2,
   Upload,
-  Image,
   ArrowLeft,
+  Image,
   User as UserIcon,
   LogOut
 } from "lucide-react";
@@ -261,8 +261,24 @@ export default function UserManagement() {
             </div>
 
             <div className="flex items-center space-x-1 sm:space-x-4">
+              {/* Back to Dashboard Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <a
+                    href="/"
+                    className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-sm"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span className="hidden sm:inline">Dashboard</span>
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Return to the main admin dashboard</p>
+                </TooltipContent>
+              </Tooltip>
+              
               <a
-                href="/"
+                href="/profile"
                 className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
               >
                 <ArrowLeft className="w-4 h-4" />
