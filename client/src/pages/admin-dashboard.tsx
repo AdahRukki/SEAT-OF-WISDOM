@@ -1701,8 +1701,6 @@ export default function AdminDashboard() {
                         setStudentLastName("");
                         setStudentEmail("");
                         setStudentPassword("");
-                        setStudentParentContact("");
-                        setStudentAddress("");
                         setStudentId("");
                         
                         // Set the selected class from the current class details
