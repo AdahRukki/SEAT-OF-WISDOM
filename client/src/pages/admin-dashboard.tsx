@@ -96,6 +96,11 @@ export default function AdminDashboard() {
   // School selection for main admin
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
 
+  // Logo upload states
+  const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string>("");
+
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
 
@@ -252,6 +257,33 @@ export default function AdminDashboard() {
     setStudentPassword("");
     setStudentId("");
     setSelectedClassId("");
+  };
+
+  // Logo upload functions
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setLogoPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleLogoUpload = () => {
+    if (logoFile) {
+      // For now, just simulate an upload
+      toast({
+        title: "Logo Upload",
+        description: "Logo upload feature is being prepared. Coming soon!",
+      });
+      setIsLogoUploadDialogOpen(false);
+      setLogoFile(null);
+      setLogoPreview("");
+    }
   };
 
   const handleStudentCreated = () => {
@@ -594,6 +626,26 @@ export default function AdminDashboard() {
                 </Button>
               </div>
               
+              {/* Logo Upload Button - Only for admin */}
+              {user.role === 'admin' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsLogoUploadDialogOpen(true)}
+                      className="px-2 sm:px-4"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span className="hidden sm:inline sm:ml-2">Logo</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Upload and change the academy logo</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
               {/* Navigation to User Management - Icon only on mobile */}
               {user.role === 'admin' && (
                 <Tooltip>
@@ -1387,6 +1439,64 @@ export default function AdminDashboard() {
                   <p className="text-sm">Add students to see them here.</p>
                 </div>
               )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Logo Upload Dialog */}
+        <Dialog open={isLogoUploadDialogOpen} onOpenChange={setIsLogoUploadDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Upload Academy Logo</DialogTitle>
+              <DialogDescription>
+                Upload a new logo for Seat of Wisdom Academy. Recommended size: 200x200px
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="logo-upload" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Choose Logo File
+                </label>
+                <input
+                  id="logo-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoFileChange}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+              </div>
+              
+              {logoPreview && (
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Preview:</p>
+                  <img 
+                    src={logoPreview} 
+                    alt="Logo preview" 
+                    className="max-w-32 max-h-32 mx-auto rounded-lg border border-gray-200"
+                  />
+                </div>
+              )}
+              
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsLogoUploadDialogOpen(false);
+                    setLogoFile(null);
+                    setLogoPreview("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleLogoUpload}
+                  disabled={!logoFile}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Logo
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

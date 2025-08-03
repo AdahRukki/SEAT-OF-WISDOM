@@ -49,7 +49,8 @@ import {
   Upload,
   Image,
   ArrowLeft,
-  User as UserIcon
+  User as UserIcon,
+  LogOut
 } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { User, School as SchoolType } from "@shared/schema";
