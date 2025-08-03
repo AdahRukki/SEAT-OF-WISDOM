@@ -84,6 +84,7 @@ export default function AdminDashboard() {
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
   const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
+  const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false);
   const [selectedClassForDetails, setSelectedClassForDetails] = useState<Class | null>(null);
 
   // Form states
@@ -106,6 +107,10 @@ export default function AdminDashboard() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
   const [currentLogoUrl, setCurrentLogoUrl] = useState<string>("");
+
+  // New subject creation states
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const [newSubjectDescription, setNewSubjectDescription] = useState("");
 
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
@@ -347,6 +352,43 @@ export default function AdminDashboard() {
       toast({ 
         title: "Error", 
         description: "Failed to add subject to class", 
+        variant: "destructive" 
+      });
+    }
+  });
+
+  // Create new subject mutation
+  const createSubjectMutation = useMutation({
+    mutationFn: async (data: { name: string; description?: string }) => {
+      return await apiRequest('/api/admin/subjects', {
+        method: 'POST',
+        body: data
+      });
+    },
+    onSuccess: (newSubject) => {
+      toast({ 
+        title: "Success", 
+        description: "New subject created successfully" 
+      });
+      // Reset form
+      setNewSubjectName("");
+      setNewSubjectDescription("");
+      setIsNewSubjectDialogOpen(false);
+      // Refresh subjects list
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/subjects'] });
+      
+      // Automatically add the new subject to the current class if we're in subject management
+      if (selectedClassForDetails?.id && isSubjectManagementDialogOpen) {
+        addSubjectMutation.mutate({
+          classId: selectedClassForDetails.id,
+          subjectId: newSubject.id
+        });
+      }
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to create new subject", 
         variant: "destructive" 
       });
     }
@@ -1766,7 +1808,17 @@ export default function AdminDashboard() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <h4 className="text-sm font-medium">Available Subjects</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium">Available Subjects</h4>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => setIsNewSubjectDialogOpen(true)}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Create New
+                </Button>
+              </div>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {subjects
                   .filter(subject => !selectedClassSubjects.some(cs => cs.id === subject.id))
@@ -1803,6 +1855,79 @@ export default function AdminDashboard() {
                   onClick={() => setIsSubjectManagementDialogOpen(false)}
                 >
                   Done
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* New Subject Creation Dialog */}
+        <Dialog open={isNewSubjectDialogOpen} onOpenChange={setIsNewSubjectDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Subject</DialogTitle>
+              <DialogDescription>
+                Add a new subject to the academy curriculum
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="subject-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Subject Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="subject-name"
+                  type="text"
+                  value={newSubjectName}
+                  onChange={(e) => setNewSubjectName(e.target.value)}
+                  placeholder="e.g., Physics, Chemistry, Literature"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="subject-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Description (Optional)
+                </label>
+                <textarea
+                  id="subject-description"
+                  value={newSubjectDescription}
+                  onChange={(e) => setNewSubjectDescription(e.target.value)}
+                  placeholder="Brief description of the subject"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsNewSubjectDialogOpen(false);
+                    setNewSubjectName("");
+                    setNewSubjectDescription("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (newSubjectName.trim()) {
+                      createSubjectMutation.mutate({
+                        name: newSubjectName.trim(),
+                        description: newSubjectDescription.trim() || undefined
+                      });
+                    }
+                  }}
+                  disabled={!newSubjectName.trim() || createSubjectMutation.isPending}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {createSubjectMutation.isPending ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
+                  {createSubjectMutation.isPending ? "Creating..." : "Create Subject"}
                 </Button>
               </div>
             </div>
