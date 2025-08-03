@@ -1139,9 +1139,14 @@ export default function AdminDashboard() {
                             </span>
                           )}
                         </Label>
-                        <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                        <Select value={selectedClassId} onValueChange={(value) => {
+                          console.log("Class selection changed to:", value);
+                          setSelectedClassId(value);
+                        }}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select a class" />
+                            <SelectValue placeholder={selectedClassId ? 
+                              classes.find(c => c.id === selectedClassId)?.name || "Select a class" 
+                              : "Select a class"} />
                           </SelectTrigger>
                           <SelectContent>
                             {classes.map((classItem) => (
@@ -1151,6 +1156,11 @@ export default function AdminDashboard() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {selectedClassId && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Selected: {classes.find(c => c.id === selectedClassId)?.name}
+                          </p>
+                        )}
                       </div>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1705,8 +1715,10 @@ export default function AdminDashboard() {
                         
                         // Set the selected class from the current class details
                         const classId = selectedClassForDetails?.id || "";
+                        const className = selectedClassForDetails?.name || "";
                         setSelectedClassId(classId);
-                        console.log("Setting selected class ID from class details:", classId);
+                        console.log("Setting selected class ID from class details:", classId, "Class name:", className);
+                        console.log("Current selectedClassId state before opening dialog:", selectedClassId);
                         
                         // Generate a new student ID for this new student
                         generateStudentId();
@@ -1714,6 +1726,11 @@ export default function AdminDashboard() {
                         // Open the student dialog and close class details
                         setIsStudentDialogOpen(true);
                         setIsClassDetailsDialogOpen(false);
+                        
+                        // Debug: Log what happens after state change
+                        setTimeout(() => {
+                          console.log("selectedClassId after dialog opened:", selectedClassId);
+                        }, 100);
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
