@@ -39,6 +39,7 @@ import {
   TooltipProvider, 
   TooltipTrigger 
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 import { 
   Plus, 
   Users, 
@@ -55,7 +56,9 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  Upload
+  Upload,
+  Edit,
+  X
 } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { 
@@ -1520,27 +1523,81 @@ export default function AdminDashboard() {
                 {selectedClassForDetails?.description}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Students in this Class</h3>
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-2">
-                    <Users className="h-4 w-4" />
-                    <span className="text-sm text-gray-600">{classStudents.length} students</span>
-                  </div>
+            <div className="space-y-6">
+              {/* Subjects Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Class Subjects</h3>
                   <Button 
                     size="sm" 
+                    variant="outline"
                     onClick={() => {
-                      setSelectedClassId(selectedClassForDetails?.id || "");
-                      setIsStudentDialogOpen(true);
-                      setIsClassDetailsDialogOpen(false);
+                      // Add subject management functionality
+                      toast({
+                        title: "Subject Management",
+                        description: "Feature to add/remove subjects from this class",
+                      });
                     }}
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Student
+                    Manage Subjects
                   </Button>
                 </div>
+                
+                {/* Display current subjects */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {subjects.slice(0, 6).map((subject) => (
+                    <div key={subject.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+                      <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                        {subject.name}
+                      </span>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-6 w-6 p-0 text-blue-600 hover:text-red-600"
+                        onClick={() => {
+                          toast({
+                            title: "Remove Subject",
+                            description: `Remove ${subject.name} from this class`,
+                          });
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                {subjects.length === 0 && (
+                  <div className="text-center py-4 text-gray-500">
+                    <BookOpen className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">No subjects assigned to this class yet.</p>
+                  </div>
+                )}
               </div>
+              </div>
+
+              {/* Students Section */}
+              <div className="space-y-4 border-t pt-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Students in this Class</h3>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2">
+                      <Users className="h-4 w-4" />
+                      <span className="text-sm text-gray-600">{classStudents.length} students</span>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      onClick={() => {
+                        setSelectedClassId(selectedClassForDetails?.id || "");
+                        setIsStudentDialogOpen(true);
+                        setIsClassDetailsDialogOpen(false);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Student
+                    </Button>
+                  </div>
+                </div>
               
               {classStudents.length > 0 ? (
                 <div className="border rounded-lg overflow-hidden">
