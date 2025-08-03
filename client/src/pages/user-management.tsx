@@ -39,6 +39,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider
+} from "@/components/ui/tooltip";
+import {
   Users,
   UserPlus,
   Settings,
@@ -103,7 +109,7 @@ export default function UserManagement() {
     }) => {
       return apiRequest('/api/admin/users', {
         method: 'POST',
-        body: JSON.stringify(data)
+        body: JSON.stringify({...data, role: 'sub-admin'})
       });
     },
     onSuccess: () => {
@@ -203,7 +209,8 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <TooltipProvider>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -430,19 +437,44 @@ export default function UserManagement() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setIsProfileDialogOpen(true);
-                            }}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setIsProfileDialogOpen(true);
+                                }}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View user profile details</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  // Add edit functionality here
+                                  toast({
+                                    title: "Edit User",
+                                    description: "User editing feature coming soon!"
+                                  });
+                                }}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit user details and permissions</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -481,7 +513,71 @@ export default function UserManagement() {
                     {school.phone && <p>Phone: {school.phone}</p>}
                     {school.email && <p>Email: {school.email}</p>}
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-2">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full">
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit School Details
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Edit School Details</DialogTitle>
+                          <DialogDescription>
+                            Update information for {school.name}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                          <div>
+                            <Label htmlFor="school-name">School Name</Label>
+                            <Input
+                              id="school-name"
+                              defaultValue={school.name}
+                              placeholder="Enter school name"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="school-address">Address</Label>
+                            <Input
+                              id="school-address"
+                              defaultValue={school.address || ""}
+                              placeholder="Enter school address"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="school-phone">Phone</Label>
+                            <Input
+                              id="school-phone"
+                              defaultValue={school.phone || ""}
+                              placeholder="Enter phone number"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="school-email">Email</Label>
+                            <Input
+                              id="school-email"
+                              type="email"
+                              defaultValue={school.email || ""}
+                              placeholder="Enter email address"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-3">
+                          <Button variant="outline">Cancel</Button>
+                          <Button
+                            onClick={() => {
+                              toast({
+                                title: "School Updated",
+                                description: "School editing feature coming soon!"
+                              });
+                            }}
+                          >
+                            Save Changes
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" className="w-full">
@@ -520,19 +616,29 @@ export default function UserManagement() {
                           )}
                         </div>
                         <div className="flex justify-end gap-3">
-                          <Button variant="outline">Cancel</Button>
+                          <Button 
+                            variant="outline"
+                            onClick={() => {
+                              setLogoFile(null);
+                              setLogoPreview("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
                           <Button
                             onClick={() => {
                               if (logoFile) {
-                                uploadLogoMutation.mutate({
-                                  schoolId: school.id,
-                                  logoFile
+                                toast({
+                                  title: "Logo Upload",
+                                  description: "Logo upload feature coming soon!"
                                 });
+                                setLogoFile(null);
+                                setLogoPreview("");
                               }
                             }}
-                            disabled={!logoFile || uploadLogoMutation.isPending}
+                            disabled={!logoFile}
                           >
-                            {uploadLogoMutation.isPending ? "Uploading..." : "Upload Logo"}
+                            Upload Logo
                           </Button>
                         </div>
                       </DialogContent>
@@ -545,7 +651,7 @@ export default function UserManagement() {
         </TabsContent>
         </Tabs>
 
-      {/* User Profile Dialog */}
+        {/* User Profile Dialog */}
       <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -598,8 +704,9 @@ export default function UserManagement() {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
+        </Dialog>
       </div>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

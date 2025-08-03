@@ -119,10 +119,17 @@ export default function AdminDashboard() {
 
   // Set initial school for sub-admin or first school for main admin
   useEffect(() => {
-    if (user?.role === 'sub-admin' && user.schoolId) {
-      setSelectedSchoolId(user.schoolId);
+    if (user?.role === 'sub-admin' && (user as any).schoolId) {
+      setSelectedSchoolId((user as any).schoolId);
     }
   }, [user]);
+
+  // Set first school for admin when schools are loaded
+  useEffect(() => {
+    if (user?.role === 'admin' && schools && schools.length > 0 && !selectedSchoolId) {
+      setSelectedSchoolId(schools[0].id);
+    }
+  }, [user, schools, selectedSchoolId]);
 
   // Update sync status periodically
   useEffect(() => {
@@ -132,13 +139,14 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // School-aware queries
-  const queryParams = user?.role === 'admin' && selectedSchoolId ? `?schoolId=${selectedSchoolId}` : '';
-  
+  // Queries
   const { data: schools = [] } = useQuery<SchoolType[]>({ 
     queryKey: ['/api/admin/schools'],
     enabled: user?.role === 'admin'
   });
+
+  // School-aware queries
+  const queryParams = user?.role === 'admin' && selectedSchoolId ? `?schoolId=${selectedSchoolId}` : '';
 
   const { data: classes = [] } = useQuery<Class[]>({ 
     queryKey: ['/api/admin/classes', selectedSchoolId],
@@ -276,15 +284,18 @@ export default function AdminDashboard() {
 
   const handleLogoUpload = () => {
     if (logoFile) {
-      // For now, just simulate an upload
       toast({
         title: "Logo Upload",
         description: "Logo upload feature is being prepared. Coming soon!",
       });
-      setIsLogoUploadDialogOpen(false);
-      setLogoFile(null);
-      setLogoPreview("");
+      handleLogoCancelation();
     }
+  };
+
+  const handleLogoCancelation = () => {
+    setIsLogoUploadDialogOpen(false);
+    setLogoFile(null);
+    setLogoPreview("");
   };
 
   const handleStudentCreated = () => {
@@ -507,7 +518,7 @@ export default function AdminDashboard() {
                   Available School Branches
                 </Label>
                 <div className="grid gap-2">
-                  {schools.map((school) => (
+                  {schools?.map((school) => (
                     <Button
                       key={school.id}
                       variant="outline"
@@ -582,13 +593,23 @@ export default function AdminDashboard() {
                       </div>
                     </SelectTrigger>
                     <SelectContent>
-                      {schools.map((school) => (
+                      {schools?.map((school) => (
                         <SelectItem key={school.id} value={school.id}>
                           {school.name}
                         </SelectItem>
-                      ))}
+                      )) || []}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {/* Sub-Admin School Display - Hidden on mobile */}
+              {user.role === 'sub-admin' && (
+                <div className="hidden lg:flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-md border border-blue-200 dark:border-blue-800">
+                  <School className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    {schools?.find(s => s.id === (user as any).schoolId)?.name || 'Loading...'}
+                  </span>
                 </div>
               )}
             </div>
@@ -652,7 +673,7 @@ export default function AdminDashboard() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <a
-                      href="/users"
+                      href="/user-management"
                       className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
                     >
                       <Users className="w-4 h-4" />
@@ -703,11 +724,11 @@ export default function AdminDashboard() {
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  {schools.map((school) => (
+                  {schools?.map((school) => (
                     <SelectItem key={school.id} value={school.id}>
                       {school.name}
                     </SelectItem>
-                  ))}
+                  )) || []}
                 </SelectContent>
               </Select>
             </div>
@@ -1481,11 +1502,7 @@ export default function AdminDashboard() {
               <div className="flex justify-end space-x-2">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setIsLogoUploadDialogOpen(false);
-                    setLogoFile(null);
-                    setLogoPreview("");
-                  }}
+                  onClick={handleLogoCancelation}
                 >
                   Cancel
                 </Button>
