@@ -263,7 +263,7 @@ export default function AdminDashboard() {
     mutationFn: async (scoresArray: any[]) => {
       // Send scores individually to the single assessment endpoint
       const promises = scoresArray.map(scoreData => 
-        apiRequest('/api/admin/assessments', {
+        apiRequest('/api/assessments', {
           method: 'POST',
           body: scoreData
         })
@@ -273,6 +273,12 @@ export default function AdminDashboard() {
     onSuccess: () => {
       toast({ title: "Success", description: "Scores updated successfully" });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/assessments'] });
+      // Also refresh the assessments for the current class/subject
+      if (scoresClassId && scoresSubjectId) {
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId: scoresSubjectId }] 
+        });
+      }
       setScoreInputs({}); // Clear the input state after successful save
     },
     onError: (error) => {
