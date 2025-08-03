@@ -364,9 +364,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin routes - Student management
   app.post('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
     try {
-      const studentData = insertStudentSchema.parse(req.body);
+      const { firstName, lastName, email, password, studentId, classId } = req.body;
+      
+      if (!firstName || !lastName || !email || !password || !studentId || !classId) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      // Get the school ID - for sub-admins use their schoolId, for main admin get it from the class
+      const user = (req as any).user;
+      let schoolId: string;
+      
+      if (user.role === 'admin') {
+        // Main admin: get school from the selected class
+        const classData = await storage.getClassById(classId);
+        if (!classData) {
+          return res.status(400).json({ error: "Invalid class selected" });
+        }
+        schoolId = classData.schoolId;
+      } else {
+        // Sub-admin: use their assigned school
+        schoolId = user.schoolId;
+      }
+
+      // First create the user account
+      const userData = insertUserSchema.parse({
+        firstName,
+        lastName,
+        email,
+        password,
+        role: 'student',
+        schoolId: schoolId
+      });
+      
+      const newUser = await storage.createUser(userData);
+      
+      // Then create the student record
+      const studentData = insertStudentSchema.parse({
+        userId: newUser.id,
+        classId,
+        studentId,
+        parentContact: '',
+        address: ''
+      });
+      
       const student = await storage.createStudent(studentData);
-      res.json(student);
+      res.json({ user: newUser, student });
     } catch (error) {
       console.error("Create student error:", error);
       res.status(400).json({ error: "Failed to create student" });

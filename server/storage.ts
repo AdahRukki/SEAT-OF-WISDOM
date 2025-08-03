@@ -290,6 +290,11 @@ export class DatabaseStorage implements IStorage {
     return await baseQuery;
   }
 
+  async getClassById(classId: string): Promise<Class | undefined> {
+    const [classData] = await db.select().from(classes).where(eq(classes.id, classId));
+    return classData || undefined;
+  }
+
   async getAllSubjects(): Promise<Subject[]> {
     return await db.select().from(subjects);
   }
