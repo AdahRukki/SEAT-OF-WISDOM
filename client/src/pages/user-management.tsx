@@ -70,7 +70,6 @@ export default function UserManagement() {
   // State for dialogs
   const [isCreateSubAdminDialogOpen, setIsCreateSubAdminDialogOpen] = useState(false);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
-  const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedUserForDeletion, setSelectedUserForDeletion] = useState<User | null>(null);
   const [isDeleteUserDialogOpen, setIsDeleteUserDialogOpen] = useState(false);
@@ -82,9 +81,14 @@ export default function UserManagement() {
   const [password, setPassword] = useState("");
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
   
-  // Logo upload state
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string>("");
+  // School editing state
+  const [editingSchool, setEditingSchool] = useState<SchoolType | null>(null);
+  const [schoolFormData, setSchoolFormData] = useState({
+    name: "",
+    address: "",
+    phone: "",
+    email: ""
+  });
   
   // Password visibility state
   const [showPassword, setShowPassword] = useState(false);
@@ -133,30 +137,26 @@ export default function UserManagement() {
     }
   });
 
-  // Upload logo mutation - Global academy logo
-  const uploadLogoMutation = useMutation({
-    mutationFn: async (logoUrl: string) => {
-      return apiRequest('/api/admin/logo', {
-        method: 'POST',
-        body: { logoUrl }
+  // School editing mutation
+  const editSchoolMutation = useMutation({
+    mutationFn: async (data: { id: string; name: string; address: string; phone: string; email: string }) => {
+      return apiRequest(`/api/admin/schools/${data.id}`, {
+        method: 'PUT',
+        body: data
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/schools'] });
-      setIsLogoUploadDialogOpen(false);
-      setLogoFile(null);
-      setLogoPreview("");
+      setEditingSchool(null);
       toast({
         title: "Success",
-        description: "Academy logo uploaded successfully for all schools"
+        description: "School information updated successfully"
       });
-      // Refresh page to show new logo everywhere
-      window.location.reload();
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to upload academy logo",
+        title: "Error", 
+        description: "Failed to update school information",
         variant: "destructive"
       });
     }
@@ -195,17 +195,7 @@ export default function UserManagement() {
     setSelectedSchoolId("");
   };
 
-  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setLogoFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setLogoPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -577,7 +567,19 @@ export default function UserManagement() {
                     {school.email && <p>Email: {school.email}</p>}
                   </div>
                   <div className="mt-4 space-y-2">
-                    <Dialog>
+                    <Dialog open={editingSchool?.id === school.id} onOpenChange={(open) => {
+                      if (open) {
+                        setEditingSchool(school);
+                        setSchoolFormData({
+                          name: school.name || "",
+                          address: school.address || "",
+                          phone: school.phone || "",
+                          email: school.email || ""
+                        });
+                      } else {
+                        setEditingSchool(null);
+                      }
+                    }}>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" className="w-full">
                           <Edit className="w-4 h-4 mr-2" />
@@ -596,7 +598,8 @@ export default function UserManagement() {
                             <Label htmlFor="school-name">School Name</Label>
                             <Input
                               id="school-name"
-                              defaultValue={school.name}
+                              value={schoolFormData.name}
+                              onChange={(e) => setSchoolFormData({...schoolFormData, name: e.target.value})}
                               placeholder="Enter school name"
                             />
                           </div>
@@ -604,7 +607,8 @@ export default function UserManagement() {
                             <Label htmlFor="school-address">Address</Label>
                             <Input
                               id="school-address"
-                              defaultValue={school.address || ""}
+                              value={schoolFormData.address}
+                              onChange={(e) => setSchoolFormData({...schoolFormData, address: e.target.value})}
                               placeholder="Enter school address"
                             />
                           </div>
@@ -612,7 +616,8 @@ export default function UserManagement() {
                             <Label htmlFor="school-phone">Phone</Label>
                             <Input
                               id="school-phone"
-                              defaultValue={school.phone || ""}
+                              value={schoolFormData.phone}
+                              onChange={(e) => setSchoolFormData({...schoolFormData, phone: e.target.value})}
                               placeholder="Enter phone number"
                             />
                           </div>
@@ -621,98 +626,43 @@ export default function UserManagement() {
                             <Input
                               id="school-email"
                               type="email"
-                              defaultValue={school.email || ""}
+                              value={schoolFormData.email}
+                              onChange={(e) => setSchoolFormData({...schoolFormData, email: e.target.value})}
                               placeholder="Enter email address"
                             />
                           </div>
                         </div>
                         <div className="flex justify-end gap-3">
-                          <Button variant="outline">Cancel</Button>
-                          <Button
-                            onClick={() => {
-                              // School editing functionality - could be expanded later
-                              toast({
-                                title: "School Information",
-                                description: "School details updated successfully"
-                              });
-                            }}
-                          >
-                            Save Changes
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="w-full">
-                          <Upload className="w-4 h-4 mr-2" />
-                          Upload Logo
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Upload School Logo</DialogTitle>
-                          <DialogDescription>
-                            Upload a logo for {school.name}
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                          <div>
-                            <Label htmlFor="logo">Logo Image</Label>
-                            <Input
-                              id="logo"
-                              type="file"
-                              accept="image/*"
-                              onChange={handleLogoFileChange}
-                            />
-                          </div>
-                          {logoPreview && (
-                            <div className="mt-4">
-                              <Label>Preview</Label>
-                              <div className="mt-2 w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                                <img
-                                  src={logoPreview}
-                                  alt="Logo preview"
-                                  className="w-full h-full object-cover rounded-lg"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex justify-end gap-3">
                           <Button 
                             variant="outline"
-                            onClick={() => {
-                              setLogoFile(null);
-                              setLogoPreview("");
-                            }}
+                            onClick={() => setEditingSchool(null)}
                           >
                             Cancel
                           </Button>
                           <Button
                             onClick={() => {
-                              if (logoFile && logoPreview) {
-                                uploadLogoMutation.mutate(logoPreview);
+                              if (editingSchool) {
+                                editSchoolMutation.mutate({
+                                  id: editingSchool.id,
+                                  name: schoolFormData.name,
+                                  address: schoolFormData.address,
+                                  phone: schoolFormData.phone,
+                                  email: schoolFormData.email
+                                });
                               }
                             }}
-                            disabled={!logoFile || uploadLogoMutation.isPending}
-                            className="bg-blue-600 hover:bg-blue-700"
+                            disabled={editSchoolMutation.isPending}
                           >
-                            {uploadLogoMutation.isPending ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                Uploading...
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="h-4 w-4 mr-2" />
-                                Upload Logo
-                              </>
-                            )}
+                            {editSchoolMutation.isPending ? "Saving..." : "Save Changes"}
                           </Button>
                         </div>
                       </DialogContent>
                     </Dialog>
+                    <div className="text-center py-2">
+                      <p className="text-xs text-gray-500">
+                        Logo managed centrally in Admin Dashboard
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

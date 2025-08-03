@@ -163,6 +163,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update school endpoint
+  app.put('/api/admin/schools/:id', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, address, phone, email } = req.body;
+      const updatedSchool = await storage.updateSchool(id, { name, address, phone, email });
+      res.json(updatedSchool);
+    } catch (error) {
+      console.error('Error updating school:', error);
+      res.status(500).json({ error: 'Failed to update school' });
+    }
+  });
+
   // Admin routes - User management
   app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
     try {

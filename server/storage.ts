@@ -191,6 +191,23 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(schools);
   }
 
+  async updateSchool(schoolId: string, updateData: { name?: string; address?: string; phone?: string; email?: string }): Promise<School> {
+    const [updatedSchool] = await db
+      .update(schools)
+      .set({
+        ...updateData,
+        updatedAt: new Date()
+      })
+      .where(eq(schools.id, schoolId))
+      .returning();
+    
+    if (!updatedSchool) {
+      throw new Error('School not found');
+    }
+    
+    return updatedSchool;
+  }
+
   async getSchoolById(id: string): Promise<School | undefined> {
     const [school] = await db.select().from(schools).where(eq(schools.id, id));
     return school || undefined;
