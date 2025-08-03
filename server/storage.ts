@@ -388,7 +388,7 @@ export class DatabaseStorage implements IStorage {
     const total = Number(assessmentData.firstCA || 0) + 
                   Number(assessmentData.secondCA || 0) + 
                   Number(assessmentData.exam || 0);
-    const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
+    const grade = total >= 75 ? 'A' : total >= 50 ? 'C' : total >= 40 ? 'P' : 'F';
 
     if (existing) {
       // Update existing assessment

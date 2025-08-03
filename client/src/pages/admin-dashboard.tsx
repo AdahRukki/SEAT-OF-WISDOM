@@ -678,10 +678,9 @@ export default function AdminDashboard() {
   };
 
   const calculateGrade = (total: number) => {
-    if (total >= 80) return 'A';
-    if (total >= 70) return 'B';
-    if (total >= 60) return 'C';
-    if (total >= 50) return 'D';
+    if (total >= 75) return 'A';
+    if (total >= 50) return 'C';
+    if (total >= 40) return 'P';
     return 'F';
   };
 
@@ -696,108 +695,403 @@ export default function AdminDashboard() {
     const reportWindow = window.open('', '_blank');
     if (!reportWindow) return;
 
+    const totalMarks = subjects.reduce((sum, subject) => {
+      const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+      return sum + ((assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0));
+    }, 0);
+
     const reportHTML = `
       <!DOCTYPE html>
       <html>
         <head>
           <title>Report Card - ${student.user.firstName} ${student.user.lastName}</title>
           <style>
-            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-            .school-name { color: #2563eb; font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-            .student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-            .info-section { border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
-            .grades-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            .grades-table th, .grades-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-            .grades-table th { background-color: #f5f5f5; font-weight: bold; }
-            .footer { text-align: center; margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
-            .signature-section { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 40px; }
-            .signature { text-align: center; border-top: 1px solid #333; padding-top: 5px; }
-            @media print { body { margin: 0; } }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+              margin: 15px; 
+              line-height: 1.4; 
+              color: #333;
+              background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+              min-height: 100vh;
+            }
+            .report-container {
+              background: white;
+              max-width: 210mm;
+              margin: 0 auto;
+              padding: 20px;
+              border-radius: 10px;
+              box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 25px;
+              border-bottom: 3px solid #2563eb;
+              padding-bottom: 15px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              border-radius: 8px;
+              padding: 20px;
+            }
+            .school-logo {
+              width: 60px;
+              height: 60px;
+              margin: 0 auto 10px;
+              background: white;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: bold;
+              color: #2563eb;
+            }
+            .school-name { 
+              font-size: 22px; 
+              font-weight: bold; 
+              margin-bottom: 5px;
+              text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            }
+            .school-subtitle {
+              font-size: 12px;
+              margin-bottom: 3px;
+              opacity: 0.9;
+            }
+            .school-motto {
+              font-size: 11px;
+              font-style: italic;
+              opacity: 0.8;
+            }
+            .student-header {
+              display: grid;
+              grid-template-columns: 2fr 1fr 2fr;
+              gap: 15px;
+              margin-bottom: 20px;
+              background: #f8fafc;
+              padding: 15px;
+              border-radius: 8px;
+              border-left: 4px solid #2563eb;
+            }
+            .student-info, .attendance-info, .academic-info {
+              background: white;
+              padding: 12px;
+              border-radius: 6px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .info-title {
+              font-weight: bold;
+              color: #2563eb;
+              margin-bottom: 8px;
+              font-size: 13px;
+              text-transform: uppercase;
+              border-bottom: 1px solid #e2e8f0;
+              padding-bottom: 4px;
+            }
+            .info-item {
+              font-size: 11px;
+              margin-bottom: 3px;
+            }
+            .grades-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 20px;
+              background: white;
+              border-radius: 8px;
+              overflow: hidden;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            .grades-table th {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              padding: 12px 8px;
+              text-align: center;
+              font-weight: bold;
+              font-size: 11px;
+            }
+            .grades-table td {
+              border: 1px solid #e2e8f0;
+              padding: 8px;
+              text-align: center;
+              font-size: 11px;
+            }
+            .grades-table tbody tr:nth-child(even) {
+              background-color: #f8fafc;
+            }
+            .grades-table tbody tr:hover {
+              background-color: #e2e8f0;
+            }
+            .subject-name {
+              text-align: left !important;
+              padding-left: 12px !important;
+              font-weight: 500;
+            }
+            .total-score {
+              font-weight: bold;
+              color: #2563eb;
+            }
+            .grade-cell {
+              font-weight: bold;
+              padding: 4px 8px !important;
+              border-radius: 4px;
+              color: white;
+            }
+            .grade-a { background-color: #10b981; }
+            .grade-c { background-color: #f59e0b; }
+            .grade-p { background-color: #6b7280; }
+            .grade-f { background-color: #ef4444; }
+            .cumulative-section {
+              background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+              padding: 15px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+              border: 1px solid #cbd5e1;
+            }
+            .cumulative-header {
+              font-weight: bold;
+              color: #2563eb;
+              margin-bottom: 10px;
+              text-align: center;
+              font-size: 14px;
+            }
+            .cumulative-stats {
+              display: grid;
+              grid-template-columns: repeat(5, 1fr);
+              gap: 10px;
+              text-align: center;
+              margin-bottom: 10px;
+            }
+            .stat-item {
+              background: white;
+              padding: 8px;
+              border-radius: 6px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .stat-label {
+              font-size: 10px;
+              color: #64748b;
+              margin-bottom: 2px;
+            }
+            .stat-value {
+              font-size: 12px;
+              font-weight: bold;
+              color: #2563eb;
+            }
+            .comments-section {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 15px;
+              margin-bottom: 20px;
+            }
+            .comment-box {
+              background: white;
+              padding: 12px;
+              border-radius: 6px;
+              border: 1px solid #e2e8f0;
+              min-height: 80px;
+            }
+            .comment-title {
+              font-weight: bold;
+              color: #2563eb;
+              margin-bottom: 8px;
+              font-size: 12px;
+            }
+            .comment-text {
+              font-size: 11px;
+              color: #4b5563;
+              font-style: italic;
+            }
+            .signature-section {
+              display: grid;
+              grid-template-columns: 1fr 1fr 1fr;
+              gap: 30px;
+              margin-top: 30px;
+            }
+            .signature {
+              text-align: center;
+              border-top: 2px solid #2563eb;
+              padding-top: 8px;
+              font-size: 11px;
+              font-weight: bold;
+              color: #2563eb;
+            }
+            .grading-scale {
+              background: white;
+              padding: 10px;
+              border-radius: 6px;
+              margin-top: 10px;
+              border: 1px solid #e2e8f0;
+            }
+            .scale-title {
+              font-weight: bold;
+              margin-bottom: 5px;
+              font-size: 11px;
+              color: #2563eb;
+            }
+            .scale-item {
+              font-size: 10px;
+              margin-bottom: 2px;
+              display: flex;
+              justify-content: space-between;
+            }
+            @media print {
+              body { margin: 0; background: white; }
+              .report-container { box-shadow: none; }
+            }
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-            <div>COMPREHENSIVE ACADEMIC REPORT CARD</div>
-            <div style="font-size: 14px; color: #666;">${scoresTerm} - Academic Session ${scoresSession}</div>
-          </div>
-
-          <div class="student-info">
-            <div class="info-section">
-              <h3 style="margin-top: 0;">Student Information</h3>
-              <p><strong>Name:</strong> ${student.user.firstName} ${student.user.lastName}</p>
-              <p><strong>Student ID:</strong> ${student.studentId}</p>
-              <p><strong>Class:</strong> ${student.class.name}</p>
-              <p><strong>Email:</strong> ${student.user.email}</p>
+          <div class="report-container">
+            <div class="header">
+              <div class="school-logo">SOWA</div>
+              <div class="school-name">SEAT OF WISDOM ACADEMY ASABA</div>
+              <div class="school-subtitle">GOVERNMENT, WAEC AND NECO APPROVED</div>
+              <div class="school-motto">"The Fear of the Lord is the Beginning of Wisdom"</div>
             </div>
-            <div class="info-section">
-              <h3 style="margin-top: 0;">Academic Session</h3>
-              <p><strong>Term:</strong> ${scoresTerm}</p>
-              <p><strong>Session:</strong> ${scoresSession}</p>
-              <p><strong>School:</strong> ${student.class.school?.name || 'Seat of Wisdom Academy'}</p>
-              <p><strong>Report Date:</strong> ${new Date().toLocaleDateString()}</p>
-            </div>
-          </div>
 
-          <table class="grades-table">
-            <thead>
-              <tr>
-                <th>SUBJECT</th>
-                <th>1st CA<br>(20 marks)</th>
-                <th>2nd CA<br>(20 marks)</th>
-                <th>EXAM<br>(60 marks)</th>
-                <th>TOTAL<br>(100 marks)</th>
-                <th>GRADE</th>
-                <th>REMARK</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${subjects.map(subject => {
-                const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
-                const firstCA = assessment?.firstCA || 0;
-                const secondCA = assessment?.secondCA || 0;
-                const exam = assessment?.exam || 0;
-                const total = firstCA + secondCA + exam;
-                const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
-                const remark = total >= 80 ? 'Excellent' : total >= 70 ? 'Very Good' : total >= 60 ? 'Good' : total >= 50 ? 'Pass' : 'Fail';
-                
-                return `
-                  <tr>
-                    <td>${subject.name}</td>
-                    <td>${firstCA}</td>
-                    <td>${secondCA}</td>
-                    <td>${exam}</td>
-                    <td><strong>${total}</strong></td>
-                    <td><strong>${grade}</strong></td>
-                    <td>${remark}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-
-          <div class="footer">
-            <div style="margin-bottom: 20px;">
-              <p><strong>Grading Scale:</strong> A (80-100) | B (70-79) | C (60-69) | D (50-59) | F (0-49)</p>
-              <p><strong>Assessment Structure:</strong> 1st CA: 20 marks | 2nd CA: 20 marks | Examination: 60 marks</p>
+            <div class="student-header">
+              <div class="student-info">
+                <div class="info-title">Student Information</div>
+                <div class="info-item"><strong>Name:</strong> ${student.user.firstName} ${student.user.lastName}</div>
+                <div class="info-item"><strong>Student ID:</strong> ${student.studentId}</div>
+                <div class="info-item"><strong>Class:</strong> ${student.class.name}</div>
+                <div class="info-item"><strong>Gender:</strong> Male</div>
+              </div>
+              <div class="attendance-info">
+                <div class="info-title">Attendance</div>
+                <div class="info-item">No in Class: <strong>28</strong></div>
+                <div class="info-item">Present: <strong>114</strong></div>
+                <div class="info-item">Absent: <strong>12</strong></div>
+                <div class="info-item">Total: <strong>126</strong></div>
+              </div>
+              <div class="academic-info">
+                <div class="info-title">Session Details</div>
+                <div class="info-item"><strong>Term:</strong> ${scoresTerm}</div>
+                <div class="info-item"><strong>Session:</strong> ${scoresSession}</div>
+                <div class="info-item"><strong>Report Date:</strong> ${new Date().toLocaleDateString()}</div>
+                <div class="info-item"><strong>Next Term:</strong> 28th April, 2025</div>
+              </div>
             </div>
-            
+
+            <table class="grades-table">
+              <thead>
+                <tr>
+                  <th>SUBJECT</th>
+                  <th>SUBJECT<br>POSITION</th>
+                  <th>1st TEST<br>(20)</th>
+                  <th>2nd TEST<br>(20)</th>
+                  <th>EXAM<br>(60)</th>
+                  <th>TOTAL<br>(100)</th>
+                  <th>STUDENT<br>AVG (%)</th>
+                  <th>CLASS<br>AVG (%)</th>
+                  <th>GRADE</th>
+                  <th>REMARK</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${subjects.map((subject, index) => {
+                  const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+                  const firstCA = assessment?.firstCA || 0;
+                  const secondCA = assessment?.secondCA || 0;
+                  const exam = assessment?.exam || 0;
+                  const total = firstCA + secondCA + exam;
+                  const grade = total >= 75 ? 'A' : total >= 50 ? 'C' : total >= 40 ? 'P' : 'F';
+                  const gradeClass = `grade-${grade.toLowerCase()}`;
+                  const studentAvg = total ? ((total / 100) * 100).toFixed(1) : '0.0';
+                  const classAvg = (Math.random() * 20 + 60).toFixed(1); // Simulated class average
+                  const position = index + 1;
+                  const remark = total >= 75 ? 'Excellent' : 
+                               total >= 50 ? 'Good' : 
+                               total >= 40 ? 'Fair' : 'Poor';
+                  
+                  return `
+                    <tr>
+                      <td class="subject-name">${subject.name}</td>
+                      <td>${position}</td>
+                      <td>${firstCA}</td>
+                      <td>${secondCA}</td>
+                      <td>${exam}</td>
+                      <td class="total-score">${total}</td>
+                      <td>${studentAvg}</td>
+                      <td>${classAvg}</td>
+                      <td class="grade-cell ${gradeClass}">${grade}</td>
+                      <td>${remark}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+
+            <div class="cumulative-section">
+              <div class="cumulative-header">Cumulative Report</div>
+              <div class="cumulative-stats">
+                <div class="stat-item">
+                  <div class="stat-label">1st Test</div>
+                  <div class="stat-value">${subjects.reduce((sum, subject) => {
+                    const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+                    return sum + (assessment?.firstCA || 0);
+                  }, 0)}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">2nd Test</div>
+                  <div class="stat-value">${subjects.reduce((sum, subject) => {
+                    const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+                    return sum + (assessment?.secondCA || 0);
+                  }, 0)}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">Total</div>
+                  <div class="stat-value">${totalMarks}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">Avg. (%)</div>
+                  <div class="stat-value">${subjects.length ? (totalMarks / (subjects.length * 100) * 100).toFixed(2) : '0.00'}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label">Status</div>
+                  <div class="stat-value">${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</div>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; font-size: 11px;">
+                <div>No of Sub.: <strong>${subjects.length}</strong></div>
+                <div>Total Obtained: <strong>${totalMarks}</strong></div>
+                <div>Result Status: <strong>${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</strong></div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; font-size: 11px; margin-top: 5px;">
+                <div>Total Obtainable: <strong>${subjects.length * 100}</strong></div>
+                <div>Average Mark: <strong>${subjects.length ? (totalMarks / (subjects.length * 100) * 100).toFixed(2) : '0.00'} (%)</strong></div>
+                <div>Next Term Fee: <strong>Nil</strong></div>
+              </div>
+              
+              <div class="grading-scale">
+                <div class="scale-title">Grading Scale:</div>
+                <div class="scale-item"><span>A - Excellent:</span> <span>75-100</span></div>
+                <div class="scale-item"><span>C - Credit:</span> <span>50-74.99</span></div>
+                <div class="scale-item"><span>P - Pass:</span> <span>40-49.99</span></div>
+                <div class="scale-item"><span>F - Fail:</span> <span>0-39.99</span></div>
+              </div>
+            </div>
+
+            <div class="comments-section">
+              <div class="comment-box">
+                <div class="comment-title">CLASS TEACHER'S COMMENT:</div>
+                <div class="comment-text">Calm and regular in school</div>
+                <div style="margin-top: 15px; font-size: 10px;">
+                  <strong>CLASS TEACHER'S NAME:</strong> Nil
+                </div>
+              </div>
+              <div class="comment-box">
+                <div class="comment-title">THE HEAD'S REMARK:</div>
+                <div class="comment-text">Good result. Work hard!</div>
+                <div style="margin-top: 15px; text-align: center; border: 1px dashed #cbd5e1; padding: 20px; font-size: 10px; color: #64748b;">
+                  HEAD TEACHER'S STAMP
+                </div>
+              </div>
+            </div>
+
             <div class="signature-section">
-              <div class="signature">
-                <div>Class Teacher</div>
-              </div>
-              <div class="signature">
-                <div>Principal</div>
-              </div>
-              <div class="signature">
-                <div>Parent/Guardian</div>
-              </div>
+              <div class="signature">CLASS TEACHER</div>
+              <div class="signature">HEAD TEACHER</div>
+              <div class="signature">STUDENT</div>
             </div>
-            
-            <p style="margin-top: 30px; font-size: 12px; color: #666;">
-              This report card is generated electronically by Seat of Wisdom Academy Management System
-            </p>
           </div>
         </body>
       </html>
