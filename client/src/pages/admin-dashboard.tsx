@@ -88,7 +88,12 @@ import type {
   Payment,
   School as SchoolType 
 } from "@shared/schema";
-import { insertFeeTypeSchema, recordPaymentSchema } from "@shared/schema";
+import { 
+  insertFeeTypeSchema, 
+  recordPaymentSchema, 
+  assignFeeSchema,
+  type AssignFeeForm 
+} from "@shared/schema";
 import type { z } from "zod";
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
@@ -142,6 +147,7 @@ export default function AdminDashboard() {
   // Fee type management states
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
   const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
+  const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("First Term");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("2024/2025");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
@@ -167,6 +173,18 @@ export default function AdminDashboard() {
       paymentMethod: "cash",
       reference: "",
       paymentDate: new Date().toISOString().split('T')[0],
+      notes: "",
+    },
+  });
+
+  const assignFeeForm = useForm<AssignFeeForm>({
+    resolver: zodResolver(assignFeeSchema),
+    defaultValues: {
+      feeTypeId: "",
+      classId: "",
+      term: selectedFinanceTerm,
+      session: selectedFinanceSession,
+      dueDate: "",
       notes: "",
     },
   });
@@ -567,6 +585,32 @@ export default function AdminDashboard() {
     }
   });
 
+  const assignFeeMutation = useMutation({
+    mutationFn: async (assignmentData: AssignFeeForm) => {
+      return await apiRequest('/api/admin/assign-fee', {
+        method: 'POST',
+        body: assignmentData
+      });
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Success", 
+        description: `Fee assigned to ${data.assignedFees?.length || 0} students` 
+      });
+      assignFeeForm.reset();
+      setIsAssignFeeDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to assign fee to class", 
+        variant: "destructive" 
+      });
+    }
+  });
+
   // Form submission handlers
   const handleFeeTypeSubmit = (data: FeeTypeForm) => {
     createFeeTypeMutation.mutate(data);
@@ -574,6 +618,10 @@ export default function AdminDashboard() {
 
   const handlePaymentSubmit = (data: PaymentForm) => {
     recordPaymentMutation.mutate(data);
+  };
+
+  const handleAssignFeeSubmit = (data: AssignFeeForm) => {
+    assignFeeMutation.mutate(data);
   };
 
   // Logo upload functions
@@ -2159,13 +2207,13 @@ export default function AdminDashboard() {
                   </Select>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button>
+                      <Button onClick={() => setIsAssignFeeDialogOpen(true)}>
                         <Plus className="h-4 w-4 mr-2" />
                         Assign Fees
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Assign fees to selected students</p>
+                      <p>Assign fees to all students in a class</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
@@ -3297,6 +3345,171 @@ export default function AdminDashboard() {
                       <Receipt className="h-4 w-4 mr-2" />
                     )}
                     {recordPaymentMutation.isPending ? "Recording..." : "Record Payment"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Assign Fee Dialog */}
+        <Dialog open={isAssignFeeDialogOpen} onOpenChange={setIsAssignFeeDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Assign Fee to Class</DialogTitle>
+              <DialogDescription>
+                Assign a specific fee type to all students in a selected class
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...assignFeeForm}>
+              <form onSubmit={assignFeeForm.handleSubmit(handleAssignFeeSubmit)} className="space-y-4">
+                <FormField
+                  control={assignFeeForm.control}
+                  name="feeTypeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fee Type *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select fee type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {feeTypes.map((feeType) => (
+                            <SelectItem key={feeType.id} value={feeType.id}>
+                              {feeType.name} - ₦{Number(feeType.amount).toLocaleString()}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={assignFeeForm.control}
+                  name="classId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Class *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select class" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {classes.map((classItem) => (
+                            <SelectItem key={classItem.id} value={classItem.id}>
+                              {classItem.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={assignFeeForm.control}
+                  name="term"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Term *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select term" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="First Term">First Term</SelectItem>
+                          <SelectItem value="Second Term">Second Term</SelectItem>
+                          <SelectItem value="Third Term">Third Term</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={assignFeeForm.control}
+                  name="session"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Session *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select session" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="2023/2024">2023/2024</SelectItem>
+                          <SelectItem value="2024/2025">2024/2025</SelectItem>
+                          <SelectItem value="2025/2026">2025/2026</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={assignFeeForm.control}
+                  name="dueDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Due Date *</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={assignFeeForm.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notes (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Additional notes about this fee assignment"
+                          rows={2}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsAssignFeeDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={assignFeeMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {assignFeeMutation.isPending ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4 mr-2" />
+                    )}
+                    {assignFeeMutation.isPending ? "Assigning..." : "Assign Fee"}
                   </Button>
                 </div>
               </form>

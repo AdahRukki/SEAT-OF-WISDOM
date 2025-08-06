@@ -86,6 +86,7 @@ export interface IStorage {
   deleteFeeType(id: string): Promise<void>;
   
   assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee>;
+  assignFeeToClass(classId: string, feeTypeId: string, term: string, session: string, dueDate: string, notes?: string): Promise<StudentFee[]>;
   getStudentFees(studentId: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]>;
   getAllStudentFees(schoolId?: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]>;
   updateStudentFeeStatus(id: string, status: string): Promise<StudentFee>;
@@ -622,6 +623,43 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return studentFee;
+  }
+
+  async assignFeeToClass(classId: string, feeTypeId: string, term: string, session: string, dueDate: string, notes?: string): Promise<StudentFee[]> {
+    // Get all students in the class
+    const classStudents = await this.getStudentsByClass(classId);
+    
+    // Get the fee type to determine amount
+    const feeType = await this.getFeeTypeById(feeTypeId);
+    if (!feeType) {
+      throw new Error('Fee type not found');
+    }
+
+    const studentFeePromises = classStudents.map(async (student) => {
+      // Check if student already has this fee for this term and session
+      const existingFees = await this.getStudentFees(student.id, term, session);
+      const hasExistingFee = existingFees.some(fee => fee.feeTypeId === feeTypeId);
+      
+      if (!hasExistingFee) {
+        return await db
+          .insert(studentFees)
+          .values({
+            studentId: student.id,
+            feeTypeId,
+            term,
+            session,
+            amount: feeType.amount,
+            status: 'pending',
+            dueDate: new Date(dueDate),
+            notes
+          })
+          .returning();
+      }
+      return null;
+    });
+
+    const results = await Promise.all(studentFeePromises);
+    return results.filter(result => result !== null).flat();
   }
 
   async getStudentFees(studentId: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]> {

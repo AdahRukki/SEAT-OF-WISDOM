@@ -12,7 +12,8 @@ import {
   insertStudentSchema,
   changePasswordSchema,
   insertFeeTypeSchema,
-  recordPaymentSchema
+  recordPaymentSchema,
+  assignFeeSchema
 } from "@shared/schema";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
@@ -989,6 +990,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: error.issues[0].message });
       }
       res.status(500).json({ error: "Failed to record payment" });
+    }
+  });
+
+  // Assign fee to class
+  app.post('/api/admin/assign-fee', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const assignmentData = assignFeeSchema.parse(req.body);
+      
+      const assignedFees = await storage.assignFeeToClass(
+        assignmentData.classId,
+        assignmentData.feeTypeId,
+        assignmentData.term,
+        assignmentData.session,
+        assignmentData.dueDate,
+        assignmentData.notes
+      );
+
+      res.json({ 
+        message: `Successfully assigned fee to ${assignedFees.length} students`,
+        assignedFees 
+      });
+    } catch (error) {
+      console.error("Assign fee error:", error);
+      if (error.issues) {
+        return res.status(400).json({ error: error.issues[0].message });
+      }
+      res.status(500).json({ error: "Failed to assign fee to class" });
     }
   });
 

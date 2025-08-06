@@ -316,6 +316,15 @@ export const recordPaymentSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const assignFeeSchema = z.object({
+  feeTypeId: z.string().min(1, "Fee type is required"),
+  classId: z.string().min(1, "Class is required"),
+  term: z.string().min(1, "Term is required"),
+  session: z.string().min(1, "Session is required"),
+  dueDate: z.string().min(1, "Due date is required"),
+  notes: z.string().optional(),
+});
+
 // Types
 export type School = typeof schools.$inferSelect;
 export type InsertSchool = z.infer<typeof insertSchoolSchema>;
@@ -351,6 +360,8 @@ export type InsertStudentFee = z.infer<typeof insertStudentFeeSchema>;
 export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type RecordPayment = z.infer<typeof recordPaymentSchema>;
+export type RecordPaymentForm = z.infer<typeof recordPaymentSchema>;
+export type AssignFeeForm = z.infer<typeof assignFeeSchema>;
 
 // Student with relations
 export type StudentWithDetails = Student & {
