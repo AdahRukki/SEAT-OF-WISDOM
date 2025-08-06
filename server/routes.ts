@@ -994,10 +994,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/payments', authenticate, requireAdmin, async (req, res) => {
     try {
+      const user = (req as any).user;
+      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      const term = req.query.term as string;
+      const session = req.query.session as string;
       const studentId = req.query.studentId as string;
       const studentFeeId = req.query.studentFeeId as string;
       
-      const payments = await storage.getPayments(studentId, studentFeeId);
+      const payments = await storage.getPayments(studentId, studentFeeId, schoolId, term, session);
       res.json(payments);
     } catch (error) {
       console.error("Get payments error:", error);

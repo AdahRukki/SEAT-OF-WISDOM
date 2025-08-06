@@ -34,7 +34,7 @@ import {
   type PaymentWithDetails
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -91,7 +91,7 @@ export interface IStorage {
   updateStudentFeeStatus(id: string, status: string): Promise<StudentFee>;
   
   recordPayment(paymentData: InsertPayment): Promise<Payment>;
-  getPayments(studentId?: string, studentFeeId?: string): Promise<PaymentWithDetails[]>;
+  getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string): Promise<PaymentWithDetails[]>;
   getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
   
   getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
@@ -722,10 +722,13 @@ export class DatabaseStorage implements IStorage {
     return paymentsResult.reduce((total, payment) => total + Number(payment.amount), 0);
   }
 
-  async getPayments(studentId?: string, studentFeeId?: string): Promise<PaymentWithDetails[]> {
+  async getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string): Promise<PaymentWithDetails[]> {
     const conditions = [];
     if (studentId) conditions.push(eq(payments.studentId, studentId));
     if (studentFeeId) conditions.push(eq(payments.studentFeeId, studentFeeId));
+    if (term) conditions.push(eq(studentFees.term, term));
+    if (session) conditions.push(eq(studentFees.session, session));
+    if (schoolId) conditions.push(eq(feeTypes.schoolId, schoolId));
 
     let query = db
       .select()
@@ -733,7 +736,8 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(studentFees, eq(payments.studentFeeId, studentFees.id))
       .leftJoin(feeTypes, eq(studentFees.feeTypeId, feeTypes.id))
       .leftJoin(students, eq(payments.studentId, students.id))
-      .leftJoin(users, eq(students.userId, users.id));
+      .leftJoin(users, eq(students.userId, users.id))
+      .orderBy(desc(payments.paymentDate));
 
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
@@ -743,14 +747,14 @@ export class DatabaseStorage implements IStorage {
 
     return results.map(({ payments: payment, student_fees: studentFee, fee_types: feeType, students: student, users: user }) => ({
       ...payment,
-      studentFee: {
-        ...studentFee!,
-        feeType: feeType!
-      },
-      student: {
-        ...student!,
-        user: user!
-      }
+      studentFee: studentFee ? {
+        ...studentFee,
+        feeType: feeType
+      } : null,
+      student: student ? {
+        ...student,
+        user: user
+      } : null
     }));
   }
 

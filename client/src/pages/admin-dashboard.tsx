@@ -285,6 +285,17 @@ export default function AdminDashboard() {
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
 
+  const { data: payments = [] } = useQuery<Payment[]>({ 
+    queryKey: ['/api/admin/payments', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
+    queryFn: () => {
+      let url = '/api/admin/payments?';
+      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
+      url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
+      return apiRequest(url);
+    },
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+  });
+
   // Mutations
   const createClassMutation = useMutation({
     mutationFn: async (classData: any) => {
@@ -2152,11 +2163,52 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      <tr>
-                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
-                          No student fees assigned yet. Create fee types first, then assign them to students.
-                        </td>
-                      </tr>
+                      {studentFees.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
+                            No student fees assigned yet. Create fee types first, then assign them to students.
+                          </td>
+                        </tr>
+                      ) : (
+                        studentFees.map((studentFee) => {
+                          const totalPaid = studentFee.payments?.reduce((sum, payment) => sum + parseFloat(payment.amount), 0) || 0;
+                          const balance = parseFloat(studentFee.amount) - totalPaid;
+                          const status = balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
+                          
+                          return (
+                            <tr key={studentFee.id}>
+                              <td className="px-4 py-3 font-medium">
+                                {studentFee.student?.user?.firstName} {studentFee.student?.user?.lastName}
+                              </td>
+                              <td className="px-4 py-3">{studentFee.feeType?.name}</td>
+                              <td className="px-4 py-3">₦{parseFloat(studentFee.amount).toLocaleString()}</td>
+                              <td className="px-4 py-3">₦{totalPaid.toLocaleString()}</td>
+                              <td className="px-4 py-3">₦{balance.toLocaleString()}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-1 text-xs rounded-full ${
+                                  status === 'Paid' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : status === 'Partial'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex space-x-2">
+                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                    <Receipt className="h-4 w-4" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2199,11 +2251,39 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      <tr>
-                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
-                          No payments recorded yet. Use "Record Payment" to add payment entries.
-                        </td>
-                      </tr>
+                      {payments.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
+                            No payments recorded yet. Use "Record Payment" to add payment entries.
+                          </td>
+                        </tr>
+                      ) : (
+                        payments.map((payment) => (
+                          <tr key={payment.id}>
+                            <td className="px-4 py-3">
+                              {new Date(payment.paymentDate).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-3 font-medium">
+                              {payment.student?.user?.firstName} {payment.student?.user?.lastName}
+                            </td>
+                            <td className="px-4 py-3">
+                              {payment.studentFee?.feeType?.name}
+                            </td>
+                            <td className="px-4 py-3">
+                              ₦{parseFloat(payment.amount).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 capitalize">
+                              {payment.paymentMethod}
+                            </td>
+                            <td className="px-4 py-3">
+                              {payment.reference || 'N/A'}
+                            </td>
+                            <td className="px-4 py-3">
+                              {payment.recordedBy?.firstName} {payment.recordedBy?.lastName}
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -3013,7 +3093,10 @@ export default function AdminDashboard() {
                         <Textarea 
                           placeholder="Brief description of this fee type"
                           rows={3}
-                          {...field} 
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          name={field.name}
                         />
                       </FormControl>
                       <FormMessage />
