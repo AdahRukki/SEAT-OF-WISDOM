@@ -3202,7 +3202,7 @@ export default function AdminDashboard() {
 
         {/* Record Payment Dialog */}
         <Dialog open={isRecordPaymentDialogOpen} onOpenChange={setIsRecordPaymentDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Record Student Payment</DialogTitle>
               <DialogDescription>
@@ -3210,7 +3210,7 @@ export default function AdminDashboard() {
               </DialogDescription>
             </DialogHeader>
             <Form {...paymentForm}>
-              <form onSubmit={paymentForm.handleSubmit(handlePaymentSubmit)} className="space-y-4">
+              <form onSubmit={paymentForm.handleSubmit(handlePaymentSubmit)} className="space-y-3">
                 <FormField
                   control={paymentForm.control}
                   name="studentFeeId"
@@ -3258,44 +3258,6 @@ export default function AdminDashboard() {
                 
                 <FormField
                   control={paymentForm.control}
-                  name="paymentMethod"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Payment Method *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select payment method" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="cash">Cash</SelectItem>
-                          <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                          <SelectItem value="cheque">Cheque</SelectItem>
-                          <SelectItem value="card">Card Payment</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={paymentForm.control}
-                  name="reference"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Reference (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Receipt number or transaction reference" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={paymentForm.control}
                   name="paymentDate"
                   render={({ field }) => (
                     <FormItem>
@@ -3316,7 +3278,7 @@ export default function AdminDashboard() {
                       <FormLabel>Notes (Optional)</FormLabel>
                       <FormControl>
                         <Textarea 
-                          placeholder="Additional notes about this payment"
+                          placeholder="Additional notes"
                           rows={2}
                           {...field}
                         />
@@ -3326,25 +3288,27 @@ export default function AdminDashboard() {
                   )}
                 />
                 
-                <div className="flex justify-end space-x-2 pt-4">
+                <div className="flex justify-end space-x-2 pt-3">
                   <Button
                     type="button"
                     variant="outline"
+                    size="sm"
                     onClick={() => setIsRecordPaymentDialogOpen(false)}
                   >
-                    Cancel
+                    Close
                   </Button>
                   <Button 
                     type="submit" 
+                    size="sm"
                     disabled={recordPaymentMutation.isPending}
                     className="bg-green-600 hover:bg-green-700"
                   >
                     {recordPaymentMutation.isPending ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
                     ) : (
-                      <Receipt className="h-4 w-4 mr-2" />
+                      <Receipt className="h-4 w-4 mr-1" />
                     )}
-                    {recordPaymentMutation.isPending ? "Recording..." : "Record Payment"}
+                    {recordPaymentMutation.isPending ? "Recording..." : "Record"}
                   </Button>
                 </div>
               </form>
@@ -3356,9 +3320,9 @@ export default function AdminDashboard() {
         <Dialog open={isAssignFeeDialogOpen} onOpenChange={setIsAssignFeeDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Assign Fee to Class</DialogTitle>
+              <DialogTitle>Assign Fee to Class Term</DialogTitle>
               <DialogDescription>
-                Assign a specific fee type to all students in a selected class
+                Assign a specific fee type to all students in a selected class for a specific term
               </DialogDescription>
             </DialogHeader>
             <Form {...assignFeeForm}>
@@ -3403,7 +3367,7 @@ export default function AdminDashboard() {
                         <SelectContent>
                           {classes.map((classItem) => (
                             <SelectItem key={classItem.id} value={classItem.id}>
-                              {classItem.name}
+                              {classItem.name} ({selectedFinanceTerm})
                             </SelectItem>
                           ))}
                         </SelectContent>

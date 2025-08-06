@@ -976,7 +976,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         studentId: studentFee.studentId,
         studentFeeId: paymentData.studentFeeId,
         amount: paymentData.amount.toString(),
-        paymentMethod: paymentData.paymentMethod,
+        paymentMethod: paymentData.paymentMethod || "cash",
         reference: paymentData.reference,
         paymentDate: new Date(paymentData.paymentDate),
         recordedBy: user.id,

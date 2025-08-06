@@ -310,7 +310,7 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true,
 export const recordPaymentSchema = z.object({
   studentFeeId: z.string(),
   amount: z.coerce.number().positive("Amount must be positive"),
-  paymentMethod: z.string().min(1, "Payment method is required"),
+  paymentMethod: z.string().optional().default("cash"),
   reference: z.string().optional(),
   paymentDate: z.string(),
   notes: z.string().optional(),
