@@ -120,6 +120,7 @@ export const feeTypes = pgTable("fee_types", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
+  category: varchar("category", { length: 50 }).notNull(),
   schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   isActive: boolean("is_active").default(true),
@@ -293,7 +294,16 @@ export const changePasswordSchema = z.object({
 });
 
 // Financial schemas
-export const insertFeeTypeSchema = createInsertSchema(feeTypes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFeeTypeSchema = createInsertSchema(feeTypes).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  amount: z.string().transform((val) => {
+    // Remove commas and convert to number
+    const numericValue = parseFloat(val.replace(/,/g, ''));
+    if (isNaN(numericValue)) {
+      throw new Error('Invalid amount');
+    }
+    return numericValue.toString();
+  }),
+});
 export const insertStudentFeeSchema = createInsertSchema(studentFees).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 
