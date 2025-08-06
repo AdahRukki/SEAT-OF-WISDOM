@@ -151,6 +151,16 @@ export default function AdminDashboard() {
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("First Term");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("2024/2025");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
+  
+  // Bulk payment states
+  const [selectedPaymentClass, setSelectedPaymentClass] = useState("");
+  const [bulkPaymentDate, setBulkPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [bulkPayments, setBulkPayments] = useState<Array<{
+    studentId: string;
+    feeTypeId: string;
+    amount: number;
+    notes: string;
+  }>>([]);
 
   // Fee type form
   const feeTypeForm = useForm<FeeTypeForm>({
@@ -177,15 +187,11 @@ export default function AdminDashboard() {
     },
   });
 
-  const assignFeeForm = useForm<AssignFeeForm>({
-    resolver: zodResolver(assignFeeSchema),
+  const assignFeeForm = useForm<Pick<AssignFeeForm, 'feeTypeId' | 'classId'>>({
+    resolver: zodResolver(assignFeeSchema.pick({ feeTypeId: true, classId: true })),
     defaultValues: {
       feeTypeId: "",
       classId: "",
-      term: selectedFinanceTerm,
-      session: selectedFinanceSession,
-      dueDate: "",
-      notes: "",
     },
   });
 
@@ -620,8 +626,118 @@ export default function AdminDashboard() {
     recordPaymentMutation.mutate(data);
   };
 
-  const handleAssignFeeSubmit = (data: AssignFeeForm) => {
-    assignFeeMutation.mutate(data);
+  // Helper functions for bulk payment
+  const getStudentsForPaymentClass = () => {
+    if (!selectedPaymentClass) return [];
+    return studentsData.filter(student => student.classId === selectedPaymentClass);
+  };
+
+  const updateBulkPayment = (index: number, field: string, value: any) => {
+    setBulkPayments(prev => {
+      const updated = [...prev];
+      if (!updated[index]) {
+        updated[index] = { studentId: "", feeTypeId: "", amount: 0, notes: "" };
+      }
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const getStudentFeeAmount = (studentId: string, feeTypeId: string) => {
+    if (!feeTypeId) return "---";
+    const studentFee = studentFees.find(sf => 
+      sf.studentId === studentId && sf.feeTypeId === feeTypeId
+    );
+    const feeType = feeTypes.find(ft => ft.id === feeTypeId);
+    return studentFee ? `₦${parseFloat(studentFee.amount).toLocaleString()}` : 
+           feeType ? `₦${parseFloat(feeType.amount).toLocaleString()}` : "---";
+  };
+
+  const handleBulkPaymentSubmit = async () => {
+    const validPayments = bulkPayments.filter(payment => 
+      payment.amount > 0 && payment.feeTypeId
+    );
+
+    if (validPayments.length === 0) {
+      toast({
+        title: "No payments to record",
+        description: "Please enter payment amounts for at least one student.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const classStudents = getStudentsForPaymentClass();
+      
+      for (let i = 0; i < validPayments.length; i++) {
+        const payment = validPayments[i];
+        const student = classStudents[i];
+        
+        if (student && payment.amount > 0) {
+          // Find or create student fee
+          let studentFee = studentFees.find(sf => 
+            sf.studentId === student.id && sf.feeTypeId === payment.feeTypeId
+          );
+
+          if (!studentFee) {
+            // Create student fee assignment first
+            const assignData = {
+              feeTypeId: payment.feeTypeId,
+              classId: selectedPaymentClass,
+              term: selectedFinanceTerm,
+              session: selectedFinanceSession,
+            };
+            await assignFeeMutation.mutateAsync(assignData);
+            
+            // Refetch to get the new student fee
+            await queryClient.invalidateQueries({ 
+              queryKey: ['/api/admin/student-fees'] 
+            });
+            studentFee = studentFees.find(sf => 
+              sf.studentId === student.id && sf.feeTypeId === payment.feeTypeId
+            );
+          }
+
+          if (studentFee) {
+            const paymentData = {
+              studentFeeId: studentFee.id,
+              amount: payment.amount,
+              paymentDate: bulkPaymentDate,
+              notes: payment.notes || "",
+            };
+            await recordPaymentMutation.mutateAsync(paymentData);
+          }
+        }
+      }
+
+      toast({
+        title: "Payments recorded successfully",
+        description: `Recorded ${validPayments.length} payment(s) for the class.`,
+      });
+      
+      setIsRecordPaymentDialogOpen(false);
+      setSelectedPaymentClass("");
+      setBulkPayments([]);
+      
+    } catch (error) {
+      toast({
+        title: "Error recording payments",
+        description: "Some payments may not have been recorded. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAssignFeeSubmit = (data: Pick<AssignFeeForm, 'feeTypeId' | 'classId'>) => {
+    const fullData: AssignFeeForm = {
+      ...data,
+      term: selectedFinanceTerm,
+      session: selectedFinanceSession,
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+      notes: `Assigned for ${selectedFinanceTerm} ${selectedFinanceSession}`,
+    };
+    assignFeeMutation.mutate(fullData);
   };
 
   // Logo upload functions
@@ -3200,119 +3316,142 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* Record Payment Dialog */}
+        {/* Record Payment Dialog - Spreadsheet Style */}
         <Dialog open={isRecordPaymentDialogOpen} onOpenChange={setIsRecordPaymentDialogOpen}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-6xl">
             <DialogHeader>
-              <DialogTitle>Record Student Payment</DialogTitle>
+              <DialogTitle>Record Class Payments</DialogTitle>
               <DialogDescription>
-                Record a new payment from a student for their fees
+                Select a class and record payments for multiple students in spreadsheet format
               </DialogDescription>
             </DialogHeader>
-            <Form {...paymentForm}>
-              <form onSubmit={paymentForm.handleSubmit(handlePaymentSubmit)} className="space-y-3">
-                <FormField
-                  control={paymentForm.control}
-                  name="studentFeeId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Student & Fee *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select student and fee" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {studentFees.map((studentFee) => (
-                            <SelectItem key={studentFee.id} value={studentFee.id}>
-                              {studentFee.student?.user?.firstName} {studentFee.student?.user?.lastName} - {studentFee.feeType?.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={paymentForm.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Amount (₦) *</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          step="0.01"
-                          placeholder="0.00" 
-                          {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={paymentForm.control}
-                  name="paymentDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Payment Date *</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={paymentForm.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes (Optional)</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Additional notes"
-                          rows={2}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <div className="flex justify-end space-x-2 pt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsRecordPaymentDialogOpen(false)}
+            
+            <div className="space-y-4">
+              {/* Class Selection */}
+              <div className="flex items-center space-x-4">
+                <div className="flex-1">
+                  <label className="text-sm font-medium">Select Class *</label>
+                  <Select 
+                    value={selectedPaymentClass} 
+                    onValueChange={setSelectedPaymentClass}
                   >
-                    Close
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    size="sm"
-                    disabled={recordPaymentMutation.isPending}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    {recordPaymentMutation.isPending ? (
-                      <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <Receipt className="h-4 w-4 mr-1" />
-                    )}
-                    {recordPaymentMutation.isPending ? "Recording..." : "Record"}
-                  </Button>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.map((cls) => (
+                        <SelectItem key={cls.id} value={cls.id}>
+                          {cls.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </form>
-            </Form>
+                
+                <div className="flex-1">
+                  <label className="text-sm font-medium">Payment Date *</label>
+                  <Input 
+                    type="date" 
+                    value={bulkPaymentDate}
+                    onChange={(e) => setBulkPaymentDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Spreadsheet Table */}
+              {selectedPaymentClass && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-96 overflow-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Student ID</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Student Name</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Fee Type</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Amount Due (₦)</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Payment Amount (₦)</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getStudentsForPaymentClass().map((student, index) => (
+                          <tr key={student.id} className="border-t">
+                            <td className="px-4 py-2 text-sm">{student.studentId}</td>
+                            <td className="px-4 py-2 text-sm font-medium">
+                              {student.user?.firstName} {student.user?.lastName}
+                            </td>
+                            <td className="px-4 py-2 text-sm">
+                              <Select
+                                value={bulkPayments[index]?.feeTypeId || ""}
+                                onValueChange={(value) => updateBulkPayment(index, 'feeTypeId', value)}
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue placeholder="Select fee" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {feeTypes.map((feeType) => (
+                                    <SelectItem key={feeType.id} value={feeType.id}>
+                                      {feeType.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-2 text-sm">
+                              {getStudentFeeAmount(student.id, bulkPayments[index]?.feeTypeId)}
+                            </td>
+                            <td className="px-4 py-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                className="h-8"
+                                value={bulkPayments[index]?.amount || ""}
+                                onChange={(e) => updateBulkPayment(index, 'amount', parseFloat(e.target.value) || 0)}
+                              />
+                            </td>
+                            <td className="px-4 py-2">
+                              <Input
+                                placeholder="Optional notes"
+                                className="h-8"
+                                value={bulkPayments[index]?.notes || ""}
+                                onChange={(e) => updateBulkPayment(index, 'notes', e.target.value)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsRecordPaymentDialogOpen(false);
+                    setSelectedPaymentClass("");
+                    setBulkPayments([]);
+                  }}
+                >
+                  Close
+                </Button>
+                <Button 
+                  disabled={!selectedPaymentClass || bulkPayments.filter(p => p.amount > 0).length === 0 || recordPaymentMutation.isPending}
+                  onClick={handleBulkPaymentSubmit}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {recordPaymentMutation.isPending ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Receipt className="h-4 w-4 mr-2" />
+                  )}
+                  {recordPaymentMutation.isPending ? "Recording..." : "Record Payments"}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -3320,9 +3459,9 @@ export default function AdminDashboard() {
         <Dialog open={isAssignFeeDialogOpen} onOpenChange={setIsAssignFeeDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Assign Fee to Class Term</DialogTitle>
+              <DialogTitle>Assign Fee to Class</DialogTitle>
               <DialogDescription>
-                Assign a specific fee type to all students in a selected class for a specific term
+                Assign a specific fee type to all students in a selected class
               </DialogDescription>
             </DialogHeader>
             <Form {...assignFeeForm}>
@@ -3367,7 +3506,7 @@ export default function AdminDashboard() {
                         <SelectContent>
                           {classes.map((classItem) => (
                             <SelectItem key={classItem.id} value={classItem.id}>
-                              {classItem.name} ({selectedFinanceTerm})
+                              {classItem.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -3377,83 +3516,16 @@ export default function AdminDashboard() {
                   )}
                 />
                 
-                <FormField
-                  control={assignFeeForm.control}
-                  name="term"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Term *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select term" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="First Term">First Term</SelectItem>
-                          <SelectItem value="Second Term">Second Term</SelectItem>
-                          <SelectItem value="Third Term">Third Term</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={assignFeeForm.control}
-                  name="session"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Session *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select session" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="2023/2024">2023/2024</SelectItem>
-                          <SelectItem value="2024/2025">2024/2025</SelectItem>
-                          <SelectItem value="2025/2026">2025/2026</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={assignFeeForm.control}
-                  name="dueDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Due Date *</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={assignFeeForm.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes (Optional)</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Additional notes about this fee assignment"
-                          rows={2}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="bg-gray-50 p-3 rounded-lg text-sm">
+                  <p className="font-medium">Term & Session Settings</p>
+                  <p className="text-gray-600 mt-1">
+                    Current Term: <span className="font-medium">{selectedFinanceTerm}</span><br/>
+                    Current Session: <span className="font-medium">{selectedFinanceSession}</span>
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Term and session are set globally by the school admin
+                  </p>
+                </div>
                 
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button
