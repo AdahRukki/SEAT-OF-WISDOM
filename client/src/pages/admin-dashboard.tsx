@@ -687,6 +687,8 @@ export default function AdminDashboard() {
               classId: selectedPaymentClass,
               term: selectedFinanceTerm,
               session: selectedFinanceSession,
+              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              notes: `Assigned for ${selectedFinanceTerm} ${selectedFinanceSession}`,
             };
             await assignFeeMutation.mutateAsync(assignData);
             
@@ -704,6 +706,7 @@ export default function AdminDashboard() {
               studentFeeId: studentFee.id,
               amount: payment.amount,
               paymentDate: bulkPaymentDate,
+              paymentMethod: "cash",
               notes: payment.notes || "",
             };
             await recordPaymentMutation.mutateAsync(paymentData);
@@ -3439,11 +3442,11 @@ export default function AdminDashboard() {
                   Close
                 </Button>
                 <Button 
-                  disabled={!selectedPaymentClass || bulkPayments.filter(p => p.amount > 0).length === 0 || recordPaymentMutation.isPending}
+                  disabled={!selectedPaymentClass || bulkPayments.filter(p => p.amount > 0).length === 0}
                   onClick={handleBulkPaymentSubmit}
                   className="bg-green-600 hover:bg-green-700"
                 >
-                  {recordPaymentMutation.isPending ? (
+                  {false ? (
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Receipt className="h-4 w-4 mr-2" />
