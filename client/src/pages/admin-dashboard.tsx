@@ -629,7 +629,7 @@ export default function AdminDashboard() {
   // Helper functions for bulk payment
   const getStudentsForPaymentClass = () => {
     if (!selectedPaymentClass) return [];
-    return studentsData.filter(student => student.classId === selectedPaymentClass);
+    return allStudents.filter(student => student.classId === selectedPaymentClass);
   };
 
   const updateBulkPayment = (index: number, field: string, value: any) => {
