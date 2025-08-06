@@ -222,6 +222,41 @@ export const assessmentsRelations = relations(assessments, ({ one }) => ({
   }),
 }));
 
+export const feeTypesRelations = relations(feeTypes, ({ one, many }) => ({
+  school: one(schools, {
+    fields: [feeTypes.schoolId],
+    references: [schools.id],
+  }),
+  studentFees: many(studentFees),
+}));
+
+export const studentFeesRelations = relations(studentFees, ({ one, many }) => ({
+  student: one(students, {
+    fields: [studentFees.studentId],
+    references: [students.id],
+  }),
+  feeType: one(feeTypes, {
+    fields: [studentFees.feeTypeId],
+    references: [feeTypes.id],
+  }),
+  payments: many(payments),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  student: one(students, {
+    fields: [payments.studentId],
+    references: [students.id],
+  }),
+  studentFee: one(studentFees, {
+    fields: [payments.studentFeeId],
+    references: [studentFees.id],
+  }),
+  recordedBy: one(users, {
+    fields: [payments.recordedBy],
+    references: [users.id],
+  }),
+}));
+
 // Zod schemas
 export const insertSchoolSchema = createInsertSchema(schools).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertClassSchema = createInsertSchema(classes).omit({ id: true, createdAt: true, updatedAt: true });
@@ -257,6 +292,20 @@ export const changePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// Financial schemas
+export const insertFeeTypeSchema = createInsertSchema(feeTypes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertStudentFeeSchema = createInsertSchema(studentFees).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+
+export const recordPaymentSchema = z.object({
+  studentFeeId: z.string(),
+  amount: z.coerce.number().positive("Amount must be positive"),
+  paymentMethod: z.string().min(1, "Payment method is required"),
+  reference: z.string().optional(),
+  paymentDate: z.string(),
+  notes: z.string().optional(),
+});
+
 // Types
 export type School = typeof schools.$inferSelect;
 export type InsertSchool = z.infer<typeof insertSchoolSchema>;
@@ -282,6 +331,17 @@ export type InsertReportCardTemplate = z.infer<typeof insertReportCardTemplateSc
 export type LoginData = z.infer<typeof loginSchema>;
 export type AddScore = z.infer<typeof addScoreSchema>;
 
+// Financial types
+export type FeeType = typeof feeTypes.$inferSelect;
+export type InsertFeeType = z.infer<typeof insertFeeTypeSchema>;
+
+export type StudentFee = typeof studentFees.$inferSelect;
+export type InsertStudentFee = z.infer<typeof insertStudentFeeSchema>;
+
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type RecordPayment = z.infer<typeof recordPaymentSchema>;
+
 // Student with relations
 export type StudentWithDetails = Student & {
   user: User;
@@ -289,4 +349,24 @@ export type StudentWithDetails = Student & {
   assessments: (Assessment & {
     subject: Subject;
   })[];
+};
+
+// Student fee with relations
+export type StudentFeeWithDetails = StudentFee & {
+  feeType: FeeType;
+  student: Student & {
+    user: User;
+  };
+  payments: Payment[];
+};
+
+// Payment with relations
+export type PaymentWithDetails = Payment & {
+  studentFee: StudentFee & {
+    feeType: FeeType;
+  };
+  student: Student & {
+    user: User;
+  };
+  recordedBy?: User;
 };

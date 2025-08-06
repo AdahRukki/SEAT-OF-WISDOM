@@ -7,6 +7,9 @@ import {
   classSubjects,
   assessments,
   reportCardTemplates,
+  feeTypes,
+  studentFees,
+  payments,
   type School,
   type User,
   type Student,
@@ -14,16 +17,24 @@ import {
   type Subject,
   type Assessment,
   type ReportCardTemplate,
+  type FeeType,
+  type StudentFee,
+  type Payment,
   type InsertUser,
   type InsertStudent,
   type InsertClass,
   type InsertSubject,
   type InsertAssessment,
   type InsertReportCardTemplate,
-  type StudentWithDetails
+  type InsertFeeType,
+  type InsertStudentFee,
+  type InsertPayment,
+  type StudentWithDetails,
+  type StudentFeeWithDetails,
+  type PaymentWithDetails
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -66,6 +77,29 @@ export interface IStorage {
   createReportCardTemplate(templateData: InsertReportCardTemplate): Promise<ReportCardTemplate>;
   getReportCardTemplates(): Promise<ReportCardTemplate[]>;
   getDefaultReportCardTemplate(): Promise<ReportCardTemplate | undefined>;
+  
+  // Financial management
+  createFeeType(feeTypeData: InsertFeeType): Promise<FeeType>;
+  getFeeTypes(schoolId?: string): Promise<FeeType[]>;
+  getFeeTypeById(id: string): Promise<FeeType | undefined>;
+  updateFeeType(id: string, data: Partial<InsertFeeType>): Promise<FeeType>;
+  deleteFeeType(id: string): Promise<void>;
+  
+  assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee>;
+  getStudentFees(studentId: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]>;
+  getAllStudentFees(schoolId?: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]>;
+  updateStudentFeeStatus(id: string, status: string): Promise<StudentFee>;
+  
+  recordPayment(paymentData: InsertPayment): Promise<Payment>;
+  getPayments(studentId?: string, studentFeeId?: string): Promise<PaymentWithDetails[]>;
+  getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
+  
+  getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
+    totalFees: number;
+    totalPaid: number;
+    totalPending: number;
+    totalOverdue: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -532,6 +566,254 @@ export class DatabaseStorage implements IStorage {
         assessments: [] // Will be populated separately if needed
       }
     }));
+  }
+
+  // Financial management methods
+  async createFeeType(feeTypeData: InsertFeeType): Promise<FeeType> {
+    const [feeType] = await db
+      .insert(feeTypes)
+      .values(feeTypeData)
+      .returning();
+    return feeType;
+  }
+
+  async getFeeTypes(schoolId?: string): Promise<FeeType[]> {
+    if (schoolId) {
+      return await db
+        .select()
+        .from(feeTypes)
+        .where(and(eq(feeTypes.schoolId, schoolId), eq(feeTypes.isActive, true)));
+    }
+    return await db.select().from(feeTypes).where(eq(feeTypes.isActive, true));
+  }
+
+  async getFeeTypeById(id: string): Promise<FeeType | undefined> {
+    const [feeType] = await db.select().from(feeTypes).where(eq(feeTypes.id, id));
+    return feeType || undefined;
+  }
+
+  async updateFeeType(id: string, data: Partial<InsertFeeType>): Promise<FeeType> {
+    const [updated] = await db
+      .update(feeTypes)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(feeTypes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteFeeType(id: string): Promise<void> {
+    await db.update(feeTypes).set({ isActive: false }).where(eq(feeTypes.id, id));
+  }
+
+  async assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee> {
+    // Get the fee type to determine amount if not provided
+    const feeType = await this.getFeeTypeById(feeTypeId);
+    const finalAmount = amount || (feeType ? Number(feeType.amount) : 0);
+
+    const [studentFee] = await db
+      .insert(studentFees)
+      .values({
+        studentId,
+        feeTypeId,
+        term,
+        session,
+        amount: finalAmount.toString(),
+        status: 'pending'
+      })
+      .returning();
+    return studentFee;
+  }
+
+  async getStudentFees(studentId: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]> {
+    const conditions = [eq(studentFees.studentId, studentId)];
+    if (term) conditions.push(eq(studentFees.term, term));
+    if (session) conditions.push(eq(studentFees.session, session));
+
+    const results = await db
+      .select()
+      .from(studentFees)
+      .leftJoin(feeTypes, eq(studentFees.feeTypeId, feeTypes.id))
+      .leftJoin(students, eq(studentFees.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .where(and(...conditions));
+
+    // Get payments for each student fee
+    const studentFeeIds = results.map(r => r.student_fees.id);
+    const paymentsResults = studentFeeIds.length > 0 ? 
+      await db.select().from(payments).where(sql`${payments.studentFeeId} = ANY(${studentFeeIds})`) : [];
+
+    return results.map(({ student_fees: studentFee, fee_types: feeType, students: student, users: user }) => ({
+      ...studentFee,
+      feeType: feeType!,
+      student: {
+        ...student!,
+        user: user!
+      },
+      payments: paymentsResults.filter(p => p.studentFeeId === studentFee.id)
+    }));
+  }
+
+  async getAllStudentFees(schoolId?: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]> {
+    const conditions = [];
+    if (schoolId) conditions.push(eq(classes.schoolId, schoolId));
+    if (term) conditions.push(eq(studentFees.term, term));
+    if (session) conditions.push(eq(studentFees.session, session));
+
+    let query = db
+      .select()
+      .from(studentFees)
+      .leftJoin(feeTypes, eq(studentFees.feeTypeId, feeTypes.id))
+      .leftJoin(students, eq(studentFees.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const results = await query;
+
+    return results.map(({ student_fees: studentFee, fee_types: feeType, students: student, users: user }) => ({
+      ...studentFee,
+      feeType: feeType!,
+      student: {
+        ...student!,
+        user: user!
+      },
+      payments: []
+    }));
+  }
+
+  async updateStudentFeeStatus(id: string, status: string): Promise<StudentFee> {
+    const [updated] = await db
+      .update(studentFees)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(studentFees.id, id))
+      .returning();
+    return updated;
+  }
+
+  async recordPayment(paymentData: InsertPayment): Promise<Payment> {
+    const [payment] = await db
+      .insert(payments)
+      .values(paymentData)
+      .returning();
+
+    // Update the student fee status if fully paid
+    const studentFee = await db.select().from(studentFees).where(eq(studentFees.id, paymentData.studentFeeId));
+    if (studentFee.length > 0) {
+      const totalPaid = await this.getTotalPaidForStudentFee(paymentData.studentFeeId);
+      const feeAmount = Number(studentFee[0].amount);
+      
+      if (totalPaid >= feeAmount) {
+        await this.updateStudentFeeStatus(paymentData.studentFeeId, 'paid');
+      }
+    }
+
+    return payment;
+  }
+
+  async getTotalPaidForStudentFee(studentFeeId: string): Promise<number> {
+    const paymentsResult = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.studentFeeId, studentFeeId));
+    
+    return paymentsResult.reduce((total, payment) => total + Number(payment.amount), 0);
+  }
+
+  async getPayments(studentId?: string, studentFeeId?: string): Promise<PaymentWithDetails[]> {
+    const conditions = [];
+    if (studentId) conditions.push(eq(payments.studentId, studentId));
+    if (studentFeeId) conditions.push(eq(payments.studentFeeId, studentFeeId));
+
+    let query = db
+      .select()
+      .from(payments)
+      .leftJoin(studentFees, eq(payments.studentFeeId, studentFees.id))
+      .leftJoin(feeTypes, eq(studentFees.feeTypeId, feeTypes.id))
+      .leftJoin(students, eq(payments.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const results = await query;
+
+    return results.map(({ payments: payment, student_fees: studentFee, fee_types: feeType, students: student, users: user }) => ({
+      ...payment,
+      studentFee: {
+        ...studentFee!,
+        feeType: feeType!
+      },
+      student: {
+        ...student!,
+        user: user!
+      }
+    }));
+  }
+
+  async getPaymentById(id: string): Promise<PaymentWithDetails | undefined> {
+    const [result] = await db
+      .select()
+      .from(payments)
+      .leftJoin(studentFees, eq(payments.studentFeeId, studentFees.id))
+      .leftJoin(feeTypes, eq(studentFees.feeTypeId, feeTypes.id))
+      .leftJoin(students, eq(payments.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .where(eq(payments.id, id));
+
+    if (!result) return undefined;
+
+    const { payments: payment, student_fees: studentFee, fee_types: feeType, students: student, users: user } = result;
+
+    return {
+      ...payment,
+      studentFee: {
+        ...studentFee!,
+        feeType: feeType!
+      },
+      student: {
+        ...student!,
+        user: user!
+      }
+    };
+  }
+
+  async getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
+    totalFees: number;
+    totalPaid: number;
+    totalPending: number;
+    totalOverdue: number;
+  }> {
+    // Get all student fees based on filters
+    const studentFeesData = await this.getAllStudentFees(schoolId, term, session);
+    
+    let totalFees = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    let totalOverdue = 0;
+
+    for (const studentFee of studentFeesData) {
+      const feeAmount = Number(studentFee.amount);
+      totalFees += feeAmount;
+
+      if (studentFee.status === 'paid') {
+        totalPaid += feeAmount;
+      } else if (studentFee.status === 'pending') {
+        totalPending += feeAmount;
+      } else if (studentFee.status === 'overdue') {
+        totalOverdue += feeAmount;
+      }
+    }
+
+    return {
+      totalFees,
+      totalPaid,
+      totalPending,
+      totalOverdue
+    };
   }
 }
 

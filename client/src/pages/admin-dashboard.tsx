@@ -60,7 +60,13 @@ import {
   EyeOff,
   Upload,
   Edit,
-  X
+  X,
+  DollarSign,
+  CreditCard,
+  TrendingUp,
+  Calendar,
+  Receipt,
+  Wallet
 } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { 
@@ -1366,10 +1372,11 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
             <TabsTrigger value="students" className="text-xs sm:text-sm">Students</TabsTrigger>
             <TabsTrigger value="scores" className="text-xs sm:text-sm">Scores</TabsTrigger>
+            <TabsTrigger value="finance" className="text-xs sm:text-sm">Finance</TabsTrigger>
             <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm">Settings</TabsTrigger>
           </TabsList>
@@ -1836,6 +1843,215 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Financial Management Tab */}
+          <TabsContent value="finance" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₦0.00</div>
+                  <p className="text-xs text-muted-foreground">This term</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Outstanding Fees</CardTitle>
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₦0.00</div>
+                  <p className="text-xs text-muted-foreground">Pending payments</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Collection Rate</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">0%</div>
+                  <p className="text-xs text-muted-foreground">Payment success rate</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Students Owing</CardTitle>
+                  <Wallet className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">0</div>
+                  <p className="text-xs text-muted-foreground">With outstanding fees</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Fee Types Management */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Fee Types Management</CardTitle>
+                  <CardDescription>
+                    Create and manage different types of fees for the school
+                  </CardDescription>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Fee Type
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Create a new fee type (tuition, registration, etc.)</p>
+                  </TooltipContent>
+                </Tooltip>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Category</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
+                          No fee types created yet. Click "Create Fee Type" to add one.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Student Fee Assignments */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Student Fee Assignments</CardTitle>
+                  <CardDescription>
+                    Assign fees to students and track payment status
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Select value="" onValueChange={() => {}}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="Term" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="first">First Term</SelectItem>
+                      <SelectItem value="second">Second Term</SelectItem>
+                      <SelectItem value="third">Third Term</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value="" onValueChange={() => {}}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Session" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2024-2025">2024-2025</SelectItem>
+                      <SelectItem value="2025-2026">2025-2026</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Assign Fees
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Assign fees to selected students</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Paid</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Balance</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
+                          No student fees assigned yet. Create fee types first, then assign them to students.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment Records */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Recent Payments</CardTitle>
+                  <CardDescription>
+                    Track and record student fee payments
+                  </CardDescription>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button>
+                      <Receipt className="h-4 w-4 mr-2" />
+                      Record Payment
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Record a new fee payment from a student</p>
+                  </TooltipContent>
+                </Tooltip>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Method</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Reference</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Recorded By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
+                          No payments recorded yet. Use "Record Payment" to add payment entries.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

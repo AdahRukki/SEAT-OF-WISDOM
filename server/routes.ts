@@ -10,7 +10,9 @@ import {
   insertSubjectSchema,
   addScoreSchema,
   insertStudentSchema,
-  changePasswordSchema
+  changePasswordSchema,
+  insertFeeTypeSchema,
+  recordPaymentSchema
 } from "@shared/schema";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
@@ -838,6 +840,206 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: error.issues[0].message });
       }
       res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+
+  // ===== FINANCIAL MANAGEMENT ROUTES =====
+
+  // Fee Types Management
+  app.post('/api/admin/fee-types', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const feeTypeData = insertFeeTypeSchema.parse(req.body);
+      
+      // Sub-admins can only create fee types for their school
+      if (user.role === 'sub-admin') {
+        feeTypeData.schoolId = user.schoolId;
+      }
+
+      const feeType = await storage.createFeeType(feeTypeData);
+      res.json(feeType);
+    } catch (error) {
+      console.error("Create fee type error:", error);
+      if (error.issues) {
+        return res.status(400).json({ error: error.issues[0].message });
+      }
+      res.status(500).json({ error: "Failed to create fee type" });
+    }
+  });
+
+  app.get('/api/admin/fee-types', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      
+      const feeTypes = await storage.getFeeTypes(schoolId);
+      res.json(feeTypes);
+    } catch (error) {
+      console.error("Get fee types error:", error);
+      res.status(500).json({ error: "Failed to fetch fee types" });
+    }
+  });
+
+  app.put('/api/admin/fee-types/:id', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+      
+      const feeType = await storage.updateFeeType(id, updateData);
+      res.json(feeType);
+    } catch (error) {
+      console.error("Update fee type error:", error);
+      res.status(500).json({ error: "Failed to update fee type" });
+    }
+  });
+
+  app.delete('/api/admin/fee-types/:id', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteFeeType(id);
+      res.json({ message: "Fee type deleted successfully" });
+    } catch (error) {
+      console.error("Delete fee type error:", error);
+      res.status(500).json({ error: "Failed to delete fee type" });
+    }
+  });
+
+  // Student Fees Management
+  app.post('/api/admin/student-fees', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { studentId, feeTypeId, term, session, amount } = req.body;
+      
+      const studentFee = await storage.assignFeesToStudent(studentId, feeTypeId, term, session, amount);
+      res.json(studentFee);
+    } catch (error) {
+      console.error("Assign student fee error:", error);
+      res.status(500).json({ error: "Failed to assign fee to student" });
+    }
+  });
+
+  app.get('/api/admin/student-fees', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      const term = req.query.term as string;
+      const session = req.query.session as string;
+      
+      const studentFees = await storage.getAllStudentFees(schoolId, term, session);
+      res.json(studentFees);
+    } catch (error) {
+      console.error("Get student fees error:", error);
+      res.status(500).json({ error: "Failed to fetch student fees" });
+    }
+  });
+
+  app.get('/api/student/fees', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      
+      // Only students can access this endpoint
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const student = await storage.getStudentByUserId(user.id);
+      if (!student) {
+        return res.status(404).json({ error: "Student record not found" });
+      }
+
+      const term = req.query.term as string;
+      const session = req.query.session as string;
+      
+      const studentFees = await storage.getStudentFees(student.id, term, session);
+      res.json(studentFees);
+    } catch (error) {
+      console.error("Get student fees error:", error);
+      res.status(500).json({ error: "Failed to fetch student fees" });
+    }
+  });
+
+  // Payments Management
+  app.post('/api/admin/payments', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const paymentData = recordPaymentSchema.parse(req.body);
+      
+      // Get the student fee to get student ID
+      const studentFeeResult = await storage.getAllStudentFees();
+      const studentFee = studentFeeResult.find(sf => sf.id === paymentData.studentFeeId);
+      
+      if (!studentFee) {
+        return res.status(404).json({ error: "Student fee not found" });
+      }
+
+      const payment = await storage.recordPayment({
+        studentId: studentFee.studentId,
+        studentFeeId: paymentData.studentFeeId,
+        amount: paymentData.amount.toString(),
+        paymentMethod: paymentData.paymentMethod,
+        reference: paymentData.reference,
+        paymentDate: new Date(paymentData.paymentDate),
+        recordedBy: user.id,
+        notes: paymentData.notes
+      });
+
+      res.json(payment);
+    } catch (error) {
+      console.error("Record payment error:", error);
+      if (error.issues) {
+        return res.status(400).json({ error: error.issues[0].message });
+      }
+      res.status(500).json({ error: "Failed to record payment" });
+    }
+  });
+
+  app.get('/api/admin/payments', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const studentId = req.query.studentId as string;
+      const studentFeeId = req.query.studentFeeId as string;
+      
+      const payments = await storage.getPayments(studentId, studentFeeId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Get payments error:", error);
+      res.status(500).json({ error: "Failed to fetch payments" });
+    }
+  });
+
+  app.get('/api/student/payments', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      
+      // Only students can access this endpoint
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const student = await storage.getStudentByUserId(user.id);
+      if (!student) {
+        return res.status(404).json({ error: "Student record not found" });
+      }
+      
+      const payments = await storage.getPayments(student.id);
+      res.json(payments);
+    } catch (error) {
+      console.error("Get student payments error:", error);
+      res.status(500).json({ error: "Failed to fetch student payments" });
+    }
+  });
+
+  // Financial Summary
+  app.get('/api/admin/financial-summary', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      const term = req.query.term as string;
+      const session = req.query.session as string;
+      
+      const summary = await storage.getFinancialSummary(schoolId, term, session);
+      res.json(summary);
+    } catch (error) {
+      console.error("Get financial summary error:", error);
+      res.status(500).json({ error: "Failed to fetch financial summary" });
     }
   });
 

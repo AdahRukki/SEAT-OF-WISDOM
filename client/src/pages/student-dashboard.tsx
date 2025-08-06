@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff } from "lucide-react";
+import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
@@ -151,12 +151,13 @@ export default function StudentDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="scores">My Scores</TabsTrigger>
-            <TabsTrigger value="report">Report Card</TabsTrigger>
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="scores" className="text-xs sm:text-sm">My Scores</TabsTrigger>
+            <TabsTrigger value="finance" className="text-xs sm:text-sm">Fees</TabsTrigger>
+            <TabsTrigger value="report" className="text-xs sm:text-sm">Report Card</TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs sm:text-sm">Profile</TabsTrigger>
+            <TabsTrigger value="security" className="text-xs sm:text-sm">Security</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -326,6 +327,166 @@ export default function StudentDashboard() {
                 </Card>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="finance" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₦0.00</div>
+                  <p className="text-xs text-muted-foreground">This term</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Amount Paid</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₦0.00</div>
+                  <p className="text-xs text-muted-foreground">Total payments</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
+                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">₦0.00</div>
+                  <p className="text-xs text-muted-foreground">Balance due</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Current Term Fees */}
+            <Card>
+              <CardHeader>
+                <CardTitle>My Fees - {selectedTerm} {selectedSession}</CardTitle>
+                <CardDescription>
+                  View your assigned fees and payment status for the current term
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="First Term">First Term</SelectItem>
+                        <SelectItem value="Second Term">Second Term</SelectItem>
+                        <SelectItem value="Third Term">Third Term</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={selectedSession} onValueChange={setSelectedSession}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2024/2025">2024/2025</SelectItem>
+                        <SelectItem value="2023/2024">2023/2024</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Paid</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Balance</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        <tr>
+                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
+                            No fees assigned for the selected term and session.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment History */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Payment History</CardTitle>
+                  <CardDescription>
+                    View all your fee payments and receipts
+                  </CardDescription>
+                </div>
+                <Button variant="outline">
+                  <Receipt className="h-4 w-4 mr-2" />
+                  Print History
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Method</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Reference</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Receipt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={6}>
+                          No payment history available yet.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment Instructions */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Information</CardTitle>
+                <CardDescription>
+                  How to make fee payments
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Payment Methods Accepted</h4>
+                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                    <li>• Cash payments at the school office</li>
+                    <li>• Bank transfers to school account</li>
+                    <li>• Online payment portal (coming soon)</li>
+                  </ul>
+                </div>
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-2">Important Notes</h4>
+                  <ul className="text-sm text-yellow-800 dark:text-yellow-200 space-y-1">
+                    <li>• Always obtain a receipt for your payments</li>
+                    <li>• Keep payment receipts for your records</li>
+                    <li>• Contact the school office for payment assistance</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="report" className="space-y-6">
