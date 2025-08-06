@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -18,6 +20,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { 
+  Form, 
+  FormControl, 
+  FormField, 
+  FormItem, 
+  FormLabel, 
+  FormMessage 
+} from "@/components/ui/form";
 import { 
   Dialog, 
   DialogContent, 
@@ -73,8 +83,15 @@ import type {
   Class, 
   Subject, 
   StudentWithDetails,
+  FeeType,
+  StudentFee,
+  Payment,
   School as SchoolType 
 } from "@shared/schema";
+import { insertFeeTypeSchema } from "@shared/schema";
+import type { z } from "zod";
+
+type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -120,6 +137,24 @@ export default function AdminDashboard() {
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectDescription, setNewSubjectDescription] = useState("");
+
+  // Fee type management states
+  const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
+  const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("First Term");
+  const [selectedFinanceSession, setSelectedFinanceSession] = useState("2024/2025");
+  const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
+
+  // Fee type form
+  const feeTypeForm = useForm<FeeTypeForm>({
+    resolver: zodResolver(insertFeeTypeSchema),
+    defaultValues: {
+      name: "",
+      amount: "",
+      category: "",
+      description: "",
+      isActive: true,
+    },
+  });
 
   // Enable Firebase real-time sync for the selected school
   useFirebaseSync(selectedSchoolId);
@@ -214,6 +249,40 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'],
     queryFn: () => apiRequest(`/api/admin/classes/${selectedClassForDetails?.id}/students`),
     enabled: !!selectedClassForDetails?.id
+  });
+
+  // Financial data queries
+  const { data: feeTypes = [] } = useQuery<FeeType[]>({ 
+    queryKey: ['/api/admin/fee-types', selectedSchoolId],
+    queryFn: () => {
+      const url = user?.role === 'admin' && selectedSchoolId 
+        ? `/api/admin/fee-types?schoolId=${selectedSchoolId}`
+        : '/api/admin/fee-types';
+      return apiRequest(url);
+    },
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+  });
+
+  const { data: studentFees = [] } = useQuery<any[]>({ 
+    queryKey: ['/api/admin/student-fees', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
+    queryFn: () => {
+      let url = '/api/admin/student-fees?';
+      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
+      url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
+      return apiRequest(url);
+    },
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+  });
+
+  const { data: financialSummary } = useQuery<any>({ 
+    queryKey: ['/api/admin/financial-summary', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
+    queryFn: () => {
+      let url = '/api/admin/financial-summary?';
+      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
+      url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
+      return apiRequest(url);
+    },
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
 
   // Mutations
@@ -415,6 +484,64 @@ export default function AdminDashboard() {
       });
     }
   });
+
+  // Financial mutations
+  const createFeeTypeMutation = useMutation({
+    mutationFn: async (feeTypeData: FeeTypeForm) => {
+      return await apiRequest('/api/admin/fee-types', {
+        method: 'POST',
+        body: {
+          ...feeTypeData,
+          schoolId: selectedSchoolId || user?.schoolId
+        }
+      });
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Success", 
+        description: "Fee type created successfully" 
+      });
+      feeTypeForm.reset();
+      setIsFeeTypeDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to create fee type", 
+        variant: "destructive" 
+      });
+    }
+  });
+
+  const updatePaymentMutation = useMutation({
+    mutationFn: async ({ studentFeeId, amount, paymentMethod }: { studentFeeId: string; amount: number; paymentMethod: string }) => {
+      return await apiRequest('/api/admin/payments', {
+        method: 'POST',
+        body: { studentFeeId, amount, paymentMethod }
+      });
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Success", 
+        description: "Payment recorded successfully" 
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to record payment", 
+        variant: "destructive" 
+      });
+    }
+  });
+
+  // Form submission handlers
+  const handleFeeTypeSubmit = (data: FeeTypeForm) => {
+    createFeeTypeMutation.mutate(data);
+  };
 
   // Logo upload functions
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1856,8 +1983,10 @@ export default function AdminDashboard() {
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">₦0.00</div>
-                  <p className="text-xs text-muted-foreground">This term</p>
+                  <div className="text-2xl font-bold">
+                    ₦{financialSummary?.totalPaid?.toLocaleString() || "0.00"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{selectedFinanceTerm}</p>
                 </CardContent>
               </Card>
 
@@ -1867,7 +1996,9 @@ export default function AdminDashboard() {
                   <CreditCard className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">₦0.00</div>
+                  <div className="text-2xl font-bold">
+                    ₦{financialSummary?.totalOutstanding?.toLocaleString() || "0.00"}
+                  </div>
                   <p className="text-xs text-muted-foreground">Pending payments</p>
                 </CardContent>
               </Card>
@@ -1878,7 +2009,9 @@ export default function AdminDashboard() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">0%</div>
+                  <div className="text-2xl font-bold">
+                    {financialSummary?.collectionRate ? `${financialSummary.collectionRate}%` : "0%"}
+                  </div>
                   <p className="text-xs text-muted-foreground">Payment success rate</p>
                 </CardContent>
               </Card>
@@ -1889,7 +2022,9 @@ export default function AdminDashboard() {
                   <Wallet className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-2xl font-bold">
+                    {financialSummary?.studentsOwing || "0"}
+                  </div>
                   <p className="text-xs text-muted-foreground">With outstanding fees</p>
                 </CardContent>
               </Card>
@@ -1906,7 +2041,7 @@ export default function AdminDashboard() {
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button>
+                    <Button onClick={() => setIsFeeTypeDialogOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Create Fee Type
                     </Button>
@@ -1929,11 +2064,31 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      <tr>
-                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
-                          No fee types created yet. Click "Create Fee Type" to add one.
-                        </td>
-                      </tr>
+                      {feeTypes.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
+                            No fee types created yet. Click "Create Fee Type" to add one.
+                          </td>
+                        </tr>
+                      ) : (
+                        feeTypes.map((feeType) => (
+                          <tr key={feeType.id}>
+                            <td className="px-4 py-3 font-medium">{feeType.name}</td>
+                            <td className="px-4 py-3">₦{parseFloat(feeType.amount).toLocaleString()}</td>
+                            <td className="px-4 py-3 capitalize">{feeType.category}</td>
+                            <td className="px-4 py-3">{feeType.description || 'N/A'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                feeType.isActive 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {feeType.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2792,6 +2947,103 @@ export default function AdminDashboard() {
                 </TooltipContent>
               </Tooltip>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Fee Type Creation Dialog */}
+        <Dialog open={isFeeTypeDialogOpen} onOpenChange={setIsFeeTypeDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create New Fee Type</DialogTitle>
+              <DialogDescription>
+                Add a new fee category for school payments
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...feeTypeForm}>
+              <form onSubmit={feeTypeForm.handleSubmit(handleFeeTypeSubmit)} className="space-y-4">
+                <FormField
+                  control={feeTypeForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fee Type Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Tuition, Registration, Textbooks" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={feeTypeForm.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Amount (₦) *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 25000" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={feeTypeForm.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Academic, Administrative, Miscellaneous" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={feeTypeForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Brief description of this fee type"
+                          rows={3}
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsFeeTypeDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={createFeeTypeMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {createFeeTypeMutation.isPending ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4 mr-2" />
+                    )}
+                    {createFeeTypeMutation.isPending ? "Creating..." : "Create Fee Type"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
           </DialogContent>
         </Dialog>
       </div>
