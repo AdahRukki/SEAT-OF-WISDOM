@@ -115,6 +115,46 @@ export const reportCardTemplates = pgTable("report_card_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Fee Types table (different types of fees like tuition, books, etc.)
+export const feeTypes = pgTable("fee_types", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Student Fees table (records fees assigned to students)
+export const studentFees = pgTable("student_fees", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  feeTypeId: uuid("fee_type_id").notNull().references(() => feeTypes.id, { onDelete: "cascade" }),
+  term: varchar("term", { length: 20 }).notNull(),
+  session: varchar("session", { length: 20 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  dueDate: timestamp("due_date"),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, paid, overdue, waived
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Payments table (records when students make payments)
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  studentFeeId: uuid("student_fee_id").notNull().references(() => studentFees.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("cash"), // cash, bank_transfer, cheque, card
+  reference: varchar("reference", { length: 100 }), // receipt number or transaction reference
+  paymentDate: timestamp("payment_date").defaultNow(),
+  recordedBy: uuid("recorded_by").references(() => users.id),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const schoolsRelations = relations(schools, ({ many }) => ({
   classes: many(classes),
