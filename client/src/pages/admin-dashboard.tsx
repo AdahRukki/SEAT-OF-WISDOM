@@ -88,10 +88,11 @@ import type {
   Payment,
   School as SchoolType 
 } from "@shared/schema";
-import { insertFeeTypeSchema } from "@shared/schema";
+import { insertFeeTypeSchema, recordPaymentSchema } from "@shared/schema";
 import type { z } from "zod";
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
+type PaymentForm = z.infer<typeof recordPaymentSchema>;
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -140,6 +141,7 @@ export default function AdminDashboard() {
 
   // Fee type management states
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
+  const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("First Term");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("2024/2025");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
@@ -153,6 +155,19 @@ export default function AdminDashboard() {
       category: "",
       description: "",
       isActive: true,
+    },
+  });
+
+  // Payment form
+  const paymentForm = useForm<PaymentForm>({
+    resolver: zodResolver(recordPaymentSchema),
+    defaultValues: {
+      studentFeeId: "",
+      amount: 0,
+      paymentMethod: "cash",
+      reference: "",
+      paymentDate: new Date().toISOString().split('T')[0],
+      notes: "",
     },
   });
 
@@ -525,11 +540,11 @@ export default function AdminDashboard() {
     }
   });
 
-  const updatePaymentMutation = useMutation({
-    mutationFn: async ({ studentFeeId, amount, paymentMethod }: { studentFeeId: string; amount: number; paymentMethod: string }) => {
+  const recordPaymentMutation = useMutation({
+    mutationFn: async (paymentData: PaymentForm) => {
       return await apiRequest('/api/admin/payments', {
         method: 'POST',
-        body: { studentFeeId, amount, paymentMethod }
+        body: paymentData
       });
     },
     onSuccess: () => {
@@ -537,7 +552,10 @@ export default function AdminDashboard() {
         title: "Success", 
         description: "Payment recorded successfully" 
       });
+      paymentForm.reset();
+      setIsRecordPaymentDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/payments'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
     },
     onError: () => {
@@ -552,6 +570,10 @@ export default function AdminDashboard() {
   // Form submission handlers
   const handleFeeTypeSubmit = (data: FeeTypeForm) => {
     createFeeTypeMutation.mutate(data);
+  };
+
+  const handlePaymentSubmit = (data: PaymentForm) => {
+    recordPaymentMutation.mutate(data);
   };
 
   // Logo upload functions
@@ -2116,23 +2138,23 @@ export default function AdminDashboard() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Select value="" onValueChange={() => {}}>
+                  <Select value={selectedFinanceTerm} onValueChange={setSelectedFinanceTerm}>
                     <SelectTrigger className="w-32">
                       <SelectValue placeholder="Term" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="first">First Term</SelectItem>
-                      <SelectItem value="second">Second Term</SelectItem>
-                      <SelectItem value="third">Third Term</SelectItem>
+                      <SelectItem value="First Term">First Term</SelectItem>
+                      <SelectItem value="Second Term">Second Term</SelectItem>
+                      <SelectItem value="Third Term">Third Term</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select value="" onValueChange={() => {}}>
+                  <Select value={selectedFinanceSession} onValueChange={setSelectedFinanceSession}>
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="Session" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="2024-2025">2024-2025</SelectItem>
-                      <SelectItem value="2025-2026">2025-2026</SelectItem>
+                      <SelectItem value="2024/2025">2024/2025</SelectItem>
+                      <SelectItem value="2025/2026">2025/2026</SelectItem>
                     </SelectContent>
                   </Select>
                   <Tooltip>
@@ -2226,7 +2248,7 @@ export default function AdminDashboard() {
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button>
+                    <Button onClick={() => setIsRecordPaymentDialogOpen(true)}>
                       <Receipt className="h-4 w-4 mr-2" />
                       Record Payment
                     </Button>
@@ -3123,6 +3145,158 @@ export default function AdminDashboard() {
                       <Plus className="h-4 w-4 mr-2" />
                     )}
                     {createFeeTypeMutation.isPending ? "Creating..." : "Create Fee Type"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Record Payment Dialog */}
+        <Dialog open={isRecordPaymentDialogOpen} onOpenChange={setIsRecordPaymentDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Record Student Payment</DialogTitle>
+              <DialogDescription>
+                Record a new payment from a student for their fees
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...paymentForm}>
+              <form onSubmit={paymentForm.handleSubmit(handlePaymentSubmit)} className="space-y-4">
+                <FormField
+                  control={paymentForm.control}
+                  name="studentFeeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Student & Fee *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select student and fee" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {studentFees.map((studentFee) => (
+                            <SelectItem key={studentFee.id} value={studentFee.id}>
+                              {studentFee.student?.user?.firstName} {studentFee.student?.user?.lastName} - {studentFee.feeType?.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={paymentForm.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Amount (₦) *</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.01"
+                          placeholder="0.00" 
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={paymentForm.control}
+                  name="paymentMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Payment Method *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select payment method" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                          <SelectItem value="cheque">Cheque</SelectItem>
+                          <SelectItem value="card">Card Payment</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={paymentForm.control}
+                  name="reference"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Reference (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Receipt number or transaction reference" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={paymentForm.control}
+                  name="paymentDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Payment Date *</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={paymentForm.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notes (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Additional notes about this payment"
+                          rows={2}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsRecordPaymentDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={recordPaymentMutation.isPending}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {recordPaymentMutation.isPending ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Receipt className="h-4 w-4 mr-2" />
+                    )}
+                    {recordPaymentMutation.isPending ? "Recording..." : "Record Payment"}
                   </Button>
                 </div>
               </form>
