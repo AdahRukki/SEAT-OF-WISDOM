@@ -76,7 +76,8 @@ import {
   TrendingUp,
   Calendar,
   Receipt,
-  Wallet
+  Wallet,
+  History
 } from "lucide-react";
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { 
@@ -148,6 +149,8 @@ export default function AdminDashboard() {
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
   const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
+  const [isPaymentHistoryDialogOpen, setIsPaymentHistoryDialogOpen] = useState(false);
+  const [selectedStudentForHistory, setSelectedStudentForHistory] = useState<StudentWithDetails | null>(null);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("First Term");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("2024/2025");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
@@ -639,24 +642,10 @@ export default function AdminDashboard() {
         updated[index] = { 
           studentId: "", 
           amount: 0, 
-          payment1: 0, 
-          payment2: 0, 
-          payment3: 0, 
-          payment4: 0, 
           notes: "" 
         };
       }
       updated[index] = { ...updated[index], [field]: value };
-      
-      // Auto-calculate total amount when any payment field changes
-      if (field.startsWith('payment')) {
-        const total = (updated[index].payment1 || 0) + 
-                     (updated[index].payment2 || 0) + 
-                     (updated[index].payment3 || 0) + 
-                     (updated[index].payment4 || 0);
-        updated[index].amount = total;
-      }
-      
       return updated;
     });
   };
@@ -2296,29 +2285,10 @@ export default function AdminDashboard() {
                 <div>
                   <CardTitle>Student Fee Assignments</CardTitle>
                   <CardDescription>
-                    Assign fees to students and track payment status
+                    Assign fees to students for {selectedFinanceTerm} {selectedFinanceSession} (set globally)
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Select value={selectedFinanceTerm} onValueChange={setSelectedFinanceTerm}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="Term" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="First Term">First Term</SelectItem>
-                      <SelectItem value="Second Term">Second Term</SelectItem>
-                      <SelectItem value="Third Term">Third Term</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={selectedFinanceSession} onValueChange={setSelectedFinanceSession}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Session" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2024/2025">2024/2025</SelectItem>
-                      <SelectItem value="2025/2026">2025/2026</SelectItem>
-                    </SelectContent>
-                  </Select>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button onClick={() => setIsAssignFeeDialogOpen(true)}>
@@ -3316,10 +3286,7 @@ export default function AdminDashboard() {
                           <th className="px-3 py-2 text-left text-sm font-medium">Student Name</th>
                           <th className="px-3 py-2 text-left text-sm font-medium">Total Paid (₦)</th>
                           <th className="px-3 py-2 text-left text-sm font-medium">Balance (₦)</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 1 (₦)</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 2 (₦)</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 3 (₦)</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 4 (₦)</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Payment Amount (₦)</th>
                           <th className="px-3 py-2 text-left text-sm font-medium">Notes</th>
                         </tr>
                       </thead>
@@ -3343,8 +3310,22 @@ export default function AdminDashboard() {
                               <td className="px-3 py-2 text-sm font-medium">
                                 {student.user?.firstName} {student.user?.lastName}
                               </td>
-                              <td className="px-3 py-2 text-sm text-green-600 font-medium">
-                                ₦{totalPaid.toLocaleString()}
+                              <td className="px-3 py-2 text-sm font-medium">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-green-600">₦{totalPaid.toLocaleString()}</span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0 hover:bg-blue-100"
+                                    onClick={() => {
+                                      // Show payment history modal
+                                      setSelectedStudentForHistory(student);
+                                      setIsPaymentHistoryDialogOpen(true);
+                                    }}
+                                  >
+                                    <History className="h-4 w-4 text-blue-600" />
+                                  </Button>
+                                </div>
                               </td>
                               <td className="px-3 py-2 text-sm text-red-600 font-medium">
                                 ₦{balance.toLocaleString()}
@@ -3353,36 +3334,9 @@ export default function AdminDashboard() {
                                 <Input
                                   type="number"
                                   placeholder="0"
-                                  className="h-8 w-20"
-                                  value={bulkPayments[index]?.payment1 || ""}
-                                  onChange={(e) => updateBulkPayment(index, 'payment1', Number(e.target.value) || 0)}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <Input
-                                  type="number"
-                                  placeholder="0"
-                                  className="h-8 w-20"
-                                  value={bulkPayments[index]?.payment2 || ""}
-                                  onChange={(e) => updateBulkPayment(index, 'payment2', Number(e.target.value) || 0)}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <Input
-                                  type="number"
-                                  placeholder="0"
-                                  className="h-8 w-20"
-                                  value={bulkPayments[index]?.payment3 || ""}
-                                  onChange={(e) => updateBulkPayment(index, 'payment3', Number(e.target.value) || 0)}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <Input
-                                  type="number"
-                                  placeholder="0"
-                                  className="h-8 w-20"
-                                  value={bulkPayments[index]?.payment4 || ""}
-                                  onChange={(e) => updateBulkPayment(index, 'payment4', Number(e.target.value) || 0)}
+                                  className="h-8 w-24"
+                                  value={bulkPayments[index]?.amount || ""}
+                                  onChange={(e) => updateBulkPayment(index, 'amount', Number(e.target.value) || 0)}
                                 />
                               </td>
                               <td className="px-3 py-2">
@@ -3526,6 +3480,96 @@ export default function AdminDashboard() {
                 </div>
               </form>
             </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Payment History Dialog */}
+        <Dialog open={isPaymentHistoryDialogOpen} onOpenChange={setIsPaymentHistoryDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Payment History</DialogTitle>
+              <DialogDescription>
+                {selectedStudentForHistory && (
+                  <>
+                    Payment history for {selectedStudentForHistory.user?.firstName} {selectedStudentForHistory.user?.lastName} ({selectedStudentForHistory.studentId})
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {(() => {
+                // Get payments for this student
+                const studentPaymentHistory = payments.filter(p => {
+                  const studentFee = studentFees.find(sf => sf.id === p.studentFeeId);
+                  return studentFee?.studentId === selectedStudentForHistory?.id;
+                });
+
+                if (studentPaymentHistory.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-500">No payment history found</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Date</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Amount</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Method</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Reference</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {studentPaymentHistory.map((payment, index) => (
+                          <tr key={payment.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                            <td className="px-4 py-2 text-sm">
+                              {new Date(payment.paymentDate).toLocaleDateString()}
+                            </td>
+                            <td className="px-4 py-2 text-sm font-medium text-green-600">
+                              ₦{Number(payment.amount).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-2 text-sm capitalize">
+                              {payment.paymentMethod}
+                            </td>
+                            <td className="px-4 py-2 text-sm">
+                              {payment.reference || '-'}
+                            </td>
+                            <td className="px-4 py-2 text-sm">
+                              {payment.notes || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    
+                    <div className="px-4 py-3 bg-gray-100 border-t">
+                      <div className="flex justify-between text-sm font-medium">
+                        <span>Total Paid:</span>
+                        <span className="text-green-600">
+                          ₦{studentPaymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            
+            <div className="flex justify-end pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setIsPaymentHistoryDialogOpen(false)}
+              >
+                Close
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
