@@ -34,7 +34,7 @@ import {
   type PaymentWithDetails
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -678,7 +678,7 @@ export class DatabaseStorage implements IStorage {
     // Get payments for each student fee
     const studentFeeIds = results.map(r => r.student_fees.id);
     const paymentsResults = studentFeeIds.length > 0 ? 
-      await db.select().from(payments).where(sql`${payments.studentFeeId} = ANY(${studentFeeIds})`) : [];
+      await db.select().from(payments).where(inArray(payments.studentFeeId, studentFeeIds)) : [];
 
     return results.map(({ student_fees: studentFee, fee_types: feeType, students: student, users: user }) => ({
       ...studentFee,
