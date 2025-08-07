@@ -37,18 +37,45 @@ export default function StudentDashboard() {
   });
 
   const { data: assessments = [] } = useQuery<(Assessment & { subject: Subject })[]>({ 
-    queryKey: ['/api/student/assessments'],
+    queryKey: ['/api/student/assessments', selectedTerm, selectedSession],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedTerm) params.append('term', selectedTerm);
+      if (selectedSession) params.append('session', selectedSession);
+      
+      const response = await fetch(`/api/student/assessments?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch assessments');
+      return response.json();
+    },
     enabled: !!profile
   });
 
   // Student financial data
   const { data: studentFees = [] } = useQuery<any[]>({ 
-    queryKey: ['/api/student/fees'],
+    queryKey: ['/api/student/fees', selectedTerm, selectedSession],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedTerm) params.append('term', selectedTerm);
+      if (selectedSession) params.append('session', selectedSession);
+      
+      const response = await fetch(`/api/student/fees?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch student fees');
+      return response.json();
+    },
     enabled: !!profile
   });
 
   const { data: paymentHistory = [] } = useQuery<any[]>({ 
-    queryKey: ['/api/student/payments'],
+    queryKey: ['/api/student/payments', selectedTerm, selectedSession],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedTerm) params.append('term', selectedTerm);
+      if (selectedSession) params.append('session', selectedSession);
+      
+      const response = await fetch(`/api/student/payments?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch payment history');
+      return response.json();
+    },
     enabled: !!profile
   });
 
@@ -570,6 +597,46 @@ export default function StudentDashboard() {
           </TabsContent>
 
           <TabsContent value="report" className="space-y-6">
+            {/* Term and Session Selection for Report Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Report Card Settings</CardTitle>
+                <CardDescription>
+                  Select the term and session to view your report card
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium mb-2 block">Academic Session</label>
+                    <Select value={selectedSession} onValueChange={setSelectedSession}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2024/2025">2024/2025</SelectItem>
+                        <SelectItem value="2023/2024">2023/2024</SelectItem>
+                        <SelectItem value="2022/2023">2022/2023</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium mb-2 block">Term</label>
+                    <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="First Term">First Term</SelectItem>
+                        <SelectItem value="Second Term">Second Term</SelectItem>
+                        <SelectItem value="Third Term">Third Term</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">

@@ -1051,7 +1051,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Student record not found" });
       }
       
-      const payments = await storage.getPayments(student.id);
+      const term = req.query.term as string;
+      const session = req.query.session as string;
+      
+      const payments = await storage.getPayments(student.id, undefined, undefined, term, session);
       res.json(payments);
     } catch (error) {
       console.error("Get student payments error:", error);
