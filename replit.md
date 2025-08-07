@@ -10,6 +10,13 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**August 7, 2025**
+- ✅ **STUDENT ID FORMAT STANDARDIZED** - Updated to SOWA/x000 format where x is school number (1,2,3,4)
+- ✅ **STUDENT FINANCIAL PORTAL COMPLETED** - Real financial data now displays instead of ₦0.00 placeholders
+- ✅ **TERM/SESSION SELECTION FOR REPORT CARDS** - Students can select academic term and session to view specific reports
+- ✅ **ENHANCED STUDENT DASHBOARD** - Financial tab shows real fee assignments and payment history
+- ✅ **DATABASE FIX** - Fixed array query errors that prevented fee assignment functionality
+
 **August 3, 2025**
 - ✅ **STUDENT PASSWORD CHANGE FEATURE COMPLETED** - Students can now change their passwords securely
 - ✅ **SECURITY TAB ADDED TO STUDENT DASHBOARD** - New dedicated security section with password change form

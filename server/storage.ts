@@ -175,9 +175,41 @@ export class DatabaseStorage implements IStorage {
   async createStudent(studentData: InsertStudent): Promise<Student> {
     // Auto-generate student ID if not provided
     if (!studentData.studentId) {
-      const existingStudents = await db.select().from(students);
-      const nextNumber = (existingStudents.length + 1).toString().padStart(4, '0');
-      studentData.studentId = `SOWA/${nextNumber}`;
+      // Get the school through the class to determine the school number
+      const classData = await db
+        .select({ schoolId: classes.schoolId })
+        .from(classes)
+        .where(eq(classes.id, studentData.classId!))
+        .limit(1);
+      
+      let schoolNumber = '1'; // Default to school 1
+      
+      if (classData.length > 0) {
+        const school = await db
+          .select()
+          .from(schools)
+          .where(eq(schools.id, classData[0].schoolId))
+          .limit(1);
+        
+        if (school.length > 0) {
+          // Extract school number from school name (e.g., "School 1" -> "1")
+          const schoolName = school[0].name;
+          const match = schoolName.match(/School (\d+)/i);
+          if (match) {
+            schoolNumber = match[1];
+          }
+        }
+      }
+      
+      // Get existing students for this school to determine next number
+      const existingStudents = await db
+        .select()
+        .from(students)
+        .leftJoin(classes, eq(students.classId, classes.id))
+        .where(eq(classes.schoolId, classData.length > 0 ? classData[0].schoolId : ''));
+      
+      const nextNumber = (existingStudents.length + 1).toString().padStart(3, '0');
+      studentData.studentId = `SOWA/${schoolNumber}${nextNumber}`;
     }
     
     const [student] = await db
