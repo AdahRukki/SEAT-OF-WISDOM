@@ -161,6 +161,20 @@
     color: black !important;
   }
   
+  .print-only img {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    display: block !important;
+    visibility: visible !important;
+  }
+  
+  .report-card img {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    display: block !important;
+    visibility: visible !important;
+  }
+  
   @page {
     margin: 0.5in;
     size: A4;

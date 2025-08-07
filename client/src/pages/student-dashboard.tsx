@@ -661,10 +661,22 @@ export default function StudentDashboard() {
                 <div className="space-y-6">
                   {/* School Header for Print */}
                   <div className="hidden print-only">
-                    <h1 className="text-center text-2xl font-bold mb-4">STUDENT REPORT CARD</h1>
                     <div className="text-center mb-6">
-                      <p className="text-lg font-semibold">Academic Session: {selectedSession}</p>
-                      <p className="text-lg font-semibold">Term: {selectedTerm}</p>
+                      <div className="flex items-center justify-center space-x-4 mb-4">
+                        <img 
+                          src={logoImage} 
+                          alt="Seat of Wisdom Academy Logo" 
+                          className="h-16 w-16 object-contain rounded-md" 
+                        />
+                        <div>
+                          <h1 className="text-2xl font-bold">SEAT OF WISDOM ACADEMY</h1>
+                          <p className="text-lg font-semibold">STUDENT REPORT CARD</p>
+                        </div>
+                      </div>
+                      <div className="border-t border-b border-gray-300 py-2 mb-4">
+                        <p className="text-lg font-semibold">Academic Session: {selectedSession}</p>
+                        <p className="text-lg font-semibold">Term: {selectedTerm}</p>
+                      </div>
                     </div>
                   </div>
 
