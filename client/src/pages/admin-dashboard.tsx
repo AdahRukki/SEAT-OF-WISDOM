@@ -636,9 +636,27 @@ export default function AdminDashboard() {
     setBulkPayments(prev => {
       const updated = [...prev];
       if (!updated[index]) {
-        updated[index] = { studentId: "", feeTypeId: "", amount: 0, notes: "" };
+        updated[index] = { 
+          studentId: "", 
+          amount: 0, 
+          payment1: 0, 
+          payment2: 0, 
+          payment3: 0, 
+          payment4: 0, 
+          notes: "" 
+        };
       }
       updated[index] = { ...updated[index], [field]: value };
+      
+      // Auto-calculate total amount when any payment field changes
+      if (field.startsWith('payment')) {
+        const total = (updated[index].payment1 || 0) + 
+                     (updated[index].payment2 || 0) + 
+                     (updated[index].payment3 || 0) + 
+                     (updated[index].payment4 || 0);
+        updated[index].amount = total;
+      }
+      
       return updated;
     });
   };
@@ -654,9 +672,7 @@ export default function AdminDashboard() {
   };
 
   const handleBulkPaymentSubmit = async () => {
-    const validPayments = bulkPayments.filter(payment => 
-      payment.amount > 0 && payment.feeTypeId
-    );
+    const validPayments = bulkPayments.filter(payment => payment.amount > 0);
 
     if (validPayments.length === 0) {
       toast({
@@ -675,31 +691,8 @@ export default function AdminDashboard() {
         const student = classStudents[i];
         
         if (student && payment.amount > 0) {
-          // Find or create student fee
-          let studentFee = studentFees.find(sf => 
-            sf.studentId === student.id && sf.feeTypeId === payment.feeTypeId
-          );
-
-          if (!studentFee) {
-            // Create student fee assignment first
-            const assignData = {
-              feeTypeId: payment.feeTypeId,
-              classId: selectedPaymentClass,
-              term: selectedFinanceTerm,
-              session: selectedFinanceSession,
-              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              notes: `Assigned for ${selectedFinanceTerm} ${selectedFinanceSession}`,
-            };
-            await assignFeeMutation.mutateAsync(assignData);
-            
-            // Refetch to get the new student fee
-            await queryClient.invalidateQueries({ 
-              queryKey: ['/api/admin/student-fees'] 
-            });
-            studentFee = studentFees.find(sf => 
-              sf.studentId === student.id && sf.feeTypeId === payment.feeTypeId
-            );
-          }
+          // Find existing student fee assignment for this student
+          const studentFee = studentFees.find(sf => sf.studentId === student.id);
 
           if (studentFee) {
             const paymentData = {
@@ -710,6 +703,8 @@ export default function AdminDashboard() {
               notes: payment.notes || "",
             };
             await recordPaymentMutation.mutateAsync(paymentData);
+          } else {
+            console.warn(`No fee assignment found for student ${student.studentId}`);
           }
         }
       }
@@ -2338,82 +2333,18 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                {studentFees.length === 0 ? (
-                  <div className="text-center py-12">
-                    <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Fee Assignments</h3>
-                    <p className="text-gray-500 mb-4">Get started by assigning fees to classes</p>
-                    <Button 
-                      onClick={() => setIsAssignFeeDialogOpen(true)}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Assign Your First Fee
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {studentFees.map((studentFee) => {
-                      const totalPaid = studentFee.payments?.reduce((sum, payment) => sum + parseFloat(payment.amount), 0) || 0;
-                      const balance = parseFloat(studentFee.amount) - totalPaid;
-                      const status = balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
-                      
-                      return (
-                        <Card key={studentFee.id} className={`${status === 'Paid' ? "border-green-200 bg-green-50 dark:bg-green-900/20" : ""} hover:shadow-md transition-shadow`}>
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-base">
-                                {studentFee.student?.user?.firstName} {studentFee.student?.user?.lastName}
-                              </CardTitle>
-                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                status === 'Paid' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : status === 'Partial'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {status}
-                              </span>
-                            </div>
-                            <CardDescription>
-                              {studentFee.feeType?.name}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span>Amount:</span>
-                                <span className="font-medium">₦{parseFloat(studentFee.amount).toLocaleString()}</span>
-                              </div>
-                              {totalPaid > 0 && (
-                                <div className="flex justify-between text-sm text-green-600">
-                                  <span>Paid:</span>
-                                  <span className="font-medium">₦{totalPaid.toLocaleString()}</span>
-                                </div>
-                              )}
-                              {balance > 0 && (
-                                <div className="flex justify-between text-sm text-red-600">
-                                  <span>Balance:</span>
-                                  <span className="font-medium">₦{balance.toLocaleString()}</span>
-                                </div>
-                              )}
-                              <div className="flex space-x-2 pt-2">
-                                <Button size="sm" variant="ghost" className="h-8 flex-1">
-                                  <Receipt className="h-4 w-4 mr-1" />
-                                  Receipt
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-8 flex-1">
-                                  <Edit className="h-4 w-4 mr-1" />
-                                  Edit
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
+                <div className="text-center py-12">
+                  <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Fee Assignment Management</h3>
+                  <p className="text-gray-500 mb-4">Assign fee types to entire classes at once</p>
+                  <Button 
+                    onClick={() => setIsAssignFeeDialogOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Assign Fees to Class
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -3381,61 +3312,90 @@ export default function AdminDashboard() {
                     <table className="w-full">
                       <thead className="bg-gray-50 sticky top-0">
                         <tr>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Student ID</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Student Name</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Fee Type</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Amount Due (₦)</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Payment Amount (₦)</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Notes</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Student ID</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Student Name</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Total Paid (₦)</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Balance (₦)</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 1 (₦)</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 2 (₦)</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 3 (₦)</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Payment 4 (₦)</th>
+                          <th className="px-3 py-2 text-left text-sm font-medium">Notes</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {getStudentsForPaymentClass().map((student, index) => (
-                          <tr key={student.id} className="border-t">
-                            <td className="px-4 py-2 text-sm">{student.studentId}</td>
-                            <td className="px-4 py-2 text-sm font-medium">
-                              {student.user?.firstName} {student.user?.lastName}
-                            </td>
-                            <td className="px-4 py-2 text-sm">
-                              <Select
-                                value={bulkPayments[index]?.feeTypeId || ""}
-                                onValueChange={(value) => updateBulkPayment(index, 'feeTypeId', value)}
-                              >
-                                <SelectTrigger className="h-8">
-                                  <SelectValue placeholder="Select fee" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {feeTypes.map((feeType) => (
-                                    <SelectItem key={feeType.id} value={feeType.id}>
-                                      {feeType.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="px-4 py-2 text-sm">
-                              {getStudentFeeAmount(student.id, bulkPayments[index]?.feeTypeId)}
-                            </td>
-                            <td className="px-4 py-2">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                className="h-8"
-                                value={bulkPayments[index]?.amount || ""}
-                                onChange={(e) => updateBulkPayment(index, 'amount', parseFloat(e.target.value) || 0)}
-                              />
-                            </td>
-                            <td className="px-4 py-2">
-                              <Input
-                                placeholder="Optional notes"
-                                className="h-8"
-                                value={bulkPayments[index]?.notes || ""}
-                                onChange={(e) => updateBulkPayment(index, 'notes', e.target.value)}
-                              />
-                            </td>
-                          </tr>
-                        ))}
+                        {getStudentsForPaymentClass().map((student, index) => {
+                          // Calculate total paid and balance for this student
+                          const studentPayments = payments.filter(p => {
+                            const studentFee = studentFees.find(sf => sf.id === p.studentFeeId);
+                            return studentFee?.studentId === student.id;
+                          });
+                          const totalPaid = studentPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+                          
+                          // Get the assigned fee amount for this student
+                          const studentFee = studentFees.find(sf => sf.studentId === student.id);
+                          const feeAmount = studentFee ? Number(studentFee.amount) : 0;
+                          const balance = feeAmount - totalPaid;
+                          
+                          return (
+                            <tr key={student.id} className="border-t">
+                              <td className="px-3 py-2 text-sm">{student.studentId}</td>
+                              <td className="px-3 py-2 text-sm font-medium">
+                                {student.user?.firstName} {student.user?.lastName}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-green-600 font-medium">
+                                ₦{totalPaid.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-red-600 font-medium">
+                                ₦{balance.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className="h-8 w-20"
+                                  value={bulkPayments[index]?.payment1 || ""}
+                                  onChange={(e) => updateBulkPayment(index, 'payment1', Number(e.target.value) || 0)}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className="h-8 w-20"
+                                  value={bulkPayments[index]?.payment2 || ""}
+                                  onChange={(e) => updateBulkPayment(index, 'payment2', Number(e.target.value) || 0)}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className="h-8 w-20"
+                                  value={bulkPayments[index]?.payment3 || ""}
+                                  onChange={(e) => updateBulkPayment(index, 'payment3', Number(e.target.value) || 0)}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className="h-8 w-20"
+                                  value={bulkPayments[index]?.payment4 || ""}
+                                  onChange={(e) => updateBulkPayment(index, 'payment4', Number(e.target.value) || 0)}
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  placeholder="Notes"
+                                  className="h-8 w-32"
+                                  value={bulkPayments[index]?.notes || ""}
+                                  onChange={(e) => updateBulkPayment(index, 'notes', e.target.value)}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
