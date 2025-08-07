@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useLogo } from "@/hooks/use-logo";
 import { firebaseSync } from "@/lib/offline-firebase-sync";
 import { useFirebaseSync } from "@/hooks/use-firebase-sync";
 import { checkFirebaseData } from "@/utils/check-firebase";
@@ -79,7 +80,7 @@ import {
   Wallet,
   History
 } from "lucide-react";
-import logoImage from "@assets/4oWHptM_1754171230437.gif";
+// Logo is now loaded dynamically via useLogo hook
 import type { 
   Class, 
   Subject, 
@@ -102,6 +103,7 @@ type PaymentForm = z.infer<typeof recordPaymentSchema>;
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { logoUrl: currentLogoUrl, isLoading: logoLoading } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -138,7 +140,6 @@ export default function AdminDashboard() {
   const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
-  const [currentLogoUrl, setCurrentLogoUrl] = useState<string>("");
 
   // New subject creation states
   const [newSubjectName, setNewSubjectName] = useState("");
@@ -436,12 +437,11 @@ export default function AdminDashboard() {
     },
     onSuccess: (data) => {
       toast({ title: "Success", description: "Academy logo updated successfully" });
-      setCurrentLogoUrl(data.logoUrl);
       setIsLogoUploadDialogOpen(false);
       setLogoFile(null);
       setLogoPreview("");
-      // Refresh to show new logo everywhere
-      window.location.reload();
+      // Refresh the logo cache to show the new logo immediately
+      queryClient.invalidateQueries({ queryKey: ['/api/logo'] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to upload logo", variant: "destructive" });
@@ -1523,7 +1523,7 @@ export default function AdminDashboard() {
                 <div className="min-w-0">
                   <div className="flex items-center space-x-2">
                     <img 
-                      src={logoImage} 
+                      src={currentLogoUrl} 
                       alt="Seat of Wisdom Academy Logo" 
                       className="h-6 w-6 sm:h-8 sm:w-8 object-contain rounded-md flex-shrink-0" 
                     />
@@ -2550,7 +2550,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center space-x-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                     <div className="flex-shrink-0">
                       <img 
-                        src={logoImage} 
+                        src={currentLogoUrl} 
                         alt="Current Academy Logo" 
                         className="h-16 w-16 object-contain rounded-md border border-gray-200" 
                       />

@@ -10,6 +10,7 @@ import {
   feeTypes,
   studentFees,
   payments,
+  settings,
   type School,
   type User,
   type Student,
@@ -20,6 +21,7 @@ import {
   type FeeType,
   type StudentFee,
   type Payment,
+  type Setting,
   type InsertUser,
   type InsertStudent,
   type InsertClass,
@@ -29,6 +31,7 @@ import {
   type InsertFeeType,
   type InsertStudentFee,
   type InsertPayment,
+  type InsertSetting,
   type StudentWithDetails,
   type StudentFeeWithDetails,
   type PaymentWithDetails
@@ -101,6 +104,10 @@ export interface IStorage {
     totalPending: number;
     totalOverdue: number;
   }>;
+
+  // Settings operations
+  getSetting(key: string): Promise<Setting | undefined>;
+  setSetting(key: string, value: string): Promise<Setting>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -888,6 +895,31 @@ export class DatabaseStorage implements IStorage {
       totalPending,
       totalOverdue
     };
+  }
+
+  // Settings operations
+  async getSetting(key: string): Promise<Setting | undefined> {
+    const [setting] = await db.select().from(settings).where(eq(settings.key, key));
+    return setting || undefined;
+  }
+
+  async setSetting(key: string, value: string): Promise<Setting> {
+    const existingSetting = await this.getSetting(key);
+    
+    if (existingSetting) {
+      const [updatedSetting] = await db
+        .update(settings)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(settings.key, key))
+        .returning();
+      return updatedSetting;
+    } else {
+      const [newSetting] = await db
+        .insert(settings)
+        .values({ key, value })
+        .returning();
+      return newSetting;
+    }
   }
 }
 

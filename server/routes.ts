@@ -796,8 +796,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Logo URL is required" });
       }
 
-      // Store the global logo URL (you could store this in a settings table or config)
-      // For now, we'll return success - in a real implementation, you'd save to database
+      // Store the global logo URL in settings table
+      await storage.setSetting('academy_logo', logoUrl);
       console.log(`Global academy logo updated: ${logoUrl}`);
       
       res.json({ message: "Logo updated successfully", logoUrl });
@@ -807,11 +807,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get current logo endpoint
+  // Get current logo endpoint (admin authenticated)
   app.get('/api/admin/logo', authenticate, async (req, res) => {
     try {
-      // Return the current logo URL - this would come from database in real implementation
-      const logoUrl = "/assets/4oWHptM_1754171230437.gif"; // Default logo
+      // Get the logo from settings table
+      const logoSetting = await storage.getSetting('academy_logo');
+      const logoUrl = logoSetting?.value || "/assets/4oWHptM_1754171230437.gif"; // Default fallback logo
+      res.json({ logoUrl });
+    } catch (error) {
+      console.error("Get logo error:", error);
+      res.status(500).json({ error: "Failed to get logo" });
+    }
+  });
+
+  // Public logo endpoint (no authentication required)
+  app.get('/api/logo', async (req, res) => {
+    try {
+      // Get the logo from settings table
+      const logoSetting = await storage.getSetting('academy_logo');
+      const logoUrl = logoSetting?.value || "/assets/4oWHptM_1754171230437.gif"; // Default fallback logo
       res.json({ logoUrl });
     } catch (error) {
       console.error("Get logo error:", error);

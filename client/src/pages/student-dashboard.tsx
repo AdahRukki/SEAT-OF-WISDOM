@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useLogo } from "@/hooks/use-logo";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +14,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle } from "lucide-react";
-import logoImage from "@assets/4oWHptM_1754171230437.gif";
+// Logo is now loaded dynamically via useLogo hook
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
 import { changePasswordSchema } from "@shared/schema";
@@ -23,6 +24,7 @@ type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+  const { logoUrl: currentLogoUrl } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedTerm, setSelectedTerm] = useState("First Term");
@@ -147,7 +149,7 @@ export default function StudentDashboard() {
               <div>
                 <div className="flex items-center space-x-3">
                   <img 
-                    src={logoImage} 
+                    src={currentLogoUrl} 
                     alt="Seat of Wisdom Academy Logo" 
                     className="h-8 w-8 object-contain rounded-md flex-shrink-0" 
                   />
@@ -664,7 +666,7 @@ export default function StudentDashboard() {
                     <div className="text-center mb-6">
                       <div className="flex items-center justify-center space-x-4 mb-4">
                         <img 
-                          src={logoImage} 
+                          src={currentLogoUrl} 
                           alt="Seat of Wisdom Academy Logo" 
                           className="h-16 w-16 object-contain rounded-md" 
                         />

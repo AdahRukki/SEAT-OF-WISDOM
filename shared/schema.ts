@@ -14,6 +14,15 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
+// Settings table (for global academy configuration)
+export const settings = pgTable("settings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key", { length: 100 }).notNull().unique(),
+  value: text("value"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Schools table (for multiple branches)
 export const schools = pgTable("schools", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -391,3 +400,7 @@ export type PaymentWithDetails = Payment & {
   };
   recordedBy?: User;
 };
+
+// Settings types
+export type Setting = typeof settings.$inferSelect;
+export type InsertSetting = typeof settings.$inferInsert;
