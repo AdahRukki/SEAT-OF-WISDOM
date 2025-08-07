@@ -2338,69 +2338,82 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Paid</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Balance</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {studentFees.length === 0 ? (
-                        <tr>
-                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
-                            No student fees assigned yet. Create fee types first, then assign them to students.
-                          </td>
-                        </tr>
-                      ) : (
-                        studentFees.map((studentFee) => {
-                          const totalPaid = studentFee.payments?.reduce((sum, payment) => sum + parseFloat(payment.amount), 0) || 0;
-                          const balance = parseFloat(studentFee.amount) - totalPaid;
-                          const status = balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
-                          
-                          return (
-                            <tr key={studentFee.id}>
-                              <td className="px-4 py-3 font-medium">
+                {studentFees.length === 0 ? (
+                  <div className="text-center py-12">
+                    <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Fee Assignments</h3>
+                    <p className="text-gray-500 mb-4">Get started by assigning fees to classes</p>
+                    <Button 
+                      onClick={() => setIsAssignFeeDialogOpen(true)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Assign Your First Fee
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {studentFees.map((studentFee) => {
+                      const totalPaid = studentFee.payments?.reduce((sum, payment) => sum + parseFloat(payment.amount), 0) || 0;
+                      const balance = parseFloat(studentFee.amount) - totalPaid;
+                      const status = balance <= 0 ? 'Paid' : totalPaid > 0 ? 'Partial' : 'Pending';
+                      
+                      return (
+                        <Card key={studentFee.id} className={`${status === 'Paid' ? "border-green-200 bg-green-50 dark:bg-green-900/20" : ""} hover:shadow-md transition-shadow`}>
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-base">
                                 {studentFee.student?.user?.firstName} {studentFee.student?.user?.lastName}
-                              </td>
-                              <td className="px-4 py-3">{studentFee.feeType?.name}</td>
-                              <td className="px-4 py-3">₦{parseFloat(studentFee.amount).toLocaleString()}</td>
-                              <td className="px-4 py-3">₦{totalPaid.toLocaleString()}</td>
-                              <td className="px-4 py-3">₦{balance.toLocaleString()}</td>
-                              <td className="px-4 py-3">
-                                <span className={`px-2 py-1 text-xs rounded-full ${
-                                  status === 'Paid' 
-                                    ? 'bg-green-100 text-green-800' 
-                                    : status === 'Partial'
-                                    ? 'bg-yellow-100 text-yellow-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex space-x-2">
-                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                                    <Receipt className="h-4 w-4" />
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
+                              </CardTitle>
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                status === 'Paid' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : status === 'Partial'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {status}
+                              </span>
+                            </div>
+                            <CardDescription>
+                              {studentFee.feeType?.name}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span>Amount:</span>
+                                <span className="font-medium">₦{parseFloat(studentFee.amount).toLocaleString()}</span>
+                              </div>
+                              {totalPaid > 0 && (
+                                <div className="flex justify-between text-sm text-green-600">
+                                  <span>Paid:</span>
+                                  <span className="font-medium">₦{totalPaid.toLocaleString()}</span>
                                 </div>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                              )}
+                              {balance > 0 && (
+                                <div className="flex justify-between text-sm text-red-600">
+                                  <span>Balance:</span>
+                                  <span className="font-medium">₦{balance.toLocaleString()}</span>
+                                </div>
+                              )}
+                              <div className="flex space-x-2 pt-2">
+                                <Button size="sm" variant="ghost" className="h-8 flex-1">
+                                  <Receipt className="h-4 w-4 mr-1" />
+                                  Receipt
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-8 flex-1">
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
