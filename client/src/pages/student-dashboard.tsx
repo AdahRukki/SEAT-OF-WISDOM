@@ -41,6 +41,17 @@ export default function StudentDashboard() {
     enabled: !!profile
   });
 
+  // Student financial data
+  const { data: studentFees = [] } = useQuery<any[]>({ 
+    queryKey: ['/api/student/fees'],
+    enabled: !!profile
+  });
+
+  const { data: paymentHistory = [] } = useQuery<any[]>({ 
+    queryKey: ['/api/student/payments'],
+    enabled: !!profile
+  });
+
   const calculateGrade = (total: number) => {
     if (total >= 80) return { grade: 'A', color: 'bg-green-500' };
     if (total >= 60) return { grade: 'B', color: 'bg-blue-500' };
@@ -337,7 +348,9 @@ export default function StudentDashboard() {
                   <CreditCard className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">₦0.00</div>
+                  <div className="text-2xl font-bold">
+                    ₦{studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0).toLocaleString()}
+                  </div>
                   <p className="text-xs text-muted-foreground">This term</p>
                 </CardContent>
               </Card>
@@ -348,7 +361,9 @@ export default function StudentDashboard() {
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">₦0.00</div>
+                  <div className="text-2xl font-bold">
+                    ₦{paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0).toLocaleString()}
+                  </div>
                   <p className="text-xs text-muted-foreground">Total payments</p>
                 </CardContent>
               </Card>
@@ -359,7 +374,9 @@ export default function StudentDashboard() {
                   <AlertCircle className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">₦0.00</div>
+                  <div className="text-2xl font-bold">
+                    ₦{Math.max(0, studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0) - paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0)).toLocaleString()}
+                  </div>
                   <p className="text-xs text-muted-foreground">Balance due</p>
                 </CardContent>
               </Card>
@@ -409,11 +426,43 @@ export default function StudentDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        <tr>
-                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
-                            No fees assigned for the selected term and session.
-                          </td>
-                        </tr>
+                        {studentFees.length === 0 ? (
+                          <tr>
+                            <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
+                              No fees assigned for the selected term and session.
+                            </td>
+                          </tr>
+                        ) : (
+                          studentFees.map((fee: any) => {
+                            const paidAmount = paymentHistory
+                              .filter((payment: any) => payment.studentFeeId === fee.id)
+                              .reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
+                            const balance = Number(fee.amount) - paidAmount;
+                            const isPaid = balance <= 0;
+                            
+                            return (
+                              <tr key={fee.id}>
+                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                  {fee.feeType?.name || 'Unknown Fee'}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                  ₦{Number(fee.amount).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                  ₦{paidAmount.toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                  ₦{Math.max(0, balance).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  <Badge variant={isPaid ? "default" : "destructive"}>
+                                    {isPaid ? "Paid" : "Outstanding"}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -449,11 +498,42 @@ export default function StudentDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      <tr>
-                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={6}>
-                          No payment history available yet.
-                        </td>
-                      </tr>
+                      {paymentHistory.length === 0 ? (
+                        <tr>
+                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={6}>
+                            No payment history available yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        paymentHistory.map((payment: any) => {
+                          const studentFee = studentFees.find((fee: any) => fee.id === payment.studentFeeId);
+                          return (
+                            <tr key={payment.id}>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {new Date(payment.paymentDate).toLocaleDateString()}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {studentFee?.feeType?.name || 'Unknown Fee'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                ₦{Number(payment.amount).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {payment.paymentMethod?.charAt(0).toUpperCase() + payment.paymentMethod?.slice(1) || 'Cash'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {payment.reference || 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                <Button variant="outline" size="sm">
+                                  <Receipt className="h-3 w-3 mr-1" />
+                                  Receipt
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
