@@ -1525,7 +1525,7 @@ export default function AdminDashboard() {
                     <img 
                       src={currentLogoUrl} 
                       alt="Seat of Wisdom Academy Logo" 
-                      className="h-6 w-6 sm:h-8 sm:w-8 object-contain rounded-md flex-shrink-0" 
+                      className="h-6 w-6 sm:h-8 sm:w-8 object-contain rounded-md flex-shrink-0 bg-white p-1" 
                     />
                     <h1 className="text-sm sm:text-xl font-bold text-gray-900 dark:text-white truncate">
                       Seat of Wisdom Academy
@@ -2552,7 +2552,7 @@ export default function AdminDashboard() {
                       <img 
                         src={currentLogoUrl} 
                         alt="Current Academy Logo" 
-                        className="h-16 w-16 object-contain rounded-md border border-gray-200" 
+                        className="h-16 w-16 object-contain rounded-md border border-gray-200 bg-white p-2" 
                       />
                     </div>
                     <div>

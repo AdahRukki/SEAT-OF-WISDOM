@@ -106,7 +106,7 @@ export default function Login() {
             <img 
               src={currentLogoUrl} 
               alt="Seat of Wisdom Academy Logo" 
-              className="h-16 w-16 object-contain rounded-md" 
+              className="h-20 w-20 object-contain rounded-md border border-gray-200 bg-white p-2" 
             />
           </div>
           <CardTitle className="text-2xl font-bold">Seat of Wisdom Academy</CardTitle>

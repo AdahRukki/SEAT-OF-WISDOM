@@ -151,7 +151,7 @@ export default function StudentDashboard() {
                   <img 
                     src={currentLogoUrl} 
                     alt="Seat of Wisdom Academy Logo" 
-                    className="h-8 w-8 object-contain rounded-md flex-shrink-0" 
+                    className="h-8 w-8 object-contain rounded-md flex-shrink-0 bg-white p-1" 
                   />
                   <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</h1>
                 </div>
@@ -668,7 +668,7 @@ export default function StudentDashboard() {
                         <img 
                           src={currentLogoUrl} 
                           alt="Seat of Wisdom Academy Logo" 
-                          className="h-16 w-16 object-contain rounded-md" 
+                          className="h-16 w-16 object-contain rounded-md bg-white p-2" 
                         />
                         <div>
                           <h1 className="text-2xl font-bold">SEAT OF WISDOM ACADEMY</h1>
