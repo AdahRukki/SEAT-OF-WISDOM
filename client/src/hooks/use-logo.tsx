@@ -11,7 +11,7 @@ export function useLogo() {
   });
 
   return {
-    logoUrl: data?.logoUrl || "/assets/4oWHptM_1754171230437.gif", // Fallback to default
+    logoUrl: data?.logoUrl || "/assets/212743_6b41e693330ee948d15ebcfdae2c4289-23_04_2024__13_22_35__1__1-removebg-preview-removebg-preview (1).png", // Fallback to your logo
     isLoading,
     error
   };
