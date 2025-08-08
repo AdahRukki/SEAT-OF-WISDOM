@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useLogo } from "@/hooks/use-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 
 export default function Login() {
+  const { logoUrl: currentLogoUrl } = useLogo();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -101,9 +103,11 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-blue-600 rounded-full">
-              <GraduationCap className="h-8 w-8 text-white" />
-            </div>
+            <img 
+              src={currentLogoUrl} 
+              alt="Seat of Wisdom Academy Logo" 
+              className="h-16 w-16 object-contain rounded-md" 
+            />
           </div>
           <CardTitle className="text-2xl font-bold">Seat of Wisdom Academy</CardTitle>
           <CardDescription>
