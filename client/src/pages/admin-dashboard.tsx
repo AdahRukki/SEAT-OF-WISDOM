@@ -1062,9 +1062,17 @@ export default function AdminDashboard() {
               display: flex;
               align-items: center;
               justify-content: center;
-              font-weight: bold;
-              color: #2563eb;
-              font-size: 10px;
+              padding: 2px;
+            }
+            .academy-logo {
+              width: 100%;
+              height: 100%;
+              object-fit: contain;
+              border-radius: 50%;
+              -webkit-print-color-adjust: exact !important;
+              color-adjust: exact !important;
+              display: block !important;
+              visibility: visible !important;
             }
             .school-name { 
               font-size: 16px; 
@@ -1276,7 +1284,9 @@ export default function AdminDashboard() {
         <body>
           <div class="report-container">
             <div class="header">
-              <div class="school-logo">SOWA</div>
+              <div class="school-logo">
+                <img src="${currentLogoUrl}" alt="Seat of Wisdom Academy Logo" class="academy-logo" />
+              </div>
               <div class="school-name">SEAT OF WISDOM ACADEMY ASABA</div>
               <div class="school-subtitle">GOVERNMENT, WAEC AND NECO APPROVED</div>
               <div class="school-motto">"The Fear of the Lord is the Beginning of Wisdom"</div>
