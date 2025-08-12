@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import path from "path";
+import express from "express";
 import { 
   loginSchema, 
   insertUserSchema, 
@@ -81,6 +83,9 @@ const requireMainAdmin = (req: Request, res: Response, next: NextFunction) => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Serve static assets first (before other routes)
+  app.use('/assets', express.static(path.join(process.cwd(), 'client/src/assets')));
+
   // Authentication routes
   app.post('/api/auth/login', async (req, res) => {
     try {
