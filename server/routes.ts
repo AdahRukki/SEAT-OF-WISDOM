@@ -801,7 +801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         } catch (error) {
           console.error(`Error processing row ${i + 2}:`, error);
-          errors.push(`Row ${i + 2}: ${error.message || 'Processing error'}`);
+          errors.push(`Row ${i + 2}: ${(error as Error).message || 'Processing error'}`);
         }
       }
 
@@ -959,10 +959,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Password updated successfully" });
     } catch (error) {
       console.error("Change password error:", error);
-      if (error.issues) {
-        return res.status(400).json({ error: error.issues[0].message });
+      if ((error as any).issues) {
+        return res.status(400).json({ error: (error as any).issues[0].message });
       }
       res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+
+  // Logout endpoint for comprehensive session cleanup
+  app.post('/api/logout', async (req, res) => {
+    try {
+      // Destroy the session if it exists
+      if (req.session) {
+        req.session.destroy((err) => {
+          if (err) {
+            console.error("Session destruction error:", err);
+          }
+        });
+      }
+      
+      // Clear all authentication cookies
+      res.clearCookie('connect.sid', { path: '/' });
+      res.clearCookie('auth_token', { path: '/' });
+      res.clearCookie('session', { path: '/' });
+      
+      // Set security headers to prevent caching
+      res.set({
+        'Cache-Control': 'no-cache, no-store, must-revalidate, private',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'X-Accel-Expires': '0'
+      });
+      
+      res.json({ message: 'Logged out successfully' });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ error: "Failed to logout" });
     }
   });
 
@@ -1108,8 +1140,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(payment);
     } catch (error) {
       console.error("Record payment error:", error);
-      if (error.issues) {
-        return res.status(400).json({ error: error.issues[0].message });
+      if ((error as any).issues) {
+        return res.status(400).json({ error: (error as any).issues[0].message });
       }
       res.status(500).json({ error: "Failed to record payment" });
     }
@@ -1135,8 +1167,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Assign fee error:", error);
-      if (error.issues) {
-        return res.status(400).json({ error: error.issues[0].message });
+      if ((error as any).issues) {
+        return res.status(400).json({ error: (error as any).issues[0].message });
       }
       res.status(500).json({ error: "Failed to assign fee to class" });
     }

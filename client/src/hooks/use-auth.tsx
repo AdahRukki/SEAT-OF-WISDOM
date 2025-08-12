@@ -74,14 +74,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const logout = () => {
-    localStorage.removeItem('auth_token');
+  const logout = async () => {
+    try {
+      // Call server logout endpoint to invalidate session
+      await fetch('/api/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (error) {
+      console.error('Server logout failed:', error);
+    }
+    
+    // Clear all client-side storage
+    localStorage.clear();
+    sessionStorage.clear();
     setToken(null);
     queryClient.clear();
-    // Prevent back navigation after logout
+    
+    // Clear browser cache and prevent back navigation
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => {
+          caches.delete(name);
+        });
+      });
+    }
+    
+    // Replace current history state and prevent back navigation
     window.history.replaceState(null, '', '/login');
     window.history.pushState(null, '', '/login');
-    window.location.href = '/login';
+    window.history.pushState(null, '', '/login');
+    
+    // Add multiple layers of back navigation prevention
+    const preventBack = (event: PopStateEvent) => {
+      event.preventDefault();
+      window.history.pushState(null, '', '/login');
+      window.location.replace('/login');
+    };
+    
+    const preventKeyboardBack = (event: KeyboardEvent) => {
+      if ((event.altKey && event.key === 'ArrowLeft') || 
+          (event.metaKey && event.key === 'ArrowLeft') || 
+          (event.ctrlKey && event.key === 'ArrowLeft') ||
+          event.key === 'Backspace') {
+        event.preventDefault();
+        window.location.replace('/login');
+      }
+    };
+    
+    window.addEventListener('popstate', preventBack);
+    window.addEventListener('keydown', preventKeyboardBack);
+    window.addEventListener('beforeunload', preventBack);
+    
+    // Force page reload and redirect
+    window.location.replace('/login');
+    
+    // Additional security: reload the page after a short delay
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
   };
 
   // Set up API client with auth token

@@ -10,9 +10,48 @@ import StudentDashboard from "@/pages/student-dashboard";
 import UserManagement from "@/pages/user-management";
 import Profile from "@/pages/profile";
 import NotFound from "@/pages/not-found";
+import { useEffect } from "react";
 
 function AppRoutes() {
   const { user, isLoading, isAuthenticated } = useAuth();
+
+  // Global back navigation prevention for unauthenticated users
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      // Clear navigation history and prevent back access
+      window.history.replaceState(null, '', '/login');
+      
+      const preventBackNavigation = (event: PopStateEvent) => {
+        event.preventDefault();
+        window.history.pushState(null, '', '/login');
+        window.location.replace('/login');
+      };
+      
+      const preventKeyboardNavigation = (event: KeyboardEvent) => {
+        if ((event.altKey && event.key === 'ArrowLeft') || 
+            (event.metaKey && event.key === 'ArrowLeft') || 
+            (event.ctrlKey && event.key === 'ArrowLeft')) {
+          event.preventDefault();
+          window.location.replace('/login');
+        }
+      };
+      
+      window.addEventListener('popstate', preventBackNavigation);
+      window.addEventListener('keydown', preventKeyboardNavigation);
+      
+      // Also prevent browser back button using page visibility
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && !isAuthenticated) {
+          window.location.replace('/login');
+        }
+      });
+      
+      return () => {
+        window.removeEventListener('popstate', preventBackNavigation);
+        window.removeEventListener('keydown', preventKeyboardNavigation);
+      };
+    }
+  }, [isAuthenticated, isLoading]);
 
   if (isLoading) {
     return (
