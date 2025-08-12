@@ -73,6 +73,7 @@ import {
   Edit,
   X,
   DollarSign,
+  Settings,
   CreditCard,
   TrendingUp,
   Calendar,
@@ -219,6 +220,75 @@ export default function AdminDashboard() {
   const [scoresTerm, setScoresTerm] = useState("First Term");
   const [scoresSession, setScoresSession] = useState("2024/2025");
   const [scoreInputs, setScoreInputs] = useState<{[key: string]: {firstCA: string, secondCA: string, exam: string}}>({});
+  
+  // Class-based student viewing
+  const [selectedClassForStudents, setSelectedClassForStudents] = useState("");
+  
+  // Student creation form with single-word validation
+  const [studentCreationForm, setStudentCreationForm] = useState({
+    firstName: "",
+    lastName: "",
+    middleName: "",
+    email: "",
+    password: "",
+    classId: "",
+    dateOfBirth: "",
+    parentContact: "",
+    parentWhatsApp: "",
+    address: ""
+  });
+  const [studentFormErrors, setStudentFormErrors] = useState<{[key: string]: string}>({});
+  
+  // Universal settings management
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [globalTerm, setGlobalTerm] = useState("First Term");
+  const [globalSession, setGlobalSession] = useState("2024/2025");
+  const [isCreateSessionDialogOpen, setIsCreateSessionDialogOpen] = useState(false);
+  const [newSessionYear, setNewSessionYear] = useState("");
+  
+  // Report generation with promotion
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [selectedReportClass, setSelectedReportClass] = useState("");
+  const [selectedReportTerm, setSelectedReportTerm] = useState("First Term");
+  const [selectedReportSession, setSelectedReportSession] = useState("2024/2025");
+  const [nextTermResumptionDate, setNextTermResumptionDate] = useState("");
+  const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
+  const [studentsToPromote, setStudentsToPromote] = useState<{[key: string]: string}>({});
+  
+  // Subject assignment to classes
+  const [isAssignSubjectDialogOpen, setIsAssignSubjectDialogOpen] = useState(false);
+  const [selectedClassForSubject, setSelectedClassForSubject] = useState("");
+  const [selectedSubjectToAssign, setSelectedSubjectToAssign] = useState("");
+
+  // Single-word validation function
+  const validateSingleWord = (value: string) => {
+    if (!value) return "";
+    if (value.includes(' ')) return 'Only single words are allowed (no spaces)';
+    return "";
+  };
+
+  const handleStudentFormChange = (field: string, value: string) => {
+    setStudentCreationForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+
+    // Validate single-word fields in real-time
+    if (['firstName', 'lastName', 'middleName'].includes(field)) {
+      const error = validateSingleWord(value);
+      setStudentFormErrors(prev => ({
+        ...prev,
+        [field]: error
+      }));
+    }
+  };
+
+  const isStudentFormValid = () => {
+    const { firstName, lastName, email, password, classId, parentWhatsApp } = studentCreationForm;
+    const hasRequiredFields = firstName && lastName && email && password && classId && parentWhatsApp;
+    const hasNoErrors = Object.values(studentFormErrors).every(error => !error);
+    return hasRequiredFields && hasNoErrors;
+  };
 
   // Set initial school for sub-admin or first school for main admin
   useEffect(() => {
@@ -369,25 +439,44 @@ export default function AdminDashboard() {
 
   const createStudentMutation = useMutation({
     mutationFn: async (studentData: any) => {
-      const newStudent = await apiRequest('/api/admin/students', {
+      return await apiRequest('/api/admin/students', {
         method: 'POST',
-        body: studentData
+        body: {
+          ...studentData,
+          parentWhatsapp: studentData.parentWhatsApp,
+          schoolId: selectedSchoolId || user?.schoolId
+        }
       });
-      
-      // Sync to Firebase
-      await firebaseSync.saveStudent(newStudent);
-      
-      return newStudent;
     },
     onSuccess: () => {
-      toast({ title: "Success", description: "Student created successfully" });
+      toast({
+        title: "Success",
+        description: "Student created successfully with auto-generated SOWA ID",
+      });
+      setIsStudentDialogOpen(false);
+      setStudentCreationForm({
+        firstName: "",
+        lastName: "",
+        middleName: "",
+        email: "",
+        password: "",
+        classId: "",
+        dateOfBirth: "",
+        parentContact: "",
+        parentWhatsApp: "",
+        address: ""
+      });
+      setStudentFormErrors({});
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'] });
-      handleStudentCreated();
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create student", variant: "destructive" });
-    }
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create student",
+        variant: "destructive",
+      });
+    },
   });
 
   const updateScoresMutation = useMutation({
@@ -418,13 +507,53 @@ export default function AdminDashboard() {
     }
   });
 
-  const resetStudentForm = () => {
-    setStudentFirstName("");
-    setStudentLastName("");
-    setStudentEmail("");
-    setStudentPassword("");
-    setStudentId("");
-    setSelectedClassId("");
+  // Single-word validation is now implemented earlier in the file
+
+  // Student form validation is implemented earlier in the file
+
+  // Enhanced student creation mutation is implemented earlier in the file
+
+  // Create student with comprehensive validation
+  const handleCreateStudent = () => {
+    if (!isStudentFormValid()) {
+      toast({ 
+        title: "Validation Error", 
+        description: "Please complete all required fields and fix validation errors", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    const studentData = {
+      firstName: studentCreationForm.firstName,
+      lastName: studentCreationForm.lastName,
+      middleName: studentCreationForm.middleName || undefined,
+      email: studentCreationForm.email,
+      password: studentCreationForm.password,
+      classId: studentCreationForm.classId || selectedClassForStudents,
+      dateOfBirth: studentCreationForm.dateOfBirth || undefined,
+      parentContact: studentCreationForm.parentContact || undefined,
+      parentWhatsApp: studentCreationForm.parentWhatsApp,
+      address: studentCreationForm.address || undefined
+    };
+
+    createStudentMutation.mutate(studentData);
+  };
+
+  // Get class progression mapping
+  const getNextClass = (currentClass: string): string => {
+    const classProgression: {[key: string]: string} = {
+      "JSS1": "JSS2",
+      "JSS2": "JSS3", 
+      "JSS3": "SSS1",
+      "SSS1": "SSS2",
+      "SSS2": "SSS3",
+      "SSS3": "Graduated"
+    };
+    
+    // Extract class name from full class name
+    const className = currentClass.split(' ').pop() || currentClass;
+    return classProgression[className] || "Graduated";
   };
 
   // Logo upload mutation
@@ -535,6 +664,66 @@ export default function AdminDashboard() {
         description: "Failed to create new subject", 
         variant: "destructive" 
       });
+    }
+  });
+
+  // Universal settings management
+  const updateGlobalSettings = useMutation({
+    mutationFn: async (settings: {term: string, session: string}) => {
+      return await apiRequest('/api/admin/settings/global', {
+        method: 'POST',
+        body: settings
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Global settings updated" });
+      setIsSettingsDialogOpen(false);
+      // Update local state
+      setScoresTerm(globalTerm);
+      setScoresSession(globalSession);
+      setSelectedFinanceTerm(globalTerm);
+      setSelectedFinanceSession(globalSession);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update settings", variant: "destructive" });
+    }
+  });
+
+  // Create new academic session
+  const createSessionMutation = useMutation({
+    mutationFn: async (sessionData: {sessionYear: string}) => {
+      return await apiRequest('/api/admin/sessions', {
+        method: 'POST',
+        body: sessionData
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "New session created" });
+      setIsCreateSessionDialogOpen(false);
+      setNewSessionYear("");
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create session", variant: "destructive" });
+    }
+  });
+
+  // Assign subject to class (from Overview tab)
+  const assignSubjectToClassMutation = useMutation({
+    mutationFn: async (data: {classId: string, subjectId: string}) => {
+      return await apiRequest('/api/admin/classes/assign-subject', {
+        method: 'POST',
+        body: data
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Subject assigned to class" });
+      setIsAssignSubjectDialogOpen(false);
+      setSelectedClassForSubject("");
+      setSelectedSubjectToAssign("");
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to assign subject", variant: "destructive" });
     }
   });
 
@@ -1850,62 +2039,139 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Subject Assignment Feature for Overview */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Subject Assignment</CardTitle>
+                  <CardDescription>
+                    Assign subjects to specific classes
+                  </CardDescription>
+                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button onClick={() => setIsAssignSubjectDialogOpen(true)}>
+                        <BookOpen className="h-4 w-4 mr-2" />
+                        Assign Subject
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Assign subjects to classes for better organization</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8">
+                  <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Subject Management</h3>
+                  <p className="text-gray-500 mb-4">Assign subjects to classes for organized curriculum management</p>
+                  <Button onClick={() => setIsAssignSubjectDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Assign Subject to Class
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* Students Tab */}
+          {/* Students Tab - Class-based viewing */}
           <TabsContent value="students" className="space-y-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Student Management</CardTitle>
                   <CardDescription>
-                    Add and manage student accounts and information
+                    Select a class to view and manage students
                   </CardDescription>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button onClick={() => setIsStudentDialogOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Student
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Create new student account with auto-generated SOWA ID</p>
-                  </TooltipContent>
-                </Tooltip>
-
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div>
+                        <Button 
+                          onClick={() => setIsStudentDialogOpen(true)}
+                          disabled={!selectedClassForStudents}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Student
+                        </Button>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{selectedClassForStudents ? "Create new student account with auto-generated SOWA ID" : "Select a class first to add students"}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </CardHeader>
               <CardContent>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Class</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {allStudents.map((student) => (
-                        <tr key={student.id}>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                            {student.user.firstName} {student.user.lastName}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                            {student.studentId}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                            {student.user.email}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                            {student.class.name}
-                          </td>
-                        </tr>
+                {/* Class Selection */}
+                <div className="mb-6">
+                  <Label htmlFor="class-select">Select Class to View Students</Label>
+                  <Select value={selectedClassForStudents} onValueChange={setSelectedClassForStudents}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Choose a class to view students..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.map((classItem) => (
+                        <SelectItem key={classItem.id} value={classItem.id}>
+                          {classItem.name} ({allStudents.filter(s => s.classId === classItem.id).length} students)
+                        </SelectItem>
                       ))}
-                    </tbody>
-                  </table>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {/* Students Table - Only show when class is selected */}
+                {selectedClassForStudents ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Parent WhatsApp</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {allStudents
+                          .filter(student => student.classId === selectedClassForStudents)
+                          .map((student) => (
+                            <tr key={student.id}>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {student.user.firstName} {student.user.lastName}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {student.studentId}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {student.user.email}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                {student.parentWhatsapp || 'Not provided'}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                    {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
+                      <div className="text-center py-8">
+                        <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No students in this class</h3>
+                        <p className="text-gray-500">Click "Add Student" to create the first student</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 border rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                    <School className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Select a Class</h3>
+                    <p className="text-gray-500">Choose a class from the dropdown above to view and manage students</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -2607,6 +2873,33 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                {/* Universal Settings Management */}
+                <div className="border-t pt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-medium">Universal Settings</h3>
+                        <p className="text-sm text-gray-500">Global term and session management for the entire academy</p>
+                      </div>
+                      <Button onClick={() => setIsSettingsDialogOpen(true)}>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Manage Settings
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="text-lg font-bold text-blue-600">Current Term</div>
+                        <p className="text-sm text-blue-600">{scoresTerm}</p>
+                      </div>
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                        <div className="text-lg font-bold text-green-600">Current Session</div>
+                        <p className="text-sm text-green-600">{scoresSession}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* System Information */}
                 <div className="border-t pt-6">
                   <div className="space-y-4">
@@ -3015,42 +3308,63 @@ export default function AdminDashboard() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="student-firstname">First Name</Label>
+                  <Label htmlFor="student-firstname">First Name *</Label>
                   <Input
                     id="student-firstname"
-                    value={studentFirstName}
-                    onChange={(e) => setStudentFirstName(e.target.value)}
+                    value={studentCreationForm.firstName}
+                    onChange={(e) => handleStudentFormChange('firstName', e.target.value)}
                     placeholder="John"
+                    className={studentFormErrors.firstName ? "border-red-500" : ""}
                   />
+                  {studentFormErrors.firstName && (
+                    <p className="text-red-500 text-xs mt-1">{studentFormErrors.firstName}</p>
+                  )}
                 </div>
                 <div>
-                  <Label htmlFor="student-lastname">Last Name</Label>
+                  <Label htmlFor="student-lastname">Last Name *</Label>
                   <Input
                     id="student-lastname"
-                    value={studentLastName}
-                    onChange={(e) => setStudentLastName(e.target.value)}
+                    value={studentCreationForm.lastName}
+                    onChange={(e) => handleStudentFormChange('lastName', e.target.value)}
                     placeholder="Doe"
+                    className={studentFormErrors.lastName ? "border-red-500" : ""}
                   />
+                  {studentFormErrors.lastName && (
+                    <p className="text-red-500 text-xs mt-1">{studentFormErrors.lastName}</p>
+                  )}
                 </div>
               </div>
               <div>
-                <Label htmlFor="student-email">Email</Label>
+                <Label htmlFor="student-middlename">Middle Name (Optional)</Label>
+                <Input
+                  id="student-middlename"
+                  value={studentCreationForm.middleName}
+                  onChange={(e) => handleStudentFormChange('middleName', e.target.value)}
+                  placeholder="Smith"
+                  className={studentFormErrors.middleName ? "border-red-500" : ""}
+                />
+                {studentFormErrors.middleName && (
+                  <p className="text-red-500 text-xs mt-1">{studentFormErrors.middleName}</p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor="student-email">Email *</Label>
                 <Input
                   id="student-email"
                   type="email"
-                  value={studentEmail}
-                  onChange={(e) => setStudentEmail(e.target.value)}
+                  value={studentCreationForm.email}
+                  onChange={(e) => handleStudentFormChange('email', e.target.value)}
                   placeholder="john.doe@student.com"
                 />
               </div>
               <div>
-                <Label htmlFor="student-password">Password</Label>
+                <Label htmlFor="student-password">Password *</Label>
                 <div className="relative">
                   <Input
                     id="student-password"
                     type={showPassword ? "text" : "password"}
-                    value={studentPassword}
-                    onChange={(e) => setStudentPassword(e.target.value)}
+                    value={studentCreationForm.password}
+                    onChange={(e) => handleStudentFormChange('password', e.target.value)}
                     placeholder="Enter password"
                     className="pr-10"
                   />
@@ -3068,6 +3382,18 @@ export default function AdminDashboard() {
                     )}
                   </Button>
                 </div>
+              </div>
+              <div>
+                <Label htmlFor="student-whatsapp">Parent WhatsApp Number *</Label>
+                <Input
+                  id="student-whatsapp"
+                  value={studentCreationForm.parentWhatsApp}
+                  onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
+                  placeholder="+234 XXX XXX XXXX"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Parent's WhatsApp number for communication and updates
+                </p>
               </div>
               <div>
                 <Label htmlFor="student-id">Student ID (Auto-generated)</Label>
@@ -3097,15 +3423,11 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div>
-                <Label htmlFor="student-class">
-                  Class 
-                  {selectedClassId && (
-                    <span className="text-xs text-green-600 ml-2">
-                      (Pre-selected from class details)
-                    </span>
-                  )}
-                </Label>
-                <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                <Label htmlFor="student-class">Class *</Label>
+                <Select 
+                  value={studentCreationForm.classId || selectedClassForStudents} 
+                  onValueChange={(value) => handleStudentFormChange('classId', value)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a class" />
                   </SelectTrigger>
@@ -3118,18 +3440,21 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
               </div>
+              
+              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                <h4 className="text-sm font-medium text-yellow-800 mb-2">
+                  Single-Word Names Only
+                </h4>
+                <p className="text-xs text-yellow-700">
+                  Only single words are allowed for first name, last name, and middle name (no spaces).
+                  This ensures proper student record management.
+                </p>
+              </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
-                    onClick={() => createStudentMutation.mutate({
-                      firstName: studentFirstName,
-                      lastName: studentLastName,
-                      email: studentEmail,
-                      password: studentPassword,
-                      studentId: studentId,
-                      classId: selectedClassId
-                    })}
-                    disabled={!studentFirstName || !studentLastName || !studentEmail || !studentPassword || !selectedClassId || createStudentMutation.isPending}
+                    onClick={handleCreateStudent}
+                    disabled={!isStudentFormValid() || createStudentMutation.isPending}
                     className="w-full"
                   >
                     {createStudentMutation.isPending ? "Creating..." : "Create Student"}
@@ -3579,6 +3904,331 @@ export default function AdminDashboard() {
               >
                 Close
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Enhanced Student Creation Dialog with Single-Word Validation and WhatsApp */}
+        <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create New Student</DialogTitle>
+              <DialogDescription>
+                Add a new student with comprehensive information and auto-generated SOWA ID
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    value={studentCreationForm.firstName}
+                    onChange={(e) => handleStudentFormChange('firstName', e.target.value)}
+                    placeholder="Enter first name (single word only)"
+                    className={studentFormErrors.firstName ? "border-red-500" : ""}
+                  />
+                  {studentFormErrors.firstName && (
+                    <p className="text-red-500 text-xs mt-1">{studentFormErrors.firstName}</p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    value={studentCreationForm.lastName}
+                    onChange={(e) => handleStudentFormChange('lastName', e.target.value)}
+                    placeholder="Enter last name (single word only)"
+                    className={studentFormErrors.lastName ? "border-red-500" : ""}
+                  />
+                  {studentFormErrors.lastName && (
+                    <p className="text-red-500 text-xs mt-1">{studentFormErrors.lastName}</p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="middleName">Middle Name (Optional)</Label>
+                  <Input
+                    id="middleName"
+                    value={studentCreationForm.middleName}
+                    onChange={(e) => handleStudentFormChange('middleName', e.target.value)}
+                    placeholder="Enter middle name (single word only)"
+                    className={studentFormErrors.middleName ? "border-red-500" : ""}
+                  />
+                  {studentFormErrors.middleName && (
+                    <p className="text-red-500 text-xs mt-1">{studentFormErrors.middleName}</p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="email">Email Address *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={studentCreationForm.email}
+                    onChange={(e) => handleStudentFormChange('email', e.target.value)}
+                    placeholder="student@example.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="password">Password *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={studentCreationForm.password}
+                    onChange={(e) => handleStudentFormChange('password', e.target.value)}
+                    placeholder="Enter secure password"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="classId">Class *</Label>
+                  <Select 
+                    value={studentCreationForm.classId || selectedClassForStudents} 
+                    onValueChange={(value) => handleStudentFormChange('classId', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.map((cls) => (
+                        <SelectItem key={cls.id} value={cls.id}>
+                          {cls.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Input
+                    id="dateOfBirth"
+                    type="date"
+                    value={studentCreationForm.dateOfBirth}
+                    onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="parentContact">Parent Contact</Label>
+                  <Input
+                    id="parentContact"
+                    value={studentCreationForm.parentContact}
+                    onChange={(e) => handleStudentFormChange('parentContact', e.target.value)}
+                    placeholder="Parent phone number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="parentWhatsApp">Parent WhatsApp *</Label>
+                  <Input
+                    id="parentWhatsApp"
+                    value={studentCreationForm.parentWhatsApp}
+                    onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
+                    placeholder="Parent WhatsApp number"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea
+                    id="address"
+                    value={studentCreationForm.address}
+                    onChange={(e) => handleStudentFormChange('address', e.target.value)}
+                    placeholder="Student's home address"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setIsStudentDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <div className="flex items-center gap-2">
+                  {!isStudentFormValid() && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div>
+                            <Button disabled>
+                              Create Student
+                            </Button>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Complete all required fields and fix validation errors</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {isStudentFormValid() && (
+                    <Button 
+                      onClick={handleCreateStudent} 
+                      disabled={createStudentMutation.isPending}
+                    >
+                      {createStudentMutation.isPending ? "Creating..." : "Create Student"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Universal Settings Dialog */}
+        <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Universal Settings</DialogTitle>
+              <DialogDescription>
+                Set global term and session for the entire academy
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="globalTerm">Current Term</Label>
+                <Select value={globalTerm} onValueChange={setGlobalTerm}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select term" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="First Term">First Term</SelectItem>
+                    <SelectItem value="Second Term">Second Term</SelectItem>
+                    <SelectItem value="Third Term">Third Term</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="globalSession">Current Session</Label>
+                <Select value={globalSession} onValueChange={setGlobalSession}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2024/2025">2024/2025</SelectItem>
+                    <SelectItem value="2025/2026">2025/2026</SelectItem>
+                    <SelectItem value="2026/2027">2026/2027</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Create New Session</Label>
+                    <p className="text-sm text-gray-500">Add a new academic session</p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsCreateSessionDialogOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Session
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => updateGlobalSettings.mutate({term: globalTerm, session: globalSession})}
+                  disabled={updateGlobalSettings.isPending}
+                >
+                  {updateGlobalSettings.isPending ? "Updating..." : "Update Settings"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Subject Assignment Dialog */}
+        <Dialog open={isAssignSubjectDialogOpen} onOpenChange={setIsAssignSubjectDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Assign Subject to Class</DialogTitle>
+              <DialogDescription>
+                Select a class and subject to create the assignment
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="classForSubject">Select Class</Label>
+                <Select value={selectedClassForSubject} onValueChange={setSelectedClassForSubject}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((classItem) => (
+                      <SelectItem key={classItem.id} value={classItem.id}>
+                        {classItem.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="subjectToAssign">Select Subject</Label>
+                <Select value={selectedSubjectToAssign} onValueChange={setSelectedSubjectToAssign}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a subject" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subjects.map((subject) => (
+                      <SelectItem key={subject.id} value={subject.id}>
+                        {subject.name} ({subject.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setIsAssignSubjectDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => assignSubjectToClassMutation.mutate({
+                    classId: selectedClassForSubject,
+                    subjectId: selectedSubjectToAssign
+                  })}
+                  disabled={!selectedClassForSubject || !selectedSubjectToAssign || assignSubjectToClassMutation.isPending}
+                >
+                  {assignSubjectToClassMutation.isPending ? "Assigning..." : "Assign Subject"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create New Session Dialog */}
+        <Dialog open={isCreateSessionDialogOpen} onOpenChange={setIsCreateSessionDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Academic Session</DialogTitle>
+              <DialogDescription>
+                Add a new academic session to the system
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="newSessionYear">Session Year</Label>
+                <Input
+                  id="newSessionYear"
+                  value={newSessionYear}
+                  onChange={(e) => setNewSessionYear(e.target.value)}
+                  placeholder="e.g., 2025/2026"
+                />
+                <p className="text-sm text-gray-500 mt-1">Format: YYYY/YYYY</p>
+              </div>
+              
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setIsCreateSessionDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => createSessionMutation.mutate({sessionYear: newSessionYear})}
+                  disabled={!newSessionYear || createSessionMutation.isPending}
+                >
+                  {createSessionMutation.isPending ? "Creating..." : "Create Session"}
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

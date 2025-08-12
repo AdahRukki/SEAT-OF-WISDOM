@@ -488,35 +488,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin routes - Student management
   app.post('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
     try {
-      const { firstName, lastName, email, password, studentId, classId } = req.body;
+      const { 
+        firstName, 
+        lastName, 
+        middleName,
+        email, 
+        password, 
+        classId,
+        dateOfBirth,
+        parentContact,
+        parentWhatsApp,
+        address,
+        schoolId: requestSchoolId
+      } = req.body;
       
-      if (!firstName || !lastName || !email || !password || !studentId || !classId) {
-        return res.status(400).json({ error: "All fields are required" });
+      // Required fields validation
+      if (!firstName || !lastName || !email || !password || !classId || !parentWhatsApp) {
+        return res.status(400).json({ error: "Required fields: firstName, lastName, email, password, classId, parentWhatsApp" });
       }
 
-      // Get the school ID - for sub-admins use their schoolId, for main admin get it from the class
+      // Get the school ID - for sub-admins use their schoolId, for main admin get it from request or class
       const user = (req as any).user;
       let schoolId: string;
       
       if (user.role === 'admin') {
-        // Main admin: get school from the selected class
-        const classData = await storage.getClassById(classId);
-        if (!classData) {
-          return res.status(400).json({ error: "Invalid class selected" });
+        // Main admin: use provided schoolId or get from class
+        if (requestSchoolId) {
+          schoolId = requestSchoolId;
+        } else {
+          const classData = await storage.getClassById(classId);
+          if (!classData) {
+            return res.status(400).json({ error: "Invalid class selected" });
+          }
+          schoolId = classData.schoolId!;
         }
-        schoolId = classData.schoolId!;
       } else {
         // Sub-admin: use their assigned school
         schoolId = user.schoolId;
       }
 
-      // Validate single name only (no spaces allowed)
-      if (firstName.includes(' ') || lastName.includes(' ')) {
+      // Validate single words only (no spaces allowed for names)
+      if (firstName.includes(' ') || lastName.includes(' ') || (middleName && middleName.includes(' '))) {
         return res.status(400).json({ error: "Names must be single words without spaces" });
       }
 
-      // Extract parentWhatsapp from request
-      const { parentWhatsapp } = req.body;
+      // Auto-generate student ID in SOWA/x000 format
+      const schoolNumber = await storage.getSchoolNumber(schoolId);
+      const studentCount = await storage.getStudentCountForSchool(schoolId);
+      const autoStudentId = `SOWA/${schoolNumber}${(studentCount + 1).toString().padStart(3, '0')}`;
 
       // First create the user account
       const userData = insertUserSchema.parse({
@@ -530,21 +549,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newUser = await storage.createUser(userData);
       
-      // Then create the student record
+      // Then create the student record with comprehensive data
       const studentData = insertStudentSchema.parse({
         userId: newUser.id,
         classId,
-        studentId,
-        parentContact: '',
-        parentWhatsapp: parentWhatsapp || '',
-        address: ''
+        studentId: autoStudentId,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        parentContact: parentContact || '',
+        parentWhatsapp: parentWhatsApp,
+        address: address || ''
       });
       
       const student = await storage.createStudent(studentData);
-      res.json({ user: newUser, student });
+      
+      res.json({ 
+        message: "Student created successfully",
+        user: newUser, 
+        student,
+        studentId: autoStudentId
+      });
     } catch (error) {
       console.error("Create student error:", error);
-      res.status(400).json({ error: "Failed to create student" });
+      res.status(500).json({ error: error.message || "Failed to create student" });
     }
   });
 

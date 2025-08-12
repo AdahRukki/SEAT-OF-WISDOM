@@ -11,6 +11,8 @@ import {
   studentFees,
   payments,
   settings,
+  academicSessions,
+  academicTerms,
   type School,
   type User,
   type Student,
@@ -22,6 +24,8 @@ import {
   type StudentFee,
   type Payment,
   type Setting,
+  type AcademicSession,
+  type AcademicTerm,
   type InsertUser,
   type InsertStudent,
   type InsertClass,
@@ -32,6 +36,8 @@ import {
   type InsertStudentFee,
   type InsertPayment,
   type InsertSetting,
+  type InsertAcademicSession,
+  type InsertAcademicTerm,
   type StudentWithDetails,
   type StudentFeeWithDetails,
   type PaymentWithDetails
@@ -124,6 +130,13 @@ export interface IStorage {
   // Student promotion system
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
   markStudentsAsGraduated(studentIds: string[]): Promise<void>;
+  
+  // Enhanced student creation helpers
+  getSchoolNumber(schoolId: string): Promise<string>;
+  getStudentCountForSchool(schoolId: string): Promise<number>;
+  getClassById(classId: string): Promise<Class | undefined>;
+  updateSchool(schoolId: string, data: Partial<School>): Promise<School>;
+  updateUserProfile(userId: string, data: Partial<User>): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1043,6 +1056,50 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date()
       })
       .where(inArray(students.id, studentIds));
+  }
+
+  // Enhanced student creation helper methods
+  async getSchoolNumber(schoolId: string): Promise<string> {
+    const [school] = await db.select().from(schools).where(eq(schools.id, schoolId));
+    if (!school) throw new Error("School not found");
+    
+    // Extract school number from name or use sortOrder
+    // School 1 -> "1", School 2 -> "2", etc.
+    const match = school.name.match(/(\d+)/);
+    return match ? match[1] : school.sortOrder?.toString() || "1";
+  }
+
+  async getStudentCountForSchool(schoolId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(eq(classes.schoolId, schoolId));
+    
+    return result?.count || 0;
+  }
+
+  async getClassById(classId: string): Promise<Class | undefined> {
+    const [classData] = await db.select().from(classes).where(eq(classes.id, classId));
+    return classData;
+  }
+
+  async updateSchool(schoolId: string, data: Partial<School>): Promise<School> {
+    const [updatedSchool] = await db
+      .update(schools)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(schools.id, schoolId))
+      .returning();
+    return updatedSchool;
+  }
+
+  async updateUserProfile(userId: string, data: Partial<User>): Promise<User> {
+    const [updatedUser] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return updatedUser;
   }
 }
 
