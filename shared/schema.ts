@@ -23,6 +23,29 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Academic sessions and terms
+export const academicSessions = pgTable("academic_sessions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionYear: varchar("session_year", { length: 20 }).notNull().unique(), // e.g., "2024/2025"
+  isActive: boolean("is_active").default(false),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const academicTerms = pgTable("academic_terms", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  termName: varchar("term_name", { length: 20 }).notNull(), // "First Term", "Second Term", "Third Term"
+  sessionId: uuid("session_id").notNull().references(() => academicSessions.id, { onDelete: "cascade" }),
+  isActive: boolean("is_active").default(false),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  resumptionDate: timestamp("resumption_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Schools table (for multiple branches)
 export const schools = pgTable("schools", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -83,10 +106,12 @@ export const students = pgTable("students", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id),
-  studentId: varchar("student_id", { length: 50 }).notNull().unique(), // e.g., "STU001"
+  studentId: varchar("student_id", { length: 50 }).notNull().unique(), // e.g., "SOWA/1001"
   dateOfBirth: timestamp("date_of_birth"),
   parentContact: varchar("parent_contact", { length: 255 }),
+  parentWhatsapp: varchar("parent_whatsapp", { length: 20 }), // WhatsApp number for parents
   address: text("address"),
+  status: varchar("status", { length: 20 }).default("active"), // active, graduated
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -404,3 +429,9 @@ export type PaymentWithDetails = Payment & {
 // Settings types
 export type Setting = typeof settings.$inferSelect;
 export type InsertSetting = typeof settings.$inferInsert;
+
+// Academic Session and Term types
+export type AcademicSession = typeof academicSessions.$inferSelect;
+export type InsertAcademicSession = typeof academicSessions.$inferInsert;
+export type AcademicTerm = typeof academicTerms.$inferSelect;
+export type InsertAcademicTerm = typeof academicTerms.$inferInsert;

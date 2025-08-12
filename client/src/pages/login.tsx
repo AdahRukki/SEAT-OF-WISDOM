@@ -119,11 +119,11 @@ export default function Login() {
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Email or Student ID</Label>
                   <Input
                     id="email"
-                    type="email"
-                    placeholder="Enter your email"
+                    type="text"
+                    placeholder="Enter your email or student ID (e.g., SOWA/1001)"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required

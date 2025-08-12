@@ -43,6 +43,7 @@ import bcrypt from "bcrypt";
 export interface IStorage {
   // Authentication
   authenticateUser(email: string, password: string): Promise<User | null>;
+  authenticateUserByStudentId(studentId: string, password: string): Promise<User | null>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   verifyPassword(email: string, password: string): Promise<boolean>;
@@ -53,7 +54,7 @@ export interface IStorage {
   getSchoolById(id: string): Promise<School | undefined>;
   
   // Admin operations
-  getAllUsers(): Promise<(User & { school?: School })[]>;
+  getAllUsers(adminOnly?: boolean): Promise<(User & { school?: School })[]>;
   createUser(userData: InsertUser): Promise<User>;
   deleteUser(userId: string): Promise<void>;
   updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School>;
@@ -108,6 +109,21 @@ export interface IStorage {
   // Settings operations
   getSetting(key: string): Promise<Setting | undefined>;
   setSetting(key: string, value: string): Promise<Setting>;
+
+  // Academic sessions and terms management
+  createAcademicSession(sessionData: InsertAcademicSession): Promise<AcademicSession>;
+  getAcademicSessions(): Promise<AcademicSession[]>;
+  getActiveAcademicSession(): Promise<AcademicSession | undefined>;
+  setActiveAcademicSession(sessionId: string): Promise<AcademicSession>;
+  
+  createAcademicTerm(termData: InsertAcademicTerm): Promise<AcademicTerm>;
+  getAcademicTerms(sessionId?: string): Promise<AcademicTerm[]>;
+  getActiveTerm(): Promise<AcademicTerm | undefined>;
+  setActiveTerm(termId: string): Promise<AcademicTerm>;
+  
+  // Student promotion system
+  promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
+  markStudentsAsGraduated(studentIds: string[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -117,6 +133,19 @@ export class DatabaseStorage implements IStorage {
     
     const isValidPassword = await bcrypt.compare(password, user.password);
     return isValidPassword ? user : null;
+  }
+
+  async authenticateUserByStudentId(studentId: string, password: string): Promise<User | null> {
+    // Find student by student ID
+    const [student] = await db.select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .where(eq(students.studentId, studentId));
+    
+    if (!student || !student.users || !student.users.isActive) return null;
+    
+    const isValidPassword = await bcrypt.compare(password, student.users.password);
+    return isValidPassword ? student.users : null;
   }
 
   async getUserById(id: string): Promise<User | undefined> {
@@ -317,8 +346,8 @@ export class DatabaseStorage implements IStorage {
     return school || undefined;
   }
 
-  async getAllUsers(): Promise<(User & { school?: School })[]> {
-    const result = await db
+  async getAllUsers(adminOnly: boolean = false): Promise<(User & { school?: School })[]> {
+    let query = db
       .select({
         id: users.id,
         email: users.email,
@@ -343,6 +372,12 @@ export class DatabaseStorage implements IStorage {
       })
       .from(users)
       .leftJoin(schools, eq(users.schoolId, schools.id));
+
+    if (adminOnly) {
+      query = query.where(inArray(users.role, ['admin', 'sub-admin']));
+    }
+
+    const result = await query;
 
     return result.map(row => ({
       ...row,
@@ -920,6 +955,94 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return newSetting;
     }
+  }
+
+  // Academic Sessions and Terms Management
+  async createAcademicSession(sessionData: InsertAcademicSession): Promise<AcademicSession> {
+    const [session] = await db
+      .insert(academicSessions)
+      .values(sessionData)
+      .returning();
+    return session;
+  }
+
+  async getAcademicSessions(): Promise<AcademicSession[]> {
+    return await db.select().from(academicSessions).orderBy(desc(academicSessions.createdAt));
+  }
+
+  async getActiveAcademicSession(): Promise<AcademicSession | undefined> {
+    const [session] = await db.select().from(academicSessions).where(eq(academicSessions.isActive, true));
+    return session;
+  }
+
+  async setActiveAcademicSession(sessionId: string): Promise<AcademicSession> {
+    // Deactivate all sessions first
+    await db.update(academicSessions).set({ isActive: false });
+    
+    // Activate the selected session
+    const [session] = await db
+      .update(academicSessions)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(academicSessions.id, sessionId))
+      .returning();
+    return session;
+  }
+
+  async createAcademicTerm(termData: InsertAcademicTerm): Promise<AcademicTerm> {
+    const [term] = await db
+      .insert(academicTerms)
+      .values(termData)
+      .returning();
+    return term;
+  }
+
+  async getAcademicTerms(sessionId?: string): Promise<AcademicTerm[]> {
+    let query = db.select().from(academicTerms);
+    
+    if (sessionId) {
+      query = query.where(eq(academicTerms.sessionId, sessionId));
+    }
+    
+    return await query.orderBy(asc(academicTerms.termName));
+  }
+
+  async getActiveTerm(): Promise<AcademicTerm | undefined> {
+    const [term] = await db.select().from(academicTerms).where(eq(academicTerms.isActive, true));
+    return term;
+  }
+
+  async setActiveTerm(termId: string): Promise<AcademicTerm> {
+    // Deactivate all terms first
+    await db.update(academicTerms).set({ isActive: false });
+    
+    // Activate the selected term
+    const [term] = await db
+      .update(academicTerms)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(academicTerms.id, termId))
+      .returning();
+    return term;
+  }
+
+  // Student Promotion System
+  async promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void> {
+    await db
+      .update(students)
+      .set({ 
+        classId: nextClassId,
+        updatedAt: new Date()
+      })
+      .where(inArray(students.id, studentIds));
+  }
+
+  async markStudentsAsGraduated(studentIds: string[]): Promise<void> {
+    await db
+      .update(students)
+      .set({ 
+        status: 'graduated',
+        updatedAt: new Date()
+      })
+      .where(inArray(students.id, studentIds));
   }
 }
 

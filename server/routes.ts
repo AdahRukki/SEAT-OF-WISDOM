@@ -90,7 +90,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/auth/login', async (req, res) => {
     try {
       const { email, password } = loginSchema.parse(req.body);
-      const user = await storage.authenticateUser(email, password);
+      
+      let user = null;
+      
+      // Try login by email first
+      user = await storage.authenticateUser(email, password);
+      
+      // If not found and looks like student ID (SOWA/format), try student ID login
+      if (!user && email.includes('/')) {
+        user = await storage.authenticateUserByStudentId(email, password);
+      }
       
       if (!user) {
         return res.status(401).json({ error: "Invalid credentials" });
@@ -226,6 +235,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Academic Sessions and Terms Management
+  app.get('/api/admin/academic-sessions', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const sessions = await storage.getAcademicSessions();
+      res.json(sessions);
+    } catch (error) {
+      console.error("Get academic sessions error:", error);
+      res.status(500).json({ error: "Failed to fetch academic sessions" });
+    }
+  });
+
+  app.post('/api/admin/academic-sessions', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const sessionData = req.body;
+      const session = await storage.createAcademicSession(sessionData);
+      res.json(session);
+    } catch (error) {
+      console.error("Create academic session error:", error);
+      res.status(400).json({ error: "Failed to create academic session" });
+    }
+  });
+
+  app.get('/api/admin/academic-terms', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const sessionId = req.query.sessionId as string;
+      const terms = await storage.getAcademicTerms(sessionId);
+      res.json(terms);
+    } catch (error) {
+      console.error("Get academic terms error:", error);
+      res.status(500).json({ error: "Failed to fetch academic terms" });
+    }
+  });
+
+  app.post('/api/admin/academic-terms', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const termData = req.body;
+      const term = await storage.createAcademicTerm(termData);
+      res.json(term);
+    } catch (error) {
+      console.error("Create academic term error:", error);
+      res.status(400).json({ error: "Failed to create academic term" });
+    }
+  });
+
+  app.put('/api/admin/academic-sessions/:id/activate', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const session = await storage.setActiveAcademicSession(id);
+      res.json(session);
+    } catch (error) {
+      console.error("Activate session error:", error);
+      res.status(400).json({ error: "Failed to activate session" });
+    }
+  });
+
+  app.put('/api/admin/academic-terms/:id/activate', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const term = await storage.setActiveTerm(id);
+      res.json(term);
+    } catch (error) {
+      console.error("Activate term error:", error);
+      res.status(400).json({ error: "Failed to activate term" });
+    }
+  });
+
+  // Student Promotion System
+  app.post('/api/admin/promote-students', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { currentClassId, nextClassId, studentIds } = req.body;
+      
+      if (nextClassId === 'graduated') {
+        await storage.markStudentsAsGraduated(studentIds);
+      } else {
+        await storage.promoteStudentsToNextClass(currentClassId, nextClassId, studentIds);
+      }
+      
+      res.json({ message: "Students promoted successfully" });
+    } catch (error) {
+      console.error("Promote students error:", error);
+      res.status(400).json({ error: "Failed to promote students" });
+    }
+  });
+
   // Admin routes - Class management
   app.get('/api/admin/classes', authenticate, requireAdmin, async (req, res) => {
     try {
@@ -332,7 +425,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Users routes
   app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
     try {
-      const users = await storage.getAllUsers();
+      const adminOnly = req.query.adminOnly === 'true';
+      const users = await storage.getAllUsers(adminOnly);
       res.json(users);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -416,6 +510,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         schoolId = user.schoolId;
       }
 
+      // Validate single name only (no spaces allowed)
+      if (firstName.includes(' ') || lastName.includes(' ')) {
+        return res.status(400).json({ error: "Names must be single words without spaces" });
+      }
+
+      // Extract parentWhatsapp from request
+      const { parentWhatsapp } = req.body;
+
       // First create the user account
       const userData = insertUserSchema.parse({
         firstName,
@@ -434,6 +536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         classId,
         studentId,
         parentContact: '',
+        parentWhatsapp: parentWhatsapp || '',
         address: ''
       });
       
