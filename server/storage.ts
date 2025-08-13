@@ -208,24 +208,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(users).where(eq(users.id, userId));
   }
 
-  async updateUserProfile(userId: string, profileData: { firstName: string; lastName: string; email: string }): Promise<User> {
-    const [updatedUser] = await db
-      .update(users)
-      .set({
-        firstName: profileData.firstName,
-        lastName: profileData.lastName,
-        email: profileData.email,
-        updatedAt: new Date()
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    
-    if (!updatedUser) {
-      throw new Error('User not found');
-    }
-    
-    return updatedUser;
-  }
+
 
   async createStudent(studentData: InsertStudent): Promise<Student> {
     // Auto-generate student ID if not provided
@@ -427,6 +410,8 @@ export class DatabaseStorage implements IStorage {
         address: schools.address,
         phone: schools.phone,
         email: schools.email,
+        logoUrl: schools.logoUrl,
+        sortOrder: schools.sortOrder,
         createdAt: schools.createdAt,
         updatedAt: schools.updatedAt,
       }
@@ -438,14 +423,25 @@ export class DatabaseStorage implements IStorage {
     return await baseQuery;
   }
 
-  async getClassById(classId: string): Promise<Class | undefined> {
-    const [classData] = await db.select().from(classes).where(eq(classes.id, classId));
-    return classData || undefined;
-  }
-
   async getAllSubjects(): Promise<Subject[]> {
     return await db.select().from(subjects);
   }
+
+  async createSubject(subjectData: { name: string; code: string; description?: string }): Promise<Subject> {
+    const [subject] = await db
+      .insert(subjects)
+      .values({
+        name: subjectData.name,
+        code: subjectData.code,
+        description: subjectData.description || null,
+      })
+      .returning();
+    return subject;
+  }
+
+
+
+
 
   async getStudentsByClass(classId: string): Promise<StudentWithDetails[]> {
     const studentsData = await db
@@ -500,21 +496,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getStudentsByClass(classId: string): Promise<(Student & { user: User })[]> {
-    const results = await db
-      .select()
-      .from(students)
-      .leftJoin(users, eq(students.userId, users.id))
-      .where(eq(students.classId, classId))
-      .orderBy(asc(students.studentId));
-    
-    return results
-      .filter(result => result.students && result.users)
-      .map(result => ({
-        ...result.students!,
-        user: result.users!
-      }));
-  }
+
 
   async createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment> {
     console.log("[DEBUG] Storage createOrUpdateAssessment called with:", assessmentData);
@@ -1065,30 +1047,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Enhanced student creation helper methods
-  async getSchoolNumber(schoolId: string): Promise<string> {
-    const [school] = await db.select().from(schools).where(eq(schools.id, schoolId));
-    if (!school) throw new Error("School not found");
-    
-    // Extract school number from name or use sortOrder
-    // School 1 -> "1", School 2 -> "2", etc.
-    const match = school.name.match(/(\d+)/);
-    return match ? match[1] : school.sortOrder?.toString() || "1";
-  }
 
-  async getStudentCountForSchool(schoolId: string): Promise<number> {
-    const [result] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(students)
-      .leftJoin(classes, eq(students.classId, classes.id))
-      .where(eq(classes.schoolId, schoolId));
-    
-    return result?.count || 0;
-  }
 
-  async getClassById(classId: string): Promise<Class | undefined> {
-    const [classData] = await db.select().from(classes).where(eq(classes.id, classId));
-    return classData;
-  }
+
+
+
 
   async updateSchool(schoolId: string, data: Partial<School>): Promise<School> {
     const [updatedSchool] = await db
@@ -1099,14 +1062,7 @@ export class DatabaseStorage implements IStorage {
     return updatedSchool;
   }
 
-  async updateUserProfile(userId: string, data: Partial<User>): Promise<User> {
-    const [updatedUser] = await db
-      .update(users)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(users.id, userId))
-      .returning();
-    return updatedUser;
-  }
+
 
   async getCurrentAcademicInfo(): Promise<{
     currentSession: string | null;
