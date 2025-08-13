@@ -147,6 +147,15 @@ export default function AdminDashboard() {
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectDescription, setNewSubjectDescription] = useState("");
 
+  // Report generation and promotion states
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [selectedStudentForReport, setSelectedStudentForReport] = useState<any>(null);
+  const [nextTermResumptionDate, setNextTermResumptionDate] = useState("");
+  const [reportTerm, setReportTerm] = useState("");
+  const [reportSession, setReportSession] = useState("");
+  const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
+  const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
+
   // Fee type management states
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
   const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
@@ -253,14 +262,7 @@ export default function AdminDashboard() {
   const [isCreateSessionDialogOpen, setIsCreateSessionDialogOpen] = useState(false);
   const [newSessionYear, setNewSessionYear] = useState("");
   
-  // Report generation with promotion
-  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
-  const [selectedReportClass, setSelectedReportClass] = useState("");
-  const [selectedReportTerm, setSelectedReportTerm] = useState("First Term");
-  const [selectedReportSession, setSelectedReportSession] = useState("2024/2025");
-  const [nextTermResumptionDate, setNextTermResumptionDate] = useState("");
-  const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
-  const [studentsToPromote, setStudentsToPromote] = useState<{[key: string]: string}>({});
+
   
   // Subject assignment to classes
   const [isAssignSubjectDialogOpen, setIsAssignSubjectDialogOpen] = useState(false);
@@ -547,20 +549,33 @@ export default function AdminDashboard() {
     createStudentMutation.mutate(studentData);
   };
 
-  // Get class progression mapping
-  const getNextClass = (currentClass: string): string => {
-    const classProgression: {[key: string]: string} = {
-      "JSS1": "JSS2",
-      "JSS2": "JSS3", 
+  // Helper function to get next class in progression
+  const getNextClass = (currentClassName: string): { nextClass: string | null; isGraduation: boolean } => {
+    const classProgression = {
+      "J.S.S 1": "J.S.S 2",
+      "JSS1": "JSS2", 
+      "JSS 1": "JSS 2",
+      "J.S.S 2": "J.S.S 3",
+      "JSS2": "JSS3",
+      "JSS 2": "JSS 3", 
+      "J.S.S 3": "S.S.S 1",
       "JSS3": "SSS1",
+      "JSS 3": "SSS 1",
+      "S.S.S 1": "S.S.S 2",
       "SSS1": "SSS2",
+      "SSS 1": "SSS 2",
+      "S.S.S 2": "S.S.S 3", 
       "SSS2": "SSS3",
-      "SSS3": "Graduated"
+      "SSS 2": "SSS 3",
+      "S.S.S 3": "Graduated",
+      "SSS3": "Graduated",
+      "SSS 3": "Graduated"
     };
+
+    const nextClass = classProgression[currentClassName as keyof typeof classProgression] || null;
+    const isGraduation = nextClass === "Graduated";
     
-    // Extract class name from full class name
-    const className = currentClass.split(' ').pop() || currentClass;
-    return classProgression[className] || "Graduated";
+    return { nextClass, isGraduation };
   };
 
   // Logo upload mutation
@@ -758,6 +773,34 @@ export default function AdminDashboard() {
       toast({ 
         title: "Error", 
         description: "Failed to create fee type", 
+        variant: "destructive" 
+      });
+    }
+  });
+
+  // Student promotion mutation
+  const promoteStudentsMutation = useMutation({
+    mutationFn: async (data: { currentClassId: string; nextClassId: string; studentIds: string[] }) => {
+      return await apiRequest('/api/admin/promote-students', {
+        method: 'POST',
+        body: data
+      });
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Success", 
+        description: "Students promoted successfully" 
+      });
+      setIsPromotionDialogOpen(false);
+      setStudentsToPromote([]);
+      // Refresh student data
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
+    },
+    onError: () => {
+      toast({ 
+        title: "Error", 
+        description: "Failed to promote students", 
         variant: "destructive" 
       });
     }
@@ -1202,8 +1245,25 @@ export default function AdminDashboard() {
     setIsClassDetailsDialogOpen(true);
   };
 
+
+
+  // Check if current term is third term
+  const isThirdTerm = (term: string): boolean => {
+    return term.toLowerCase().includes('third') || term.toLowerCase().includes('3rd') || term === '3';
+  };
+
   // Report card generation function
-  const generateReportCard = (student: any) => {
+  // New report generation function with popup
+  const handleGenerateReport = (student: any) => {
+    setSelectedStudentForReport(student);
+    setReportTerm(scoresTerm);
+    setReportSession(scoresSession);
+    setNextTermResumptionDate("");
+    setIsReportDialogOpen(true);
+  };
+
+  // Generate the actual report card
+  const generateReportCard = (student: any, nextTermDate: string, term: string, session: string, promotedToClass?: string) => {
     // Create a printable report card
     const reportWindow = window.open('', '_blank');
     if (!reportWindow) return;
@@ -1212,6 +1272,12 @@ export default function AdminDashboard() {
       const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
       return sum + ((assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0));
     }, 0);
+
+    const promotionText = promotedToClass === "Graduated" 
+      ? "🎓 CONGRATULATIONS! Student has successfully GRADUATED from the academy."
+      : promotedToClass 
+        ? `📈 PROMOTED TO: ${promotedToClass} for next academic session`
+        : "";
 
     const reportHTML = `
       <!DOCTYPE html>
@@ -1626,6 +1692,35 @@ export default function AdminDashboard() {
                   HEAD TEACHER'S STAMP
                 </div>
               </div>
+            </div>
+
+            ${promotionText ? `
+              <div style="
+                margin: 12px 0;
+                padding: 10px;
+                background: ${promotedToClass === 'Graduated' ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)'};
+                color: white;
+                border-radius: 6px;
+                text-align: center;
+                font-size: 10px;
+                font-weight: bold;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              ">
+                ${promotionText}
+              </div>
+            ` : ''}
+
+            <div style="
+              margin: 10px 0;
+              padding: 8px;
+              background: #f1f5f9;
+              border-radius: 4px;
+              border-left: 3px solid #2563eb;
+              font-size: 8px;
+            ">
+              <div style="margin-bottom: 4px;"><strong>Academic Term:</strong> ${term}</div>
+              <div style="margin-bottom: 4px;"><strong>Academic Session:</strong> ${session}</div>
+              ${nextTermDate ? `<div><strong>Next Term Resumes:</strong> ${new Date(nextTermDate).toLocaleDateString('en-GB')}</div>` : ''}
             </div>
 
             <div class="signature-section">
@@ -2855,7 +2950,7 @@ export default function AdminDashboard() {
                                 <Button 
                                   variant="outline" 
                                   className="w-full"
-                                  onClick={() => generateReportCard(student)}
+                                  onClick={() => handleGenerateReport(student)}
                                 >
                                   <FileText className="h-4 w-4 mr-2" />
                                   Generate Report
@@ -4309,6 +4404,198 @@ export default function AdminDashboard() {
                   disabled={!newSessionYear || createSessionMutation.isPending}
                 >
                   {createSessionMutation.isPending ? "Creating..." : "Create Session"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Report Generation Dialog */}
+        <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Generate Report Card</DialogTitle>
+              <DialogDescription>
+                Generate report card for {selectedStudentForReport?.user?.firstName} {selectedStudentForReport?.user?.lastName}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Term</Label>
+                <Select value={reportTerm} onValueChange={setReportTerm}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select term" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="First Term">First Term</SelectItem>
+                    <SelectItem value="Second Term">Second Term</SelectItem>
+                    <SelectItem value="Third Term">Third Term</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Academic Session</Label>
+                <Select value={reportSession} onValueChange={setReportSession}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2024/2025">2024/2025</SelectItem>
+                    <SelectItem value="2025/2026">2025/2026</SelectItem>
+                    <SelectItem value="2026/2027">2026/2027</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Next Term Resumption Date</Label>
+                <input
+                  type="date"
+                  value={nextTermResumptionDate}
+                  onChange={(e) => setNextTermResumptionDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsReportDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedStudentForReport && nextTermResumptionDate) {
+                      // Check if it's third term for promotion
+                      if (isThirdTerm(reportTerm)) {
+                        const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class.name);
+                        if (nextClass) {
+                          // Set up promotion dialog
+                          setStudentsToPromote([selectedStudentForReport.id]);
+                          setIsPromotionDialogOpen(true);
+                          setIsReportDialogOpen(false);
+                        } else {
+                          // Generate report without promotion
+                          generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
+                          setIsReportDialogOpen(false);
+                        }
+                      } else {
+                        // Generate report without promotion
+                        generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
+                        setIsReportDialogOpen(false);
+                      }
+                    }
+                  }}
+                  disabled={!nextTermResumptionDate}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Generate Report
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Promotion Dialog */}
+        <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Student Promotion</DialogTitle>
+              <DialogDescription>
+                This is a Third Term report. Would you like to promote this student to the next class?
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {selectedStudentForReport && (() => {
+                const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class.name);
+                
+                return (
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <UserCheck className="h-8 w-8 text-blue-600" />
+                      <div>
+                        <p className="font-medium">
+                          {selectedStudentForReport.user.firstName} {selectedStudentForReport.user.lastName}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          ID: {selectedStudentForReport.studentId}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm">Current Class:</span>
+                        <span className="text-sm font-medium">{selectedStudentForReport.class.name}</span>
+                      </div>
+                      
+                      {nextClass && (
+                        <div className="flex justify-between">
+                          <span className="text-sm">Promote to:</span>
+                          <span className="text-sm font-medium text-green-600">
+                            {isGraduation ? "🎓 Graduated" : nextClass}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex justify-between space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    // Generate report without promotion
+                    if (selectedStudentForReport && nextTermResumptionDate) {
+                      generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
+                    }
+                    setIsPromotionDialogOpen(false);
+                  }}
+                  className="flex-1"
+                >
+                  Skip Promotion
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedStudentForReport) {
+                      const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class.name);
+                      
+                      if (nextClass && nextTermResumptionDate) {
+                        // Generate report WITH promotion information
+                        generateReportCard(
+                          selectedStudentForReport,
+                          nextTermResumptionDate,
+                          reportTerm,
+                          reportSession,
+                          nextClass
+                        );
+                        
+                        // If not graduation, actually promote the student in the database
+                        if (!isGraduation) {
+                          // Find next class ID from available classes
+                          const nextClassObj = classes?.find(c => c.name === nextClass);
+                          if (nextClassObj) {
+                            promoteStudentsMutation.mutate({
+                              currentClassId: selectedStudentForReport.classId,
+                              nextClassId: nextClassObj.id,
+                              studentIds: [selectedStudentForReport.id]
+                            });
+                          }
+                        }
+                      }
+                    }
+                    setIsPromotionDialogOpen(false);
+                  }}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Promote & Generate
                 </Button>
               </div>
             </div>
