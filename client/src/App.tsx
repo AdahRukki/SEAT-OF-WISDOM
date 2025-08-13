@@ -15,17 +15,27 @@ import { useEffect } from "react";
 function AppRoutes() {
   const { user, isLoading, isAuthenticated } = useAuth();
 
-  // Comprehensive authentication and security protection
+  // Ultimate authentication and security protection
   useEffect(() => {
     // Check for logout timestamp to prevent cached access
     const logoutTimestamp = localStorage.getItem('logout_timestamp');
     const now = Date.now();
     
-    if (logoutTimestamp && (now - parseInt(logoutTimestamp)) < 300000) { // 5 minutes
-      if (!isAuthenticated) {
-        window.location.href = '/login?forced=1';
-        return;
-      }
+    // If logged out recently (within 10 minutes), force login page
+    if (logoutTimestamp && (now - parseInt(logoutTimestamp)) < 600000) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/login?cache_cleared=1';
+      return;
+    }
+    
+    // Check if token exists but authentication failed
+    const token = localStorage.getItem('auth_token');
+    if (token && !isLoading && !isAuthenticated) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/login?token_invalid=1';
+      return;
     }
     
     if (!isLoading && !isAuthenticated) {

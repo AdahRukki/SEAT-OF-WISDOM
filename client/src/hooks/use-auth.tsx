@@ -22,17 +22,38 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(
-    localStorage.getItem('auth_token')
-  );
+  const [token, setToken] = useState<string | null>(() => {
+    // Check if we're within logout window
+    const logoutTimestamp = localStorage.getItem('logout_timestamp');
+    if (logoutTimestamp && (Date.now() - parseInt(logoutTimestamp)) < 600000) {
+      localStorage.clear();
+      return null;
+    }
+    return localStorage.getItem('auth_token');
+  });
   const queryClient = useQueryClient();
 
-  // Get current user
-  const { data: user, isLoading } = useQuery({
+  // Get current user with aggressive re-validation
+  const { data: user, isLoading, error } = useQuery({
     queryKey: ['/api/auth/me'],
     enabled: !!token,
     retry: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    staleTime: 0, // Always check server
+    cacheTime: 0, // Never cache
   });
+  
+  // If there's an auth error, immediately clear everything
+  if (error && error.message.includes('401')) {
+    localStorage.clear();
+    sessionStorage.clear();
+    setToken(null);
+    queryClient.clear();
+    
+    // Force redirect
+    window.location.href = '/login?auth_error=1';
+  }
 
   // Login mutation
   const loginMutation = useMutation({

@@ -29,6 +29,25 @@ export async function apiRequest(
     credentials: "include",
   });
 
+  // If we get 401, immediately clear all auth data and redirect
+  if (res.status === 401) {
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Clear all caches
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        names.forEach(name => {
+          caches.delete(name);
+        });
+      });
+    }
+    
+    // Force immediate redirect
+    window.location.href = '/login?expired=1';
+    throw new Error('401: Session expired - redirecting to login');
+  }
+
   await throwIfResNotOk(res);
   return await res.json();
 }
@@ -51,8 +70,31 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      // Immediately clear all auth data on 401
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      // Clear all caches
+      if ('caches' in window) {
+        caches.keys().then(names => {
+          names.forEach(name => {
+            caches.delete(name);
+          });
+        });
+      }
+      
+      if (unauthorizedBehavior === "returnNull") {
+        // Force redirect even if returning null
+        setTimeout(() => {
+          window.location.href = '/login?expired=1';
+        }, 100);
+        return null;
+      }
+      
+      // Force immediate redirect
+      window.location.href = '/login?expired=1';
+      throw new Error('401: Session expired - redirecting to login');
     }
 
     await throwIfResNotOk(res);
