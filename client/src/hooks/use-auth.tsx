@@ -23,13 +23,35 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
-    // Check if we're within logout window
+    const now = Date.now();
+    const forceLogout = localStorage.getItem('force_logout');
     const logoutTimestamp = localStorage.getItem('logout_timestamp');
-    if (logoutTimestamp && (Date.now() - parseInt(logoutTimestamp)) < 600000) {
+    const loggedOutToken = localStorage.getItem('logged_out_token');
+    
+    // If force logout flag exists, clear everything
+    if (forceLogout === 'true') {
       localStorage.clear();
+      window.location.replace('/login?provider_cleared=' + now);
       return null;
     }
-    return localStorage.getItem('auth_token');
+    
+    // Check if we're within logout window (30 minutes)
+    if (logoutTimestamp && (now - parseInt(logoutTimestamp)) < 1800000) {
+      localStorage.clear();
+      window.location.replace('/login?window_cleared=' + now);
+      return null;
+    }
+    
+    const currentToken = localStorage.getItem('auth_token');
+    
+    // If this token was previously logged out, block it
+    if (currentToken && loggedOutToken && currentToken === loggedOutToken) {
+      localStorage.clear();
+      window.location.replace('/login?reuse_blocked=' + now);
+      return null;
+    }
+    
+    return currentToken;
   });
   const queryClient = useQueryClient();
 
@@ -96,6 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const logout = async () => {
+    const timestamp = Date.now();
+    
     try {
       // Call server logout endpoint with token for server-side invalidation
       await fetch('/api/logout', {
@@ -110,13 +134,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Server logout failed:', error);
     }
     
-    // Clear all client-side storage immediately
+    // Store logout timestamp first
+    localStorage.setItem('logout_timestamp', timestamp.toString());
+    localStorage.setItem('force_logout', 'true');
+    
+    // Clear all client-side storage
+    const authToken = localStorage.getItem('auth_token');
     localStorage.clear();
     sessionStorage.clear();
+    
+    // Re-set the logout markers after clearing
+    localStorage.setItem('logout_timestamp', timestamp.toString());
+    localStorage.setItem('force_logout', 'true');
+    localStorage.setItem('logged_out_token', authToken || 'no_token');
+    
     setToken(null);
     queryClient.clear();
     
-    // Clear browser cache aggressively
+    // Clear all browser storage types
     if ('caches' in window) {
       caches.keys().then(names => {
         names.forEach(name => {
@@ -125,7 +160,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
     
-    // Clear IndexedDB if present
     if ('indexedDB' in window) {
       try {
         const databases = await indexedDB.databases();
@@ -139,51 +173,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     
-    // Comprehensive history manipulation
-    const loginUrl = '/login';
-    window.history.replaceState(null, '', loginUrl);
+    // Disable page caching
+    if (window.performance && window.performance.navigation) {
+      window.performance.mark('logout-' + timestamp);
+    }
     
-    // Add multiple security layers
-    const timestamp = Date.now();
-    const preventBack = (event: PopStateEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      window.history.replaceState(null, '', loginUrl);
-      window.location.href = loginUrl;
+    // Block all back navigation permanently
+    const blockNavigation = () => {
+      window.history.pushState(null, '', '/login');
+      window.location.replace('/login?logout=' + timestamp);
     };
     
-    const preventKeyboardBack = (event: KeyboardEvent) => {
-      if ((event.altKey && event.key === 'ArrowLeft') || 
-          (event.metaKey && event.key === 'ArrowLeft') || 
-          (event.ctrlKey && event.key === 'ArrowLeft')) {
-        event.preventDefault();
-        event.stopPropagation();
-        window.location.href = loginUrl;
+    // Comprehensive event blocking
+    ['popstate', 'beforeunload', 'pagehide', 'visibilitychange', 'focus', 'pageshow'].forEach(event => {
+      window.addEventListener(event, blockNavigation, { capture: true, passive: false });
+      document.addEventListener(event, blockNavigation, { capture: true, passive: false });
+    });
+    
+    // Block keyboard navigation
+    window.addEventListener('keydown', (e) => {
+      if ((e.altKey && e.key === 'ArrowLeft') || 
+          (e.metaKey && e.key === 'ArrowLeft') || 
+          (e.ctrlKey && e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        e.stopPropagation();
+        blockNavigation();
       }
-    };
+    }, { capture: true, passive: false });
     
-    const preventVisibilityRestore = () => {
-      if (document.visibilityState === 'visible') {
-        window.location.href = loginUrl;
-      }
-    };
-    
-    // Add event listeners
-    window.addEventListener('popstate', preventBack, true);
-    window.addEventListener('keydown', preventKeyboardBack, true);
-    window.addEventListener('beforeunload', () => {
-      localStorage.setItem('logout_timestamp', timestamp.toString());
-    }, true);
-    window.addEventListener('pagehide', () => {
-      localStorage.setItem('logout_timestamp', timestamp.toString());
-    }, true);
-    document.addEventListener('visibilitychange', preventVisibilityRestore, true);
-    
-    // Store logout timestamp
-    localStorage.setItem('logout_timestamp', timestamp.toString());
-    
-    // Force immediate redirect with no cache
-    window.location.href = loginUrl + '?t=' + timestamp;
+    // Nuclear option - completely refresh and redirect
+    window.location.replace('/login?forced_logout=' + timestamp);
   };
 
   // Set up API client with auth token

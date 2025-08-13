@@ -15,26 +15,46 @@ import { useEffect } from "react";
 function AppRoutes() {
   const { user, isLoading, isAuthenticated } = useAuth();
 
-  // Ultimate authentication and security protection
+  // Nuclear authentication security protection
   useEffect(() => {
-    // Check for logout timestamp to prevent cached access
-    const logoutTimestamp = localStorage.getItem('logout_timestamp');
     const now = Date.now();
+    const logoutTimestamp = localStorage.getItem('logout_timestamp');
+    const forceLogout = localStorage.getItem('force_logout');
+    const loggedOutToken = localStorage.getItem('logged_out_token');
     
-    // If logged out recently (within 10 minutes), force login page
-    if (logoutTimestamp && (now - parseInt(logoutTimestamp)) < 600000) {
+    // If force logout flag exists, clear everything and redirect
+    if (forceLogout === 'true') {
       localStorage.clear();
       sessionStorage.clear();
-      window.location.href = '/login?cache_cleared=1';
+      window.location.replace('/login?force_cleared=' + now);
       return;
     }
     
-    // Check if token exists but authentication failed
-    const token = localStorage.getItem('auth_token');
-    if (token && !isLoading && !isAuthenticated) {
+    // If logged out recently (within 30 minutes), prevent any access
+    if (logoutTimestamp) {
+      const timeSinceLogout = now - parseInt(logoutTimestamp);
+      if (timeSinceLogout < 1800000) { // 30 minutes
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.replace('/login?time_blocked=' + now);
+        return;
+      }
+    }
+    
+    // If we have a token from a logged out session, block it
+    const currentToken = localStorage.getItem('auth_token');
+    if (currentToken && loggedOutToken && currentToken === loggedOutToken) {
       localStorage.clear();
       sessionStorage.clear();
-      window.location.href = '/login?token_invalid=1';
+      window.location.replace('/login?token_blocked=' + now);
+      return;
+    }
+    
+    // If token exists but user not authenticated after loading, it's invalid
+    if (currentToken && !isLoading && !isAuthenticated) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.replace('/login?auth_failed=' + now);
       return;
     }
     
