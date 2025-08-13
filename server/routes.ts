@@ -976,6 +976,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get current academic session and term
+  app.get('/api/current-academic-info', async (req, res) => {
+    try {
+      const currentInfo = await storage.getCurrentAcademicInfo();
+      res.json(currentInfo);
+    } catch (error) {
+      console.error("Error fetching current academic info:", error);
+      res.status(500).json({ error: "Failed to fetch current academic info" });
+    }
+  });
+
   // Change password endpoint (for students and other users)
   app.post('/api/auth/change-password', authenticate, async (req, res) => {
     try {

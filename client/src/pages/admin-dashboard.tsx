@@ -209,6 +209,13 @@ export default function AdminDashboard() {
     enabled: user?.role === 'admin'
   });
 
+  const { data: academicInfo } = useQuery<{
+    currentSession: string | null;
+    currentTerm: string | null;
+  }>({
+    queryKey: ['/api/current-academic-info'],
+  });
+
   // Check Firebase data on mount
   useEffect(() => {
     checkFirebaseData();
@@ -1730,9 +1737,22 @@ export default function AdminDashboard() {
                       Seat of Wisdom Academy
                     </h1>
                   </div>
-                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block ml-8 sm:ml-10">
-                    {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
-                  </p>
+                  <div className="hidden sm:block ml-8 sm:ml-10">
+                    <p className="text-xs sm:text-sm text-gray-500">
+                      {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
+                    </p>
+                    {academicInfo && (academicInfo.currentSession || academicInfo.currentTerm) ? (
+                      <p className="text-xs text-blue-600 font-medium">
+                        {academicInfo.currentSession && academicInfo.currentTerm
+                          ? `${academicInfo.currentSession} • ${academicInfo.currentTerm}`
+                          : academicInfo.currentSession || academicInfo.currentTerm}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-amber-600 font-medium">
+                        2024/2025 • First Term
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
               

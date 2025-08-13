@@ -116,6 +116,12 @@ export interface IStorage {
   getSetting(key: string): Promise<Setting | undefined>;
   setSetting(key: string, value: string): Promise<Setting>;
 
+  // Current academic info
+  getCurrentAcademicInfo(): Promise<{
+    currentSession: string | null;
+    currentTerm: string | null;
+  }>;
+
   // Academic sessions and terms management
   createAcademicSession(sessionData: InsertAcademicSession): Promise<AcademicSession>;
   getAcademicSessions(): Promise<AcademicSession[]>;
@@ -1100,6 +1106,40 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return updatedUser;
+  }
+
+  async getCurrentAcademicInfo(): Promise<{
+    currentSession: string | null;
+    currentTerm: string | null;
+  }> {
+    try {
+      // Get active session
+      const [activeSession] = await db
+        .select()
+        .from(academicSessions)
+        .where(eq(academicSessions.isActive, true));
+
+      // Get active term
+      const [activeTerm] = await db
+        .select({
+          termName: academicTerms.termName,
+          sessionYear: academicSessions.sessionYear
+        })
+        .from(academicTerms)
+        .leftJoin(academicSessions, eq(academicTerms.sessionId, academicSessions.id))
+        .where(eq(academicTerms.isActive, true));
+
+      return {
+        currentSession: activeSession?.sessionYear || activeTerm?.sessionYear || null,
+        currentTerm: activeTerm?.termName || null
+      };
+    } catch (error) {
+      console.error("Error getting current academic info:", error);
+      return {
+        currentSession: null,
+        currentTerm: null
+      };
+    }
   }
 }
 
