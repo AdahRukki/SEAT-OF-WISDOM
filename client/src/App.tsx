@@ -15,40 +15,86 @@ import { useEffect } from "react";
 function AppRoutes() {
   const { user, isLoading, isAuthenticated } = useAuth();
 
-  // Global back navigation prevention for unauthenticated users
+  // Comprehensive authentication and security protection
   useEffect(() => {
+    // Check for logout timestamp to prevent cached access
+    const logoutTimestamp = localStorage.getItem('logout_timestamp');
+    const now = Date.now();
+    
+    if (logoutTimestamp && (now - parseInt(logoutTimestamp)) < 300000) { // 5 minutes
+      if (!isAuthenticated) {
+        window.location.href = '/login?forced=1';
+        return;
+      }
+    }
+    
     if (!isLoading && !isAuthenticated) {
-      // Clear navigation history and prevent back access
+      // Set strict cache control headers if possible
+      if (document.head) {
+        const metaCache = document.createElement('meta');
+        metaCache.setAttribute('http-equiv', 'Cache-Control');
+        metaCache.setAttribute('content', 'no-cache, no-store, must-revalidate');
+        document.head.appendChild(metaCache);
+        
+        const metaPragma = document.createElement('meta');
+        metaPragma.setAttribute('http-equiv', 'Pragma');
+        metaPragma.setAttribute('content', 'no-cache');
+        document.head.appendChild(metaPragma);
+      }
+      
+      // Clear navigation history aggressively
       window.history.replaceState(null, '', '/login');
       
       const preventBackNavigation = (event: PopStateEvent) => {
         event.preventDefault();
-        window.history.pushState(null, '', '/login');
-        window.location.replace('/login');
+        event.stopImmediatePropagation();
+        window.history.replaceState(null, '', '/login');
+        window.location.href = '/login?back=prevented';
       };
       
       const preventKeyboardNavigation = (event: KeyboardEvent) => {
         if ((event.altKey && event.key === 'ArrowLeft') || 
             (event.metaKey && event.key === 'ArrowLeft') || 
-            (event.ctrlKey && event.key === 'ArrowLeft')) {
+            (event.ctrlKey && event.key === 'ArrowLeft') ||
+            (event.key === 'Backspace' && !['INPUT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName))) {
           event.preventDefault();
-          window.location.replace('/login');
+          event.stopImmediatePropagation();
+          window.location.href = '/login?kb=prevented';
         }
       };
       
-      window.addEventListener('popstate', preventBackNavigation);
-      window.addEventListener('keydown', preventKeyboardNavigation);
-      
-      // Also prevent browser back button using page visibility
-      document.addEventListener('visibilitychange', () => {
+      const preventVisibilityRestore = () => {
         if (document.visibilityState === 'visible' && !isAuthenticated) {
-          window.location.replace('/login');
+          window.location.href = '/login?vis=restored';
         }
-      });
+      };
+      
+      const preventFocus = () => {
+        if (!isAuthenticated) {
+          window.location.href = '/login?focus=prevented';
+        }
+      };
+      
+      // Add comprehensive event listeners
+      window.addEventListener('popstate', preventBackNavigation, { passive: false, capture: true });
+      window.addEventListener('keydown', preventKeyboardNavigation, { passive: false, capture: true });
+      window.addEventListener('focus', preventFocus, { passive: false, capture: true });
+      document.addEventListener('visibilitychange', preventVisibilityRestore, { passive: false, capture: true });
+      
+      // Prevent context menu on unauthenticated pages
+      const preventContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+        return false;
+      };
+      
+      document.addEventListener('contextmenu', preventContextMenu);
       
       return () => {
-        window.removeEventListener('popstate', preventBackNavigation);
-        window.removeEventListener('keydown', preventKeyboardNavigation);
+        window.removeEventListener('popstate', preventBackNavigation, { capture: true });
+        window.removeEventListener('keydown', preventKeyboardNavigation, { capture: true });
+        window.removeEventListener('focus', preventFocus, { capture: true });
+        document.removeEventListener('visibilitychange', preventVisibilityRestore, { capture: true });
+        document.removeEventListener('contextmenu', preventContextMenu);
       };
     }
   }, [isAuthenticated, isLoading]);

@@ -22,6 +22,9 @@ import { Request, Response, NextFunction } from "express";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
+// Store invalidated tokens (in production, use Redis or database)
+const invalidatedTokens = new Set<string>();
+
 // Configure multer for file uploads
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -50,6 +53,11 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(401).json({ error: "No token provided" });
     }
 
+    // Check if token has been invalidated
+    if (invalidatedTokens.has(token)) {
+      return res.status(401).json({ error: "Token has been invalidated" });
+    }
+
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
     const user = await storage.getUserById(decoded.userId);
     
@@ -58,6 +66,7 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
     }
 
     (req as any).user = user;
+    (req as any).token = token; // Store token for potential invalidation
     next();
   } catch (error) {
     res.status(401).json({ error: "Invalid token" });
@@ -995,6 +1004,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Logout endpoint for comprehensive session cleanup
   app.post('/api/logout', async (req, res) => {
     try {
+      // Get token from Authorization header
+      const token = req.headers.authorization?.split(' ')[1];
+      
+      // Invalidate the JWT token if present
+      if (token) {
+        invalidatedTokens.add(token);
+        console.log('Token invalidated:', token.substring(0, 20) + '...');
+      }
+      
       // Destroy the session if it exists
       if (req.session) {
         req.session.destroy((err) => {
@@ -1009,15 +1027,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.clearCookie('auth_token', { path: '/' });
       res.clearCookie('session', { path: '/' });
       
-      // Set security headers to prevent caching
+      // Set aggressive security headers to prevent caching
       res.set({
-        'Cache-Control': 'no-cache, no-store, must-revalidate, private',
+        'Cache-Control': 'no-cache, no-store, must-revalidate, private, max-age=0',
         'Pragma': 'no-cache',
         'Expires': '0',
-        'X-Accel-Expires': '0'
+        'X-Accel-Expires': '0',
+        'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff'
       });
       
-      res.json({ message: 'Logged out successfully' });
+      res.json({ 
+        message: 'Logged out successfully',
+        timestamp: Date.now(),
+        tokenInvalidated: !!token 
+      });
     } catch (error) {
       console.error("Logout error:", error);
       res.status(500).json({ error: "Failed to logout" });

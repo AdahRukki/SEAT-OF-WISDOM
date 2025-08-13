@@ -76,25 +76,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      // Call server logout endpoint to invalidate session
+      // Call server logout endpoint with token for server-side invalidation
       await fetch('/api/logout', {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
       });
     } catch (error) {
       console.error('Server logout failed:', error);
     }
     
-    // Clear all client-side storage
+    // Clear all client-side storage immediately
     localStorage.clear();
     sessionStorage.clear();
     setToken(null);
     queryClient.clear();
     
-    // Clear browser cache and prevent back navigation
+    // Clear browser cache aggressively
     if ('caches' in window) {
       caches.keys().then(names => {
         names.forEach(name => {
@@ -103,39 +104,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
     
-    // Replace current history state and prevent back navigation
-    window.history.replaceState(null, '', '/login');
-    window.history.pushState(null, '', '/login');
-    window.history.pushState(null, '', '/login');
+    // Clear IndexedDB if present
+    if ('indexedDB' in window) {
+      try {
+        const databases = await indexedDB.databases();
+        databases.forEach(db => {
+          if (db.name) {
+            indexedDB.deleteDatabase(db.name);
+          }
+        });
+      } catch (e) {
+        console.log('IndexedDB clear failed:', e);
+      }
+    }
     
-    // Add multiple layers of back navigation prevention
+    // Comprehensive history manipulation
+    const loginUrl = '/login';
+    window.history.replaceState(null, '', loginUrl);
+    
+    // Add multiple security layers
+    const timestamp = Date.now();
     const preventBack = (event: PopStateEvent) => {
       event.preventDefault();
-      window.history.pushState(null, '', '/login');
-      window.location.replace('/login');
+      event.stopPropagation();
+      window.history.replaceState(null, '', loginUrl);
+      window.location.href = loginUrl;
     };
     
     const preventKeyboardBack = (event: KeyboardEvent) => {
       if ((event.altKey && event.key === 'ArrowLeft') || 
           (event.metaKey && event.key === 'ArrowLeft') || 
-          (event.ctrlKey && event.key === 'ArrowLeft') ||
-          event.key === 'Backspace') {
+          (event.ctrlKey && event.key === 'ArrowLeft')) {
         event.preventDefault();
-        window.location.replace('/login');
+        event.stopPropagation();
+        window.location.href = loginUrl;
       }
     };
     
-    window.addEventListener('popstate', preventBack);
-    window.addEventListener('keydown', preventKeyboardBack);
-    window.addEventListener('beforeunload', preventBack);
+    const preventVisibilityRestore = () => {
+      if (document.visibilityState === 'visible') {
+        window.location.href = loginUrl;
+      }
+    };
     
-    // Force page reload and redirect
-    window.location.replace('/login');
+    // Add event listeners
+    window.addEventListener('popstate', preventBack, true);
+    window.addEventListener('keydown', preventKeyboardBack, true);
+    window.addEventListener('beforeunload', () => {
+      localStorage.setItem('logout_timestamp', timestamp.toString());
+    }, true);
+    window.addEventListener('pagehide', () => {
+      localStorage.setItem('logout_timestamp', timestamp.toString());
+    }, true);
+    document.addEventListener('visibilitychange', preventVisibilityRestore, true);
     
-    // Additional security: reload the page after a short delay
-    setTimeout(() => {
-      window.location.reload();
-    }, 100);
+    // Store logout timestamp
+    localStorage.setItem('logout_timestamp', timestamp.toString());
+    
+    // Force immediate redirect with no cache
+    window.location.href = loginUrl + '?t=' + timestamp;
   };
 
   // Set up API client with auth token
