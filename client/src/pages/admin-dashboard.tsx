@@ -2599,17 +2599,180 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-12">
-                  <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Fee Assignment Management</h3>
-                  <p className="text-gray-500 mb-4">Assign fee types to entire classes at once</p>
-                  <Button 
-                    onClick={() => setIsAssignFeeDialogOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Assign Fees to Class
-                  </Button>
+                <div className="space-y-4">
+                  {classes.length > 0 ? (
+                    <>
+                      {/* Filter Options */}
+                      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                        <div className="flex items-center space-x-2">
+                          <label htmlFor="fee-filter" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Filter:
+                          </label>
+                          <select
+                            id="fee-filter"
+                            value={feeFilter}
+                            onChange={(e) => setFeeFilter(e.target.value)}
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          >
+                            <option value="all">All Classes</option>
+                            <option value="assigned">With Fees Assigned</option>
+                            <option value="unassigned">No Fees Assigned</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {selectedFinanceTerm} {selectedFinanceSession}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Classes and Fee Assignments Display */}
+                      <div className="space-y-4">
+                        {classes
+                          .filter(classItem => {
+                            const classStudentFees = studentFees.filter(sf => 
+                              allStudents.some(student => 
+                                student.id === sf.studentId && student.classId === classItem.id
+                              )
+                            );
+                            
+                            if (feeFilter === 'assigned') return classStudentFees.length > 0;
+                            if (feeFilter === 'unassigned') return classStudentFees.length === 0;
+                            return true;
+                          })
+                          .map((classItem) => {
+                            const classStudents = allStudents.filter(student => student.classId === classItem.id);
+                            const classStudentFees = studentFees.filter(sf => 
+                              classStudents.some(student => student.id === sf.studentId)
+                            );
+                            
+                            // Group fees by fee type for this class
+                            const feesByType = classStudentFees.reduce((acc, sf) => {
+                              const feeType = feeTypes.find(ft => ft.id === sf.feeTypeId);
+                              if (feeType) {
+                                if (!acc[feeType.id]) {
+                                  acc[feeType.id] = {
+                                    feeType,
+                                    assignments: [],
+                                    totalAmount: 0
+                                  };
+                                }
+                                acc[feeType.id].assignments.push(sf);
+                                acc[feeType.id].totalAmount += parseFloat(sf.amount);
+                              }
+                              return acc;
+                            }, {} as Record<string, { feeType: FeeType; assignments: StudentFee[]; totalAmount: number }>);
+
+                            return (
+                              <div key={classItem.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center space-x-3">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                    <div>
+                                      <h4 className="font-semibold text-gray-900 dark:text-white">
+                                        {classItem.name}
+                                      </h4>
+                                      <p className="text-sm text-gray-500">
+                                        {classStudents.length} students • {Object.keys(feesByType).length} fee types assigned
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedPaymentClass(classItem.id);
+                                      setIsAssignFeeDialogOpen(true);
+                                    }}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Assign Fee
+                                  </Button>
+                                </div>
+
+                                {/* Display assigned fees for this class */}
+                                {Object.keys(feesByType).length > 0 ? (
+                                  <div className="space-y-2">
+                                    <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                      Assigned Fees:
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {Object.values(feesByType).map(({ feeType, assignments, totalAmount }) => (
+                                        <div key={feeType.id} className="bg-gray-50 dark:bg-gray-800 rounded-md p-3">
+                                          <div className="flex items-center justify-between">
+                                            <div>
+                                              <p className="font-medium text-sm text-gray-900 dark:text-white">
+                                                {feeType.name}
+                                              </p>
+                                              <p className="text-xs text-gray-500">
+                                                ₦{parseFloat(feeType.amount).toLocaleString()} per student
+                                              </p>
+                                            </div>
+                                            <div className="text-right">
+                                              <p className="text-sm font-semibold text-blue-600">
+                                                {assignments.length}/{classStudents.length}
+                                              </p>
+                                              <p className="text-xs text-gray-500">assigned</p>
+                                            </div>
+                                          </div>
+                                          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                                              Total Expected: ₦{totalAmount.toLocaleString()}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-center py-4 text-gray-500">
+                                    <Receipt className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                                    <p className="text-sm">No fees assigned to this class yet</p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+
+                      {/* Summary Section */}
+                      <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                          <div>
+                            <div className="text-lg font-bold text-blue-600">
+                              {classes.length}
+                            </div>
+                            <p className="text-xs text-blue-600">Total Classes</p>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-green-600">
+                              {classes.filter(c => studentFees.some(sf => allStudents.some(s => s.classId === c.id && s.id === sf.studentId))).length}
+                            </div>
+                            <p className="text-xs text-green-600">With Fees</p>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-orange-600">
+                              {feeTypes.length}
+                            </div>
+                            <p className="text-xs text-orange-600">Fee Types</p>
+                          </div>
+                          <div>
+                            <div className="text-lg font-bold text-purple-600">
+                              ₦{studentFees.reduce((sum, sf) => sum + parseFloat(sf.amount), 0).toLocaleString()}
+                            </div>
+                            <p className="text-xs text-purple-600">Total Assigned</p>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-12">
+                      <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Classes Available</h3>
+                      <p className="text-gray-500 mb-4">Create classes first to assign fees</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
