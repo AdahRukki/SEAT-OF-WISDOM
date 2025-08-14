@@ -556,8 +556,7 @@ export default function AdminDashboard() {
   // Helper function to sort classes in proper order
   const sortClassesByOrder = (classes: any[]) => {
     const classOrder = ["J.S.S 1", "J.S.S 2", "J.S.S 3", "S.S.S 1", "S.S.S 2", "S.S.S 3"];
-    console.log("🔍 DEBUG: Sorting classes:", classes.map(c => c.name));
-    const sorted = classes.sort((a, b) => {
+    return classes.sort((a, b) => {
       const aIndex = classOrder.indexOf(a.name);
       const bIndex = classOrder.indexOf(b.name);
       if (aIndex === -1 && bIndex === -1) return a.name.localeCompare(b.name);
@@ -565,8 +564,6 @@ export default function AdminDashboard() {
       if (bIndex === -1) return -1;
       return aIndex - bIndex;
     });
-    console.log("✅ SORTED: Result:", sorted.map(c => c.name));
-    return sorted;
   };
 
   // Helper function to get next class in progression
@@ -2195,59 +2192,7 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {/* Subject Assignment Feature for Overview */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Subject Assignment</CardTitle>
-                  <CardDescription>
-                    Assign subjects to specific classes
-                  </CardDescription>
-                </div>
-                <div className="flex space-x-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setIsNewSubjectDialogOpen(true)}
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create Subject
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Create a new subject for the academy</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button onClick={() => setIsAssignSubjectDialogOpen(true)}>
-                          <BookOpen className="h-4 w-4 mr-2" />
-                          Assign Subject
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Assign subjects to classes for better organization</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8">
-                  <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Subject Management</h3>
-                  <p className="text-gray-500 mb-4">Assign subjects to classes for organized curriculum management</p>
-                  <Button onClick={() => setIsAssignSubjectDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Assign Subject to Class
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+
           </TabsContent>
 
           {/* Students Tab - Class-based viewing */}
