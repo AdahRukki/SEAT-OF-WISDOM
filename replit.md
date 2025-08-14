@@ -16,6 +16,7 @@ Preferred communication style: Simple, everyday language.
 - ✅ **SUBJECT ASSIGNMENT SYSTEM COMPLETED** - Fixed missing API endpoint and added Create New Subject button to overview
 - ✅ **OVERVIEW STREAMLINED** - Removed redundant Subject Assignment section from overview tab (available in class details)
 - ✅ **DEBUG CODE CLEANED** - Removed temporary debug logging from class sorting function
+- ✅ **RECORD SCORES BUTTON ADDED** - Added Record Scores button in class details that navigates to Scores tab with class, term, and session pre-selected
 - ✅ **APP STABILITY RESTORED** - Fixed infinite redirect loops causing app glitching by removing aggressive security code
 - ✅ **FORM RESET FUNCTIONALITY** - Student creation form now properly resets when dialog is closed
 - ✅ **COMPREHENSIVE ATTENDANCE TRACKING SYSTEM COMPLETED** - Full attendance management with total score input per student

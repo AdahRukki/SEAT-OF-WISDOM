@@ -3034,9 +3034,12 @@ export default function AdminDashboard() {
                             size="sm" 
                             variant="outline"
                             onClick={() => {
-                              // Set the selected class for scores and switch to Scores tab
+                              // Set the selected class, current term and session for scores
                               setScoresClassId(selectedClassForDetails?.id || "");
                               setScoresSubjectId("");
+                              // Set current academic term and session
+                              setScoresTerm(academicInfo?.currentTerm || "First Term");
+                              setScoresSession(academicInfo?.currentSession || "2024/2025");
                               // Close dialog first then switch to scores tab
                               setIsClassDetailsDialogOpen(false);
                               // Use setTimeout to ensure dialog closes before tab switch
