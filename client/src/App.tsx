@@ -15,116 +15,21 @@ import { useEffect } from "react";
 function AppRoutes() {
   const { user, isLoading, isAuthenticated } = useAuth();
 
-  // Nuclear authentication security protection
+  // Simple authentication check
   useEffect(() => {
-    const now = Date.now();
-    const logoutTimestamp = localStorage.getItem('logout_timestamp');
-    const forceLogout = localStorage.getItem('force_logout');
-    const loggedOutToken = localStorage.getItem('logged_out_token');
-    
-    // If force logout flag exists, clear everything and redirect
-    if (forceLogout === 'true') {
-      localStorage.clear();
-      sessionStorage.clear();
-      window.location.replace('/login?force_cleared=' + now);
-      return;
-    }
-    
-    // If logged out recently (within 30 minutes), prevent any access
-    if (logoutTimestamp) {
-      const timeSinceLogout = now - parseInt(logoutTimestamp);
-      if (timeSinceLogout < 1800000) { // 30 minutes
-        localStorage.clear();
-        sessionStorage.clear();
-        window.location.replace('/login?time_blocked=' + now);
-        return;
-      }
-    }
-    
-    // If we have a token from a logged out session, block it
-    const currentToken = localStorage.getItem('auth_token');
-    if (currentToken && loggedOutToken && currentToken === loggedOutToken) {
-      localStorage.clear();
-      sessionStorage.clear();
-      window.location.replace('/login?token_blocked=' + now);
-      return;
-    }
-    
-    // If token exists but user not authenticated after loading, it's invalid
-    if (currentToken && !isLoading && !isAuthenticated) {
-      localStorage.clear();
-      sessionStorage.clear();
-      window.location.replace('/login?auth_failed=' + now);
-      return;
-    }
-    
+    // Only prevent back navigation for logged out users
     if (!isLoading && !isAuthenticated) {
-      // Set strict cache control headers if possible
-      if (document.head) {
-        const metaCache = document.createElement('meta');
-        metaCache.setAttribute('http-equiv', 'Cache-Control');
-        metaCache.setAttribute('content', 'no-cache, no-store, must-revalidate');
-        document.head.appendChild(metaCache);
-        
-        const metaPragma = document.createElement('meta');
-        metaPragma.setAttribute('http-equiv', 'Pragma');
-        metaPragma.setAttribute('content', 'no-cache');
-        document.head.appendChild(metaPragma);
-      }
-      
-      // Clear navigation history aggressively
-      window.history.replaceState(null, '', '/login');
-      
       const preventBackNavigation = (event: PopStateEvent) => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        window.history.replaceState(null, '', '/login');
-        window.location.href = '/login?back=prevented';
-      };
-      
-      const preventKeyboardNavigation = (event: KeyboardEvent) => {
-        if ((event.altKey && event.key === 'ArrowLeft') || 
-            (event.metaKey && event.key === 'ArrowLeft') || 
-            (event.ctrlKey && event.key === 'ArrowLeft') ||
-            (event.key === 'Backspace' && !['INPUT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName))) {
+        if (window.location.pathname !== '/login') {
           event.preventDefault();
-          event.stopImmediatePropagation();
-          window.location.href = '/login?kb=prevented';
+          window.location.href = '/login';
         }
       };
       
-      const preventVisibilityRestore = () => {
-        if (document.visibilityState === 'visible' && !isAuthenticated) {
-          window.location.href = '/login?vis=restored';
-        }
-      };
-      
-      const preventFocus = () => {
-        if (!isAuthenticated) {
-          window.location.href = '/login?focus=prevented';
-        }
-      };
-      
-      // Add comprehensive event listeners
-      window.addEventListener('popstate', preventBackNavigation, { passive: false, capture: true });
-      window.addEventListener('keydown', preventKeyboardNavigation, { passive: false, capture: true });
-      window.addEventListener('focus', preventFocus, { passive: false, capture: true });
-      document.addEventListener('visibilitychange', preventVisibilityRestore, { passive: false, capture: true });
-      
-      // Prevent context menu on unauthenticated pages
-      const preventContextMenu = (e: MouseEvent) => {
-        e.preventDefault();
-        return false;
-      };
-      
-      document.addEventListener('contextmenu', preventContextMenu);
+      window.addEventListener('popstate', preventBackNavigation);
       
       return () => {
-        window.removeEventListener('popstate', preventBackNavigation, { capture: true });
-        window.removeEventListener('keydown', preventKeyboardNavigation, { capture: true });
-        window.removeEventListener('focus', preventFocus, { capture: true });
-        document.removeEventListener('visibilitychange', preventVisibilityRestore, { capture: true });
-        document.removeEventListener('contextmenu', preventContextMenu);
+        window.removeEventListener('popstate', preventBackNavigation);
       };
     }
   }, [isAuthenticated, isLoading]);

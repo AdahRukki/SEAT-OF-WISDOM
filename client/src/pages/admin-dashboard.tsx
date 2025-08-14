@@ -300,22 +300,6 @@ export default function AdminDashboard() {
     const { firstName, lastName, email, password, classId, parentWhatsApp } = studentCreationForm;
     const hasRequiredFields = firstName && lastName && email && password && classId && parentWhatsApp;
     const hasNoErrors = Object.values(studentFormErrors).every(error => !error);
-    
-    // Temporary debug logging
-    if (!hasRequiredFields || !hasNoErrors) {
-      console.log("Form validation failed:", {
-        firstName: !!firstName,
-        lastName: !!lastName, 
-        email: !!email,
-        password: !!password,
-        classId: !!classId,
-        parentWhatsApp: !!parentWhatsApp,
-        hasRequiredFields,
-        hasNoErrors,
-        errors: studentFormErrors
-      });
-    }
-    
     return hasRequiredFields && hasNoErrors;
   };
 
@@ -544,11 +528,7 @@ export default function AdminDashboard() {
 
   // Create student with comprehensive validation
   const handleCreateStudent = () => {
-    console.log("Create student button clicked!");
-    console.log("Form data:", studentCreationForm);
-    
     if (!isStudentFormValid()) {
-      console.log("Form validation failed");
       toast({ 
         title: "Validation Error", 
         description: "Please complete all required fields and fix validation errors", 
@@ -557,7 +537,6 @@ export default function AdminDashboard() {
       return;
     }
 
-    console.log("Form validation passed, creating student...");
     const studentData = {
       firstName: studentCreationForm.firstName,
       lastName: studentCreationForm.lastName,
@@ -571,7 +550,6 @@ export default function AdminDashboard() {
       address: studentCreationForm.address || undefined
     };
 
-    console.log("Sending student data:", studentData);
     createStudentMutation.mutate(studentData);
   };
 
