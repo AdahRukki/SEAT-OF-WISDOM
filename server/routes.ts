@@ -16,8 +16,11 @@ import {
   changePasswordSchema,
   insertFeeTypeSchema,
   recordPaymentSchema,
-  assignFeeSchema
+  assignFeeSchema,
+  users
 } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
@@ -611,7 +614,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const updatedStudent = await storage.updateStudent(id, updateData);
+      // Handle date conversion properly and filter out non-student fields
+      const { firstName, lastName, middleName, email, ...studentOnlyData } = updateData;
+      
+      // Convert date string to Date object if provided
+      if (studentOnlyData.dateOfBirth && typeof studentOnlyData.dateOfBirth === 'string') {
+        studentOnlyData.dateOfBirth = new Date(studentOnlyData.dateOfBirth);
+      }
+      
+      // Update user fields if provided
+      if (firstName || lastName || middleName || email) {
+        const student = await storage.getStudent(id);
+        if (student && student.userId) {
+          // Update the user record directly in database
+          await db.update(users)
+            .set({
+              firstName: firstName || undefined,
+              lastName: lastName || undefined, 
+              middleName: middleName || undefined,
+              email: email || undefined
+            })
+            .where(eq(users.id, student.userId));
+        }
+      }
+      
+      // Update student fields  
+      const updatedStudent = await storage.updateStudent(id, studentOnlyData);
       res.json(updatedStudent);
     } catch (error) {
       console.error('Error updating student:', error);
