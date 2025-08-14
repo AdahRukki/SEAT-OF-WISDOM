@@ -728,44 +728,90 @@ export default function AdminDashboard() {
     }
   });
 
-  // Export student data function
+  // Export student data function with multiple class sheets
   const exportStudentData = (format: 'excel' | 'pdf') => {
     const currentSchoolStudents = allStudents.filter(student => 
       !selectedSchoolId || student.schoolId === selectedSchoolId
     );
 
     if (format === 'excel') {
-      // Create workbook and worksheet
+      // Create workbook
       const workbook = XLSX.utils.book_new();
-      const worksheetData = [
-        ['Student ID', 'First Name', 'Last Name', 'Middle Name', 'Email', 'Class', 'Date of Birth', 'Parent Contact', 'Parent WhatsApp', 'Address']
-      ];
-
+      
+      // Group students by class
+      const studentsByClass = new Map<string, typeof currentSchoolStudents>();
+      
       currentSchoolStudents.forEach(student => {
-        const className = classes.find(c => c.id === student.classId)?.name || 'N/A';
-        worksheetData.push([
-          student.studentId || 'N/A',
-          student.firstName || 'N/A',
-          student.lastName || 'N/A',
-          student.middleName || 'N/A',
-          student.email || 'N/A',
-          className,
-          student.dateOfBirth || 'N/A',
-          student.parentContact || 'N/A',
-          student.parentWhatsApp || 'N/A',
-          student.address || 'N/A'
-        ]);
+        const className = classes.find(c => c.id === student.classId)?.name || 'Unassigned';
+        if (!studentsByClass.has(className)) {
+          studentsByClass.set(className, []);
+        }
+        studentsByClass.get(className)!.push(student);
       });
 
-      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Data');
+      // Create a sheet for each class
+      studentsByClass.forEach((students, className) => {
+        const worksheetData = [
+          ['Student ID', 'First Name', 'Last Name', 'Middle Name', 'Email', 'Date of Birth', 'Parent Contact', 'Parent WhatsApp', 'Address']
+        ];
+
+        students.forEach(student => {
+          worksheetData.push([
+            student.studentId || 'N/A',
+            student.firstName || 'N/A',
+            student.lastName || 'N/A',
+            student.middleName || 'N/A',
+            student.email || 'N/A',
+            student.dateOfBirth || 'N/A',
+            student.parentContact || 'N/A',
+            student.parentWhatsApp || 'N/A',
+            student.address || 'N/A'
+          ]);
+        });
+
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        
+        // Set column widths for better readability
+        worksheet['!cols'] = [
+          { width: 15 }, // Student ID
+          { width: 15 }, // First Name
+          { width: 15 }, // Last Name
+          { width: 15 }, // Middle Name
+          { width: 25 }, // Email
+          { width: 12 }, // Date of Birth
+          { width: 15 }, // Parent Contact
+          { width: 15 }, // Parent WhatsApp
+          { width: 30 }  // Address
+        ];
+        
+        // Use valid sheet name (Excel has sheet name restrictions)
+        const safeSheetName = className.replace(/[:\\\/?*\[\]]/g, '-').substring(0, 31);
+        XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
+      });
+
+      // Add summary sheet if there are multiple classes
+      if (studentsByClass.size > 1) {
+        const summaryData = [
+          ['Class', 'Total Students'],
+          ...Array.from(studentsByClass.entries()).map(([className, students]) => [
+            className,
+            students.length
+          ]),
+          ['', ''],
+          ['Total Students', currentSchoolStudents.length]
+        ];
+        
+        const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+        summarySheet['!cols'] = [{ width: 20 }, { width: 15 }];
+        XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+      }
       
       const schoolName = schools?.find(s => s.id === selectedSchoolId)?.name || 'All Schools';
       XLSX.writeFile(workbook, `${schoolName}_Student_Data_${new Date().toISOString().split('T')[0]}.xlsx`);
       
       toast({
         title: "Success",
-        description: "Student data exported to Excel successfully"
+        description: `Student data exported with ${studentsByClass.size} class sheets`
       });
     } else {
       // PDF export using browser print
@@ -4600,14 +4646,14 @@ export default function AdminDashboard() {
 
         {/* Edit Student Dialog */}
         <Dialog open={isEditStudentDialogOpen} onOpenChange={setIsEditStudentDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Student Details</DialogTitle>
               <DialogDescription>
                 Modify student information and contact details
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="firstName">First Name</Label>
                 <Input
@@ -4687,7 +4733,7 @@ export default function AdminDashboard() {
                   placeholder="Enter parent WhatsApp number"
                 />
               </div>
-              <div className="md:col-span-2">
+              <div className="sm:col-span-2">
                 <Label htmlFor="address">Address</Label>
                 <Input
                   id="address"
@@ -4698,8 +4744,8 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            <div className="flex justify-between pt-4">
-              <Button variant="outline" onClick={() => setIsEditStudentDialogOpen(false)}>
+            <div className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIsEditStudentDialogOpen(false)} className="order-2 sm:order-1">
                 Cancel
               </Button>
               <Button 
@@ -4712,6 +4758,7 @@ export default function AdminDashboard() {
                   }
                 }}
                 disabled={updateStudentMutation.isPending || !editingStudent}
+                className="order-1 sm:order-2"
               >
                 {updateStudentMutation.isPending ? "Updating..." : "Update Student"}
               </Button>
