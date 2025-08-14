@@ -36,7 +36,8 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
 
   // Fetch students in selected class
   const { data: studentsInClass = [], isLoading: studentsLoading } = useQuery({
-    queryKey: ["/api/admin/classes", selectedClassId, "students"],
+    queryKey: ["/api/admin/students", "by-class", selectedClassId],
+    queryFn: () => apiRequest(`/api/admin/students?classId=${selectedClassId}`),
     enabled: !!selectedClassId,
   });
 
@@ -48,6 +49,7 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
   // Fetch existing attendance records for the class
   const { data: existingAttendance = [], isLoading: attendanceLoading } = useQuery({
     queryKey: ["/api/admin/attendance/class", selectedClassId, selectedTerm, selectedSession],
+    queryFn: () => apiRequest(`/api/admin/attendance/class/${selectedClassId}?term=${encodeURIComponent(selectedTerm)}&session=${encodeURIComponent(selectedSession)}`),
     enabled: !!(selectedClassId && selectedTerm && selectedSession),
   });
 
