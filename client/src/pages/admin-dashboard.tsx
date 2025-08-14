@@ -120,23 +120,15 @@ export default function AdminDashboard() {
 
   // State for dialogs
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
-  const [isEditClassDialogOpen, setIsEditClassDialogOpen] = useState(false);
-  const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
   const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
   const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
   const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false);
   const [selectedClassForDetails, setSelectedClassForDetails] = useState<Class | null>(null);
-  const [selectedClassForEdit, setSelectedClassForEdit] = useState<Class | null>(null);
-  const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<StudentWithDetails | null>(null);
 
   // Form states
   const [className, setClassName] = useState("");
   const [classDescription, setClassDescription] = useState("");
-  
-  // Edit class form states
-  const [editClassName, setEditClassName] = useState("");
-  const [editClassDescription, setEditClassDescription] = useState("");
 
   // Student form states
   const [studentFirstName, setStudentFirstName] = useState("");
@@ -777,61 +769,6 @@ export default function AdminDashboard() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to assign subject", variant: "destructive" });
-    }
-  });
-
-  // Edit class mutation
-  const editClassMutation = useMutation({
-    mutationFn: async (data: { id: string; name: string; description: string }) => {
-      return await apiRequest(`/api/admin/classes/${data.id}`, {
-        method: 'PUT',
-        body: { name: data.name, description: data.description }
-      });
-    },
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Class updated successfully",
-      });
-      setIsEditClassDialogOpen(false);
-      setEditClassName("");
-      setEditClassDescription("");
-      setSelectedClassForEdit(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update class",
-        variant: "destructive"
-      });
-    }
-  });
-
-  // Edit student mutation
-  const editStudentMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return await apiRequest(`/api/admin/students/${data.id}`, {
-        method: 'PUT',
-        body: data
-      });
-    },
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Student updated successfully",
-      });
-      setIsEditStudentDialogOpen(false);
-      setSelectedStudentForEdit(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'] });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update student",
-        variant: "destructive"
-      });
     }
   });
 
@@ -3103,28 +3040,6 @@ export default function AdminDashboard() {
                             size="sm" 
                             variant="outline"
                             onClick={() => {
-                              setSelectedClassForEdit(selectedClassForDetails);
-                              setEditClassName(selectedClassForDetails?.name || "");
-                              setEditClassDescription(selectedClassForDetails?.description || "");
-                              setIsEditClassDialogOpen(true);
-                            }}
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit Class
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Edit class name and description</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
                               // Set the selected class, current term and session for scores
                               setScoresClassId(selectedClassForDetails?.id || "");
                               setScoresSubjectId("");
@@ -3250,7 +3165,6 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Parent Contact</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -3267,19 +3181,6 @@ export default function AdminDashboard() {
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                             {student.parentContact || 'Not provided'}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedStudentForEdit(student);
-                                setIsEditStudentDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit
-                            </Button>
                           </td>
                         </tr>
                       ))}
