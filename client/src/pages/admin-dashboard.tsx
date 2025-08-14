@@ -553,6 +553,19 @@ export default function AdminDashboard() {
     createStudentMutation.mutate(studentData);
   };
 
+  // Helper function to sort classes in proper order
+  const sortClassesByOrder = (classes: any[]) => {
+    const classOrder = ["J.S.S 1", "J.S.S 2", "J.S.S 3", "S.S.S 1", "S.S.S 2", "S.S.S 3"];
+    return classes.sort((a, b) => {
+      const aIndex = classOrder.indexOf(a.name);
+      const bIndex = classOrder.indexOf(b.name);
+      if (aIndex === -1 && bIndex === -1) return a.name.localeCompare(b.name);
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    });
+  };
+
   // Helper function to get next class in progression
   const getNextClass = (currentClassName: string): { nextClass: string | null; isGraduation: boolean } => {
     const classProgression = {
@@ -563,14 +576,14 @@ export default function AdminDashboard() {
       "JSS2": "JSS3",
       "JSS 2": "JSS 3", 
       "J.S.S 3": "S.S.S 1",
-      "JSS3": "SSS1",
-      "JSS 3": "SSS 1",
+      "JSS3": "S.S.S 1",
+      "JSS 3": "S.S.S 1",
       "S.S.S 1": "S.S.S 2",
-      "SSS1": "SSS2",
-      "SSS 1": "SSS 2",
+      "SSS1": "S.S.S 2",
+      "SSS 1": "S.S.S 2",
       "S.S.S 2": "S.S.S 3", 
-      "SSS2": "SSS3",
-      "SSS 2": "SSS 3",
+      "SSS2": "S.S.S 3",
+      "SSS 2": "S.S.S 3",
       "S.S.S 3": "Graduated",
       "SSS3": "Graduated",
       "SSS 3": "Graduated"
@@ -2254,7 +2267,7 @@ export default function AdminDashboard() {
                       <SelectValue placeholder="Choose a class to view students..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {classes.map((classItem) => (
+                      {sortClassesByOrder(classes).map((classItem) => (
                         <SelectItem key={classItem.id} value={classItem.id}>
                           {classItem.name} ({allStudents.filter(s => s.classId === classItem.id).length} students)
                         </SelectItem>
