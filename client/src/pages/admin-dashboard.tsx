@@ -2441,7 +2441,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Students Tab - Class-based viewing */}
-          <TabsContent value="students" className="space-y-6">
+          <TabsContent value="students" className="space-y-6 table-container">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -2552,7 +2552,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Scores Management Tab */}
-          <TabsContent value="scores" className="space-y-6">
+          <TabsContent value="scores" className="space-y-6 table-container">
             <Card>
               <CardHeader>
                 <CardTitle>Score Entry System</CardTitle>
@@ -2811,7 +2811,7 @@ export default function AdminDashboard() {
 
           {/* Financial Management Tab */}
           {/* Attendance Tab */}
-          <TabsContent value="attendance" className="space-y-6">
+          <TabsContent value="attendance" className="space-y-6 table-container">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -2829,7 +2829,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Finance Tab */}
-          <TabsContent value="finance" className="space-y-6">
+          <TabsContent value="finance" className="space-y-6 table-container">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -3127,7 +3127,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Report Cards Tab */}
-          <TabsContent value="reports" className="space-y-6">
+          <TabsContent value="reports" className="space-y-6 table-container">
             <ReportCardManagement 
               classes={classes}
               user={user}
@@ -3135,7 +3135,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Settings Tab */}
-          <TabsContent value="settings" className="space-y-6">
+          <TabsContent value="settings" className="space-y-6 table-container">
             <Card>
               <CardHeader>
                 <CardTitle>Academy Settings</CardTitle>
@@ -3336,7 +3336,7 @@ export default function AdminDashboard() {
 
       {/* Class Details Dialog */}
         <Dialog open={isClassDetailsDialogOpen} onOpenChange={setIsClassDetailsDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl dialog-content-scrollable table-container">
             <DialogHeader>
               <DialogTitle>Class Details: {selectedClassForDetails?.name}</DialogTitle>
               <DialogDescription>
@@ -3745,7 +3745,7 @@ export default function AdminDashboard() {
             resetStudentForm();
           }
         }}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md dialog-content-scrollable form-container">
             <DialogHeader>
               <DialogTitle>Create New Student</DialogTitle>
               <DialogDescription>
@@ -3917,7 +3917,7 @@ export default function AdminDashboard() {
 
         {/* Fee Type Creation Dialog */}
         <Dialog open={isFeeTypeDialogOpen} onOpenChange={setIsFeeTypeDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md dialog-content-scrollable form-container">
             <DialogHeader>
               <DialogTitle>Create New Fee Type</DialogTitle>
               <DialogDescription>
@@ -4017,7 +4017,7 @@ export default function AdminDashboard() {
 
         {/* Record Payment Dialog - Spreadsheet Style */}
         <Dialog open={isRecordPaymentDialogOpen} onOpenChange={setIsRecordPaymentDialogOpen}>
-          <DialogContent className="max-w-6xl">
+          <DialogContent className="max-w-6xl dialog-content-scrollable table-container">
             <DialogHeader>
               <DialogTitle>Record Class Payments</DialogTitle>
               <DialogDescription>
@@ -4646,7 +4646,7 @@ export default function AdminDashboard() {
 
         {/* Edit Student Dialog */}
         <Dialog open={isEditStudentDialogOpen} onOpenChange={setIsEditStudentDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
             <DialogHeader>
               <DialogTitle>Edit Student Details</DialogTitle>
               <DialogDescription>

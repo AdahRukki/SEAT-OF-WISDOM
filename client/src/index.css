@@ -58,6 +58,67 @@
   }
 }
 
+/* Fix scrolling issues for dialogs and popups */
+@layer components {
+  /* Ensure dialog content can scroll */
+  [data-radix-dialog-content] {
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Fix tab content scrolling */
+  [data-radix-tabs-content] {
+    max-height: calc(100vh - 200px) !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+  }
+  
+  /* Fix select dropdown scrolling */
+  [data-radix-select-content] {
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Fix popover scrolling */
+  [data-radix-popover-content] {
+    max-height: 400px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Fix navigation menu scrolling */
+  [data-radix-navigation-menu-content] {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Ensure proper scrolling for dialog overlays */
+  [data-radix-dialog-overlay] {
+    overflow-y: auto !important;
+  }
+  
+  /* Fix table scrolling in tabs */
+  .table-container {
+    max-height: 60vh !important;
+    overflow: auto !important;
+  }
+  
+  /* Ensure form containers can scroll */
+  .form-container {
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+    padding-right: 8px;
+  }
+  
+  /* Make sure content doesn't overflow viewport */
+  .dialog-content-scrollable {
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+  }
+}
+
 /* Print styles for report cards */
 @media print {
   /* Hide everything by default */
