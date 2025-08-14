@@ -964,14 +964,14 @@ export default function AdminDashboard() {
   const openEditStudent = (student: StudentWithDetails) => {
     setEditingStudent(student);
     setStudentEditForm({
-      firstName: student.firstName || "",
-      lastName: student.lastName || "",
-      middleName: student.middleName || "",
-      email: student.email || "",
+      firstName: student.user?.firstName || "",
+      lastName: student.user?.lastName || "",
+      middleName: student.user?.middleName || "",
+      email: student.user?.email || "",
       classId: student.classId || "",
-      dateOfBirth: student.dateOfBirth || "",
+      dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split('T')[0] : "",
       parentContact: student.parentContact || "",
-      parentWhatsApp: student.parentWhatsApp || "",
+      parentWhatsApp: student.parentWhatsapp || "",
       address: student.address || ""
     });
     setIsEditStudentDialogOpen(true);
