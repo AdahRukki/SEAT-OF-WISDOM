@@ -998,6 +998,16 @@ export default function AdminDashboard() {
     setLogoPreview("");
   };
 
+  // Reset student form function
+  const resetStudentForm = () => {
+    setStudentFirstName("");
+    setStudentLastName("");
+    setStudentEmail("");
+    setStudentPassword("");
+    setStudentId("");
+    setSelectedClassId("");
+  };
+
   const handleStudentCreated = () => {
     resetStudentForm();
     setIsStudentDialogOpen(false);
