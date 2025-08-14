@@ -3035,13 +3035,18 @@ export default function AdminDashboard() {
                             variant="outline"
                             onClick={() => {
                               // Set the selected class for scores and switch to Scores tab
-                              setSelectedClassForScores(selectedClassForDetails?.id || "");
-                              setScoresSubjectFilter("all");
-                              setActiveTab("scores");
+                              setScoresClassId(selectedClassForDetails?.id || "");
+                              setScoresSubjectId("");
+                              // Close dialog first then switch to scores tab
                               setIsClassDetailsDialogOpen(false);
+                              // Use setTimeout to ensure dialog closes before tab switch
+                              setTimeout(() => {
+                                const scoresTab = document.querySelector('[data-value="scores"]') as HTMLElement;
+                                if (scoresTab) scoresTab.click();
+                              }, 100);
                             }}
                           >
-                            <PenTool className="h-4 w-4 mr-2" />
+                            <Edit className="h-4 w-4 mr-2" />
                             Record Scores
                           </Button>
                         </TooltipTrigger>
