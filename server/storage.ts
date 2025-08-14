@@ -6,6 +6,7 @@ import {
   subjects,
   classSubjects,
   assessments,
+  attendance,
   reportCardTemplates,
   feeTypes,
   studentFees,
@@ -19,6 +20,7 @@ import {
   type Class,
   type Subject,
   type Assessment,
+  type Attendance,
   type ReportCardTemplate,
   type FeeType,
   type StudentFee,
@@ -31,6 +33,7 @@ import {
   type InsertClass,
   type InsertSubject,
   type InsertAssessment,
+  type InsertAttendance,
   type InsertReportCardTemplate,
   type InsertFeeType,
   type InsertStudentFee,
@@ -136,6 +139,12 @@ export interface IStorage {
   // Student promotion system
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
   markStudentsAsGraduated(studentIds: string[]): Promise<void>;
+  
+  // Attendance tracking
+  getStudentAttendance(studentId: string, term?: string, session?: string): Promise<Attendance[]>;
+  getClassAttendance(classId: string, term: string, session: string): Promise<(Attendance & { student: StudentWithDetails })[]>;
+  upsertAttendance(attendanceData: InsertAttendance): Promise<Attendance>;
+  getAttendanceByStudent(studentId: string, term: string, session: string): Promise<Attendance | undefined>;
   
   // Enhanced student creation helpers
   getSchoolNumber(schoolId: string): Promise<string>;
@@ -1096,6 +1105,117 @@ export class DatabaseStorage implements IStorage {
         currentTerm: null
       };
     }
+  }
+
+  // Attendance tracking methods
+  async getStudentAttendance(studentId: string, term?: string, session?: string): Promise<Attendance[]> {
+    let query = db.select().from(attendance).where(eq(attendance.studentId, studentId));
+    
+    if (term && session) {
+      query = query.where(and(eq(attendance.term, term), eq(attendance.session, session))) as any;
+    } else if (term) {
+      query = query.where(eq(attendance.term, term)) as any;
+    } else if (session) {
+      query = query.where(eq(attendance.session, session)) as any;
+    }
+    
+    return await query;
+  }
+
+  async getClassAttendance(classId: string, term: string, session: string): Promise<(Attendance & { student: StudentWithDetails })[]> {
+    const result = await db.select({
+      id: attendance.id,
+      studentId: attendance.studentId,
+      classId: attendance.classId,
+      term: attendance.term,
+      session: attendance.session,
+      totalDays: attendance.totalDays,
+      presentDays: attendance.presentDays,
+      absentDays: attendance.absentDays,
+      createdAt: attendance.createdAt,
+      updatedAt: attendance.updatedAt,
+      student: {
+        id: students.id,
+        userId: students.userId,
+        classId: students.classId,
+        studentId: students.studentId,
+        dateOfBirth: students.dateOfBirth,
+        parentContact: students.parentContact,
+        parentWhatsapp: students.parentWhatsapp,
+        address: students.address,
+        status: students.status,
+        createdAt: students.createdAt,
+        updatedAt: students.updatedAt,
+        user: {
+          id: users.id,
+          email: users.email,
+          password: users.password,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          role: users.role,
+          schoolId: users.schoolId,
+          isActive: users.isActive,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        },
+        class: {
+          id: classes.id,
+          name: classes.name,
+          description: classes.description,
+          schoolId: classes.schoolId,
+          createdAt: classes.createdAt,
+          updatedAt: classes.updatedAt,
+        }
+      }
+    })
+    .from(attendance)
+    .innerJoin(students, eq(attendance.studentId, students.id))
+    .innerJoin(users, eq(students.userId, users.id))
+    .innerJoin(classes, eq(students.classId, classes.id))
+    .where(and(
+      eq(attendance.classId, classId),
+      eq(attendance.term, term),
+      eq(attendance.session, session)
+    ));
+    
+    return result as (Attendance & { student: StudentWithDetails })[];
+  }
+
+  async upsertAttendance(attendanceData: InsertAttendance): Promise<Attendance> {
+    const existing = await db.select().from(attendance)
+      .where(and(
+        eq(attendance.studentId, attendanceData.studentId),
+        eq(attendance.term, attendanceData.term),
+        eq(attendance.session, attendanceData.session)
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const [updated] = await db.update(attendance)
+        .set({
+          totalDays: attendanceData.totalDays,
+          presentDays: attendanceData.presentDays,
+          absentDays: attendanceData.absentDays,
+          updatedAt: new Date()
+        })
+        .where(eq(attendance.id, existing[0].id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(attendance).values(attendanceData).returning();
+      return created;
+    }
+  }
+
+  async getAttendanceByStudent(studentId: string, term: string, session: string): Promise<Attendance | undefined> {
+    const result = await db.select().from(attendance)
+      .where(and(
+        eq(attendance.studentId, studentId),
+        eq(attendance.term, term),
+        eq(attendance.session, session)
+      ))
+      .limit(1);
+    return result[0];
   }
 }
 

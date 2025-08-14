@@ -134,6 +134,20 @@ export const assessments = pgTable("assessments", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Attendance table (total attendance scores per student per term/session)
+export const attendance = pgTable("attendance", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
+  term: varchar("term", { length: 20 }).notNull(), // "First Term", "Second Term", "Third Term"
+  session: varchar("session", { length: 20 }).notNull(), // "2024/2025"
+  totalDays: integer("total_days").notNull().default(0), // Total school days in term
+  presentDays: integer("present_days").notNull().default(0), // Days student was present
+  absentDays: integer("absent_days").notNull().default(0), // Days student was absent
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Report card templates
 export const reportCardTemplates = pgTable("report_card_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -240,6 +254,7 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
     references: [classes.id],
   }),
   assessments: many(assessments),
+  attendance: many(attendance),
 }));
 
 export const assessmentsRelations = relations(assessments, ({ one }) => ({
@@ -253,6 +268,17 @@ export const assessmentsRelations = relations(assessments, ({ one }) => ({
   }),
   class: one(classes, {
     fields: [assessments.classId],
+    references: [classes.id],
+  }),
+}));
+
+export const attendanceRelations = relations(attendance, ({ one }) => ({
+  student: one(students, {
+    fields: [attendance.studentId],
+    references: [students.id],
+  }),
+  class: one(classes, {
+    fields: [attendance.classId],
     references: [classes.id],
   }),
 }));
@@ -318,6 +344,21 @@ export const addScoreSchema = z.object({
   exam: z.number().min(0).max(60).optional(),
 });
 
+export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const addAttendanceSchema = z.object({
+  studentId: z.string(),
+  classId: z.string(),
+  term: z.string(),
+  session: z.string(),
+  totalDays: z.number().min(0, "Total days must be positive"),
+  presentDays: z.number().min(0, "Present days must be positive"),
+  absentDays: z.number().min(0, "Absent days must be positive"),
+}).refine((data) => data.presentDays + data.absentDays === data.totalDays, {
+  message: "Present days + Absent days must equal Total days",
+  path: ["totalDays"],
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
   newPassword: z.string().min(6, "New password must be at least 6 characters"),
@@ -377,6 +418,10 @@ export type InsertStudent = z.infer<typeof insertStudentSchema>;
 
 export type Assessment = typeof assessments.$inferSelect;
 export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
+
+export type Attendance = typeof attendance.$inferSelect;
+export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
+export type AddAttendance = z.infer<typeof addAttendanceSchema>;
 
 export type ReportCardTemplate = typeof reportCardTemplates.$inferSelect;
 export type InsertReportCardTemplate = z.infer<typeof insertReportCardTemplateSchema>;

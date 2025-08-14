@@ -80,8 +80,10 @@ import {
   Receipt,
   Wallet,
   History,
-  UserCheck
+  UserCheck,
+  ClipboardCheck
 } from "lucide-react";
+import { AttendanceManagement } from "@/components/attendance-management";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
   Class, 
@@ -1998,10 +2000,11 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
             <TabsTrigger value="students" className="text-xs sm:text-sm">Students</TabsTrigger>
             <TabsTrigger value="scores" className="text-xs sm:text-sm">Scores</TabsTrigger>
+            <TabsTrigger value="attendance" className="text-xs sm:text-sm">Attendance</TabsTrigger>
             <TabsTrigger value="finance" className="text-xs sm:text-sm">Finance</TabsTrigger>
             <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm">Settings</TabsTrigger>
@@ -2551,6 +2554,25 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Financial Management Tab */}
+          {/* Attendance Tab */}
+          <TabsContent value="attendance" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardCheck className="h-5 w-5" />
+                  Attendance Management
+                </CardTitle>
+                <CardDescription>
+                  Record and track student attendance by entering total attendance scores for each term and session
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AttendanceManagement selectedSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Finance Tab */}
           <TabsContent value="finance" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
               <Card>

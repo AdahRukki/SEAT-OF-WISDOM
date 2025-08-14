@@ -11,6 +11,7 @@ import {
   insertClassSchema, 
   insertSubjectSchema,
   addScoreSchema,
+  addAttendanceSchema,
   insertStudentSchema,
   changePasswordSchema,
   insertFeeTypeSchema,
@@ -1290,6 +1291,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get financial summary error:", error);
       res.status(500).json({ error: "Failed to fetch financial summary" });
+    }
+  });
+
+  // Attendance tracking routes
+  app.get("/api/admin/attendance/class/:classId", authenticate, async (req: Request, res: Response) => {
+    const { classId } = req.params;
+    const { term, session } = req.query;
+    const user = (req as any).user;
+
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can view attendance" });
+      }
+
+      if (!term || !session) {
+        return res.status(400).json({ error: "Term and session are required" });
+      }
+
+      const attendanceRecords = await storage.getClassAttendance(classId, term as string, session as string);
+      res.json(attendanceRecords);
+    } catch (error) {
+      console.error("Error fetching class attendance:", error);
+      res.status(500).json({ error: "Failed to fetch attendance data" });
+    }
+  });
+
+  app.post("/api/admin/attendance", authenticate, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can record attendance" });
+      }
+
+      const validatedData = addAttendanceSchema.parse(req.body);
+      const attendance = await storage.upsertAttendance(validatedData);
+      
+      res.json(attendance);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid attendance data", details: error.errors });
+      }
+      console.error("Error recording attendance:", error);
+      res.status(500).json({ error: "Failed to record attendance" });
+    }
+  });
+
+  app.get("/api/admin/attendance/student/:studentId", authenticate, async (req: Request, res: Response) => {
+    const { studentId } = req.params;
+    const { term, session } = req.query;
+    const user = (req as any).user;
+
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can view attendance" });
+      }
+
+      const attendanceRecords = await storage.getStudentAttendance(studentId, term as string, session as string);
+      res.json(attendanceRecords);
+    } catch (error) {
+      console.error("Error fetching student attendance:", error);
+      res.status(500).json({ error: "Failed to fetch attendance data" });
     }
   });
 
