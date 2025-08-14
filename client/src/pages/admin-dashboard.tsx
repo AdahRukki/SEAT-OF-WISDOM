@@ -102,6 +102,7 @@ import {
   type AssignFeeForm 
 } from "@shared/schema";
 import type { z } from "zod";
+import * as XLSX from 'xlsx';
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 type PaymentForm = z.infer<typeof recordPaymentSchema>;
@@ -143,6 +144,21 @@ export default function AdminDashboard() {
 
   // Active tab state
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Student editing states
+  const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<StudentWithDetails | null>(null);
+  const [studentEditForm, setStudentEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    middleName: "",
+    email: "",
+    classId: "",
+    dateOfBirth: "",
+    parentContact: "",
+    parentWhatsApp: "",
+    address: ""
+  });
 
   // Logo upload states
   const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
@@ -712,6 +728,115 @@ export default function AdminDashboard() {
     }
   });
 
+  // Export student data function
+  const exportStudentData = (format: 'excel' | 'pdf') => {
+    const currentSchoolStudents = allStudents.filter(student => 
+      !selectedSchoolId || student.schoolId === selectedSchoolId
+    );
+
+    if (format === 'excel') {
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheetData = [
+        ['Student ID', 'First Name', 'Last Name', 'Middle Name', 'Email', 'Class', 'Date of Birth', 'Parent Contact', 'Parent WhatsApp', 'Address']
+      ];
+
+      currentSchoolStudents.forEach(student => {
+        const className = classes.find(c => c.id === student.classId)?.name || 'N/A';
+        worksheetData.push([
+          student.studentId || 'N/A',
+          student.firstName || 'N/A',
+          student.lastName || 'N/A',
+          student.middleName || 'N/A',
+          student.email || 'N/A',
+          className,
+          student.dateOfBirth || 'N/A',
+          student.parentContact || 'N/A',
+          student.parentWhatsApp || 'N/A',
+          student.address || 'N/A'
+        ]);
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Data');
+      
+      const schoolName = schools?.find(s => s.id === selectedSchoolId)?.name || 'All Schools';
+      XLSX.writeFile(workbook, `${schoolName}_Student_Data_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      toast({
+        title: "Success",
+        description: "Student data exported to Excel successfully"
+      });
+    } else {
+      // PDF export using browser print
+      const printContent = `
+        <html>
+          <head>
+            <title>Student Data Export</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+              th { background-color: #f2f2f2; font-weight: bold; }
+              .header { text-align: center; margin-bottom: 20px; }
+              .header h1 { margin: 0; color: #333; }
+              .header p { margin: 5px 0; color: #666; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Seat of Wisdom Academy</h1>
+              <p>Student Data Export - ${schools?.find(s => s.id === selectedSchoolId)?.name || 'All Schools'}</p>
+              <p>Generated on: ${new Date().toLocaleDateString()}</p>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Full Name</th>
+                  <th>Email</th>
+                  <th>Class</th>
+                  <th>Parent Contact</th>
+                  <th>Parent WhatsApp</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${currentSchoolStudents.map(student => {
+                  const className = classes.find(c => c.id === student.classId)?.name || 'N/A';
+                  const fullName = `${student.firstName || ''} ${student.middleName || ''} ${student.lastName || ''}`.trim();
+                  return `
+                    <tr>
+                      <td>${student.studentId || 'N/A'}</td>
+                      <td>${fullName}</td>
+                      <td>${student.email || 'N/A'}</td>
+                      <td>${className}</td>
+                      <td>${student.parentContact || 'N/A'}</td>
+                      <td>${student.parentWhatsApp || 'N/A'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `;
+      
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      }
+      
+      toast({
+        title: "Success", 
+        description: "Student data prepared for PDF export"
+      });
+    }
+  };
+
   // Universal settings management
   const updateGlobalSettings = useMutation({
     mutationFn: async (settings: {term: string, session: string}) => {
@@ -751,6 +876,60 @@ export default function AdminDashboard() {
       toast({ title: "Error", description: "Failed to create session", variant: "destructive" });
     }
   });
+
+  // Update student mutation
+  const updateStudentMutation = useMutation({
+    mutationFn: async (studentData: { id: string; [key: string]: any }) => {
+      return await apiRequest(`/api/admin/students/${studentData.id}`, {
+        method: 'PATCH',
+        body: studentData
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Student details updated successfully"
+      });
+      setIsEditStudentDialogOpen(false);
+      setEditingStudent(null);
+      setStudentEditForm({
+        firstName: "",
+        lastName: "",
+        middleName: "",
+        email: "",
+        classId: "",
+        dateOfBirth: "",
+        parentContact: "",
+        parentWhatsApp: "",
+        address: ""
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+    },
+    onError: () => {
+      toast({
+        title: "Error", 
+        description: "Failed to update student details", 
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Function to open edit dialog
+  const openEditStudent = (student: StudentWithDetails) => {
+    setEditingStudent(student);
+    setStudentEditForm({
+      firstName: student.firstName || "",
+      lastName: student.lastName || "",
+      middleName: student.middleName || "",
+      email: student.email || "",
+      classId: student.classId || "",
+      dateOfBirth: student.dateOfBirth || "",
+      parentContact: student.parentContact || "",
+      parentWhatsApp: student.parentWhatsApp || "",
+      address: student.address || ""
+    });
+    setIsEditStudentDialogOpen(true);
+  };
 
   // Assign subject to class (from Overview tab)
   const assignSubjectToClassMutation = useMutation({
@@ -2258,6 +2437,7 @@ export default function AdminDashboard() {
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Parent WhatsApp</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -2276,6 +2456,17 @@ export default function AdminDashboard() {
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                                 {student.parentWhatsapp || 'Not provided'}
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openEditStudent(student)}
+                                  className="flex items-center"
+                                >
+                                  <Edit className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
                               </td>
                             </tr>
                           ))}
@@ -3008,6 +3199,71 @@ export default function AdminDashboard() {
                         <div className="text-2xl font-bold text-purple-600">{schools?.length || 0}</div>
                         <p className="text-sm text-gray-600">School Branches</p>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Student Data Management Section */}
+                <div className="border-t pt-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-medium">Student Data Management</h3>
+                      <p className="text-sm text-gray-500">Edit student details and export student data</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Edit Students Section */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center">
+                            <Edit className="h-5 w-5 mr-2" />
+                            Edit Student Details
+                          </CardTitle>
+                          <CardDescription>
+                            Modify student information and contact details
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Button 
+                            onClick={() => setActiveTab("students")}
+                            className="w-full"
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Go to Students Tab
+                          </Button>
+                        </CardContent>
+                      </Card>
+
+                      {/* Export Data Section */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center">
+                            <Download className="h-5 w-5 mr-2" />
+                            Export Student Data
+                          </CardTitle>
+                          <CardDescription>
+                            Download student contact information and details
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <Button 
+                            onClick={() => exportStudentData('excel')}
+                            variant="outline"
+                            className="w-full"
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            Export to Excel
+                          </Button>
+                          <Button 
+                            onClick={() => exportStudentData('pdf')}
+                            variant="outline"
+                            className="w-full"
+                          >
+                            <Receipt className="h-4 w-4 mr-2" />
+                            Export to PDF
+                          </Button>
+                        </CardContent>
+                      </Card>
                     </div>
                   </div>
                 </div>
@@ -4324,6 +4580,127 @@ export default function AdminDashboard() {
                   {assignSubjectToClassMutation.isPending ? "Assigning..." : "Assign Subject"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Student Dialog */}
+        <Dialog open={isEditStudentDialogOpen} onOpenChange={setIsEditStudentDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Student Details</DialogTitle>
+              <DialogDescription>
+                Modify student information and contact details
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  value={studentEditForm.firstName}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, firstName: e.target.value}))}
+                  placeholder="Enter first name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  value={studentEditForm.lastName}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, lastName: e.target.value}))}
+                  placeholder="Enter last name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="middleName">Middle Name</Label>
+                <Input
+                  id="middleName"
+                  value={studentEditForm.middleName}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, middleName: e.target.value}))}
+                  placeholder="Enter middle name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={studentEditForm.email}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, email: e.target.value}))}
+                  placeholder="Enter email address"
+                />
+              </div>
+              <div>
+                <Label htmlFor="classId">Class</Label>
+                <Select value={studentEditForm.classId} onValueChange={(value) => setStudentEditForm(prev => ({...prev, classId: value}))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sortClassesByOrder(classes).map((classItem) => (
+                      <SelectItem key={classItem.id} value={classItem.id}>
+                        {classItem.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                <Input
+                  id="dateOfBirth"
+                  type="date"
+                  value={studentEditForm.dateOfBirth}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, dateOfBirth: e.target.value}))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="parentContact">Parent Contact</Label>
+                <Input
+                  id="parentContact"
+                  value={studentEditForm.parentContact}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, parentContact: e.target.value}))}
+                  placeholder="Enter parent phone number"
+                />
+              </div>
+              <div>
+                <Label htmlFor="parentWhatsApp">Parent WhatsApp</Label>
+                <Input
+                  id="parentWhatsApp"
+                  value={studentEditForm.parentWhatsApp}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, parentWhatsApp: e.target.value}))}
+                  placeholder="Enter parent WhatsApp number"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  value={studentEditForm.address}
+                  onChange={(e) => setStudentEditForm(prev => ({...prev, address: e.target.value}))}
+                  placeholder="Enter home address"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-between pt-4">
+              <Button variant="outline" onClick={() => setIsEditStudentDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  if (editingStudent) {
+                    updateStudentMutation.mutate({
+                      id: editingStudent.id,
+                      ...studentEditForm
+                    });
+                  }
+                }}
+                disabled={updateStudentMutation.isPending || !editingStudent}
+              >
+                {updateStudentMutation.isPending ? "Updating..." : "Update Student"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

@@ -596,6 +596,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update student details (admin only)
+  app.patch('/api/admin/students/:id', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+      const user = (req as any).user;
+      
+      // For sub-admins, verify the student belongs to their school
+      if (user.role === 'sub-admin') {
+        const student = await storage.getStudent(id);
+        if (!student || student.schoolId !== user.schoolId) {
+          return res.status(403).json({ error: 'Cannot update student from different school' });
+        }
+      }
+      
+      const updatedStudent = await storage.updateStudent(id, updateData);
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error('Error updating student:', error);
+      res.status(500).json({ error: 'Failed to update student' });
+    }
+  });
+
   app.get('/api/admin/classes/:classId/students', authenticate, requireAdmin, async (req, res) => {
     try {
       const { classId } = req.params;
