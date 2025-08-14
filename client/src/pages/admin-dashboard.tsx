@@ -79,7 +79,8 @@ import {
   Calendar,
   Receipt,
   Wallet,
-  History
+  History,
+  UserCheck
 } from "lucide-react";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
