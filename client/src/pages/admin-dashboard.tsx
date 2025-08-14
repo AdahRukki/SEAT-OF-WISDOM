@@ -3026,14 +3026,48 @@ export default function AdminDashboard() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Class Subjects</h3>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => setIsSubjectManagementDialogOpen(true)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Manage Subjects
-                  </Button>
+                  <div className="flex space-x-2">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              // Set the selected class for scores and switch to Scores tab
+                              setSelectedClassForScores(selectedClassForDetails?.id || "");
+                              setScoresSubjectFilter("all");
+                              setActiveTab("scores");
+                              setIsClassDetailsDialogOpen(false);
+                            }}
+                          >
+                            <PenTool className="h-4 w-4 mr-2" />
+                            Record Scores
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Record student scores for this class</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setIsSubjectManagementDialogOpen(true)}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Manage Subjects
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Add or remove subjects for this class</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                 </div>
                 
                 {/* Display current subjects */}
