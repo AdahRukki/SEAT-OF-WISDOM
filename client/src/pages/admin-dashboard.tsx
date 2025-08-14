@@ -2201,19 +2201,37 @@ export default function AdminDashboard() {
                     Assign subjects to specific classes
                   </CardDescription>
                 </div>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button onClick={() => setIsAssignSubjectDialogOpen(true)}>
-                        <BookOpen className="h-4 w-4 mr-2" />
-                        Assign Subject
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Assign subjects to classes for better organization</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <div className="flex space-x-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setIsNewSubjectDialogOpen(true)}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create Subject
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Create a new subject for the academy</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button onClick={() => setIsAssignSubjectDialogOpen(true)}>
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          Assign Subject
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Assign subjects to classes for better organization</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="text-center py-8">
@@ -4276,7 +4294,7 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Choose a class" />
                   </SelectTrigger>
                   <SelectContent>
-                    {classes.map((classItem) => (
+                    {sortClassesByOrder(classes).map((classItem) => (
                       <SelectItem key={classItem.id} value={classItem.id}>
                         {classItem.name}
                       </SelectItem>

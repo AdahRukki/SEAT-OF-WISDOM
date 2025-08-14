@@ -420,6 +420,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Alternative endpoint for subject assignment (used by overview tab)
+  app.post('/api/admin/classes/assign-subject', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId, subjectId } = req.body;
+      await storage.assignSubjectToClass(classId, subjectId);
+      res.json({ message: "Subject assigned to class successfully" });
+    } catch (error) {
+      console.error("Assign subject error:", error);
+      res.status(400).json({ error: "Failed to assign subject to class" });
+    }
+  });
+
   // Remove subject from class
   app.delete('/api/admin/classes/:classId/subjects/:subjectId', authenticate, requireAdmin, async (req, res) => {
     try {
