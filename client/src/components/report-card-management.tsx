@@ -168,11 +168,23 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       return;
     }
 
+    if (students.length === 0) {
+      toast({
+        title: "No Students Found",
+        description: "No students found in the selected class",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsValidating(true);
     setValidationResults({});
 
     try {
+      console.log(`Validating ${students.length} students for class ${selectedClass}, term ${selectedTerm}, session ${selectedSession}`);
+      
       for (const student of students) {
+        console.log(`Validating student: ${student.firstName} ${student.lastName} (ID: ${student.id})`);
         await validateMutation.mutateAsync({
           studentId: student.id,
           classId: selectedClass,
@@ -180,8 +192,18 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           session: selectedSession,
         });
       }
+      
+      toast({
+        title: "Validation Complete",
+        description: `Validated ${students.length} students. Check the results below.`,
+      });
     } catch (error) {
-      // Individual errors are handled in the mutation
+      console.error("Validation error:", error);
+      toast({
+        title: "Validation Error",
+        description: "Some validations failed. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsValidating(false);
     }

@@ -1404,7 +1404,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const validation = await storage.validateReportCardData(studentId, classId, term, session);
-      res.json(validation);
+      
+      // Get student info for response
+      const student = await storage.getStudentById(studentId);
+      const studentName = student ? `${student.firstName} ${student.lastName}` : 'Unknown Student';
+      
+      // Map validation result to frontend format
+      const status = validation.hasAllScores && validation.hasAttendance ? "complete" : 
+                    validation.hasAllScores || validation.hasAttendance ? "partial" : "incomplete";
+      
+      let message = "";
+      if (!validation.hasAllScores && !validation.hasAttendance) {
+        message = `Missing subjects: ${validation.missingSubjects.join(", ")} and attendance data`;
+      } else if (!validation.hasAllScores) {
+        message = `Missing subjects: ${validation.missingSubjects.join(", ")}`;
+      } else if (!validation.hasAttendance) {
+        message = "Missing attendance data";
+      } else {
+        message = "All data complete";
+      }
+
+      console.log(`[VALIDATION] Student ${studentName}: ${status} - ${message}`);
+
+      res.json({
+        studentId,
+        studentName,
+        status,
+        message,
+        missingSubjects: validation.missingSubjects,
+        hasAttendance: validation.hasAttendance
+      });
     } catch (error) {
       console.error("Error validating report card data:", error);
       res.status(500).json({ error: "Failed to validate report card data" });
