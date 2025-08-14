@@ -84,7 +84,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
   // Fetch students for selected class
   const { data: students = [] } = useQuery<any[]>({
-    queryKey: ["/api/admin/students/class", selectedClass],
+    queryKey: [`/api/admin/students/class/${selectedClass}`],
     enabled: !!selectedClass,
   });
 

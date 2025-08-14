@@ -1463,6 +1463,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get students by class for report validation
+  app.get("/api/admin/students/class/:classId", authenticate, async (req: Request, res: Response) => {
+    const { classId } = req.params;
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can view students" });
+      }
+
+      const students = await storage.getStudentsByClass(classId);
+      res.json(students);
+    } catch (error) {
+      console.error("Error fetching students by class:", error);
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
