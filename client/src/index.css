@@ -105,6 +105,42 @@
     overflow: auto !important;
   }
   
+  /* Ensure horizontal scrolling for student table */
+  .student-table-wrapper {
+    width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    max-height: 70vh !important;
+    padding: 4px !important; /* Add padding for better scroll indicators */
+  }
+  
+  .student-table {
+    min-width: 800px !important; /* Ensure table has minimum width */
+    width: 100% !important;
+    table-layout: fixed !important; /* Better column control */
+  }
+  
+  /* Ensure table headers are sticky */
+  .student-table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    white-space: nowrap !important; /* Prevent header text wrapping */
+  }
+  
+  /* Add scroll indicators on mobile */
+  @media (max-width: 768px) {
+    .student-table-wrapper::after {
+      content: "← Scroll to see more →" !important;
+      position: absolute !important;
+      bottom: 8px !important;
+      right: 8px !important;
+      font-size: 12px !important;
+      color: #6b7280 !important;
+      pointer-events: none !important;
+    }
+  }
+  
   /* Ensure form containers can scroll */
   .form-container {
     max-height: 70vh !important;

@@ -2489,15 +2489,15 @@ export default function AdminDashboard() {
 
                 {/* Students Table - Only show when class is selected */}
                 {selectedClassForStudents ? (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
+                  <div className="student-table-wrapper border rounded-lg">
+                    <table className="student-table w-full">
                       <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Parent WhatsApp</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-40">Name</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-32">Student ID</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-48">Email</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-40">Parent WhatsApp</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-24">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
