@@ -300,6 +300,21 @@ export default function AdminDashboard() {
     const { firstName, lastName, email, password, classId, parentWhatsApp } = studentCreationForm;
     const hasRequiredFields = firstName && lastName && email && password && classId && parentWhatsApp;
     const hasNoErrors = Object.values(studentFormErrors).every(error => !error);
+    
+    // Debug logging to help identify validation issues
+    console.log("Form validation debug:", {
+      firstName: !!firstName,
+      lastName: !!lastName,
+      email: !!email,
+      password: !!password,
+      classId: !!classId,
+      parentWhatsApp: !!parentWhatsApp,
+      hasRequiredFields,
+      hasNoErrors,
+      formErrors: studentFormErrors,
+      formData: studentCreationForm
+    });
+    
     return hasRequiredFields && hasNoErrors;
   };
 
@@ -1000,10 +1015,19 @@ export default function AdminDashboard() {
 
   // Reset student form function
   const resetStudentForm = () => {
-    setStudentFirstName("");
-    setStudentLastName("");
-    setStudentEmail("");
-    setStudentPassword("");
+    setStudentCreationForm({
+      firstName: "",
+      lastName: "",
+      middleName: "",
+      email: "",
+      password: "",
+      classId: "",
+      dateOfBirth: "",
+      parentContact: "",
+      parentWhatsApp: "",
+      address: ""
+    });
+    setStudentFormErrors({});
     setStudentId("");
     setSelectedClassId("");
   };
