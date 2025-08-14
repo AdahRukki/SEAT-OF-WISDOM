@@ -38,7 +38,10 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
   // Fetch students in selected class
   const { data: studentsInClass = [], isLoading: studentsLoading } = useQuery({
     queryKey: ["/api/admin/students", "by-class", selectedClassId],
-    queryFn: () => apiRequest(`/api/admin/students?classId=${selectedClassId}`),
+    queryFn: async () => {
+      const allStudents = await apiRequest("/api/admin/students");
+      return (allStudents as StudentWithDetails[]).filter((student: StudentWithDetails) => student.classId === selectedClassId);
+    },
     enabled: !!selectedClassId,
   });
 
@@ -87,9 +90,11 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
   });
 
   const handlePresentDaysChange = (studentId: string, presentDays: number) => {
+    // Allow values within 0 to totalDaysForClass range
+    const validPresentDays = Math.max(0, Math.min(presentDays, totalDaysForClass));
     setAttendanceInputs(prev => ({
       ...prev,
-      [studentId]: { presentDays: Math.max(0, Math.min(presentDays, totalDaysForClass)) }
+      [studentId]: { presentDays: validPresentDays }
     }));
   };
 
@@ -251,8 +256,8 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
                     type="number"
                     min="1"
                     max="200"
-                    value={totalDaysForClass}
-                    onChange={(e) => setTotalDaysForClass(parseInt(e.target.value) || 0)}
+                    value={totalDaysForClass || ""}
+                    onChange={(e) => setTotalDaysForClass(e.target.value === "" ? 0 : parseInt(e.target.value) || 0)}
                     placeholder="Enter total days (e.g., 65)"
                     className="max-w-48"
                   />
@@ -295,9 +300,9 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
                               type="number"
                               min="0"
                               max={totalDaysForClass}
-                              value={currentInput.presentDays}
-                              onChange={(e) => handlePresentDaysChange(student.id, parseInt(e.target.value) || 0)}
-                              placeholder="0"
+                              value={currentInput.presentDays || ""}
+                              onChange={(e) => handlePresentDaysChange(student.id, e.target.value === "" ? 0 : parseInt(e.target.value) || 0)}
+                              placeholder="Enter present days"
                             />
                           </div>
                           <div>
