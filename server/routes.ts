@@ -521,6 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password, 
         classId,
         dateOfBirth,
+        gender,
         parentContact,
         parentWhatsApp,
         address,
@@ -580,6 +581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         classId,
         studentId: autoStudentId,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        gender: gender || null,
         parentContact: parentContact || '',
         parentWhatsapp: parentWhatsApp,
         address: address || ''

@@ -155,6 +155,7 @@ export default function AdminDashboard() {
     email: "",
     classId: "",
     dateOfBirth: "",
+    gender: "",
     parentContact: "",
     parentWhatsApp: "",
     address: ""
@@ -272,6 +273,7 @@ export default function AdminDashboard() {
     password: "",
     classId: "",
     dateOfBirth: "",
+    gender: "",
     parentContact: "",
     parentWhatsApp: "",
     address: ""
@@ -749,23 +751,48 @@ export default function AdminDashboard() {
         studentsByClass.get(className)!.push(student);
       });
 
-      // Create a sheet for each class
-      studentsByClass.forEach((students, className) => {
+      // Sort students by class order and create a sheet for each class
+      const sortedClasses = Array.from(studentsByClass.entries()).sort((a, b) => {
+        const classOrder = ["J.S.S 1", "J.S.S 2", "J.S.S 3", "S.S.S 1", "S.S.S 2", "S.S.S 3"];
+        const aIndex = classOrder.indexOf(a[0]);
+        const bIndex = classOrder.indexOf(b[0]);
+        if (aIndex === -1 && bIndex === -1) return a[0].localeCompare(b[0]);
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+
+      sortedClasses.forEach(([className, students]) => {
         const worksheetData = [
-          ['Student ID', 'First Name', 'Last Name', 'Middle Name', 'Email', 'Date of Birth', 'Parent Contact', 'Parent WhatsApp', 'Address']
+          ['Name', 'Age', 'Gender', 'Parent Number', 'Student ID', 'Class']
         ];
 
         students.forEach(student => {
+          // Calculate age from date of birth
+          let age = 'N/A';
+          if (student.dateOfBirth) {
+            const birthDate = new Date(student.dateOfBirth);
+            const today = new Date();
+            let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+            const monthDiff = today.getMonth() - birthDate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+              calculatedAge--;
+            }
+            age = calculatedAge.toString();
+          }
+
+          // Combine names into full name
+          const fullName = [student.firstName, student.middleName, student.lastName]
+            .filter(name => name && name.trim())
+            .join(' ') || 'N/A';
+
           worksheetData.push([
+            fullName,
+            age,
+            student.gender || 'N/A',
+            student.parentWhatsapp || student.parentContact || 'N/A',
             student.studentId || 'N/A',
-            student.firstName || 'N/A',
-            student.lastName || 'N/A',
-            student.middleName || 'N/A',
-            student.email || 'N/A',
-            student.dateOfBirth || 'N/A',
-            student.parentContact || 'N/A',
-            student.parentWhatsApp || 'N/A',
-            student.address || 'N/A'
+            className
           ]);
         });
 
@@ -773,15 +800,12 @@ export default function AdminDashboard() {
         
         // Set column widths for better readability
         worksheet['!cols'] = [
+          { width: 25 }, // Name
+          { width: 8 },  // Age
+          { width: 10 }, // Gender
+          { width: 18 }, // Parent Number
           { width: 15 }, // Student ID
-          { width: 15 }, // First Name
-          { width: 15 }, // Last Name
-          { width: 15 }, // Middle Name
-          { width: 25 }, // Email
-          { width: 12 }, // Date of Birth
-          { width: 15 }, // Parent Contact
-          { width: 15 }, // Parent WhatsApp
-          { width: 30 }  // Address
+          { width: 15 }  // Class
         ];
         
         // Use valid sheet name (Excel has sheet name restrictions)
@@ -951,6 +975,7 @@ export default function AdminDashboard() {
         email: "",
         classId: "",
         dateOfBirth: "",
+        gender: "",
         parentContact: "",
         parentWhatsApp: "",
         address: ""
@@ -976,6 +1001,7 @@ export default function AdminDashboard() {
       email: student.user?.email || "",
       classId: student.classId || "",
       dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split('T')[0] : "",
+      gender: student.gender || "",
       parentContact: student.parentContact || "",
       parentWhatsApp: student.parentWhatsapp || "",
       address: student.address || ""
@@ -1258,6 +1284,7 @@ export default function AdminDashboard() {
       password: "",
       classId: "",
       dateOfBirth: "",
+      gender: "",
       parentContact: "",
       parentWhatsApp: "",
       address: ""
@@ -3893,6 +3920,22 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label htmlFor="student-gender">Gender *</Label>
+                <Select 
+                  value={studentCreationForm.gender} 
+                  onValueChange={(value) => handleStudentFormChange('gender', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               
               <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
                 <h4 className="text-sm font-medium text-yellow-800 mb-2">
@@ -4720,6 +4763,19 @@ export default function AdminDashboard() {
                   value={studentEditForm.dateOfBirth}
                   onChange={(e) => setStudentEditForm(prev => ({...prev, dateOfBirth: e.target.value}))}
                 />
+              </div>
+              <div>
+                <Label htmlFor="gender">Gender</Label>
+                <Select value={studentEditForm.gender} onValueChange={(value) => setStudentEditForm(prev => ({...prev, gender: value}))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="parentContact">Parent Contact</Label>
