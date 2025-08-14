@@ -676,7 +676,10 @@ export default function AdminDashboard() {
     mutationFn: async (data: { name: string; code: string; description?: string }) => {
       return await apiRequest('/api/admin/subjects', {
         method: 'POST',
-        body: data
+        body: {
+          ...data,
+          name: data.name.toUpperCase()
+        }
       });
     },
     onSuccess: (newSubject) => {
@@ -2357,7 +2360,7 @@ export default function AdminDashboard() {
                       <SelectContent>
                         {classSubjects.map((subject) => (
                           <SelectItem key={subject.id} value={subject.id}>
-                            {subject.name}
+                            {subject.name.toUpperCase()}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -3082,7 +3085,7 @@ export default function AdminDashboard() {
                   {selectedClassSubjects.map((subject) => (
                     <div key={subject.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
                       <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                        {subject.name}
+                        {subject.name.toUpperCase()}
                       </span>
                       <Button 
                         size="sm" 
@@ -3279,7 +3282,7 @@ export default function AdminDashboard() {
                   .filter(subject => !selectedClassSubjects.some(cs => cs.id === subject.id))
                   .map((subject) => (
                     <div key={subject.id} className="flex items-center justify-between p-2 border rounded">
-                      <span className="text-sm">{subject.name}</span>
+                      <span className="text-sm">{subject.name.toUpperCase()}</span>
                       <Button 
                         size="sm" 
                         variant="outline"
@@ -4300,7 +4303,7 @@ export default function AdminDashboard() {
                   <SelectContent>
                     {subjects.map((subject) => (
                       <SelectItem key={subject.id} value={subject.id}>
-                        {subject.name} ({subject.code})
+                        {subject.name.toUpperCase()} ({subject.code})
                       </SelectItem>
                     ))}
                   </SelectContent>
