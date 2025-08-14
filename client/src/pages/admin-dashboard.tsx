@@ -2131,7 +2131,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {classes.map((classItem) => {
+                  {sortClassesByOrder(classes).map((classItem) => {
                     const studentsInClass = allStudents.filter(s => s.classId === classItem.id);
                     return (
                       <Card key={classItem.id} className="hover:shadow-md transition-shadow">
@@ -2363,7 +2363,7 @@ export default function AdminDashboard() {
                         <SelectValue placeholder="Choose a class" />
                       </SelectTrigger>
                       <SelectContent>
-                        {classes.map((classItem) => (
+                        {sortClassesByOrder(classes).map((classItem) => (
                           <SelectItem key={classItem.id} value={classItem.id}>
                             {classItem.name}
                           </SelectItem>
@@ -3712,7 +3712,7 @@ export default function AdminDashboard() {
                       <SelectValue placeholder="Choose a class" />
                     </SelectTrigger>
                     <SelectContent>
-                      {classes.map((cls) => (
+                      {sortClassesByOrder(classes).map((cls) => (
                         <SelectItem key={cls.id} value={cls.id}>
                           {cls.name}
                         </SelectItem>
@@ -4109,7 +4109,7 @@ export default function AdminDashboard() {
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
                     <SelectContent>
-                      {classes.map((cls) => (
+                      {sortClassesByOrder(classes).map((cls) => (
                         <SelectItem key={cls.id} value={cls.id}>
                           {cls.name}
                         </SelectItem>
