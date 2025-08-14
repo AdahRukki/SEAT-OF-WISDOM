@@ -141,6 +141,9 @@ export default function AdminDashboard() {
   // School selection for main admin
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
 
+  // Active tab state
+  const [activeTab, setActiveTab] = useState("overview");
+
   // Logo upload states
   const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -2032,7 +2035,7 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
             <TabsTrigger value="students" className="text-xs sm:text-sm">Students</TabsTrigger>
@@ -3040,13 +3043,9 @@ export default function AdminDashboard() {
                               // Set current academic term and session
                               setScoresTerm(academicInfo?.currentTerm || "First Term");
                               setScoresSession(academicInfo?.currentSession || "2024/2025");
-                              // Close dialog first then switch to scores tab
+                              // Close dialog and switch to scores tab
                               setIsClassDetailsDialogOpen(false);
-                              // Use setTimeout to ensure dialog closes before tab switch
-                              setTimeout(() => {
-                                const scoresTab = document.querySelector('[data-value="scores"]') as HTMLElement;
-                                if (scoresTab) scoresTab.click();
-                              }, 100);
+                              setActiveTab("scores");
                             }}
                           >
                             <Edit className="h-4 w-4 mr-2" />
