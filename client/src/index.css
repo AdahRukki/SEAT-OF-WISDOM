@@ -128,7 +128,7 @@
     white-space: nowrap !important; /* Prevent header text wrapping */
   }
   
-  /* Add scroll indicators on mobile */
+  /* Enhanced mobile responsiveness for dialogs and tables */
   @media (max-width: 768px) {
     .student-table-wrapper::after {
       content: "← Scroll to see more →" !important;
@@ -138,6 +138,21 @@
       font-size: 12px !important;
       color: #6b7280 !important;
       pointer-events: none !important;
+    }
+    
+    /* Ensure dialog stays within mobile bounds */
+    .dialog-content-scrollable {
+      max-height: 85vh !important;
+      overflow-y: auto !important;
+      margin: 0 !important;
+      width: 95vw !important;
+      max-width: 95vw !important;
+    }
+    
+    /* Ensure horizontal scroll stays within mobile bounds */
+    .student-table-wrapper {
+      max-width: 95vw !important;
+      margin: 0 auto !important;
     }
   }
   
@@ -152,6 +167,15 @@
   .dialog-content-scrollable {
     max-height: 85vh !important;
     overflow-y: auto !important;
+  }
+  
+  /* Force mobile dialog sizing */
+  @media (max-width: 768px) {
+    [data-radix-dialog-content] {
+      width: 95vw !important;
+      max-width: 95vw !important;
+      margin: 0 auto !important;
+    }
   }
 }
 

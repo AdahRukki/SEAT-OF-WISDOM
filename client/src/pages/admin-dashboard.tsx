@@ -926,9 +926,15 @@ export default function AdminDashboard() {
   // Update student mutation
   const updateStudentMutation = useMutation({
     mutationFn: async (studentData: { id: string; [key: string]: any }) => {
+      // Convert date string to Date object if provided
+      const processedData = { ...studentData };
+      if (processedData.dateOfBirth && typeof processedData.dateOfBirth === 'string') {
+        processedData.dateOfBirth = new Date(processedData.dateOfBirth);
+      }
+      
       return await apiRequest(`/api/admin/students/${studentData.id}`, {
         method: 'PATCH',
-        body: studentData
+        body: processedData
       });
     },
     onSuccess: () => {
@@ -4646,7 +4652,7 @@ export default function AdminDashboard() {
 
         {/* Edit Student Dialog */}
         <Dialog open={isEditStudentDialogOpen} onOpenChange={setIsEditStudentDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
+          <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
             <DialogHeader>
               <DialogTitle>Edit Student Details</DialogTitle>
               <DialogDescription>
