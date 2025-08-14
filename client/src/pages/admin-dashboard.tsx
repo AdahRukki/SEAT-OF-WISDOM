@@ -300,21 +300,6 @@ export default function AdminDashboard() {
     const { firstName, lastName, email, password, classId, parentWhatsApp } = studentCreationForm;
     const hasRequiredFields = firstName && lastName && email && password && classId && parentWhatsApp;
     const hasNoErrors = Object.values(studentFormErrors).every(error => !error);
-    
-    // Debug logging to help identify validation issues
-    console.log("Form validation debug:", {
-      firstName: !!firstName,
-      lastName: !!lastName,
-      email: !!email,
-      password: !!password,
-      classId: !!classId,
-      parentWhatsApp: !!parentWhatsApp,
-      hasRequiredFields,
-      hasNoErrors,
-      formErrors: studentFormErrors,
-      formData: studentCreationForm
-    });
-    
     return hasRequiredFields && hasNoErrors;
   };
 
@@ -3414,7 +3399,13 @@ export default function AdminDashboard() {
         </Dialog>
 
         {/* Global Student Dialog - can be opened from anywhere */}
-        <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
+        <Dialog open={isStudentDialogOpen} onOpenChange={(open) => {
+          setIsStudentDialogOpen(open);
+          if (!open) {
+            // Reset form when dialog is closed
+            resetStudentForm();
+          }
+        }}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Create New Student</DialogTitle>
