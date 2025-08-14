@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,8 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [selectedTerm, setSelectedTerm] = useState<string>("");
   const [selectedSession, setSelectedSession] = useState<string>("");
-  const [attendanceInputs, setAttendanceInputs] = useState<Record<string, { totalDays: number; presentDays: number; absentDays: number }>>({});
+  const [totalDaysForClass, setTotalDaysForClass] = useState<number>(0);
+  const [attendanceInputs, setAttendanceInputs] = useState<Record<string, { presentDays: number }>>({});
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -85,19 +86,10 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
     },
   });
 
-  const handleAttendanceChange = (studentId: string, field: 'totalDays' | 'presentDays' | 'absentDays', value: number) => {
+  const handlePresentDaysChange = (studentId: string, presentDays: number) => {
     setAttendanceInputs(prev => ({
       ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [field]: value,
-        // Auto-calculate absent days when total and present are provided
-        ...(field === 'totalDays' || field === 'presentDays' ? {
-          absentDays: field === 'totalDays' 
-            ? Math.max(0, value - (prev[studentId]?.presentDays || 0))
-            : Math.max(0, (prev[studentId]?.totalDays || 0) - value)
-        } : {})
-      }
+      [studentId]: { presentDays: Math.max(0, Math.min(presentDays, totalDaysForClass)) }
     }));
   };
 
@@ -111,30 +103,51 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
       return;
     }
 
-    const attendance = attendanceInputs[studentId];
-    if (!attendance || attendance.totalDays <= 0) {
+    if (totalDaysForClass <= 0) {
       toast({
         title: "Error",
-        description: "Please enter valid attendance data",
+        description: "Please enter total days for the class",
         variant: "destructive",
       });
       return;
     }
+
+    const attendance = attendanceInputs[studentId];
+    if (!attendance) {
+      toast({
+        title: "Error",
+        description: "Please enter attendance data for this student",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const absentDays = totalDaysForClass - attendance.presentDays;
 
     await recordAttendanceMutation.mutateAsync({
       studentId,
       classId: selectedClassId,
       term: selectedTerm,
       session: selectedSession,
-      totalDays: attendance.totalDays,
+      totalDays: totalDaysForClass,
       presentDays: attendance.presentDays,
-      absentDays: attendance.absentDays,
+      absentDays: absentDays,
     });
   };
 
   const getExistingAttendanceForStudent = (studentId: string): AttendanceWithStudent | undefined => {
     return (existingAttendance as AttendanceWithStudent[]).find((att: AttendanceWithStudent) => att.studentId === studentId);
   };
+
+  // Effect to set total days from existing records or reset when class/term/session changes
+  useEffect(() => {
+    if (existingAttendance && (existingAttendance as AttendanceWithStudent[]).length > 0) {
+      const firstRecord = (existingAttendance as AttendanceWithStudent[])[0];
+      setTotalDaysForClass(firstRecord.totalDays);
+    } else {
+      setTotalDaysForClass(0);
+    }
+  }, [existingAttendance, selectedClassId, selectedTerm, selectedSession]);
 
   const calculateAttendancePercentage = (present: number, total: number): number => {
     return total > 0 ? Math.round((present / total) * 100) : 0;
@@ -224,95 +237,102 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
               <p className="text-muted-foreground">No students found in this class</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {(studentsInClass as StudentWithDetails[]).map((student: StudentWithDetails) => {
-                const existingRecord = getExistingAttendanceForStudent(student.id);
-                const currentInput = attendanceInputs[student.id] || {
-                  totalDays: existingRecord?.totalDays || 0,
-                  presentDays: existingRecord?.presentDays || 0,
-                  absentDays: existingRecord?.absentDays || 0
-                };
-                const percentage = calculateAttendancePercentage(currentInput.presentDays, currentInput.totalDays);
+            <div className="space-y-6">
+              {/* Total Days Input for the Class */}
+              <Card className="p-4 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                  <Label className="font-medium text-blue-900 dark:text-blue-100">
+                    Total School Days for {selectedTerm} {selectedSession}
+                  </Label>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={totalDaysForClass}
+                    onChange={(e) => setTotalDaysForClass(parseInt(e.target.value) || 0)}
+                    placeholder="Enter total days (e.g., 65)"
+                    className="max-w-48"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    This applies to all students in the class
+                  </p>
+                </div>
+              </Card>
 
-                return (
-                  <Card key={student.id}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-base">
-                            {student.user.firstName} {student.user.lastName}
-                          </CardTitle>
-                          <p className="text-sm text-muted-foreground">
-                            Student ID: {student.studentId}
-                          </p>
-                        </div>
-                        {existingRecord && (
-                          <div className="flex items-center gap-2">
-                            <Badge variant={getAttendanceBadgeVariant(percentage)}>
-                              {percentage}%
-                            </Badge>
-                            <Check className="h-4 w-4 text-green-600" />
+              {/* Individual Student Present Days */}
+              {totalDaysForClass > 0 && (
+                <div className="grid gap-4">
+                  <h4 className="font-medium text-lg">Student Attendance (Present Days)</h4>
+                  {(studentsInClass as StudentWithDetails[]).map((student: StudentWithDetails) => {
+                    const existingRecord = getExistingAttendanceForStudent(student.id);
+                    const currentInput = attendanceInputs[student.id] || {
+                      presentDays: existingRecord?.presentDays || 0,
+                    };
+                    const absentDays = totalDaysForClass - currentInput.presentDays;
+
+                    return (
+                      <Card key={student.id} className="p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h4 className="font-medium">{student.user.firstName} {student.user.lastName}</h4>
+                            <p className="text-sm text-muted-foreground">ID: {student.studentId}</p>
                           </div>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <Label className="text-xs">Total Days</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max="200"
-                            value={currentInput.totalDays}
-                            onChange={(e) => handleAttendanceChange(student.id, 'totalDays', Number(e.target.value))}
-                            placeholder="0"
-                          />
+                          <div className="flex items-center gap-2">
+                            <Badge variant={calculateAttendancePercentage(currentInput.presentDays, totalDaysForClass) >= 75 ? "default" : "destructive"}>
+                              {calculateAttendancePercentage(currentInput.presentDays, totalDaysForClass).toFixed(1)}%
+                            </Badge>
+                          </div>
                         </div>
-                        <div>
-                          <Label className="text-xs">Present Days</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            max={currentInput.totalDays}
-                            value={currentInput.presentDays}
-                            onChange={(e) => handleAttendanceChange(student.id, 'presentDays', Number(e.target.value))}
-                            placeholder="0"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Absent Days</Label>
-                          <Input
-                            type="number"
-                            value={currentInput.absentDays}
-                            readOnly
-                            className="bg-muted"
-                          />
-                        </div>
-                      </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-muted-foreground">
-                          Attendance: {percentage}%
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <Label htmlFor={`present-${student.id}`}>Present Days</Label>
+                            <Input
+                              id={`present-${student.id}`}
+                              type="number"
+                              min="0"
+                              max={totalDaysForClass}
+                              value={currentInput.presentDays}
+                              onChange={(e) => handlePresentDaysChange(student.id, parseInt(e.target.value) || 0)}
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <Label>Absent Days</Label>
+                            <div className="flex items-center h-10 px-3 py-2 border border-input bg-muted rounded-md text-sm">
+                              {absentDays}
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Total Days</Label>
+                            <div className="flex items-center h-10 px-3 py-2 border border-input bg-muted rounded-md text-sm">
+                              {totalDaysForClass}
+                            </div>
+                          </div>
                         </div>
-                        <Button
-                          size="sm"
+
+                        <Button 
                           onClick={() => handleSubmitAttendance(student.id)}
                           disabled={recordAttendanceMutation.isPending}
+                          className="w-full"
                         >
-                          {recordAttendanceMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : existingRecord ? (
-                            "Update"
-                          ) : (
-                            "Save"
-                          )}
+                          {recordAttendanceMutation.isPending ? "Saving..." : "Save Attendance"}
                         </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+
+              {totalDaysForClass <= 0 && (
+                <div className="text-center py-8">
+                  <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Please enter the total school days first</p>
+                </div>
+              )}
             </div>
           )}
         </div>
