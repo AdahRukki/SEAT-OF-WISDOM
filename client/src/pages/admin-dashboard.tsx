@@ -556,7 +556,8 @@ export default function AdminDashboard() {
   // Helper function to sort classes in proper order
   const sortClassesByOrder = (classes: any[]) => {
     const classOrder = ["J.S.S 1", "J.S.S 2", "J.S.S 3", "S.S.S 1", "S.S.S 2", "S.S.S 3"];
-    return classes.sort((a, b) => {
+    console.log("🔍 DEBUG: Sorting classes:", classes.map(c => c.name));
+    const sorted = classes.sort((a, b) => {
       const aIndex = classOrder.indexOf(a.name);
       const bIndex = classOrder.indexOf(b.name);
       if (aIndex === -1 && bIndex === -1) return a.name.localeCompare(b.name);
@@ -564,6 +565,8 @@ export default function AdminDashboard() {
       if (bIndex === -1) return -1;
       return aIndex - bIndex;
     });
+    console.log("✅ SORTED: Result:", sorted.map(c => c.name));
+    return sorted;
   };
 
   // Helper function to get next class in progression
