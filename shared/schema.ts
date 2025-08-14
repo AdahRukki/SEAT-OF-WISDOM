@@ -163,6 +163,22 @@ export const reportCardTemplates = pgTable("report_card_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Generated Report Cards table
+export const generatedReportCards = pgTable("generated_report_cards", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
+  term: varchar("term", { length: 50 }).notNull(),
+  session: varchar("session", { length: 20 }).notNull(),
+  studentName: varchar("student_name", { length: 200 }).notNull(),
+  className: varchar("class_name", { length: 100 }).notNull(),
+  totalScore: decimal("total_score", { precision: 5, scale: 2 }),
+  averageScore: decimal("average_score", { precision: 5, scale: 2 }),
+  attendancePercentage: decimal("attendance_percentage", { precision: 5, scale: 2 }),
+  generatedBy: uuid("generated_by").notNull().references(() => users.id),
+  generatedAt: timestamp("generated_at").defaultNow(),
+});
+
 // Fee Types table (different types of fees like tuition, books, etc.)
 export const feeTypes = pgTable("fee_types", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -318,6 +334,21 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   }),
 }));
 
+export const generatedReportCardsRelations = relations(generatedReportCards, ({ one }) => ({
+  student: one(students, {
+    fields: [generatedReportCards.studentId],
+    references: [students.id],
+  }),
+  class: one(classes, {
+    fields: [generatedReportCards.classId],
+    references: [classes.id],
+  }),
+  generatedBy: one(users, {
+    fields: [generatedReportCards.generatedBy],
+    references: [users.id],
+  }),
+}));
+
 // Zod schemas
 export const insertSchoolSchema = createInsertSchema(schools).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertClassSchema = createInsertSchema(classes).omit({ id: true, createdAt: true, updatedAt: true });
@@ -326,6 +357,7 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true, creat
 export const insertStudentSchema = createInsertSchema(students).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAssessmentSchema = createInsertSchema(assessments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertReportCardTemplateSchema = createInsertSchema(reportCardTemplates);
+export const insertGeneratedReportCardSchema = createInsertSchema(generatedReportCards).omit({ id: true, generatedAt: true });
 
 // Additional validation schemas
 export const loginSchema = z.object({
@@ -422,6 +454,9 @@ export type InsertAssessment = z.infer<typeof insertAssessmentSchema>;
 export type Attendance = typeof attendance.$inferSelect;
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
 export type AddAttendance = z.infer<typeof addAttendanceSchema>;
+
+export type GeneratedReportCard = typeof generatedReportCards.$inferSelect;
+export type InsertGeneratedReportCard = z.infer<typeof insertGeneratedReportCardSchema>;
 
 export type ReportCardTemplate = typeof reportCardTemplates.$inferSelect;
 export type InsertReportCardTemplate = z.infer<typeof insertReportCardTemplateSchema>;

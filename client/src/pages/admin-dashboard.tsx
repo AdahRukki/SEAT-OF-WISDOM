@@ -84,6 +84,7 @@ import {
   ClipboardCheck
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
+import { ReportCardManagement } from "@/components/report-card-management";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
   Class, 
@@ -2872,128 +2873,10 @@ export default function AdminDashboard() {
 
           {/* Report Cards Tab */}
           <TabsContent value="reports" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Report Card Generation</CardTitle>
-                <CardDescription>
-                  Generate and print comprehensive report cards for students
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div>
-                    <Label>Select Class</Label>
-                    <Select value={scoresClassId} onValueChange={setScoresClassId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classes.map((classItem) => (
-                          <SelectItem key={classItem.id} value={classItem.id}>
-                            {classItem.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Term</Label>
-                    <Select value={scoresTerm} onValueChange={setScoresTerm}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select term" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="First Term">First Term</SelectItem>
-                        <SelectItem value="Second Term">Second Term</SelectItem>
-                        <SelectItem value="Third Term">Third Term</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Session</Label>
-                    <Select value={scoresSession} onValueChange={setScoresSession}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select session" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2024/2025">2024/2025</SelectItem>
-                        <SelectItem value="2023/2024">2023/2024</SelectItem>
-                        <SelectItem value="2022/2023">2022/2023</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {scoresClassId ? (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold">Available Report Cards</h3>
-                      <Button 
-                        onClick={() => {
-                          // Generate bulk report cards
-                          const studentsInClass = allStudents.filter(s => s.classId === scoresClassId);
-                          studentsInClass.forEach(student => {
-                            generateReportCard(student);
-                          });
-                        }}
-                        disabled={!scoresClassId}
-                      >
-                        <FileText className="h-4 w-4 mr-2" />
-                        Generate All Reports
-                      </Button>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {allStudents
-                        .filter(student => student.classId === scoresClassId)
-                        .map((student) => (
-                          <Card key={student.id} className="hover:shadow-md transition-shadow">
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-base">
-                                {student.user.firstName} {student.user.lastName}
-                              </CardTitle>
-                              <CardDescription>
-                                ID: {student.studentId}
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="space-y-3">
-                                <div className="flex justify-between text-sm">
-                                  <span>Class:</span>
-                                  <span className="font-medium">{student.class.name}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                  <span>Term:</span>
-                                  <span className="font-medium">{scoresTerm}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                  <span>Session:</span>
-                                  <span className="font-medium">{scoresSession}</span>
-                                </div>
-                                <Button 
-                                  variant="outline" 
-                                  className="w-full"
-                                  onClick={() => handleGenerateReport(student)}
-                                >
-                                  <FileText className="h-4 w-4 mr-2" />
-                                  Generate Report
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">
-                      Select a class to view available report cards
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <ReportCardManagement 
+              classes={classes}
+              user={user}
+            />
           </TabsContent>
 
           {/* Settings Tab */}

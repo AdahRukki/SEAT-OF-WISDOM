@@ -1355,6 +1355,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Report Card Management routes
+  app.get("/api/admin/generated-reports", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can view generated reports" });
+      }
+
+      const reportCards = await storage.getAllGeneratedReportCards();
+      res.json(reportCards);
+    } catch (error) {
+      console.error("Error fetching generated report cards:", error);
+      res.status(500).json({ error: "Failed to fetch report cards" });
+    }
+  });
+
+  app.get("/api/admin/generated-reports/student/:studentId", authenticate, async (req: Request, res: Response) => {
+    const { studentId } = req.params;
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can view student reports" });
+      }
+
+      const reportCards = await storage.getGeneratedReportCardsByStudent(studentId);
+      res.json(reportCards);
+    } catch (error) {
+      console.error("Error fetching student report cards:", error);
+      res.status(500).json({ error: "Failed to fetch student report cards" });
+    }
+  });
+
+  app.post("/api/admin/validate-report-data", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can validate report data" });
+      }
+
+      const { studentId, classId, term, session } = req.body;
+      
+      if (!studentId || !classId || !term || !session) {
+        return res.status(400).json({ error: "Missing required fields: studentId, classId, term, session" });
+      }
+
+      const validation = await storage.validateReportCardData(studentId, classId, term, session);
+      res.json(validation);
+    } catch (error) {
+      console.error("Error validating report card data:", error);
+      res.status(500).json({ error: "Failed to validate report card data" });
+    }
+  });
+
+  app.post("/api/admin/generated-reports", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can create report records" });
+      }
+
+      const { studentId, classId, term, session, studentName, className, totalScore, averageScore, attendancePercentage } = req.body;
+      
+      if (!studentId || !classId || !term || !session) {
+        return res.status(400).json({ error: "Missing required fields: studentId, classId, term, session" });
+      }
+
+      const reportCardData = {
+        studentId,
+        classId,
+        term,
+        session,
+        studentName,
+        className,
+        totalScore: totalScore?.toString(),
+        averageScore: averageScore?.toString(),
+        attendancePercentage: attendancePercentage?.toString(),
+        generatedBy: user.id
+      };
+
+      const reportCard = await storage.createGeneratedReportCard(reportCardData);
+      res.json(reportCard);
+    } catch (error) {
+      console.error("Error creating report card record:", error);
+      res.status(500).json({ error: "Failed to create report card record" });
+    }
+  });
+
+  app.delete("/api/admin/generated-reports/:reportId", authenticate, async (req: Request, res: Response) => {
+    const { reportId } = req.params;
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can delete report cards" });
+      }
+
+      await storage.deleteGeneratedReportCard(reportId);
+      res.json({ success: true, message: "Report card deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting report card:", error);
+      res.status(500).json({ error: "Failed to delete report card" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

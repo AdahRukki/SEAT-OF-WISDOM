@@ -8,6 +8,7 @@ import {
   assessments,
   attendance,
   reportCardTemplates,
+  generatedReportCards,
   feeTypes,
   studentFees,
   payments,
@@ -22,6 +23,7 @@ import {
   type Assessment,
   type Attendance,
   type ReportCardTemplate,
+  type GeneratedReportCard,
   type FeeType,
   type StudentFee,
   type Payment,
@@ -35,6 +37,7 @@ import {
   type InsertAssessment,
   type InsertAttendance,
   type InsertReportCardTemplate,
+  type InsertGeneratedReportCard,
   type InsertFeeType,
   type InsertStudentFee,
   type InsertPayment,
@@ -145,6 +148,14 @@ export interface IStorage {
   getClassAttendance(classId: string, term: string, session: string): Promise<(Attendance & { student: StudentWithDetails })[]>;
   upsertAttendance(attendanceData: InsertAttendance): Promise<Attendance>;
   getAttendanceByStudent(studentId: string, term: string, session: string): Promise<Attendance | undefined>;
+
+  // Report Card operations
+  getAllGeneratedReportCards(): Promise<GeneratedReportCard[]>;
+  getGeneratedReportCardsByStudent(studentId: string): Promise<GeneratedReportCard[]>;
+  getGeneratedReportCardsByClass(classId: string): Promise<GeneratedReportCard[]>;
+  createGeneratedReportCard(reportCardData: InsertGeneratedReportCard): Promise<GeneratedReportCard>;
+  deleteGeneratedReportCard(reportCardId: string): Promise<void>;
+  validateReportCardData(studentId: string, classId: string, term: string, session: string): Promise<{ hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
   
   // Enhanced student creation helpers
   getSchoolNumber(schoolId: string): Promise<string>;
@@ -1216,6 +1227,97 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
     return result[0];
+  }
+
+  // Report Card operations
+  async getAllGeneratedReportCards(): Promise<GeneratedReportCard[]> {
+    return await db.select().from(generatedReportCards).orderBy(desc(generatedReportCards.generatedAt));
+  }
+
+  async getGeneratedReportCardsByStudent(studentId: string): Promise<GeneratedReportCard[]> {
+    return await db.select()
+      .from(generatedReportCards)
+      .where(eq(generatedReportCards.studentId, studentId))
+      .orderBy(desc(generatedReportCards.generatedAt));
+  }
+
+  async getGeneratedReportCardsByClass(classId: string): Promise<GeneratedReportCard[]> {
+    return await db.select()
+      .from(generatedReportCards)
+      .where(eq(generatedReportCards.classId, classId))
+      .orderBy(desc(generatedReportCards.generatedAt));
+  }
+
+  async createGeneratedReportCard(reportCardData: InsertGeneratedReportCard): Promise<GeneratedReportCard> {
+    const [newReportCard] = await db
+      .insert(generatedReportCards)
+      .values(reportCardData)
+      .returning();
+    return newReportCard;
+  }
+
+  async deleteGeneratedReportCard(reportCardId: string): Promise<void> {
+    await db.delete(generatedReportCards).where(eq(generatedReportCards.id, reportCardId));
+  }
+
+  async validateReportCardData(studentId: string, classId: string, term: string, session: string): Promise<{ hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }> {
+    // Get all subjects assigned to the class
+    const classSubjectsQuery = await db
+      .select({ subject: subjects })
+      .from(classSubjects)
+      .leftJoin(subjects, eq(classSubjects.subjectId, subjects.id))
+      .where(eq(classSubjects.classId, classId));
+
+    const assignedSubjects = classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
+
+    // Get all assessments for this student in this term/session
+    const studentAssessments = await db
+      .select()
+      .from(assessments)
+      .where(
+        and(
+          eq(assessments.studentId, studentId),
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+
+    // Check which subjects have complete scores (first CA, second CA, and exam)
+    const subjectsWithCompleteScores = studentAssessments.filter(
+      assessment => 
+        assessment.firstCA !== null && 
+        assessment.secondCA !== null && 
+        assessment.exam !== null
+    );
+
+    const missingSubjects = assignedSubjects
+      .filter(subject => !subjectsWithCompleteScores.find(assessment => assessment.subjectId === subject.id))
+      .map(subject => subject.name);
+
+    const hasAllScores = missingSubjects.length === 0 && assignedSubjects.length > 0;
+
+    // Check attendance data
+    const attendanceRecord = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          eq(attendance.studentId, studentId),
+          eq(attendance.classId, classId),
+          eq(attendance.term, term),
+          eq(attendance.session, session)
+        )
+      )
+      .limit(1);
+
+    const hasAttendance = attendanceRecord.length > 0 && attendanceRecord[0].totalDays > 0;
+
+    return {
+      hasAllScores,
+      hasAttendance,
+      missingSubjects
+    };
   }
 }
 
