@@ -93,7 +93,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     mutationFn: async (data: { studentId: string; classId: string; term: string; session: string }) => {
       return await apiRequest("/api/admin/validate-report-data", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: data,
       });
     },
     onSuccess: (result, variables) => {
@@ -139,7 +139,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     mutationFn: async (data: any) => {
       return await apiRequest("/api/admin/generated-reports", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: data,
       });
     },
     onSuccess: () => {
