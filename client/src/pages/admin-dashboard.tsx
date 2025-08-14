@@ -2218,15 +2218,53 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-            <TabsTrigger value="students" className="text-xs sm:text-sm">Students</TabsTrigger>
-            <TabsTrigger value="scores" className="text-xs sm:text-sm">Scores</TabsTrigger>
-            <TabsTrigger value="attendance" className="text-xs sm:text-sm">Attendance</TabsTrigger>
-            <TabsTrigger value="finance" className="text-xs sm:text-sm">Finance</TabsTrigger>
-            <TabsTrigger value="reports" className="text-xs sm:text-sm">Reports</TabsTrigger>
-            <TabsTrigger value="settings" className="text-xs sm:text-sm">Settings</TabsTrigger>
-          </TabsList>
+          {/* Responsive Tabs - Better handling for mobile, tablet and desktop */}
+          <div className="w-full">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:flex lg:flex-row gap-1 p-1 bg-muted rounded-md">
+              <TabsTrigger 
+                value="overview" 
+                className="text-xs sm:text-sm px-2 py-2 lg:flex-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger 
+                value="students" 
+                className="text-xs sm:text-sm px-2 py-2 lg:flex-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                Students
+              </TabsTrigger>
+              <TabsTrigger 
+                value="scores" 
+                className="text-xs sm:text-sm px-2 py-2 lg:flex-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                Scores
+              </TabsTrigger>
+              <TabsTrigger 
+                value="attendance" 
+                className="text-xs sm:text-sm px-2 py-2 lg:flex-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                Attendance
+              </TabsTrigger>
+              <TabsTrigger 
+                value="finance" 
+                className="text-xs sm:text-sm px-2 py-2 lg:flex-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                Finance
+              </TabsTrigger>
+              <TabsTrigger 
+                value="reports" 
+                className="text-xs sm:text-sm px-2 py-2 lg:flex-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                Reports
+              </TabsTrigger>
+              <TabsTrigger 
+                value="settings" 
+                className="text-xs sm:text-sm px-2 py-2 lg:flex-1 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              >
+                Settings
+              </TabsTrigger>
+            </div>
+          </div>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
