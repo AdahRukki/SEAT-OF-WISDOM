@@ -192,12 +192,11 @@ export default function StudentDashboard() {
 
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-1">Overview</TabsTrigger>
-            <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-1">Fees</TabsTrigger>
-            <TabsTrigger value="report" className="text-xs sm:text-sm px-2 py-1">Report</TabsTrigger>
-            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-1">Profile</TabsTrigger>
-            <TabsTrigger value="security" className="text-xs sm:text-sm px-2 py-1">Change Password</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 gap-1 h-auto p-1">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto">Overview</TabsTrigger>
+            <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-2 h-auto">Fees</TabsTrigger>
+            <TabsTrigger value="report" className="text-xs sm:text-sm px-2 py-2 h-auto">Report</TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-2 h-auto">Profile</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -722,9 +721,8 @@ export default function StudentDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="security" className="space-y-6">
+            {/* Change Password Section */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -835,49 +833,27 @@ export default function StudentDashboard() {
                       )}
                     />
 
-                    <div className="flex gap-2 pt-4">
-                      <Button 
-                        type="submit" 
-                        disabled={changePasswordMutation.isPending}
-                        className="flex items-center gap-2"
-                      >
-                        {changePasswordMutation.isPending ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                            Updating...
-                          </>
-                        ) : (
-                          <>
-                            <Lock className="h-4 w-4" />
-                            Update Password
-                          </>
-                        )}
-                      </Button>
-                      <Button 
-                        type="button" 
-                        variant="outline"
-                        onClick={() => {
-                          passwordForm.reset();
-                          setShowCurrentPassword(false);
-                          setShowNewPassword(false);
-                          setShowConfirmPassword(false);
-                        }}
-                      >
-                        Cancel
-                      </Button>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                        Password Security Tips:
+                      </h4>
+                      <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                        <li>• Use at least 6 characters</li>
+                        <li>• Include a mix of letters, numbers, and symbols</li>
+                        <li>• Don't use personal information</li>
+                        <li>• Use a unique password for this account</li>
+                      </ul>
                     </div>
+
+                    <Button 
+                      type="submit" 
+                      disabled={changePasswordMutation.isPending}
+                      className="w-full"
+                    >
+                      {changePasswordMutation.isPending ? "Updating..." : "Update Password"}
+                    </Button>
                   </form>
                 </Form>
-
-                <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Password Security Tips:</h4>
-                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                    <li>• Use at least 6 characters</li>
-                    <li>• Include letters, numbers, and special characters</li>
-                    <li>• Don't use personal information</li>
-                    <li>• Keep your password confidential</li>
-                  </ul>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
