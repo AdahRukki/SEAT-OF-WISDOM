@@ -741,23 +741,48 @@ export default function AdminDashboard() {
 
   // Export student data function with class selection
   const exportStudentData = (format: 'excel' | 'pdf') => {
+    console.log('=== EXPORT DEBUG START ===');
     console.log('Export called with format:', format);
-    console.log('All students:', allStudents);
+    console.log('All students count:', allStudents?.length || 0);
+    console.log('All students data:', allStudents);
     console.log('Selected school ID:', selectedSchoolId);
     console.log('Selected export class:', selectedExportClass);
     
-    let studentsToExport = allStudents.filter(student => 
-      (!selectedSchoolId || student.schoolId === selectedSchoolId)
-    );
+    // Check if allStudents exists and has data
+    if (!allStudents || allStudents.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No students found in the system",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    let studentsToExport = allStudents.filter(student => {
+      console.log('Checking student:', student);
+      console.log('Student schoolId:', student.schoolId);
+      console.log('Student class schoolId:', student.class?.schoolId);
+      
+      // Check against both student.schoolId and student.class.schoolId
+      const studentSchoolId = student.schoolId || student.class?.schoolId;
+      const matchesSchool = !selectedSchoolId || studentSchoolId === selectedSchoolId;
+      console.log('Matches school:', matchesSchool);
+      return matchesSchool;
+    });
+
+    console.log('After school filter - students count:', studentsToExport.length);
 
     // Filter by specific class if selected
     if (selectedExportClass && selectedExportClass !== "all") {
-      studentsToExport = studentsToExport.filter(student => 
-        student.classId === selectedExportClass
-      );
+      studentsToExport = studentsToExport.filter(student => {
+        const matchesClass = student.classId === selectedExportClass;
+        console.log('Student classId:', student.classId, 'Selected:', selectedExportClass, 'Matches:', matchesClass);
+        return matchesClass;
+      });
     }
 
-    console.log('Filtered students:', studentsToExport);
+    console.log('Final filtered students:', studentsToExport);
+    console.log('Final filtered students count:', studentsToExport.length);
 
     if (studentsToExport.length === 0) {
       toast({
