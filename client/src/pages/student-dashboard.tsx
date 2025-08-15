@@ -192,13 +192,12 @@ export default function StudentDashboard() {
 
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1">
             <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-1">Overview</TabsTrigger>
-            <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-1">Scores</TabsTrigger>
             <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-1">Fees</TabsTrigger>
             <TabsTrigger value="report" className="text-xs sm:text-sm px-2 py-1">Report</TabsTrigger>
             <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-1">Profile</TabsTrigger>
-            <TabsTrigger value="security" className="text-xs sm:text-sm px-2 py-1">Security</TabsTrigger>
+            <TabsTrigger value="security" className="text-xs sm:text-sm px-2 py-1">Change Password</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -278,96 +277,6 @@ export default function StudentDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="scores" className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-              <h2 className="text-lg font-semibold">My Assessment Scores</h2>
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
-                <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                  <SelectTrigger className="w-full sm:w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="First Term">First Term</SelectItem>
-                    <SelectItem value="Second Term">Second Term</SelectItem>
-                    <SelectItem value="Third Term">Third Term</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={selectedSession} onValueChange={setSelectedSession}>
-                  <SelectTrigger className="w-full sm:w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2024/2025">2024/2025</SelectItem>
-                    <SelectItem value="2023/2024">2023/2024</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid gap-6">
-              {assessments.map((assessment) => {
-                const total = Number(assessment.total);
-                const { grade, color } = calculateGrade(total);
-                return (
-                  <Card key={assessment.id}>
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <CardTitle className="text-lg">{assessment.subject.name}</CardTitle>
-                          <CardDescription>Subject Code: {assessment.subject.code}</CardDescription>
-                        </div>
-                        <Badge className={`${color} text-white`}>
-                          Grade {grade}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="text-center">
-                          <p className="text-sm text-gray-500">First CA</p>
-                          <p className="text-2xl font-bold">{assessment.firstCA || '0'}</p>
-                          <p className="text-xs text-gray-500">out of 30</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm text-gray-500">Second CA</p>
-                          <p className="text-2xl font-bold">{assessment.secondCA || '0'}</p>
-                          <p className="text-xs text-gray-500">out of 30</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm text-gray-500">Exam</p>
-                          <p className="text-2xl font-bold">{assessment.exam || '0'}</p>
-                          <p className="text-xs text-gray-500">out of 70</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm text-gray-500">Total</p>
-                          <p className="text-3xl font-bold text-blue-600">{total}</p>
-                          <p className="text-xs text-gray-500">out of 100</p>
-                        </div>
-                      </div>
-                      <div className="mt-4">
-                        <Progress value={total} className="h-2" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-              
-              {assessments.length === 0 && (
-                <Card>
-                  <CardContent className="text-center py-8">
-                    <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      No Scores Available
-                    </h3>
-                    <p className="text-gray-500">
-                      Your assessment scores will appear here once they are recorded.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
           </TabsContent>
 
           <TabsContent value="finance" className="space-y-6">
