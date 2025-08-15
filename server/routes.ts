@@ -638,6 +638,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         studentOnlyData.dateOfBirth = new Date(studentOnlyData.dateOfBirth);
       }
       
+      // Handle integer fields - convert empty strings to null/undefined
+      if (studentOnlyData.age === '' || studentOnlyData.age === null) {
+        studentOnlyData.age = undefined;
+      } else if (typeof studentOnlyData.age === 'string' && studentOnlyData.age.trim() !== '') {
+        studentOnlyData.age = parseInt(studentOnlyData.age, 10);
+      }
+      
+      // Clean up other empty string fields
+      Object.keys(studentOnlyData).forEach(key => {
+        if (studentOnlyData[key] === '') {
+          studentOnlyData[key] = undefined;
+        }
+      });
+      
       // Update user fields if provided
       if (firstName || lastName || middleName || email) {
         const student = await storage.getStudent(id);
