@@ -156,7 +156,9 @@ export default function AdminDashboard() {
     email: "",
     classId: "",
     dateOfBirth: "",
+    age: "",
     gender: "",
+    profileImage: "",
     parentContact: "",
     parentWhatsApp: "",
     address: ""
@@ -278,7 +280,9 @@ export default function AdminDashboard() {
     password: "",
     classId: "",
     dateOfBirth: "",
+    age: "",
     gender: "",
+    profileImage: "",
     parentContact: "",
     parentWhatsApp: "",
     address: ""
@@ -566,9 +570,11 @@ export default function AdminDashboard() {
       password: studentCreationForm.password,
       classId: studentCreationForm.classId || selectedClassForStudents,
       dateOfBirth: studentCreationForm.dateOfBirth || undefined,
+      age: studentCreationForm.age ? parseInt(studentCreationForm.age) : undefined,
       parentContact: studentCreationForm.parentContact || undefined,
       parentWhatsApp: studentCreationForm.parentWhatsApp,
-      address: studentCreationForm.address || undefined
+      address: studentCreationForm.address || undefined,
+      profileImage: studentCreationForm.profileImage || undefined
     };
 
     createStudentMutation.mutate(studentData);
@@ -1071,7 +1077,9 @@ export default function AdminDashboard() {
       email: student.user?.email || "",
       classId: student.classId || "",
       dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split('T')[0] : "",
+      age: student.age?.toString() || "",
       gender: student.gender || "",
+      profileImage: student.profileImage || "",
       parentContact: student.parentContact || "",
       parentWhatsApp: student.parentWhatsapp || "",
       address: student.address || ""
@@ -4009,6 +4017,27 @@ export default function AdminDashboard() {
                 </Select>
               </div>
               <div>
+                <Label htmlFor="student-dob">Date of Birth</Label>
+                <Input
+                  id="student-dob"
+                  type="date"
+                  value={studentCreationForm.dateOfBirth}
+                  onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="student-age">Age</Label>
+                <Input
+                  id="student-age"
+                  type="number"
+                  min="5"
+                  max="25"
+                  value={studentCreationForm.age}
+                  onChange={(e) => handleStudentFormChange('age', e.target.value)}
+                  placeholder="Student's age"
+                />
+              </div>
+              <div>
                 <Label htmlFor="student-gender">Gender *</Label>
                 <Select 
                   value={studentCreationForm.gender} 
@@ -4023,6 +4052,28 @@ export default function AdminDashboard() {
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label htmlFor="student-profile-image">Profile Image (Optional)</Label>
+                <Input
+                  id="student-profile-image"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const result = event.target?.result as string;
+                        handleStudentFormChange('profileImage', result);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Upload a profile photo (optional). Supported formats: JPG, PNG, GIF
+                </p>
               </div>
               
               <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">

@@ -108,7 +108,9 @@ export const students = pgTable("students", {
   classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id),
   studentId: varchar("student_id", { length: 50 }).notNull().unique(), // e.g., "SOWA/1001"
   dateOfBirth: timestamp("date_of_birth"),
+  age: integer("age"), // Student's age
   gender: varchar("gender", { length: 10 }), // Male, Female, Other
+  profileImage: text("profile_image"), // URL or path to profile image
   parentContact: varchar("parent_contact", { length: 255 }),
   parentWhatsapp: varchar("parent_whatsapp", { length: 20 }), // WhatsApp number for parents
   address: text("address"),

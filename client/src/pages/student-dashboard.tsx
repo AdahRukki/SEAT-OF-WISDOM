@@ -245,34 +245,36 @@ export default function StudentDashboard() {
               </Card>
             </div>
 
-            {/* Academic Progress Chart */}
+            {/* Recent Academic Activity */}
             <Card>
               <CardHeader>
-                <CardTitle>Academic Progress</CardTitle>
-                <CardDescription>Your performance across all subjects</CardDescription>
+                <CardTitle>Recent Academic Activity</CardTitle>
+                <CardDescription>Your latest subject performances</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {assessments.map((assessment) => {
-                    const total = Number(assessment.total);
-                    const { grade, color } = calculateGrade(total);
-                    return (
-                      <div key={assessment.id} className="flex items-center space-x-4">
-                        <div className="w-24 text-sm font-medium">
-                          {assessment.subject.name}
+                  {assessments.length > 0 ? (
+                    assessments.slice(0, 5).map((assessment) => {
+                      const total = Number(assessment.total);
+                      const { grade, color } = calculateGrade(total);
+                      return (
+                        <div key={assessment.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm">{assessment.subject.name}</span>
+                            <span className="text-xs text-gray-500">{assessment.term} - {assessment.session}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg font-bold">{total}%</span>
+                            <Badge className={`${color} text-white`}>
+                              {grade}
+                            </Badge>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <Progress value={total} className="h-2" />
-                        </div>
-                        <div className="w-16 text-right text-sm font-medium">
-                          {total}%
-                        </div>
-                        <Badge className={`${color} text-white w-8 text-center`}>
-                          {grade}
-                        </Badge>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    <p className="text-center text-gray-500 py-4">No assessment records found</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
