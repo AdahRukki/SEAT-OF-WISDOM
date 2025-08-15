@@ -143,19 +143,19 @@ export default function StudentDashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
               <div>
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2 sm:space-x-3">
                   <img 
                     src={currentLogoUrl} 
                     alt="Seat of Wisdom Academy Logo" 
-                    className="h-8 w-8 object-contain rounded-md flex-shrink-0 bg-white p-1" 
+                    className="h-6 w-6 sm:h-8 sm:w-8 object-contain rounded-md flex-shrink-0 bg-white p-1" 
                   />
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</h1>
+                  <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</h1>
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 ml-11">
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 ml-8 sm:ml-11">
                   Welcome back, <a 
                     href="/profile"
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
@@ -165,13 +165,13 @@ export default function StudentDashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 sm:space-x-2">
               <a 
                 href="/profile"
-                className="flex items-center space-x-1 px-3 py-1 bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors text-sm"
+                className="flex items-center space-x-1 px-2 sm:px-3 py-1 bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors text-xs sm:text-sm"
               >
-                <User className="h-4 w-4" />
-                <span>Profile</span>
+                <User className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Profile</span>
               </a>
               <Button 
                 onClick={() => {
@@ -179,25 +179,26 @@ export default function StudentDashboard() {
                   window.location.href = '/login';
                 }} 
                 variant="outline" 
-                className="flex items-center space-x-2"
+                size="sm"
+                className="flex items-center space-x-1 text-xs sm:text-sm"
               >
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
+                <LogOut className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
-            <TabsTrigger value="scores" className="text-xs sm:text-sm">My Scores</TabsTrigger>
-            <TabsTrigger value="finance" className="text-xs sm:text-sm">Fees</TabsTrigger>
-            <TabsTrigger value="report" className="text-xs sm:text-sm">Report Card</TabsTrigger>
-            <TabsTrigger value="profile" className="text-xs sm:text-sm">Profile</TabsTrigger>
-            <TabsTrigger value="security" className="text-xs sm:text-sm">Security</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-1">Overview</TabsTrigger>
+            <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-1">Scores</TabsTrigger>
+            <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-1">Fees</TabsTrigger>
+            <TabsTrigger value="report" className="text-xs sm:text-sm px-2 py-1">Report</TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-1">Profile</TabsTrigger>
+            <TabsTrigger value="security" className="text-xs sm:text-sm px-2 py-1">Security</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -280,11 +281,11 @@ export default function StudentDashboard() {
           </TabsContent>
 
           <TabsContent value="scores" className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <h2 className="text-lg font-semibold">My Assessment Scores</h2>
-              <div className="flex space-x-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
                 <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-full sm:w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -294,7 +295,7 @@ export default function StudentDashboard() {
                   </SelectContent>
                 </Select>
                 <Select value={selectedSession} onValueChange={setSelectedSession}>
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-full sm:w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -323,7 +324,7 @@ export default function StudentDashboard() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         <div className="text-center">
                           <p className="text-sm text-gray-500">First CA</p>
                           <p className="text-2xl font-bold">{assessment.firstCA || '0'}</p>

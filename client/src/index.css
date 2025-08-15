@@ -307,7 +307,7 @@
   [data-radix-dialog-content] {
     max-height: 90vh !important;
     overflow-y: auto !important;
-    margin: 2rem 1rem !important;
+    margin: 2rem 0.5rem !important;
   }
   
   .form-container {
@@ -319,5 +319,18 @@
   .student-dialog-content {
     max-height: 85vh !important;
     overflow-y: auto !important;
+  }
+}
+
+/* Remove extra page margins on mobile */
+@media (max-width: 640px) {
+  .max-w-7xl {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+  
+  /* Ensure full-width on mobile */
+  body {
+    overflow-x: hidden;
   }
 }
