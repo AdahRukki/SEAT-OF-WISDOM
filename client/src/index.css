@@ -301,3 +301,23 @@
     size: A4;
   }
 }
+
+/* Mobile dialog scrolling fixes */
+@media (max-width: 768px) {
+  [data-radix-dialog-content] {
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    margin: 2rem 1rem !important;
+  }
+  
+  .form-container {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  
+  /* Fix for student form dialog specifically */
+  .student-dialog-content {
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+  }
+}

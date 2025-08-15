@@ -336,12 +336,7 @@ export default function AdminDashboard() {
     }
   }, [user]);
 
-  // Set first school for admin when schools are loaded
-  useEffect(() => {
-    if (user?.role === 'admin' && schools && schools.length > 0 && !selectedSchoolId) {
-      setSelectedSchoolId(schools[0].id);
-    }
-  }, [user, schools, selectedSchoolId]);
+  // Don't auto-select school for admin - let them choose manually
 
   // Update sync status periodically
   useEffect(() => {
@@ -3871,7 +3866,7 @@ export default function AdminDashboard() {
             resetStudentForm();
           }
         }}>
-          <DialogContent className="max-w-md dialog-content-scrollable form-container">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto student-dialog-content">
             <DialogHeader>
               <DialogTitle>Create New Student</DialogTitle>
               <DialogDescription>
