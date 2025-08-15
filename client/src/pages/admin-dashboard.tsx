@@ -824,6 +824,9 @@ export default function AdminDashboard() {
             age = calculatedAge.toString();
           }
 
+          // Debug student structure
+          console.log('Student structure:', student);
+          
           // Combine names into full name - handle nested user structure
           const firstName = student.user?.firstName || student.firstName || '';
           const middleName = student.user?.middleName || student.middleName || '';
