@@ -732,9 +732,24 @@ export default function AdminDashboard() {
 
   // Export student data function with multiple class sheets
   const exportStudentData = (format: 'excel' | 'pdf') => {
+    console.log('Export called with format:', format);
+    console.log('All students:', allStudents);
+    console.log('Selected school ID:', selectedSchoolId);
+    
     const currentSchoolStudents = allStudents.filter(student => 
       !selectedSchoolId || student.schoolId === selectedSchoolId
     );
+
+    console.log('Filtered students:', currentSchoolStudents);
+
+    if (currentSchoolStudents.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No students found to export",
+        variant: "destructive"
+      });
+      return;
+    }
 
     if (format === 'excel') {
       // Create workbook
@@ -750,6 +765,17 @@ export default function AdminDashboard() {
         }
         studentsByClass.get(className)!.push(student);
       });
+
+      console.log('Students by class:', studentsByClass);
+
+      if (studentsByClass.size === 0) {
+        toast({
+          title: "Export Error",
+          description: "No student classes found to export",
+          variant: "destructive"
+        });
+        return;
+      }
 
       // Sort students by class order and create a sheet for each class
       const sortedClasses = Array.from(studentsByClass.entries()).sort((a, b) => {
@@ -781,8 +807,11 @@ export default function AdminDashboard() {
             age = calculatedAge.toString();
           }
 
-          // Combine names into full name
-          const fullName = [student.firstName, student.middleName, student.lastName]
+          // Combine names into full name - handle nested user structure
+          const firstName = student.user?.firstName || student.firstName || '';
+          const middleName = student.user?.middleName || student.middleName || '';
+          const lastName = student.user?.lastName || student.lastName || '';
+          const fullName = [firstName, middleName, lastName]
             .filter(name => name && name.trim())
             .join(' ') || 'N/A';
 
