@@ -10,6 +10,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**August 15, 2025**
+- ✅ **STUDENT OVERVIEW AVERAGE REMOVED** - Simplified student dashboard by removing academic progress chart/overview average for cleaner interface
+- ✅ **AGE FIELD ADDED TO STUDENT CREATION** - Students can now have age field included during creation and editing
+- ✅ **PROFILE IMAGE UPLOAD FUNCTIONALITY COMPLETED** - Optional profile image upload during student creation with base64 encoding
+- ✅ **DATABASE SCHEMA UPDATED** - Added age (integer) and profileImage (text) columns to students table with proper migration
+- ✅ **SERVER-SIDE SUPPORT ENHANCED** - Student creation endpoint updated to handle age and profileImage fields
+- ✅ **FORM VALIDATION IMPROVED** - Age input restricted to 5-25 range with proper number validation
+- ✅ **STUDENT EDITING ENHANCED** - Student editing form now supports age and profile image modification
+
 **August 14, 2025**
 - ✅ **MOBILE-FIRST UI RESPONSIVENESS COMPLETED** - Enhanced mobile compatibility with responsive dialogs and button layouts
 - ✅ **STUDENT EDITING FORM PREFILL FIXED** - Student editing dialog now correctly prefills with existing data via openEditStudent function
