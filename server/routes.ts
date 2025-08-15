@@ -17,7 +17,9 @@ import {
   insertFeeTypeSchema,
   recordPaymentSchema,
   assignFeeSchema,
-  users
+  users,
+  students,
+  classes
 } from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
@@ -599,7 +601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         student,
         studentId: autoStudentId
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create student error:", error);
       res.status(500).json({ error: error.message || "Failed to create student" });
     }
@@ -614,8 +616,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // For sub-admins, verify the student belongs to their school
       if (user.role === 'sub-admin') {
-        const student = await storage.getStudent(id);
-        if (!student || student.schoolId !== user.schoolId) {
+        // Get student with class information to access schoolId
+        const studentResult = await db
+          .select()
+          .from(students)
+          .leftJoin(classes, eq(students.classId, classes.id))
+          .where(eq(students.id, id))
+          .limit(1);
+        
+        const studentWithClass = studentResult[0];
+        if (!studentWithClass || !studentWithClass.classes || studentWithClass.classes.schoolId !== user.schoolId) {
           return res.status(403).json({ error: 'Cannot update student from different school' });
         }
       }
@@ -637,7 +647,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .set({
               firstName: firstName || undefined,
               lastName: lastName || undefined, 
-              middleName: middleName || undefined,
               email: email || undefined
             })
             .where(eq(users.id, student.userId));
@@ -647,7 +656,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update student fields  
       const updatedStudent = await storage.updateStudent(id, studentOnlyData);
       res.json(updatedStudent);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating student:', error);
       res.status(500).json({ error: 'Failed to update student' });
     }
