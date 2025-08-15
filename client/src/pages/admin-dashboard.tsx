@@ -56,6 +56,7 @@ import {
   Save,
   Download,
   Users, 
+  UserPlus,
   GraduationCap, 
   BookOpen, 
   FileText,
@@ -2404,8 +2405,21 @@ export default function AdminDashboard() {
                   <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{allStudents.length}</div>
-                  <p className="text-xs text-muted-foreground">Across all classes</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <div className="text-2xl font-bold">{allStudents.length}</div>
+                      <p className="text-xs text-muted-foreground">Across all classes</p>
+                    </div>
+                    <Button 
+                      onClick={() => setIsStudentDialogOpen(true)}
+                      size="sm"
+                      className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      <span className="hidden sm:inline">Add Student</span>
+                      <span className="sm:hidden">Add</span>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -2415,8 +2429,21 @@ export default function AdminDashboard() {
                   <GraduationCap className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{classes.length}</div>
-                  <p className="text-xs text-muted-foreground">Active classes</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <div className="text-2xl font-bold">{classes.length}</div>
+                      <p className="text-xs text-muted-foreground">Active classes</p>
+                    </div>
+                    <Button 
+                      onClick={() => setIsClassDialogOpen(true)}
+                      size="sm"
+                      className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      <span className="hidden sm:inline">Add Class</span>
+                      <span className="sm:hidden">Add</span>
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </div>
