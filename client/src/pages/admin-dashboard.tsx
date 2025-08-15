@@ -4733,56 +4733,54 @@ export default function AdminDashboard() {
               </div>
               
               {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row justify-between gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex flex-col gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
+                {!isStudentFormValid() && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="w-full">
+                          <Button 
+                            disabled
+                            className="w-full bg-gray-300 text-gray-500 cursor-not-allowed px-6 py-3 rounded-lg text-lg font-medium"
+                          >
+                            <UserPlus className="w-5 h-5 mr-2" />
+                            Create Student
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent className="bg-red-600 text-white">
+                        <p>Complete all required fields and fix validation errors</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {isStudentFormValid() && (
+                  <Button 
+                    onClick={handleCreateStudent} 
+                    disabled={createStudentMutation.isPending}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-[1.02] disabled:scale-100 disabled:bg-blue-400"
+                  >
+                    {createStudentMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        Creating Student...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-5 h-5 mr-2" />
+                        Create Student
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button 
                   variant="outline" 
                   onClick={() => setIsStudentDialogOpen(false)}
-                  className="order-2 sm:order-1 transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  className="w-full transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800 py-2"
                 >
                   <X className="w-4 h-4 mr-2" />
                   Cancel
                 </Button>
-                <div className="flex items-center gap-3 order-1 sm:order-2">
-                  {!isStudentFormValid() && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div>
-                            <Button 
-                              disabled
-                              className="bg-gray-300 text-gray-500 cursor-not-allowed px-6 py-2 rounded-lg"
-                            >
-                              <UserPlus className="w-4 h-4 mr-2" />
-                              Create Student
-                            </Button>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent className="bg-red-600 text-white">
-                          <p>Complete all required fields and fix validation errors</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
-                  {isStudentFormValid() && (
-                    <Button 
-                      onClick={handleCreateStudent} 
-                      disabled={createStudentMutation.isPending}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-all duration-200 transform hover:scale-105 disabled:scale-100 disabled:bg-blue-400"
-                    >
-                      {createStudentMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Creating...
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="w-4 h-4 mr-2" />
-                          Create Student
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
               </div>
             </div>
           </DialogContent>

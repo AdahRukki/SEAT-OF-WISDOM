@@ -1345,6 +1345,65 @@ export class DatabaseStorage implements IStorage {
       missingSubjects
     };
   }
+
+  // Enhanced student creation helpers
+  async getSchoolNumber(schoolId: string): Promise<string> {
+    // Get school info and extract number from name or use a default pattern
+    const school = await db.select().from(schools).where(eq(schools.id, schoolId)).limit(1);
+    if (school.length > 0) {
+      // Try to extract number from school name (e.g., "School 1" -> "1")
+      const match = school[0].name.match(/(\d+)/);
+      if (match) {
+        return match[1];
+      }
+    }
+    // Default to "1" if no number found
+    return "1";
+  }
+
+  async getStudentCountForSchool(schoolId: string): Promise<number> {
+    // Count existing students in the school (through classes)
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(eq(classes.schoolId, schoolId));
+    
+    return result[0]?.count || 0;
+  }
+
+  async getClassById(classId: string): Promise<Class | undefined> {
+    const result = await db.select().from(classes).where(eq(classes.id, classId)).limit(1);
+    return result[0];
+  }
+
+  async updateSchool(schoolId: string, data: Partial<School>): Promise<School> {
+    const [updated] = await db
+      .update(schools)
+      .set(data)
+      .where(eq(schools.id, schoolId))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('School not found');
+    }
+    
+    return updated;
+  }
+
+  async updateUserProfile(userId: string, data: Partial<User>): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
+    
+    if (!updated) {
+      throw new Error('User not found');
+    }
+    
+    return updated;
+  }
 }
 
 export const storage = new DatabaseStorage();
