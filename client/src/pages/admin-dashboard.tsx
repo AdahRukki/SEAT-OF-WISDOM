@@ -5172,7 +5172,7 @@ export default function AdminDashboard() {
                 </Select>
               </div>
 
-              <div className="flex space-x-2">
+              <div className="flex justify-center">
                 <Button 
                   onClick={() => {
                     exportStudentData('excel');
@@ -5180,22 +5180,10 @@ export default function AdminDashboard() {
                   }}
                   disabled={!selectedExportClass}
                   variant="outline"
-                  className="flex-1"
+                  className="w-full"
                 >
                   <FileText className="h-4 w-4 mr-2" />
-                  Excel
-                </Button>
-                <Button 
-                  onClick={() => {
-                    exportStudentData('pdf');
-                    setIsExportDialogOpen(false);
-                  }}
-                  disabled={!selectedExportClass}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <Receipt className="h-4 w-4 mr-2" />
-                  PDF
+                  Export as Excel
                 </Button>
               </div>
             </div>
