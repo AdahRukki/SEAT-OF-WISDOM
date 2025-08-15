@@ -4545,7 +4545,7 @@ export default function AdminDashboard() {
 
         {/* Enhanced Student Creation Dialog with Single-Word Validation and WhatsApp */}
         <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
             <DialogHeader>
               <DialogTitle>Create New Student</DialogTitle>
               <DialogDescription>
