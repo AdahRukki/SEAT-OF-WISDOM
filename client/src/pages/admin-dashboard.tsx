@@ -166,6 +166,10 @@ export default function AdminDashboard() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
 
+  // Export dialog states
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [selectedExportClass, setSelectedExportClass] = useState("");
+
   // New subject creation states
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectCode, setNewSubjectCode] = useState("");
@@ -730,22 +734,35 @@ export default function AdminDashboard() {
     }
   });
 
-  // Export student data function with multiple class sheets
+  // Show export dialog to choose class
+  const showExportDialog = () => {
+    setIsExportDialogOpen(true);
+  };
+
+  // Export student data function with class selection
   const exportStudentData = (format: 'excel' | 'pdf') => {
     console.log('Export called with format:', format);
     console.log('All students:', allStudents);
     console.log('Selected school ID:', selectedSchoolId);
+    console.log('Selected export class:', selectedExportClass);
     
-    const currentSchoolStudents = allStudents.filter(student => 
-      !selectedSchoolId || student.schoolId === selectedSchoolId
+    let studentsToExport = allStudents.filter(student => 
+      (!selectedSchoolId || student.schoolId === selectedSchoolId)
     );
 
-    console.log('Filtered students:', currentSchoolStudents);
+    // Filter by specific class if selected
+    if (selectedExportClass && selectedExportClass !== "all") {
+      studentsToExport = studentsToExport.filter(student => 
+        student.classId === selectedExportClass
+      );
+    }
 
-    if (currentSchoolStudents.length === 0) {
+    console.log('Filtered students:', studentsToExport);
+
+    if (studentsToExport.length === 0) {
       toast({
         title: "No Data",
-        description: "No students found to export",
+        description: `No students found ${selectedExportClass === "all" ? "to export" : "in selected class"}`,
         variant: "destructive"
       });
       return;
@@ -756,9 +773,9 @@ export default function AdminDashboard() {
       const workbook = XLSX.utils.book_new();
       
       // Group students by class
-      const studentsByClass = new Map<string, typeof currentSchoolStudents>();
+      const studentsByClass = new Map<string, typeof studentsToExport>();
       
-      currentSchoolStudents.forEach(student => {
+      studentsToExport.forEach(student => {
         const className = classes.find(c => c.id === student.classId)?.name || 'Unassigned';
         if (!studentsByClass.has(className)) {
           studentsByClass.set(className, []);
@@ -851,7 +868,7 @@ export default function AdminDashboard() {
             students.length
           ]),
           ['', ''],
-          ['Total Students', currentSchoolStudents.length]
+          ['Total Students', studentsToExport.length]
         ];
         
         const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -3369,20 +3386,12 @@ export default function AdminDashboard() {
                         </CardHeader>
                         <CardContent className="space-y-2">
                           <Button 
-                            onClick={() => exportStudentData('excel')}
+                            onClick={showExportDialog}
                             variant="outline"
                             className="w-full"
                           >
                             <FileText className="h-4 w-4 mr-2" />
-                            Export to Excel
-                          </Button>
-                          <Button 
-                            onClick={() => exportStudentData('pdf')}
-                            variant="outline"
-                            className="w-full"
-                          >
-                            <Receipt className="h-4 w-4 mr-2" />
-                            Export to PDF
+                            Export Student Data
                           </Button>
                         </CardContent>
                       </Card>
@@ -5079,6 +5088,64 @@ export default function AdminDashboard() {
                 >
                   <UserCheck className="h-4 w-4 mr-2" />
                   Promote & Generate
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Export Dialog */}
+        <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Export Student Data</DialogTitle>
+              <DialogDescription>
+                Choose which class data to export
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="exportClass">Select Class</Label>
+                <Select value={selectedExportClass} onValueChange={setSelectedExportClass}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose class to export" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Classes</SelectItem>
+                    {sortClassesByOrder(classes).map((classItem) => (
+                      <SelectItem key={classItem.id} value={classItem.id}>
+                        {classItem.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex space-x-2">
+                <Button 
+                  onClick={() => {
+                    exportStudentData('excel');
+                    setIsExportDialogOpen(false);
+                  }}
+                  disabled={!selectedExportClass}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button 
+                  onClick={() => {
+                    exportStudentData('pdf');
+                    setIsExportDialogOpen(false);
+                  }}
+                  disabled={!selectedExportClass}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Receipt className="h-4 w-4 mr-2" />
+                  PDF
                 </Button>
               </div>
             </div>
