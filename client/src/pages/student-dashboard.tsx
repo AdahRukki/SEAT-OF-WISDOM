@@ -113,7 +113,7 @@ export default function StudentDashboard() {
     mutationFn: async (data: ChangePasswordForm) => {
       return apiRequest('/api/auth/change-password', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data,
       });
     },
     onSuccess: () => {
