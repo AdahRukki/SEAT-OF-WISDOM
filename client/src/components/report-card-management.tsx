@@ -73,6 +73,8 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
   const [selectedSession, setSelectedSession] = useState("");
   const [validationResults, setValidationResults] = useState<Record<string, ValidationResult>>({});
   const [isValidating, setIsValidating] = useState(false);
+  const [batchResumptionDate, setBatchResumptionDate] = useState("");
+  const [isBatchGenerating, setIsBatchGenerating] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -582,6 +584,77 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     });
   };
 
+  // Batch generation function
+  const handleBatchGenerateReports = async (readyStudents: any[]) => {
+    if (!batchResumptionDate) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a next term resumption date",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsBatchGenerating(true);
+    let successCount = 0;
+    let failureCount = 0;
+
+    try {
+      for (const student of readyStudents) {
+        try {
+          // Create report card record for each student
+          await createReportMutation.mutateAsync({
+            studentId: student.id,
+            classId: selectedClass,
+            term: selectedTerm,
+            session: selectedSession,
+            studentName: `${student.user.firstName} ${student.user.lastName}`,
+            className: classes.find(c => c.id === selectedClass)?.name || "",
+            totalScore: "0", // This would be calculated from actual scores
+            averageScore: "0", // This would be calculated from actual scores
+            attendancePercentage: "0", // This would be calculated from attendance data
+          });
+          
+          // Generate and print individual report card
+          await handleViewReportCard({
+            id: student.id,
+            studentId: student.id,
+            classId: selectedClass,
+            term: selectedTerm,
+            session: selectedSession,
+            studentName: `${student.user.firstName} ${student.user.lastName}`,
+            className: classes.find(c => c.id === selectedClass)?.name || "",
+            totalScore: "0",
+            averageScore: "0", 
+            attendancePercentage: "0",
+            generatedAt: new Date().toISOString(),
+            generatedBy: user?.firstName + " " + user?.lastName || "Admin"
+          });
+          
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to generate report for ${student.user.firstName} ${student.user.lastName}:`, error);
+          failureCount++;
+        }
+      }
+
+      toast({
+        title: "Batch Generation Complete",
+        description: `Successfully generated ${successCount} reports${failureCount > 0 ? `, ${failureCount} failed` : ''}`,
+        variant: successCount > 0 ? "default" : "destructive",
+      });
+    } catch (error) {
+      console.error('Batch generation error:', error);
+      toast({
+        title: "Batch Generation Failed",
+        description: "An error occurred during batch generation",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBatchGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Report Generation Controls */}
@@ -649,6 +722,32 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
               <CheckCircle className="w-4 h-4" />
               {isValidating ? "Validating..." : "Validate All Students"}
             </Button>
+            
+            {/* Batch Report Generation */}
+            {Object.keys(validationResults).length > 0 && (() => {
+              const readyStudents = students.filter((student: any) => canGenerateReport(student.id));
+              return readyStudents.length > 0 ? (
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-medium">Next Term Resumption Date</label>
+                    <input
+                      type="date"
+                      value={batchResumptionDate}
+                      onChange={(e) => setBatchResumptionDate(e.target.value)}
+                      className="px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => handleBatchGenerateReports(readyStudents)}
+                    disabled={!batchResumptionDate || isBatchGenerating}
+                    className="bg-green-600 hover:bg-green-700 text-white mt-6"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    {isBatchGenerating ? "Generating..." : `Generate All Reports (${readyStudents.length})`}
+                  </Button>
+                </div>
+              ) : null;
+            })()}
           </div>
         </CardContent>
       </Card>

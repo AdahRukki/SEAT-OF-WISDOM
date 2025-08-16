@@ -126,6 +126,7 @@ export default function AdminDashboard() {
   
   // Password visibility
   const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // State for dialogs
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
@@ -5032,14 +5033,29 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="space-y-2">
                     <Label htmlFor="newPassword" className="text-sm font-medium text-gray-700 dark:text-gray-300">New Password</Label>
-                    <Input
-                      id="newPassword"
-                      type="password"
-                      value={studentEditForm.newPassword}
-                      onChange={(e) => setStudentEditForm(prev => ({...prev, newPassword: e.target.value}))}
-                      placeholder="Enter new password (leave blank to keep current)"
-                      className="transition-all duration-200 focus:ring-2 focus:ring-orange-500"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="newPassword"
+                        type={showNewPassword ? "text" : "password"}
+                        value={studentEditForm.newPassword}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, newPassword: e.target.value}))}
+                        placeholder="Enter new password (leave blank to keep current)"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-orange-500 pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="h-4 w-4 text-gray-400" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-gray-400" />
+                        )}
+                      </Button>
+                    </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Leave blank to keep the current password unchanged
                     </p>
