@@ -553,6 +553,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update user (admin only)
+  app.put('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { firstName, lastName, email, schoolId, isActive } = req.body;
+      
+      // Check if user exists
+      const existingUser = await storage.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Prepare update data
+      const updateData: any = {
+        firstName,
+        lastName,
+        email,
+        isActive
+      };
+      
+      // Only update schoolId for sub-admin users
+      if (existingUser.role === 'sub-admin' && schoolId !== undefined) {
+        updateData.schoolId = schoolId;
+      }
+      
+      const updatedUser = await storage.updateUserProfile(id, updateData);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
   // Delete user (admin only)
   app.delete('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
     try {
