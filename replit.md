@@ -11,6 +11,10 @@ Preferred communication style: Simple, everyday language.
 ## Recent Changes
 
 **August 16, 2025**
+- ✅ **STUDENT CREATION FORM IMPROVEMENTS** - Fixed gender dropdown visibility, auto-generation of student ID, and form validation issues
+- ✅ **GENDER DROPDOWN VISIBILITY FIXED** - Added z-index styling to make gender dropdown menu visible above other elements
+- ✅ **STUDENT ID AUTO-GENERATION ENHANCED** - Fixed auto-generation to use form state and trigger when dialog opens
+- ✅ **FORM VALIDATION STREAMLINED** - Student creation form now properly validates all required fields including student ID and gender
 - ✅ **PROFILE IMAGE DISPLAY ISSUE FIXED** - Fixed caching issue where uploaded profile images weren't showing immediately in student list
 - ✅ **STANDARDIZED CLASSES ACROSS ALL SCHOOLS** - Added same 6 classes (J.S.S 1-3, S.S.S 1-3) to all 4 school branches for consistency
 

@@ -1404,21 +1404,21 @@ export default function AdminDashboard() {
       // Get count of existing students to determine next ID
       const nextNumber = (allStudents.length + 1).toString().padStart(4, '0');
       const newId = `SOWA/${nextNumber}`;
-      setStudentId(newId);
+      setStudentCreationForm(prev => ({ ...prev, studentId: newId }));
     } catch (error) {
       console.error('Error generating student ID:', error);
       // Fallback to timestamp-based ID
       const timestamp = Date.now().toString().slice(-4);
-      setStudentId(`SOWA/${timestamp}`);
+      setStudentCreationForm(prev => ({ ...prev, studentId: `SOWA/${timestamp}` }));
     }
   };
 
   // Auto-generate student ID when dialog opens
   useEffect(() => {
-    if (isStudentDialogOpen && !studentId) {
+    if (isStudentDialogOpen && !studentCreationForm.studentId) {
       generateStudentId();
     }
-  }, [isStudentDialogOpen, allStudents.length]);
+  }, [isStudentDialogOpen, allStudents.length, studentCreationForm.studentId]);
 
   const handleScoreChange = (studentId: string, field: string, value: string) => {
     // Validate score limits based on field type
@@ -3889,14 +3889,16 @@ export default function AdminDashboard() {
           if (!open) {
             // Reset form when dialog is closed
             resetStudentForm();
+          } else {
+            // Auto-generate student ID when dialog opens
+            if (!studentCreationForm.studentId) {
+              generateStudentId();
+            }
           }
         }}>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto student-dialog-content">
             <DialogHeader>
               <DialogTitle>Create New Student</DialogTitle>
-              <DialogDescription>
-                Add a new student to the system
-              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -4066,7 +4068,7 @@ export default function AdminDashboard() {
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-50">
                     <SelectItem value="Male">Male</SelectItem>
                     <SelectItem value="Female">Female</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
@@ -4571,9 +4573,6 @@ export default function AdminDashboard() {
                 <UserPlus className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               </div>
               <DialogTitle className="text-2xl font-semibold text-gray-900 dark:text-white">Create New Student</DialogTitle>
-              <DialogDescription className="text-gray-600 dark:text-gray-300 mt-2">
-                Add a new student with comprehensive information and auto-generated SOWA ID
-              </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-8">
