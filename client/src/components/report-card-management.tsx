@@ -505,7 +505,12 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => window.print()}
+                      onClick={() => {
+                        const printWindow = window.open(`/reports/${report.id}`, '_blank');
+                        if (printWindow) {
+                          printWindow.onload = () => printWindow.print();
+                        }
+                      }}
                       className="flex items-center gap-1"
                     >
                       <Printer className="w-4 h-4" />
