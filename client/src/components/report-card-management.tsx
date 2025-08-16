@@ -232,13 +232,35 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
   const handleViewReportCard = async (report: GeneratedReportCard) => {
     try {
-      // Fetch the student data and assessments for this report
-      const [student, subjects, assessments, attendance] = await Promise.all([
-        apiRequest(`/api/admin/students/${report.studentId}`),
+      console.log("Loading report for:", report);
+      
+      // Fetch the student data first
+      const allStudents = await apiRequest("/api/admin/students");
+      const student = allStudents.find((s: any) => s.id === report.studentId);
+      
+      if (!student) {
+        throw new Error("Student not found");
+      }
+
+      console.log("Found student:", student);
+
+      // Fetch other data
+      const [subjects, allAssessments, attendance] = await Promise.all([
         apiRequest(`/api/admin/classes/${report.classId}/subjects`),
-        apiRequest(`/api/admin/classes/${report.classId}/assessments?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`),
+        apiRequest("/api/admin/assessments"),
         apiRequest(`/api/admin/attendance/class/${report.classId}?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`)
       ]);
+
+      console.log("Fetched data:", { subjects, allAssessments, attendance });
+
+      // Filter assessments for this student, term, and session
+      const assessments = allAssessments.filter((a: any) => 
+        a.studentId === report.studentId && 
+        a.term === report.term && 
+        a.session === report.session
+      );
+
+      console.log("Filtered assessments:", assessments);
 
       // Calculate totals
       const totalMarks = subjects.reduce((sum: number, subject: any) => {
