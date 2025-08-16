@@ -88,7 +88,8 @@ import {
   Shield,
   Phone,
   Loader2,
-  Camera
+  Camera,
+  Hash
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
