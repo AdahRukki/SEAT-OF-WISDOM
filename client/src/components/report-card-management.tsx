@@ -419,11 +419,28 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                   <span class="info-value">${student.dateOfBirth ? (() => {
                     const birthDate = new Date(student.dateOfBirth);
                     const today = new Date();
+                    
+                    // Check if the date is valid
+                    if (isNaN(birthDate.getTime())) {
+                      return 'N/A';
+                    }
+                    
+                    // Check if the birth date is in the future
+                    if (birthDate > today) {
+                      return 'N/A';
+                    }
+                    
                     let calculatedAge = today.getFullYear() - birthDate.getFullYear();
                     const monthDiff = today.getMonth() - birthDate.getMonth();
                     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
                       calculatedAge--;
                     }
+                    
+                    // Ensure age is reasonable (between 0 and 150)
+                    if (calculatedAge < 0 || calculatedAge > 150) {
+                      return 'N/A';
+                    }
+                    
                     return calculatedAge;
                   })() : 'N/A'} years</span>
                 </div>
