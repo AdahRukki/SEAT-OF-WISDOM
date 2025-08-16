@@ -230,113 +230,284 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     return validation && validation.hasAllScores && validation.hasAttendance;
   };
 
-  const handleViewReportCard = (report: GeneratedReportCard) => {
-    // Open a simple view of the generated report
-    const reportWindow = window.open('', '_blank');
-    if (!reportWindow) return;
+  const handleViewReportCard = async (report: GeneratedReportCard) => {
+    try {
+      // Fetch the student data and assessments for this report
+      const [student, subjects, assessments, attendance] = await Promise.all([
+        apiRequest(`/api/admin/students/${report.studentId}`),
+        apiRequest(`/api/admin/classes/${report.classId}/subjects`),
+        apiRequest(`/api/admin/classes/${report.classId}/assessments?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`),
+        apiRequest(`/api/admin/attendance/class/${report.classId}?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`)
+      ]);
 
-    const reportHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Report Card - ${report.studentName}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-              margin: 20px; 
-              line-height: 1.6; 
-              color: #333;
-              background: #f5f5f5;
-            }
-            .report-container {
-              max-width: 800px;
-              margin: 0 auto;
-              background: white;
-              padding: 30px;
-              border-radius: 10px;
-              box-shadow: 0 0 20px rgba(0,0,0,0.1);
-            }
-            .header {
-              text-align: center;
-              border-bottom: 3px solid #2563eb;
-              padding-bottom: 20px;
-              margin-bottom: 30px;
-            }
-            .school-name { font-size: 24px; font-weight: bold; color: #1e40af; }
-            .report-title { font-size: 20px; margin-top: 10px; color: #374151; }
-            .student-info {
-              background: #f8fafc;
-              padding: 20px;
-              border-radius: 8px;
-              margin-bottom: 20px;
-            }
-            .info-row {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 10px;
-            }
-            .label { font-weight: bold; color: #374151; }
-            .value { color: #6b7280; }
-            .footer {
-              margin-top: 30px;
-              text-align: center;
-              font-size: 12px;
-              color: #6b7280;
-            }
-            @media print {
-              body { background: white; margin: 0; }
-              .report-container { box-shadow: none; margin: 0; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="report-container">
-            <div class="header">
-              <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-              <div class="report-title">STUDENT REPORT CARD</div>
-            </div>
-            
-            <div class="student-info">
-              <div class="info-row">
-                <span class="label">Student Name:</span>
-                <span class="value">${report.studentName}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Class:</span>
-                <span class="value">${report.className}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Term:</span>
-                <span class="value">${report.term}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Session:</span>
-                <span class="value">${report.session}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Generated On:</span>
-                <span class="value">${new Date(report.generatedAt).toLocaleDateString()}</span>
-              </div>
-            </div>
+      // Calculate totals
+      const totalMarks = subjects.reduce((sum: number, subject: any) => {
+        const assessment = assessments.find((a: any) => a.studentId === student.id && a.subjectId === subject.id);
+        return sum + ((assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0));
+      }, 0);
 
-            <div style="text-align: center; margin-top: 40px; padding: 20px; background: #fef3c7; border-radius: 8px;">
-              <p style="color: #92400e; font-weight: bold;">📄 Report Card Record</p>
-              <p style="color: #78716c; margin-top: 10px;">This is a saved report card record. For a detailed academic report with scores and attendance, please generate a new report from the admin dashboard.</p>
-            </div>
+      const studentAttendance = attendance.find((att: any) => att.studentId === student.id);
+      const attendancePercentage = studentAttendance ? 
+        Math.round((studentAttendance.presentDays / studentAttendance.totalDays) * 100) : 0;
 
-            <div class="footer">
-              <p>Generated by Seat of Wisdom Academy Management System</p>
-              <p>Report ID: ${report.id}</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+      // Generate the detailed report card
+      const reportWindow = window.open('', '_blank');
+      if (!reportWindow) return;
 
-    reportWindow.document.write(reportHTML);
-    reportWindow.document.close();
-    reportWindow.print();
+      const reportHTML = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Report Card - ${student.user.firstName} ${student.user.lastName}</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                margin: 10px; 
+                line-height: 1.2; 
+                color: #333;
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                min-height: 100vh;
+              }
+              .report-card {
+                max-width: 800px;
+                margin: 20px auto;
+                background: white;
+                border-radius: 15px;
+                overflow: hidden;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+                border: 3px solid #2563eb;
+              }
+              .header {
+                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+                color: white;
+                padding: 25px;
+                text-align: center;
+                position: relative;
+              }
+              .school-name { font-size: 28px; font-weight: bold; margin-bottom: 5px; }
+              .school-motto { font-size: 14px; opacity: 0.9; font-style: italic; }
+              .report-title { font-size: 20px; margin-top: 15px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; }
+              .student-info {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                padding: 25px;
+                background: #f8fafc;
+                border-bottom: 2px solid #e5e7eb;
+              }
+              .info-item { display: flex; align-items: center; }
+              .info-label { font-weight: bold; color: #374151; min-width: 80px; }
+              .info-value { color: #1f2937; }
+              .subjects-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 0;
+              }
+              .subjects-table th {
+                background: #1e40af;
+                color: white;
+                padding: 12px 8px;
+                text-align: center;
+                font-size: 12px;
+                font-weight: bold;
+              }
+              .subjects-table td {
+                padding: 10px 8px;
+                text-align: center;
+                border-bottom: 1px solid #e5e7eb;
+                font-size: 11px;
+              }
+              .subjects-table tr:nth-child(even) { background: #f9fafb; }
+              .subject-name { text-align: left !important; font-weight: 500; color: #374151; }
+              .grade { font-weight: bold; color: #1e40af; }
+              .stats-section {
+                padding: 25px;
+                background: #f1f5f9;
+                border-top: 3px solid #3b82f6;
+              }
+              .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-bottom: 20px;
+              }
+              .stat-card {
+                background: white;
+                padding: 15px;
+                border-radius: 10px;
+                text-align: center;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                border: 2px solid #e5e7eb;
+              }
+              .stat-label { font-size: 12px; color: #6b7280; font-weight: bold; }
+              .stat-value { font-size: 18px; font-weight: bold; color: #1e40af; margin-top: 5px; }
+              .footer {
+                padding: 20px;
+                text-align: center;
+                background: #1e40af;
+                color: white;
+              }
+              .signature-section {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 30px;
+                margin-top: 20px;
+              }
+              .signature {
+                text-align: center;
+                border-top: 2px solid #374151;
+                padding-top: 10px;
+                font-size: 12px;
+              }
+              @media print {
+                body { background: white !important; margin: 0 !important; }
+                .report-card { margin: 0 !important; box-shadow: none !important; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="report-card">
+              <div class="header">
+                <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+                <div class="school-motto">"Nurturing Excellence in Learning"</div>
+                <div class="report-title">STUDENT REPORT CARD</div>
+              </div>
+              
+              <div class="student-info">
+                <div class="info-item">
+                  <span class="info-label">Name:</span>
+                  <span class="info-value">${student.user.firstName} ${student.user.lastName}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">ID:</span>
+                  <span class="info-value">${student.studentId}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Class:</span>
+                  <span class="info-value">${report.className}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Session:</span>
+                  <span class="info-value">${report.session}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Term:</span>
+                  <span class="info-value">${report.term}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Age:</span>
+                  <span class="info-value">${student.age || 'N/A'} years</span>
+                </div>
+              </div>
+
+              <table class="subjects-table">
+                <thead>
+                  <tr>
+                    <th>SUBJECT</th>
+                    <th>1ST CA<br>(20)</th>
+                    <th>2ND CA<br>(20)</th>
+                    <th>EXAM<br>(60)</th>
+                    <th>TOTAL<br>(100)</th>
+                    <th>GRADE</th>
+                    <th>REMARK</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${subjects.map((subject: any) => {
+                    const assessment = assessments.find((a: any) => a.studentId === student.id && a.subjectId === subject.id);
+                    const firstCA = assessment?.firstCA || 0;
+                    const secondCA = assessment?.secondCA || 0;
+                    const exam = assessment?.exam || 0;
+                    const total = firstCA + secondCA + exam;
+                    
+                    let grade = 'F';
+                    let remark = 'Fail';
+                    
+                    if (total >= 90) { grade = 'A+'; remark = 'Excellent'; }
+                    else if (total >= 80) { grade = 'A'; remark = 'Very Good'; }
+                    else if (total >= 70) { grade = 'B'; remark = 'Good'; }
+                    else if (total >= 60) { grade = 'C'; remark = 'Credit'; }
+                    else if (total >= 50) { grade = 'D'; remark = 'Pass'; }
+                    else if (total >= 40) { grade = 'E'; remark = 'Poor'; }
+                    
+                    return `
+                      <tr>
+                        <td class="subject-name">${subject.name}</td>
+                        <td>${firstCA}</td>
+                        <td>${secondCA}</td>
+                        <td>${exam}</td>
+                        <td><strong>${total}</strong></td>
+                        <td class="grade">${grade}</td>
+                        <td>${remark}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+
+              <div class="stats-section">
+                <div class="stats-grid">
+                  <div class="stat-card">
+                    <div class="stat-label">TOTAL SCORE</div>
+                    <div class="stat-value">${totalMarks}</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">AVERAGE</div>
+                    <div class="stat-value">${subjects.length ? (totalMarks / (subjects.length * 100) * 100).toFixed(2) : '0.00'}%</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">ATTENDANCE</div>
+                    <div class="stat-value">${attendancePercentage}%</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">RESULT</div>
+                    <div class="stat-value">${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</div>
+                  </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                  <div>No of Subjects: <strong>${subjects.length}</strong></div>
+                  <div>Total Obtainable: <strong>${subjects.length * 100}</strong></div>
+                  <div>Result Status: <strong>${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</strong></div>
+                </div>
+              </div>
+
+              <div class="footer">
+                <div style="margin-bottom: 15px;">
+                  <strong>SEAT OF WISDOM ACADEMY MANAGEMENT SYSTEM</strong>
+                </div>
+                <div class="signature-section">
+                  <div class="signature">
+                    <div>Class Teacher</div>
+                  </div>
+                  <div class="signature">
+                    <div>Principal</div>
+                  </div>
+                  <div class="signature">
+                    <div>Parent/Guardian</div>
+                  </div>
+                </div>
+                <div style="margin-top: 15px; font-size: 11px; opacity: 0.8;">
+                  Generated on ${new Date().toLocaleDateString()} | Report ID: ${report.id}
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+
+      reportWindow.document.write(reportHTML);
+      reportWindow.document.close();
+      reportWindow.print();
+    } catch (error) {
+      console.error('Error loading report card data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load report card data. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleGenerateReportCard = (student: any) => {
