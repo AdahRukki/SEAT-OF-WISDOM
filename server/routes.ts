@@ -102,7 +102,7 @@ const requireMainAdmin = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
-// Helper function to format dates as "12th of September 2025"
+// Helper function to format dates as "12th of September 2025" (day before month)
 function formatDateWithOrdinal(date: Date): string {
   const day = date.getDate();
   const month = date.toLocaleString('en-US', { month: 'long' });
@@ -120,6 +120,15 @@ function formatDateWithOrdinal(date: Date): string {
   };
   
   return `${day}${getOrdinalSuffix(day)} of ${month} ${year}`;
+}
+
+// Helper function to calculate grade from score
+function calculateGrade(score: number): { grade: string; color: string } {
+  if (score >= 90) return { grade: 'A', color: 'bg-green-500' };
+  if (score >= 80) return { grade: 'B', color: 'bg-blue-500' };
+  if (score >= 70) return { grade: 'C', color: 'bg-yellow-500' };
+  if (score >= 60) return { grade: 'D', color: 'bg-orange-500' };
+  return { grade: 'F', color: 'bg-red-500' };
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -146,42 +155,171 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `);
       }
 
-      console.log(`[REPORT] Serving report: ${report.studentName} - ${report.term} ${report.session}`);
-      // Show the report card
+      // Get student and assessment data
+      const student = await storage.getStudent(report.studentId);
+      const assessments = await storage.getAssessmentsByStudent(report.studentId, report.term, report.session);
+      const attendance = await storage.getAttendanceByStudent(report.studentId, report.classId, report.term, report.session);
+      
+      if (!student) {
+        return res.status(404).send(`
+          <html>
+            <head><title>Student Not Found</title></head>
+            <body>
+              <h1>Student Data Not Found</h1>
+              <p>Could not find student data for this report.</p>
+              <a href="/" onclick="window.close(); return false;">Close</a>
+            </body>
+          </html>
+        `);
+      }
+
+      // Calculate overall average
+      const totalScore = assessments.reduce((sum: number, assessment: any) => sum + Number(assessment.total || 0), 0);
+      const overallAverage = assessments.length > 0 ? Math.round(totalScore / assessments.length) : 0;
+      const overallGrade = calculateGrade(overallAverage);
+      
+      // Calculate attendance percentage
+      const attendancePercentage = attendance ? Math.round((attendance.presentDays / attendance.totalDays) * 100) : 0;
+
+      console.log(`[REPORT] Serving report: ${student.firstName} ${student.lastName} - ${report.term} ${report.session}`);
+      
+      // Generate the full report card with all assessment data
       res.send(`
         <html>
           <head>
-            <title>${report.studentName} - ${report.term} ${report.session} Report Card</title>
+            <title>${student.firstName} ${student.lastName} - ${report.term} ${report.session} Report Card</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-              .header { text-align: center; margin-bottom: 30px; }
-              .info { margin-bottom: 20px; }
-              .scores { border: 1px solid #ccc; padding: 15px; margin: 20px 0; }
-              @media print { .no-print { display: none; } }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body { font-family: 'Arial', sans-serif; line-height: 1.4; background: white; color: #333; padding: 20px; }
+              .report-card { max-width: 800px; margin: 0 auto; background: white; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+              .header { text-align: center; margin-bottom: 30px; padding: 20px; border-bottom: 3px solid #4f46e5; }
+              .header h1 { font-size: 28px; color: #4f46e5; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+              .header h2 { font-size: 20px; color: #6b7280; margin-bottom: 10px; }
+              .session-info { background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; }
+              .student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; padding: 20px; background: #f9fafb; border-radius: 8px; }
+              .info-item { margin-bottom: 10px; }
+              .info-label { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
+              .info-value { font-size: 16px; font-weight: 600; color: #374151; }
+              .grades-section { margin: 30px 0; }
+              .grades-table { width: 100%; border-collapse: collapse; margin: 20px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+              .grades-table th { background: #4f46e5; color: white; padding: 12px 8px; text-align: center; font-weight: 600; font-size: 14px; }
+              .grades-table td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+              .grades-table tr:nth-child(even) { background: #f9fafb; }
+              .grades-table .subject-name { text-align: left; font-weight: 500; }
+              .grade-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; color: white; font-weight: 600; font-size: 12px; }
+              .summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin: 30px 0; padding: 20px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 8px; }
+              .summary-item { text-align: center; }
+              .summary-label { font-size: 12px; color: #6b7280; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+              .summary-value { font-size: 24px; font-weight: 700; color: #4f46e5; }
+              .summary-badge { display: inline-block; padding: 8px 16px; border-radius: 6px; color: white; font-weight: 600; font-size: 16px; }
+              .footer { margin-top: 40px; padding: 20px; border-top: 2px solid #e5e7eb; text-align: center; }
+              .no-print { margin: 20px 0; text-align: center; }
+              .no-print button { padding: 12px 24px; margin: 0 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
+              .print-btn { background: #4f46e5; color: white; }
+              .close-btn { background: #6b7280; color: white; }
+              .no-print button:hover { opacity: 0.9; }
+              @media print {
+                body { margin: 0; padding: 10px; }
+                .no-print { display: none !important; }
+                .report-card { box-shadow: none; max-width: none; }
+                .header h1 { font-size: 24px; }
+                .grades-table { font-size: 12px; }
+                .summary-value { font-size: 20px; }
+              }
             </style>
           </head>
           <body>
-            <div class="header">
-              <h1>Seat of Wisdom Academy</h1>
-              <h2>Report Card</h2>
-            </div>
-            <div class="info">
-              <p><strong>Student:</strong> ${report.studentName}</p>
-              <p><strong>Class:</strong> ${report.className}</p>
-              <p><strong>Term:</strong> ${report.term}</p>
-              <p><strong>Session:</strong> ${report.session}</p>
-              <p><strong>Generated:</strong> ${formatDateWithOrdinal(new Date(report.generatedAt))}</p>
-              ${report.nextTermResumptionDate ? `<p><strong>Next Term Resumes:</strong> ${formatDateWithOrdinal(new Date(report.nextTermResumptionDate))}</p>` : ''}
-            </div>
-            <div class="scores">
-              <h3>Academic Performance</h3>
-              <p><strong>Total Score:</strong> ${report.totalScore || 'N/A'}</p>
-              <p><strong>Average Score:</strong> ${report.averageScore || 'N/A'}</p>
-              <p><strong>Attendance:</strong> ${report.attendancePercentage || 'N/A'}%</p>
-            </div>
-            <div class="no-print">
-              <button onclick="window.print()">Print Report</button>
-              <button onclick="window.close()">Close</button>
+            <div class="report-card">
+              <div class="header">
+                <h1>Seat of Wisdom Academy</h1>
+                <h2>Student Report Card</h2>
+                <div class="session-info">
+                  <strong>Academic Session: ${report.session} • Term: ${report.term}</strong>
+                </div>
+              </div>
+              
+              <div class="student-info">
+                <div>
+                  <div class="info-item">
+                    <div class="info-label">Student Name</div>
+                    <div class="info-value">${student.firstName} ${student.lastName}</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Student ID</div>
+                    <div class="info-value">${student.studentId}</div>
+                  </div>
+                </div>
+                <div>
+                  <div class="info-item">
+                    <div class="info-label">Class</div>
+                    <div class="info-value">${report.className}</div>
+                  </div>
+                  <div class="info-item">
+                    <div class="info-label">Generated On</div>
+                    <div class="info-value">${formatDateWithOrdinal(new Date(report.generatedAt))}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grades-section">
+                <h3 style="margin-bottom: 15px; color: #374151; font-size: 18px;">Academic Performance</h3>
+                <table class="grades-table">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left;">Subject</th>
+                      <th>1st CA<br><small>(20)</small></th>
+                      <th>2nd CA<br><small>(20)</small></th>
+                      <th>Exam<br><small>(60)</small></th>
+                      <th>Total<br><small>(100)</small></th>
+                      <th>Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${assessments.map((assessment: any) => {
+                      const total = Number(assessment.total || 0);
+                      const grade = calculateGrade(total);
+                      return `
+                        <tr>
+                          <td class="subject-name">${assessment.subject?.name || 'Unknown Subject'}</td>
+                          <td>${assessment.firstCA || '0'}</td>
+                          <td>${assessment.secondCA || '0'}</td>
+                          <td>${assessment.exam || '0'}</td>
+                          <td style="font-weight: 600;">${total}</td>
+                          <td><span class="grade-badge" style="background-color: ${grade.color === 'bg-green-500' ? '#10b981' : grade.color === 'bg-blue-500' ? '#3b82f6' : grade.color === 'bg-yellow-500' ? '#f59e0b' : grade.color === 'bg-orange-500' ? '#f97316' : '#ef4444'}">${grade.grade}</span></td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="summary">
+                <div class="summary-item">
+                  <div class="summary-label">Overall Average</div>
+                  <div class="summary-value">${overallAverage}%</div>
+                </div>
+                <div class="summary-item">
+                  <div class="summary-label">Overall Grade</div>
+                  <div class="summary-badge" style="background-color: ${overallGrade.color === 'bg-green-500' ? '#10b981' : overallGrade.color === 'bg-blue-500' ? '#3b82f6' : overallGrade.color === 'bg-yellow-500' ? '#f59e0b' : overallGrade.color === 'bg-orange-500' ? '#f97316' : '#ef4444'}">${overallGrade.grade}</div>
+                </div>
+                <div class="summary-item">
+                  <div class="summary-label">Attendance</div>
+                  <div class="summary-value">${attendancePercentage}%</div>
+                </div>
+              </div>
+
+              ${report.nextTermResumptionDate ? `
+                <div class="footer">
+                  <p style="font-size: 16px; color: #374151;"><strong>Next Term Resumes:</strong> ${formatDateWithOrdinal(new Date(report.nextTermResumptionDate))}</p>
+                </div>
+              ` : ''}
+              
+              <div class="no-print">
+                <button class="print-btn" onclick="window.print()">Print Report Card</button>
+                <button class="close-btn" onclick="window.close()">Close Window</button>
+              </div>
             </div>
           </body>
         </html>
@@ -193,7 +331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <head><title>Error</title></head>
           <body>
             <h1>Error Loading Report</h1>
-            <p>An error occurred while loading the report card.</p>
+            <p>An error occurred while loading the report card: ${error instanceof Error ? error.message : 'Unknown error'}</p>
             <a href="/" onclick="window.close(); return false;">Close</a>
           </body>
         </html>
