@@ -289,6 +289,7 @@ export default function AdminDashboard() {
     middleName: "",
     email: "",
     password: "",
+    studentId: "",
     classId: "",
     dateOfBirth: "",
     age: "",
@@ -338,8 +339,8 @@ export default function AdminDashboard() {
   };
 
   const isStudentFormValid = () => {
-    const { firstName, lastName, email, password, classId, parentWhatsApp } = studentCreationForm;
-    const hasRequiredFields = firstName && lastName && email && password && classId && parentWhatsApp;
+    const { firstName, lastName, email, password, studentId, classId, parentWhatsApp, gender } = studentCreationForm;
+    const hasRequiredFields = firstName && lastName && email && password && studentId && classId && parentWhatsApp && gender;
     const hasNoErrors = Object.values(studentFormErrors).every(error => !error);
     return hasRequiredFields && hasNoErrors;
   };
@@ -579,9 +580,11 @@ export default function AdminDashboard() {
       middleName: studentCreationForm.middleName || undefined,
       email: studentCreationForm.email,
       password: studentCreationForm.password,
+      studentId: studentCreationForm.studentId,
       classId: studentCreationForm.classId || selectedClassForStudents,
       dateOfBirth: studentCreationForm.dateOfBirth || undefined,
       age: studentCreationForm.age ? parseInt(studentCreationForm.age) : undefined,
+      gender: studentCreationForm.gender || undefined,
       parentContact: studentCreationForm.parentContact || undefined,
       parentWhatsApp: studentCreationForm.parentWhatsApp,
       address: studentCreationForm.address || undefined,
@@ -1371,9 +1374,12 @@ export default function AdminDashboard() {
       middleName: "",
       email: "",
       password: "",
+      studentId: "",
       classId: "",
       dateOfBirth: "",
+      age: "",
       gender: "",
+      profileImage: "",
       parentContact: "",
       parentWhatsApp: "",
       address: ""
@@ -3983,14 +3989,14 @@ export default function AdminDashboard() {
                 </p>
               </div>
               <div>
-                <Label htmlFor="student-id">Student ID (Auto-generated)</Label>
+                <Label htmlFor="student-id">Student ID *</Label>
                 <div className="flex space-x-2">
                   <Input
                     id="student-id"
-                    value={studentId}
-                    readOnly
-                    placeholder="SOWA/0001"
-                    className="bg-gray-50"
+                    value={studentCreationForm.studentId}
+                    onChange={(e) => handleStudentFormChange('studentId', e.target.value)}
+                    placeholder="e.g., SOWA/1001"
+                    className=""
                   />
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -3998,7 +4004,10 @@ export default function AdminDashboard() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={generateStudentId}
+                        onClick={async () => {
+                          const newId = await generateStudentId();
+                          handleStudentFormChange('studentId', newId);
+                        }}
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
