@@ -10,6 +10,10 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**August 16, 2025**
+- ✅ **PROFILE IMAGE DISPLAY ISSUE FIXED** - Fixed caching issue where uploaded profile images weren't showing immediately in student list
+- ✅ **STANDARDIZED CLASSES ACROSS ALL SCHOOLS** - Added same 6 classes (J.S.S 1-3, S.S.S 1-3) to all 4 school branches for consistency
+
 **August 15, 2025**
 - ✅ **STUDENT OVERVIEW AVERAGE REMOVED** - Simplified student dashboard by removing academic progress chart/overview average for cleaner interface
 - ✅ **AGE FIELD ADDED TO STUDENT CREATION** - Students can now have age field included during creation and editing
