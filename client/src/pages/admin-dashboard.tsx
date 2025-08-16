@@ -3983,33 +3983,6 @@ export default function AdminDashboard() {
                 </p>
               </div>
               <div>
-                <Label htmlFor="student-id">Student ID (Auto-generated)</Label>
-                <div className="flex space-x-2">
-                  <Input
-                    id="student-id"
-                    value={studentId}
-                    readOnly
-                    placeholder="SOWA/0001"
-                    className="bg-gray-50"
-                  />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={generateStudentId}
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Generate a new random SOWA student ID</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-              <div>
                 <Label htmlFor="student-class">Class *</Label>
                 <Select 
                   value={studentCreationForm.classId || selectedClassForStudents} 
@@ -4568,6 +4541,47 @@ export default function AdminDashboard() {
             </DialogHeader>
             
             <div className="space-y-8">
+              {/* Student ID Section - Prominently displayed at top */}
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                    <Hash className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-blue-900 dark:text-blue-100">Student Identification</h3>
+                </div>
+                <div>
+                  <Label htmlFor="student-id" className="text-sm font-medium text-blue-800 dark:text-blue-200">Student ID (Auto-generated)</Label>
+                  <div className="flex space-x-2 mt-1">
+                    <Input
+                      id="student-id"
+                      value={studentId}
+                      readOnly
+                      placeholder="SOWA/0001"
+                      className="bg-white dark:bg-gray-900 border-blue-300 dark:border-blue-700 font-mono text-lg font-semibold"
+                    />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={generateStudentId}
+                          className="border-blue-300 text-blue-600 hover:bg-blue-100"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Generate a new SOWA student ID</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    This unique ID will be automatically assigned to the student
+                  </p>
+                </div>
+              </div>
+
               {/* Personal Information Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-gray-700">
