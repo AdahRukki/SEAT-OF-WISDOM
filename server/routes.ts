@@ -102,6 +102,26 @@ const requireMainAdmin = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
+// Helper function to format dates as "12th of September 2025"
+function formatDateWithOrdinal(date: Date): string {
+  const day = date.getDate();
+  const month = date.toLocaleString('en-US', { month: 'long' });
+  const year = date.getFullYear();
+  
+  // Get ordinal suffix for day
+  const getOrdinalSuffix = (day: number): string => {
+    if (day > 3 && day < 21) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  };
+  
+  return `${day}${getOrdinalSuffix(day)} of ${month} ${year}`;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve static assets first (before other routes)
   app.use('/assets', express.static(path.join(process.cwd(), 'client/src/assets')));
@@ -1795,8 +1815,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               <p><strong>Class:</strong> ${report.className}</p>
               <p><strong>Term:</strong> ${report.term}</p>
               <p><strong>Session:</strong> ${report.session}</p>
-              <p><strong>Generated:</strong> ${new Date(report.generatedAt).toLocaleDateString()}</p>
-              ${report.nextTermResumptionDate ? `<p><strong>Next Term Resumes:</strong> ${new Date(report.nextTermResumptionDate).toLocaleDateString()}</p>` : ''}
+              <p><strong>Generated:</strong> ${formatDateWithOrdinal(new Date(report.generatedAt))}</p>
+              ${report.nextTermResumptionDate ? `<p><strong>Next Term Resumes:</strong> ${formatDateWithOrdinal(new Date(report.nextTermResumptionDate))}</p>` : ''}
             </div>
             <div class="scores">
               <h3>Academic Performance</h3>
