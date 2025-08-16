@@ -232,7 +232,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     return validation && validation.hasAllScores && validation.hasAttendance;
   };
 
-  const handleViewReportCard = async (report: GeneratedReportCard) => {
+  const handleViewReportCard = async (report: GeneratedReportCard, resumptionDate?: string) => {
     try {
       // Fetch the student data first
       const allStudents = await apiRequest("/api/admin/students");
@@ -537,6 +537,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                 </div>
                 <div style="margin-top: 15px; font-size: 11px; opacity: 0.8;">
                   Generated on ${new Date().toLocaleDateString()} | Report ID: ${report.id}
+                  ${resumptionDate ? `<br/>Next Term Resumes: ${new Date(resumptionDate).toLocaleDateString()}` : ''}
                 </div>
               </div>
             </div>
@@ -629,7 +630,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
             attendancePercentage: "0",
             generatedAt: new Date().toISOString(),
             generatedBy: user?.firstName + " " + user?.lastName || "Admin"
-          });
+          }, batchResumptionDate);
           
           successCount++;
         } catch (error) {
