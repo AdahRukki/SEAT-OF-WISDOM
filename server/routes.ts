@@ -1748,15 +1748,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Route for viewing individual report cards
-  app.get("/reports/:reportId", authenticate, async (req: Request, res: Response) => {
+  // Route for viewing individual report cards (public access for generated reports)
+  app.get("/reports/:reportId", async (req: Request, res: Response) => {
     const { reportId } = req.params;
     const user = (req as any).user;
     
     try {
-      if (user.role !== "admin" && user.role !== "sub-admin" && user.role !== "student") {
-        return res.status(403).json({ error: "Access denied" });
-      }
+      // No authentication required for viewing reports since they're already generated
 
       const reportCards = await storage.getAllGeneratedReportCards();
       const report = reportCards.find(r => r.id === reportId);

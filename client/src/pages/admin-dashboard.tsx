@@ -4552,6 +4552,16 @@ export default function AdminDashboard() {
         <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
             <DialogHeader className="text-center pb-6">
+              {/* Close button in top-right corner */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                onClick={() => setIsStudentDialogOpen(false)}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </Button>
               <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
                 <UserPlus className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               </div>
