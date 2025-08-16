@@ -167,7 +167,8 @@ export default function AdminDashboard() {
     profileImage: "",
     parentContact: "",
     parentWhatsApp: "",
-    address: ""
+    address: "",
+    newPassword: ""
   });
   
   // Profile image upload states
@@ -1095,10 +1096,22 @@ export default function AdminDashboard() {
         processedData.dateOfBirth = new Date(processedData.dateOfBirth);
       }
       
-      return await apiRequest(`/api/admin/students/${studentData.id}`, {
+      // Handle password update separately if provided
+      const response = await apiRequest(`/api/admin/students/${studentData.id}`, {
         method: 'PATCH',
         body: processedData
       });
+      
+      // If new password is provided, update the user's password
+      if (processedData.newPassword && processedData.newPassword.trim() !== '') {
+        const student = response; // The response contains the updated student
+        await apiRequest(`/api/admin/users/${student.userId}`, {
+          method: 'PATCH',
+          body: { password: processedData.newPassword }
+        });
+      }
+      
+      return response;
     },
     onSuccess: () => {
       toast({
@@ -1117,7 +1130,8 @@ export default function AdminDashboard() {
         gender: "",
         parentContact: "",
         parentWhatsApp: "",
-        address: ""
+        address: "",
+        newPassword: ""
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
     },
@@ -1145,7 +1159,8 @@ export default function AdminDashboard() {
       profileImage: student.profileImage || "",
       parentContact: student.parentContact || "",
       parentWhatsApp: student.parentWhatsapp || "",
-      address: student.address || ""
+      address: student.address || "",
+      newPassword: ""
     });
     setIsEditStudentDialogOpen(true);
   };
@@ -5006,6 +5021,32 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
 
+              {/* Security Information */}
+              <Card className="border-l-4 border-l-orange-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Shield className="h-5 w-5 text-orange-500" />
+                    Security Settings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Label htmlFor="newPassword" className="text-sm font-medium text-gray-700 dark:text-gray-300">New Password</Label>
+                    <Input
+                      id="newPassword"
+                      type="password"
+                      value={studentEditForm.newPassword}
+                      onChange={(e) => setStudentEditForm(prev => ({...prev, newPassword: e.target.value}))}
+                      placeholder="Enter new password (leave blank to keep current)"
+                      className="transition-all duration-200 focus:ring-2 focus:ring-orange-500"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Leave blank to keep the current password unchanged
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Contact Information */}
               <Card className="border-l-4 border-l-purple-500">
                 <CardHeader>
@@ -5058,6 +5099,7 @@ export default function AdminDashboard() {
                 onClick={() => {
                   setIsEditStudentDialogOpen(false);
                   setProfileImagePreview("");
+                  setStudentEditForm(prev => ({...prev, newPassword: ""}));
                 }}
                 className="transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
