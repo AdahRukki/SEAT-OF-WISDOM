@@ -75,6 +75,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
   const [isValidating, setIsValidating] = useState(false);
   const [batchResumptionDate, setBatchResumptionDate] = useState("");
   const [isBatchGenerating, setIsBatchGenerating] = useState(false);
+  const [generatingReports, setGeneratingReports] = useState<Set<string>>(new Set());
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -344,8 +345,28 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
               .grade { font-weight: bold; color: #1e40af; }
               .stats-section {
                 padding: 25px;
-                background: #f1f5f9;
+                background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
                 border-top: 3px solid #3b82f6;
+                margin-top: 20px;
+              }
+              .resumption-section {
+                background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+                border: 2px solid #f59e0b;
+                border-radius: 10px;
+                padding: 15px;
+                margin: 20px 0;
+                text-align: center;
+              }
+              .resumption-section h4 {
+                color: #92400e;
+                font-size: 14px;
+                font-weight: bold;
+                margin-bottom: 5px;
+              }
+              .resumption-section p {
+                color: #451a03;
+                font-size: 16px;
+                font-weight: bold;
               }
               .stats-grid {
                 display: grid;
@@ -535,9 +556,15 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                     <div>Parent/Guardian</div>
                   </div>
                 </div>
-                <div style="margin-top: 15px; font-size: 11px; opacity: 0.8;">
+                ${resumptionDate ? `
+                <div class="resumption-section">
+                  <h4>📅 NEXT TERM RESUMPTION</h4>
+                  <p>${new Date(resumptionDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                </div>
+                ` : ''}
+                
+                <div style="margin-top: 15px; font-size: 11px; opacity: 0.8; text-align: center;">
                   Generated on ${new Date().toLocaleDateString()} | Report ID: ${report.id}
-                  ${resumptionDate ? `<br/>Next Term Resumes: ${new Date(resumptionDate).toLocaleDateString()}` : ''}
                 </div>
               </div>
             </div>
@@ -814,12 +841,15 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                       
                       <Button
                         size="sm"
-                        disabled={!canGenerateReport(student.id)}
+                        disabled={!canGenerateReport(student.id) || generatingReports.has(student.id)}
                         onClick={() => handleGenerateReportCard(student)}
                         className="flex items-center gap-1"
                       >
-                        <Download className="w-4 h-4" />
-                        Generate
+                        {generatingReports.has(student.id) ? (
+                          <><RefreshCw className="w-4 h-4 animate-spin" />Generating...</>
+                        ) : (
+                          <><Download className="w-4 h-4" />Generate</>
+                        )}
                       </Button>
                     </div>
                   </div>
