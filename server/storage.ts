@@ -324,13 +324,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudent(studentId: string): Promise<Student | undefined> {
-    const [student] = await db
-      .select()
+    const [result] = await db
+      .select({
+        id: students.id,
+        studentId: students.studentId,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        phone: students.phone,
+        parentPhone: students.parentPhone,
+        address: students.address,
+        dateOfBirth: students.dateOfBirth,
+        gender: students.gender,
+        age: students.age,
+        profileImage: students.profileImage,
+        userId: students.userId,
+        classId: students.classId,
+        createdAt: students.createdAt,
+        updatedAt: students.updatedAt,
+      })
       .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
       .where(eq(students.id, studentId))
       .limit(1);
     
-    return student;
+    return result;
   }
 
   async createClass(classData: InsertClass): Promise<Class> {
