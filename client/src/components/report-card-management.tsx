@@ -97,16 +97,12 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       });
     },
     onSuccess: (result, variables) => {
-      console.log("Validation result from server:", result);
-      
       // Map server response to frontend ValidationResult format
       const validationResult: ValidationResult = {
         hasAllScores: result.status === "complete" || (result.status === "partial" && (!result.missingSubjects || result.missingSubjects.length === 0)),
         hasAttendance: result.hasAttendance,
         missingSubjects: result.missingSubjects || []
       };
-      
-      console.log("Mapped validation result:", validationResult);
       
       setValidationResults(prev => ({
         ...prev,
@@ -192,10 +188,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     setValidationResults({});
 
     try {
-      console.log(`Validating ${students.length} students for class ${selectedClass}, term ${selectedTerm}, session ${selectedSession}`);
-      
       for (const student of students) {
-        console.log(`Validating student: ${student.firstName} ${student.lastName} (ID: ${student.id})`);
         await validateMutation.mutateAsync({
           studentId: student.id,
           classId: selectedClass,
@@ -209,7 +202,6 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         description: `Validated ${students.length} students. Check the results below.`,
       });
     } catch (error) {
-      console.error("Validation error:", error);
       toast({
         title: "Validation Error",
         description: "Some validations failed. Please try again.",
@@ -257,7 +249,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       classId: selectedClass,
       term: selectedTerm,
       session: selectedSession,
-      studentName: `${student.firstName} ${student.lastName}`,
+      studentName: `${student.user.firstName} ${student.user.lastName}`,
       className: classes.find(c => c.id === selectedClass)?.name || "",
       totalScore: "0", // This would be calculated from actual scores
       averageScore: "0", // This would be calculated from actual scores
@@ -355,7 +347,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                   <div key={student.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-4">
                       <div>
-                        <p className="font-medium">{student.firstName} {student.lastName}</p>
+                        <p className="font-medium">{student.user.firstName} {student.user.lastName}</p>
                         <p className="text-sm text-muted-foreground">{student.studentId}</p>
                       </div>
                       {status && (
