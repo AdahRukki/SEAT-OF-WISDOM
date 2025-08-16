@@ -1409,7 +1409,7 @@ export default function AdminDashboard() {
 
   // Auto-generate student ID when dialog opens
   useEffect(() => {
-    if (isStudentDialogOpen && !studentId) {
+    if (isStudentDialogOpen) {
       generateStudentId();
     }
   }, [isStudentDialogOpen, allStudents.length]);
