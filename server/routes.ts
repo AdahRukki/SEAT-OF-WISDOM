@@ -557,7 +557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const { firstName, lastName, email, schoolId, isActive } = req.body;
+      const { firstName, lastName, email, schoolId, isActive, password } = req.body;
       
       // Check if user exists
       const existingUser = await storage.getUserById(id);
@@ -578,7 +578,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updateData.schoolId = schoolId;
       }
       
+      // Update user profile
       const updatedUser = await storage.updateUserProfile(id, updateData);
+      
+      // Update password if provided
+      if (password) {
+        await storage.updateUserPassword(id, password);
+      }
+      
       res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user:", error);

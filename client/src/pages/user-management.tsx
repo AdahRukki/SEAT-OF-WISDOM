@@ -94,6 +94,8 @@ export default function UserManagement() {
   
   // Password visibility state
   const [showPassword, setShowPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Edit user form states
   const [editUserForm, setEditUserForm] = useState({
@@ -101,7 +103,10 @@ export default function UserManagement() {
     lastName: "",
     email: "",
     schoolId: "",
-    isActive: true
+    isActive: true,
+    password: "",
+    confirmPassword: "",
+    changePassword: false
   });
 
   // Queries - Filter to show only admin and sub-admin users
@@ -553,7 +558,10 @@ export default function UserManagement() {
                                     lastName: user.lastName || "",
                                     email: user.email || "",
                                     schoolId: user.schoolId || "",
-                                    isActive: user.isActive ?? true
+                                    isActive: user.isActive ?? true,
+                                    password: "",
+                                    confirmPassword: "",
+                                    changePassword: false
                                   });
                                   setIsEditUserDialogOpen(true);
                                 }}
@@ -882,6 +890,80 @@ export default function UserManagement() {
                 />
                 <Label htmlFor="editIsActive">Active User</Label>
               </div>
+              
+              {/* Password Change Section */}
+              <div className="border-t pt-4">
+                <div className="flex items-center space-x-2 mb-4">
+                  <input
+                    type="checkbox"
+                    id="editChangePassword"
+                    checked={editUserForm.changePassword}
+                    onChange={(e) => setEditUserForm({...editUserForm, changePassword: e.target.checked, password: "", confirmPassword: ""})}
+                    className="rounded"
+                  />
+                  <Label htmlFor="editChangePassword">Change Password</Label>
+                </div>
+                
+                {editUserForm.changePassword && (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="editPassword">New Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="editPassword"
+                          type={showEditPassword ? "text" : "password"}
+                          value={editUserForm.password}
+                          onChange={(e) => setEditUserForm({...editUserForm, password: e.target.value})}
+                          placeholder="Enter new password"
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowEditPassword(!showEditPassword)}
+                        >
+                          {showEditPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="editConfirmPassword">Confirm New Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="editConfirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={editUserForm.confirmPassword}
+                          onChange={(e) => setEditUserForm({...editUserForm, confirmPassword: e.target.value})}
+                          placeholder="Confirm new password"
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    {editUserForm.password && editUserForm.confirmPassword && editUserForm.password !== editUserForm.confirmPassword && (
+                      <p className="text-sm text-red-600">Passwords do not match</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>
@@ -890,17 +972,30 @@ export default function UserManagement() {
               <Button
                 onClick={() => {
                   if (selectedUser) {
-                    editUserMutation.mutate({
+                    // Validate password if changing
+                    if (editUserForm.changePassword) {
+                      if (!editUserForm.password || editUserForm.password !== editUserForm.confirmPassword) {
+                        return;
+                      }
+                    }
+                    
+                    const updateData: any = {
                       id: selectedUser.id,
                       firstName: editUserForm.firstName,
                       lastName: editUserForm.lastName,
                       email: editUserForm.email,
                       schoolId: editUserForm.schoolId || undefined,
                       isActive: editUserForm.isActive
-                    });
+                    };
+                    
+                    if (editUserForm.changePassword) {
+                      updateData.password = editUserForm.password;
+                    }
+                    
+                    editUserMutation.mutate(updateData);
                   }
                 }}
-                disabled={editUserMutation.isPending || !editUserForm.firstName || !editUserForm.lastName || !editUserForm.email}
+                disabled={editUserMutation.isPending || !editUserForm.firstName || !editUserForm.lastName || !editUserForm.email || (editUserForm.changePassword && (!editUserForm.password || editUserForm.password !== editUserForm.confirmPassword))}
               >
                 {editUserMutation.isPending ? "Updating..." : "Update User"}
               </Button>
