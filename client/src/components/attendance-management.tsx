@@ -70,7 +70,7 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
     }) => {
       return apiRequest("/api/admin/attendance", {
         method: "POST",
-        body: JSON.stringify(attendanceData),
+        body: attendanceData,
       });
     },
     onSuccess: () => {
