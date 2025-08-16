@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -76,6 +76,11 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Clear validation results when class, term, or session changes
+  useEffect(() => {
+    setValidationResults({});
+  }, [selectedClass, selectedTerm, selectedSession]);
 
   // Fetch generated report cards
   const { data: generatedReports = [], isLoading: isLoadingReports } = useQuery<GeneratedReportCard[]>({
