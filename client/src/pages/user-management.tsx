@@ -94,9 +94,9 @@ export default function UserManagement() {
   // Password visibility state
   const [showPassword, setShowPassword] = useState(false);
 
-  // Queries
+  // Queries - Filter to show only admin and sub-admin users
   const { data: users = [] } = useQuery<User[]>({
-    queryKey: ['/api/admin/users'],
+    queryKey: ['/api/admin/users?adminOnly=true'],
     enabled: user?.role === 'admin'
   });
 
@@ -309,7 +309,7 @@ export default function UserManagement() {
         <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold">User Management</h1>
           <p className="text-muted-foreground">
-            Manage users, create sub-admins, and configure school settings
+            Manage admin accounts, create sub-admins, and configure school settings
           </p>
         </div>
 
@@ -325,7 +325,7 @@ export default function UserManagement() {
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5" />
               <span className="text-lg font-semibold">
-                {users.length} Total Users
+                {users.length} Admin Accounts
               </span>
             </div>
             <Dialog open={isCreateSubAdminDialogOpen} onOpenChange={setIsCreateSubAdminDialogOpen}>
@@ -442,9 +442,9 @@ export default function UserManagement() {
           {/* Users Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Users Overview</CardTitle>
+              <CardTitle>Admin Accounts Overview</CardTitle>
               <CardDescription>
-                View and manage all system users
+                View and manage admin and sub-admin accounts only
               </CardDescription>
             </CardHeader>
             <CardContent>
