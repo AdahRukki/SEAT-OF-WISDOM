@@ -1680,14 +1680,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Report Card Management routes
   app.get("/api/admin/generated-reports", authenticate, async (req: Request, res: Response) => {
     const user = (req as any).user;
+    const { schoolId } = req.query;
     
     try {
       if (user.role !== "admin" && user.role !== "sub-admin") {
         return res.status(403).json({ error: "Only admins and sub-admins can view generated reports" });
       }
 
-      const reportCards = await storage.getAllGeneratedReportCards();
-      res.json(reportCards);
+      const allReportCards = await storage.getAllGeneratedReportCards();
+      
+      // Filter report cards by school
+      let filteredReportCards = allReportCards;
+      
+      if (user.role === "sub-admin") {
+        // Sub-admins can only see reports from their assigned school
+        const userSchoolId = user.schoolId;
+        if (userSchoolId) {
+          // Get all classes for the user's school and filter by those class IDs
+          const allClasses = await storage.getAllClasses();
+          const schoolClasses = allClasses.filter(cls => cls.schoolId === userSchoolId);
+          const schoolClassIds = schoolClasses.map(cls => cls.id);
+          filteredReportCards = allReportCards.filter(report => schoolClassIds.includes(report.classId));
+        }
+      } else if (user.role === "admin" && schoolId) {
+        // Main admin with specific school selected
+        const allClasses = await storage.getAllClasses();
+        const schoolClasses = allClasses.filter(cls => cls.schoolId === schoolId);
+        const schoolClassIds = schoolClasses.map(cls => cls.id);
+        filteredReportCards = allReportCards.filter(report => schoolClassIds.includes(report.classId));
+      }
+      // If admin with no schoolId specified, show all reports
+
+      console.log(`[REPORTS] User ${user.role} requested reports, showing ${filteredReportCards.length} reports`);
+      res.json(filteredReportCards);
     } catch (error) {
       console.error("Error fetching generated report cards:", error);
       res.status(500).json({ error: "Failed to fetch report cards" });

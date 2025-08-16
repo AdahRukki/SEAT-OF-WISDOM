@@ -3300,6 +3300,7 @@ export default function AdminDashboard() {
             <ReportCardManagement 
               classes={classes}
               user={user}
+              selectedSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
             />
           </TabsContent>
 

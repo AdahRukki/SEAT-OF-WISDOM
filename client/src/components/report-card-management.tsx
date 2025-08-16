@@ -55,6 +55,7 @@ import {
 interface ReportCardManagementProps {
   classes: any[];
   user: any;
+  selectedSchoolId?: string;
 }
 
 interface ValidationResult {
@@ -82,7 +83,7 @@ interface GeneratedReportCard {
   generatedBy: string;
 }
 
-export function ReportCardManagement({ classes, user }: ReportCardManagementProps) {
+export function ReportCardManagement({ classes, user, selectedSchoolId }: ReportCardManagementProps) {
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("");
   const [selectedSession, setSelectedSession] = useState("");
@@ -102,7 +103,11 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
   // Fetch generated report cards
   const { data: generatedReports = [], isLoading: isLoadingReports } = useQuery<GeneratedReportCard[]>({
-    queryKey: ["/api/admin/generated-reports"],
+    queryKey: ["/api/admin/generated-reports", selectedSchoolId],
+    queryFn: () => {
+      const params = selectedSchoolId ? `?schoolId=${encodeURIComponent(selectedSchoolId)}` : '';
+      return apiRequest(`/api/admin/generated-reports${params}`);
+    },
   });
 
   // Fetch students for selected class
@@ -142,7 +147,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/generated-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/generated-reports", selectedSchoolId] });
       toast({
         title: "Success",
         description: "Report card deleted successfully",
@@ -166,7 +171,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/generated-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/generated-reports", selectedSchoolId] });
       toast({
         title: "Success",
         description: "Report card record created successfully",
