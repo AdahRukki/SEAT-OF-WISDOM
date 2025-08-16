@@ -47,6 +47,9 @@ interface ReportCardManagementProps {
 }
 
 interface ValidationResult {
+  studentId: string;
+  status: string;
+  message: string;
   hasAllScores: boolean;
   hasAttendance: boolean;
   missingSubjects: string[];

@@ -1655,7 +1655,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status,
         message,
         missingSubjects: validation.missingSubjects,
-        hasAttendance: validation.hasAttendance
+        hasAttendance: validation.hasAttendance,
+        hasAllScores: validation.hasAllScores
       });
     } catch (error) {
       console.error("Error validating report card data:", error);
