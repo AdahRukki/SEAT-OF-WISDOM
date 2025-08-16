@@ -132,7 +132,7 @@ function calculateGrade(score: number): { grade: string; color: string } {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Report card viewing route (must be first to avoid conflicts)
+  // Report card viewing route (public access, based on August 3rd working patterns)
   app.get("/reports/:reportId", async (req: Request, res: Response) => {
     const { reportId } = req.params;
     
@@ -149,7 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             <body>
               <h1>Report Card Not Found</h1>
               <p>The requested report card could not be found.</p>
-              <a href="/" onclick="window.close(); return false;">Close</a>
+              <a href="javascript:window.close()">Close Window</a>
             </body>
           </html>
         `);
@@ -167,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             <body>
               <h1>Student Data Not Found</h1>
               <p>Could not find student data for this report.</p>
-              <a href="/" onclick="window.close(); return false;">Close</a>
+              <a href="javascript:window.close()">Close Window</a>
             </body>
           </html>
         `);
@@ -181,13 +181,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate attendance percentage
       const attendancePercentage = attendance ? Math.round((attendance.presentDays / attendance.totalDays) * 100) : 0;
 
-      console.log(`[REPORT] Serving report: ${student.firstName} ${student.lastName} - ${report.term} ${report.session}`);
+      // Ensure student names are available (fallback to 'Unknown Student' if missing)
+      const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Unknown Student';
+      console.log(`[REPORT] Serving report: ${studentName} - ${report.term} ${report.session}`);
       
-      // Generate the full report card with all assessment data
+      // Generate clean, working report card based on August 3rd patterns
       res.send(`
         <html>
           <head>
-            <title>${student.firstName} ${student.lastName} - ${report.term} ${report.session} Report Card</title>
+            <title>${studentName} - ${report.term} ${report.session} Report Card</title>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
@@ -244,7 +246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 <div>
                   <div class="info-item">
                     <div class="info-label">Student Name</div>
-                    <div class="info-value">${student.firstName} ${student.lastName}</div>
+                    <div class="info-value">${studentName}</div>
                   </div>
                   <div class="info-item">
                     <div class="info-label">Student ID</div>

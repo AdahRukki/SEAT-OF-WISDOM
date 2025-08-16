@@ -49,7 +49,7 @@ import {
   type PaymentWithDetails
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray, or } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -323,7 +323,7 @@ export class DatabaseStorage implements IStorage {
     return updatedStudent;
   }
 
-  async getStudent(studentId: string): Promise<Student | undefined> {
+  async getStudent(studentId: string): Promise<(Student & { firstName?: string; lastName?: string }) | undefined> {
     const [result] = await db
       .select({
         id: students.id,
