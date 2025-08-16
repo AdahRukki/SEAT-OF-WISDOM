@@ -123,6 +123,84 @@ function formatDateWithOrdinal(date: Date): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Report card viewing route (must be first to avoid conflicts)
+  app.get("/reports/:reportId", async (req: Request, res: Response) => {
+    const { reportId } = req.params;
+    
+    try {
+      console.log(`[REPORT] Accessing report: ${reportId}`);
+      const reportCards = await storage.getAllGeneratedReportCards();
+      const report = reportCards.find(r => r.id === reportId);
+      
+      if (!report) {
+        console.log(`[REPORT] Report not found: ${reportId}`);
+        return res.status(404).send(`
+          <html>
+            <head><title>Report Not Found</title></head>
+            <body>
+              <h1>Report Card Not Found</h1>
+              <p>The requested report card could not be found.</p>
+              <a href="/" onclick="window.close(); return false;">Close</a>
+            </body>
+          </html>
+        `);
+      }
+
+      console.log(`[REPORT] Serving report: ${report.studentName} - ${report.term} ${report.session}`);
+      // Show the report card
+      res.send(`
+        <html>
+          <head>
+            <title>${report.studentName} - ${report.term} ${report.session} Report Card</title>
+            <style>
+              body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .info { margin-bottom: 20px; }
+              .scores { border: 1px solid #ccc; padding: 15px; margin: 20px 0; }
+              @media print { .no-print { display: none; } }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Seat of Wisdom Academy</h1>
+              <h2>Report Card</h2>
+            </div>
+            <div class="info">
+              <p><strong>Student:</strong> ${report.studentName}</p>
+              <p><strong>Class:</strong> ${report.className}</p>
+              <p><strong>Term:</strong> ${report.term}</p>
+              <p><strong>Session:</strong> ${report.session}</p>
+              <p><strong>Generated:</strong> ${formatDateWithOrdinal(new Date(report.generatedAt))}</p>
+              ${report.nextTermResumptionDate ? `<p><strong>Next Term Resumes:</strong> ${formatDateWithOrdinal(new Date(report.nextTermResumptionDate))}</p>` : ''}
+            </div>
+            <div class="scores">
+              <h3>Academic Performance</h3>
+              <p><strong>Total Score:</strong> ${report.totalScore || 'N/A'}</p>
+              <p><strong>Average Score:</strong> ${report.averageScore || 'N/A'}</p>
+              <p><strong>Attendance:</strong> ${report.attendancePercentage || 'N/A'}%</p>
+            </div>
+            <div class="no-print">
+              <button onclick="window.print()">Print Report</button>
+              <button onclick="window.close()">Close</button>
+            </div>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error("[REPORT] Error fetching report card:", error);
+      res.status(500).send(`
+        <html>
+          <head><title>Error</title></head>
+          <body>
+            <h1>Error Loading Report</h1>
+            <p>An error occurred while loading the report card.</p>
+            <a href="/" onclick="window.close(); return false;">Close</a>
+          </body>
+        </html>
+      `);
+    }
+  });
+
   // Serve static assets first (before other routes)
   app.use('/assets', express.static(path.join(process.cwd(), 'client/src/assets')));
 
@@ -1768,83 +1846,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Route for viewing individual report cards (public access for generated reports)
-  app.get("/reports/:reportId", async (req: Request, res: Response) => {
-    const { reportId } = req.params;
-    const user = (req as any).user;
-    
-    try {
-      // No authentication required for viewing reports since they're already generated
-
-      const reportCards = await storage.getAllGeneratedReportCards();
-      const report = reportCards.find(r => r.id === reportId);
-      
-      if (!report) {
-        return res.status(404).send(`
-          <html>
-            <head><title>Report Not Found</title></head>
-            <body>
-              <h1>Report Card Not Found</h1>
-              <p>The requested report card could not be found.</p>
-              <a href="/" onclick="window.close(); return false;">Close</a>
-            </body>
-          </html>
-        `);
-      }
-
-      // Show the report card
-      res.send(`
-        <html>
-          <head>
-            <title>${report.studentName} - ${report.term} ${report.session} Report Card</title>
-            <style>
-              body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-              .header { text-align: center; margin-bottom: 30px; }
-              .info { margin-bottom: 20px; }
-              .scores { border: 1px solid #ccc; padding: 15px; margin: 20px 0; }
-              @media print { .no-print { display: none; } }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <h1>Seat of Wisdom Academy</h1>
-              <h2>Report Card</h2>
-            </div>
-            <div class="info">
-              <p><strong>Student:</strong> ${report.studentName}</p>
-              <p><strong>Class:</strong> ${report.className}</p>
-              <p><strong>Term:</strong> ${report.term}</p>
-              <p><strong>Session:</strong> ${report.session}</p>
-              <p><strong>Generated:</strong> ${formatDateWithOrdinal(new Date(report.generatedAt))}</p>
-              ${report.nextTermResumptionDate ? `<p><strong>Next Term Resumes:</strong> ${formatDateWithOrdinal(new Date(report.nextTermResumptionDate))}</p>` : ''}
-            </div>
-            <div class="scores">
-              <h3>Academic Performance</h3>
-              <p><strong>Total Score:</strong> ${report.totalScore || 'N/A'}</p>
-              <p><strong>Average Score:</strong> ${report.averageScore || 'N/A'}</p>
-              <p><strong>Attendance:</strong> ${report.attendancePercentage || 'N/A'}%</p>
-            </div>
-            <div class="no-print">
-              <button onclick="window.print()">Print Report</button>
-              <button onclick="window.close()">Close</button>
-            </div>
-          </body>
-        </html>
-      `);
-    } catch (error) {
-      console.error("Error fetching report card:", error);
-      res.status(500).send(`
-        <html>
-          <head><title>Error</title></head>
-          <body>
-            <h1>Error Loading Report</h1>
-            <p>An error occurred while loading the report card.</p>
-            <a href="/" onclick="window.close(); return false;">Close</a>
-          </body>
-        </html>
-      `);
-    }
-  });
 
   const httpServer = createServer(app);
   return httpServer;
