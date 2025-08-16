@@ -4974,6 +4974,10 @@ export default function AdminDashboard() {
                               const data = await response.json();
                               setStudentEditForm(prev => ({ ...prev, profileImage: data.objectPath }));
                               setProfileImagePreview(data.objectPath);
+                              
+                              // Refresh the students data to show updated profile image
+                              queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+                              
                               toast({
                                 title: "Success",
                                 description: "Profile image updated successfully!"
