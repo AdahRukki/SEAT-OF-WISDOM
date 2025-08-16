@@ -1672,10 +1672,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins and sub-admins can create report records" });
       }
 
-      const { studentId, classId, term, session, studentName, className, totalScore, averageScore, attendancePercentage } = req.body;
+      const { studentId, classId, term, session, studentName, className, totalScore, averageScore, attendancePercentage, nextTermResumptionDate } = req.body;
       
       if (!studentId || !classId || !term || !session) {
         return res.status(400).json({ error: "Missing required fields: studentId, classId, term, session" });
+      }
+
+      // Check for duplicate report card
+      const existingReports = await storage.getGeneratedReportCards();
+      const duplicateReport = existingReports.find(report => 
+        report.studentId === studentId && 
+        report.classId === classId && 
+        report.term === term && 
+        report.session === session
+      );
+      
+      if (duplicateReport) {
+        return res.status(409).json({ error: "Report card already exists for this student, term, and session" });
       }
 
       const reportCardData = {
@@ -1688,6 +1701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalScore: totalScore?.toString(),
         averageScore: averageScore?.toString(),
         attendancePercentage: attendancePercentage?.toString(),
+        nextTermResumptionDate: nextTermResumptionDate ? new Date(nextTermResumptionDate) : null,
         generatedBy: user.id
       };
 

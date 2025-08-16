@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { 
   Select, 
   SelectContent, 
@@ -19,6 +20,15 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter
+} from "@/components/ui/dialog";
 import { 
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +48,8 @@ import {
   Eye,
   Download,
   Calendar,
-  School
+  School,
+  Printer
 } from "lucide-react";
 
 interface ReportCardManagementProps {
@@ -66,6 +77,7 @@ interface GeneratedReportCard {
   totalScore?: string;
   averageScore?: string;
   attendancePercentage?: string;
+  nextTermResumptionDate?: string;
   generatedAt: string;
   generatedBy: string;
 }
@@ -76,6 +88,9 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
   const [selectedSession, setSelectedSession] = useState("");
   const [validationResults, setValidationResults] = useState<Record<string, ValidationResult>>({});
   const [isValidating, setIsValidating] = useState(false);
+  const [showResumptionDialog, setShowResumptionDialog] = useState(false);
+  const [selectedStudentForReport, setSelectedStudentForReport] = useState<any>(null);
+  const [nextTermResumptionDate, setNextTermResumptionDate] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -232,17 +247,53 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
   const canGenerateReport = (studentId: string) => {
     const validation = validationResults[studentId];
-    return validation && validation.hasAllScores && validation.hasAttendance;
+    const alreadyGenerated = generatedReports.some(report => 
+      report.studentId === studentId && 
+      report.classId === selectedClass && 
+      report.term === selectedTerm && 
+      report.session === selectedSession
+    );
+    return validation && validation.hasAllScores && validation.hasAttendance && !alreadyGenerated;
+  };
+
+  const isReportAlreadyGenerated = (studentId: string) => {
+    return generatedReports.some(report => 
+      report.studentId === studentId && 
+      report.classId === selectedClass && 
+      report.term === selectedTerm && 
+      report.session === selectedSession
+    );
   };
 
   const handleGenerateReportCard = (student: any) => {
-    // This would trigger the existing report card generation logic
-    // For now, we'll create a record that the report was generated
     const validation = validationResults[student.id];
     if (!validation || !canGenerateReport(student.id)) {
+      if (isReportAlreadyGenerated(student.id)) {
+        toast({
+          title: "Report Already Generated",
+          description: "A report card for this student, term, and session already exists.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Cannot Generate Report",
+          description: "Student data is incomplete. Please ensure all scores and attendance are recorded.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    // Show resumption date dialog
+    setSelectedStudentForReport(student);
+    setShowResumptionDialog(true);
+  };
+
+  const handleConfirmGeneration = () => {
+    if (!selectedStudentForReport || !nextTermResumptionDate) {
       toast({
-        title: "Cannot Generate Report",
-        description: "Student data is incomplete. Please ensure all scores and attendance are recorded.",
+        title: "Missing Information",
+        description: "Please enter the next term resumption date.",
         variant: "destructive",
       });
       return;
@@ -250,16 +301,21 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
     // Create report card record
     createReportMutation.mutate({
-      studentId: student.id,
+      studentId: selectedStudentForReport.id,
       classId: selectedClass,
       term: selectedTerm,
       session: selectedSession,
-      studentName: `${student.firstName} ${student.lastName}`,
+      studentName: `${selectedStudentForReport.firstName} ${selectedStudentForReport.lastName}`,
       className: classes.find(c => c.id === selectedClass)?.name || "",
       totalScore: "0", // This would be calculated from actual scores
       averageScore: "0", // This would be calculated from actual scores
       attendancePercentage: "0", // This would be calculated from attendance data
+      nextTermResumptionDate: new Date(nextTermResumptionDate).toISOString(),
     });
+    
+    setShowResumptionDialog(false);
+    setSelectedStudentForReport(null);
+    setNextTermResumptionDate("");
   };
 
   return (
@@ -385,9 +441,10 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                         disabled={!canGenerateReport(student.id)}
                         onClick={() => handleGenerateReportCard(student)}
                         className="flex items-center gap-1"
+                        variant={isReportAlreadyGenerated(student.id) ? "secondary" : "default"}
                       >
                         <Download className="w-4 h-4" />
-                        Generate
+                        {isReportAlreadyGenerated(student.id) ? "Already Generated" : "Generate"}
                       </Button>
                     </div>
                   </div>
@@ -422,19 +479,38 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                     <div className="flex items-center gap-2">
                       <School className="w-4 h-4 text-muted-foreground" />
                       <div>
-                        <p className="font-medium">{report.studentName}</p>
+                        <p className="font-medium">{report.studentName}, {report.session}, {report.term} Report Card</p>
                         <p className="text-sm text-muted-foreground">
-                          {report.className} • {report.term} {report.session}
+                          {report.className} • Generated: {new Date(report.generatedAt).toLocaleDateString()}
                         </p>
+                        {report.nextTermResumptionDate && (
+                          <p className="text-sm text-muted-foreground">
+                            Next Term Resumes: {new Date(report.nextTermResumptionDate).toLocaleDateString()}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="w-4 h-4" />
-                      {new Date(report.generatedAt).toLocaleDateString()}
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => window.open(`/reports/${report.id}`, '_blank')}
+                      className="flex items-center gap-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => window.print()}
+                      className="flex items-center gap-1"
+                    >
+                      <Printer className="w-4 h-4" />
+                      Print
+                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive" size="sm">
@@ -467,6 +543,38 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           )}
         </CardContent>
       </Card>
+
+      {/* Next Term Resumption Date Dialog */}
+      <Dialog open={showResumptionDialog} onOpenChange={setShowResumptionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Report Card</DialogTitle>
+            <DialogDescription>
+              Please enter the next term resumption date for {selectedStudentForReport?.firstName} {selectedStudentForReport?.lastName}'s report card.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="resumption-date">Next Term Resumption Date</Label>
+              <Input
+                id="resumption-date"
+                type="date"
+                value={nextTermResumptionDate}
+                onChange={(e) => setNextTermResumptionDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResumptionDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmGeneration}>
+              Generate Report Card
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
