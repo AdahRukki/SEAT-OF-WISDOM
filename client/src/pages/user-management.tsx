@@ -71,6 +71,7 @@ export default function UserManagement() {
   // State for dialogs
   const [isCreateSubAdminDialogOpen, setIsCreateSubAdminDialogOpen] = useState(false);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
+  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedUserForDeletion, setSelectedUserForDeletion] = useState<User | null>(null);
   const [isDeleteUserDialogOpen, setIsDeleteUserDialogOpen] = useState(false);
@@ -93,6 +94,15 @@ export default function UserManagement() {
   
   // Password visibility state
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Edit user form states
+  const [editUserForm, setEditUserForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    schoolId: "",
+    isActive: true
+  });
 
   // Queries - Filter to show only admin and sub-admin users
   const { data: users = [] } = useQuery<User[]>({
@@ -121,7 +131,7 @@ export default function UserManagement() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
       setIsCreateSubAdminDialogOpen(false);
       resetSubAdminForm();
       toast({
@@ -163,6 +173,39 @@ export default function UserManagement() {
     }
   });
 
+  // Edit user mutation
+  const editUserMutation = useMutation({
+    mutationFn: async (data: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      schoolId?: string;
+      isActive: boolean;
+    }) => {
+      return apiRequest(`/api/admin/users/${data.id}`, {
+        method: 'PUT',
+        body: data
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
+      setIsEditUserDialogOpen(false);
+      setSelectedUser(null);
+      toast({
+        title: "Success",
+        description: "User updated successfully"
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update user",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Delete user mutation
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -171,7 +214,7 @@ export default function UserManagement() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
       setIsDeleteUserDialogOpen(false);
       setSelectedUserForDeletion(null);
       toast({
@@ -505,11 +548,14 @@ export default function UserManagement() {
                                 size="sm"
                                 onClick={() => {
                                   setSelectedUser(user);
-                                  // Add edit functionality here
-                                  toast({
-                                    title: "Edit User",
-                                    description: "User profile opened for editing"
+                                  setEditUserForm({
+                                    firstName: user.firstName || "",
+                                    lastName: user.lastName || "",
+                                    email: user.email || "",
+                                    schoolId: user.schoolId || "",
+                                    isActive: user.isActive ?? true
                                   });
+                                  setIsEditUserDialogOpen(true);
                                 }}
                               >
                                 <Edit className="w-4 h-4" />
@@ -528,19 +574,13 @@ export default function UserManagement() {
                                   variant="outline" 
                                   size="sm"
                                   onClick={() => {
-                                    // Create a temporary login session for this sub-admin
-                                    toast({
-                                      title: "Switching Dashboard",
-                                      description: `Switching to ${user.firstName}'s sub-admin dashboard view`
-                                    });
-                                    // In a real app, you'd create a temporary session or redirect
-                                    // For now, we'll show what school they manage
                                     const schoolName = user.schoolId ? getSchoolName(user.schoolId) : 'Unknown School';
                                     toast({
-                                      title: "Sub-Admin Dashboard",
-                                      description: `${user.firstName} manages: ${schoolName}`,
-                                      duration: 5000
+                                      title: "Redirecting to Dashboard",
+                                      description: `Opening ${user.firstName}'s dashboard for ${schoolName}...`
                                     });
+                                    // Navigate to admin dashboard - it will show sub-admin view for their school
+                                    window.location.href = '/';
                                   }}
                                   className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
                                 >
@@ -548,7 +588,7 @@ export default function UserManagement() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Switch to sub-admin dashboard view for {user.firstName}</p>
+                                <p>Go to main dashboard to view {user.firstName}'s school</p>
                               </TooltipContent>
                             </Tooltip>
                           )}
@@ -770,6 +810,102 @@ export default function UserManagement() {
             </Button>
           </div>
         </DialogContent>
+        </Dialog>
+        
+        {/* Edit User Dialog */}
+        <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit User</DialogTitle>
+              <DialogDescription>
+                Update user information and permissions
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="editFirstName">First Name</Label>
+                  <Input
+                    id="editFirstName"
+                    value={editUserForm.firstName}
+                    onChange={(e) => setEditUserForm({...editUserForm, firstName: e.target.value})}
+                    placeholder="Enter first name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="editLastName">Last Name</Label>
+                  <Input
+                    id="editLastName"
+                    value={editUserForm.lastName}
+                    onChange={(e) => setEditUserForm({...editUserForm, lastName: e.target.value})}
+                    placeholder="Enter last name"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="editEmail">Email</Label>
+                <Input
+                  id="editEmail"
+                  type="email"
+                  value={editUserForm.email}
+                  onChange={(e) => setEditUserForm({...editUserForm, email: e.target.value})}
+                  placeholder="Enter email address"
+                />
+              </div>
+              {selectedUser?.role === 'sub-admin' && (
+                <div>
+                  <Label htmlFor="editSchool">Assigned School</Label>
+                  <Select 
+                    value={editUserForm.schoolId} 
+                    onValueChange={(value) => setEditUserForm({...editUserForm, schoolId: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select school" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {schools.map(school => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="editIsActive"
+                  checked={editUserForm.isActive}
+                  onChange={(e) => setEditUserForm({...editUserForm, isActive: e.target.checked})}
+                  className="rounded"
+                />
+                <Label htmlFor="editIsActive">Active User</Label>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsEditUserDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (selectedUser) {
+                    editUserMutation.mutate({
+                      id: selectedUser.id,
+                      firstName: editUserForm.firstName,
+                      lastName: editUserForm.lastName,
+                      email: editUserForm.email,
+                      schoolId: editUserForm.schoolId || undefined,
+                      isActive: editUserForm.isActive
+                    });
+                  }
+                }}
+                disabled={editUserMutation.isPending || !editUserForm.firstName || !editUserForm.lastName || !editUserForm.email}
+              >
+                {editUserMutation.isPending ? "Updating..." : "Update User"}
+              </Button>
+            </div>
+          </DialogContent>
         </Dialog>
         
         {/* Delete User Confirmation Dialog */}
