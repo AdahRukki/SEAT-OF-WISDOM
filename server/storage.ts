@@ -55,6 +55,7 @@ import bcrypt from "bcrypt";
 export interface IStorage {
   // Authentication
   authenticateUser(email: string, password: string): Promise<User | null>;
+  authenticateUserByName(firstName: string, lastName: string, password: string): Promise<User | null>;
   authenticateUserByStudentId(studentId: string, password: string): Promise<User | null>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -171,6 +172,20 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async authenticateUser(email: string, password: string): Promise<User | null> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
+    if (!user || !user.isActive) return null;
+    
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    return isValidPassword ? user : null;
+  }
+
+  async authenticateUserByName(firstName: string, lastName: string, password: string): Promise<User | null> {
+    const [user] = await db.select().from(users)
+      .where(and(
+        eq(users.firstName, firstName),
+        eq(users.lastName, lastName),
+        or(eq(users.role, 'admin'), eq(users.role, 'sub-admin'))
+      ));
+    
     if (!user || !user.isActive) return null;
     
     const isValidPassword = await bcrypt.compare(password, user.password);
