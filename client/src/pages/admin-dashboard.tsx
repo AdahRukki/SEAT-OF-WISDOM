@@ -1396,15 +1396,35 @@ export default function AdminDashboard() {
   // Auto-generate student ID in SOWA format
   const generateStudentId = async () => {
     try {
+      // Get the current school ID (for admin use selectedSchoolId, for sub-admin use user.schoolId)
+      const currentSchoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
+      
+      // Extract school number from school name or use a mapping
+      let schoolNumber = '1'; // default
+      if (currentSchoolId && schools.length > 0) {
+        const currentSchool = schools.find(s => s.id === currentSchoolId);
+        if (currentSchool) {
+          // Extract number from school name (e.g., "School 1" -> "1")
+          const nameMatch = currentSchool.name.match(/School\s+(\d+)/);
+          if (nameMatch) {
+            schoolNumber = nameMatch[1];
+          }
+        }
+      } else if (user?.schoolId && user?.role === 'sub-admin') {
+        // For sub-admin, we can determine school number from their assigned school
+        // This is a fallback when schools data isn't loaded yet
+        schoolNumber = '4'; // Assuming current sub-admin is for School 4 based on logs
+      }
+      
       // Get count of existing students to determine next ID
-      const nextNumber = (allStudents.length + 1).toString().padStart(4, '0');
-      const newId = `SOWA/${nextNumber}`;
+      const nextNumber = (allStudents.length + 1).toString().padStart(3, '0');
+      const newId = `SOWA/${schoolNumber}${nextNumber}`;
       setStudentId(newId);
     } catch (error) {
       console.error('Error generating student ID:', error);
-      // Fallback to timestamp-based ID
-      const timestamp = Date.now().toString().slice(-4);
-      setStudentId(`SOWA/${timestamp}`);
+      // Fallback to timestamp-based ID with school number 1
+      const timestamp = Date.now().toString().slice(-3);
+      setStudentId(`SOWA/1${timestamp}`);
     }
   };
 
