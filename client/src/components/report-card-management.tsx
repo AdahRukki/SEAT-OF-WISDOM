@@ -232,8 +232,6 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
   const handleViewReportCard = async (report: GeneratedReportCard) => {
     try {
-      console.log("Loading report for:", report);
-      
       // Fetch the student data first
       const allStudents = await apiRequest("/api/admin/students");
       const student = allStudents.find((s: any) => s.id === report.studentId);
@@ -242,25 +240,24 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         throw new Error("Student not found");
       }
 
-      console.log("Found student:", student);
 
-      // Fetch other data
-      const [subjects, allAssessments, attendance] = await Promise.all([
-        apiRequest(`/api/admin/classes/${report.classId}/subjects`),
-        apiRequest("/api/admin/assessments"),
+      // Fetch subjects first
+      const subjects = await apiRequest(`/api/admin/classes/${report.classId}/subjects`);
+      
+      // Fetch assessments for each subject for this student
+      const assessmentPromises = subjects.map((subject: any) => 
+        apiRequest(`/api/admin/assessments?classId=${report.classId}&subjectId=${subject.id}&term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`)
+      );
+      
+      const [assessmentArrays, attendance] = await Promise.all([
+        Promise.all(assessmentPromises),
         apiRequest(`/api/admin/attendance/class/${report.classId}?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`)
       ]);
 
-      console.log("Fetched data:", { subjects, allAssessments, attendance });
+      // Flatten assessments and filter for this student
+      const allAssessments = assessmentArrays.flat();
+      const assessments = allAssessments.filter((a: any) => a.studentId === report.studentId);
 
-      // Filter assessments for this student, term, and session
-      const assessments = allAssessments.filter((a: any) => 
-        a.studentId === report.studentId && 
-        a.term === report.term && 
-        a.session === report.session
-      );
-
-      console.log("Filtered assessments:", assessments);
 
       // Calculate totals
       const totalMarks = subjects.reduce((sum: number, subject: any) => {
