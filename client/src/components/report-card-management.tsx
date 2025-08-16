@@ -97,9 +97,20 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       });
     },
     onSuccess: (result, variables) => {
+      console.log("Validation result from server:", result);
+      
+      // Map server response to frontend ValidationResult format
+      const validationResult: ValidationResult = {
+        hasAllScores: result.status === "complete" || (result.status === "partial" && (!result.missingSubjects || result.missingSubjects.length === 0)),
+        hasAttendance: result.hasAttendance,
+        missingSubjects: result.missingSubjects || []
+      };
+      
+      console.log("Mapped validation result:", validationResult);
+      
       setValidationResults(prev => ({
         ...prev,
-        [variables.studentId]: result
+        [variables.studentId]: validationResult
       }));
     },
     onError: (error) => {
@@ -357,16 +368,28 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                     <div className="flex items-center gap-2">
                       {validation && (
                         <div className="text-sm text-muted-foreground">
-                          {!validation.hasAllScores && (
+                          {!validation.hasAllScores && validation.missingSubjects.length > 0 && (
                             <p className="flex items-center gap-1 text-red-600">
                               <AlertTriangle className="w-4 h-4" />
                               Missing subjects: {validation.missingSubjects.join(", ")}
+                            </p>
+                          )}
+                          {!validation.hasAllScores && validation.missingSubjects.length === 0 && (
+                            <p className="flex items-center gap-1 text-red-600">
+                              <AlertTriangle className="w-4 h-4" />
+                              Missing assessment scores
                             </p>
                           )}
                           {!validation.hasAttendance && (
                             <p className="flex items-center gap-1 text-red-600">
                               <AlertTriangle className="w-4 h-4" />
                               No attendance data
+                            </p>
+                          )}
+                          {validation.hasAllScores && validation.hasAttendance && (
+                            <p className="flex items-center gap-1 text-green-600">
+                              <CheckCircle className="w-4 h-4" />
+                              All data complete
                             </p>
                           )}
                         </div>
