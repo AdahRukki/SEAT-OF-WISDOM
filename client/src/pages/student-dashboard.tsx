@@ -99,7 +99,7 @@ export default function StudentDashboard() {
   const overallGrade = calculateGrade(overallAverage);
 
   // Helper function to calculate age from date of birth
-  const calculateAge = (dateOfBirth: string | null) => {
+  const calculateAge = (dateOfBirth: string | Date | null) => {
     if (!dateOfBirth) return 'N/A';
     const birthDate = new Date(dateOfBirth);
     const today = new Date();
@@ -830,8 +830,7 @@ export default function StudentDashboard() {
                 <CardDescription>View and print your academic performance reports</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="report-card">
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {/* School Header for Print */}
                   <div className="hidden print-only">
                     <div className="text-center mb-6">
