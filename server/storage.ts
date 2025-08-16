@@ -72,6 +72,7 @@ export interface IStorage {
   updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School>;
   createStudent(studentData: InsertStudent): Promise<Student>;
   updateStudent(studentId: string, updateData: Partial<InsertStudent>): Promise<Student>;
+  updateStudentProfileImage(studentId: string, profileImagePath: string): Promise<Student>;
   getStudent(studentId: string): Promise<Student | undefined>;
   createClass(classData: InsertClass): Promise<Class>;
   createSubject(subjectData: InsertSubject): Promise<Subject>;
@@ -283,6 +284,20 @@ export class DatabaseStorage implements IStorage {
     const [updatedStudent] = await db
       .update(students)
       .set(updateData)
+      .where(eq(students.id, studentId))
+      .returning();
+    
+    if (!updatedStudent) {
+      throw new Error('Student not found');
+    }
+    
+    return updatedStudent;
+  }
+
+  async updateStudentProfileImage(studentId: string, profileImagePath: string): Promise<Student> {
+    const [updatedStudent] = await db
+      .update(students)
+      .set({ profileImage: profileImagePath })
       .where(eq(students.id, studentId))
       .returning();
     

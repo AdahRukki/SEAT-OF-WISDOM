@@ -51,6 +51,7 @@ import {
   TooltipTrigger 
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
   Plus, 
   Save,
@@ -86,10 +87,12 @@ import {
   AlertCircle,
   Shield,
   Phone,
-  Loader2
+  Loader2,
+  Camera
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
+import { ObjectUploader } from "@/components/ObjectUploader";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
   Class, 
@@ -167,6 +170,10 @@ export default function AdminDashboard() {
     parentWhatsApp: "",
     address: ""
   });
+  
+  // Profile image upload states
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
+  const [profileImagePreview, setProfileImagePreview] = useState<string>("");
 
   // Logo upload states
   const [isLogoUploadDialogOpen, setIsLogoUploadDialogOpen] = useState(false);
@@ -4915,122 +4922,256 @@ export default function AdminDashboard() {
 
         {/* Edit Student Dialog */}
         <Dialog open={isEditStudentDialogOpen} onOpenChange={setIsEditStudentDialogOpen}>
-          <DialogContent className="w-[95vw] max-w-2xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
-            <DialogHeader>
-              <DialogTitle>Edit Student Details</DialogTitle>
-              <DialogDescription>
-                Modify student information and contact details
+          <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="text-center pb-4">
+              <DialogTitle className="text-2xl font-bold text-gray-800 dark:text-gray-200">Edit Student Profile</DialogTitle>
+              <DialogDescription className="text-gray-600 dark:text-gray-400">
+                Update student information and profile details
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="firstName">First Name</Label>
-                <Input
-                  id="firstName"
-                  value={studentEditForm.firstName}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, firstName: e.target.value}))}
-                  placeholder="Enter first name"
-                />
+            
+            <div className="space-y-8">
+              {/* Profile Image Section */}
+              <div className="flex flex-col items-center space-y-4 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-lg border">
+                <div className="relative">
+                  <Avatar className="w-32 h-32 border-4 border-white shadow-lg">
+                    <AvatarImage 
+                      src={profileImagePreview || studentEditForm.profileImage || editingStudent?.profileImage || ''} 
+                      alt={`${studentEditForm.firstName} ${studentEditForm.lastName}`}
+                    />
+                    <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-blue-400 to-purple-500 text-white">
+                      {studentEditForm.firstName?.charAt(0)}{studentEditForm.lastName?.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-2 -right-2">
+                    <ObjectUploader
+                      maxNumberOfFiles={1}
+                      maxFileSize={5242880}
+                      onGetUploadParameters={async () => {
+                        const response = await fetch('/api/objects/upload', {
+                          method: 'POST',
+                          headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                          }
+                        });
+                        const data = await response.json();
+                        return { method: 'PUT' as const, url: data.uploadURL };
+                      }}
+                      onComplete={async (result) => {
+                        if (result.successful?.[0]?.uploadURL && editingStudent) {
+                          setIsUploadingProfileImage(true);
+                          try {
+                            const response = await fetch(`/api/students/${editingStudent.id}/profile-image`, {
+                              method: 'PUT',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                              },
+                              body: JSON.stringify({ profileImageURL: result.successful[0].uploadURL })
+                            });
+                            
+                            if (response.ok) {
+                              const data = await response.json();
+                              setStudentEditForm(prev => ({ ...prev, profileImage: data.objectPath }));
+                              setProfileImagePreview(data.objectPath);
+                              toast({
+                                title: "Success",
+                                description: "Profile image updated successfully!"
+                              });
+                            } else {
+                              throw new Error('Failed to update profile image');
+                            }
+                          } catch (error) {
+                            toast({
+                              title: "Error",
+                              description: "Failed to update profile image",
+                              variant: "destructive"
+                            });
+                          } finally {
+                            setIsUploadingProfileImage(false);
+                          }
+                        }
+                      }}
+                      buttonClassName="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-2 shadow-lg transition-all duration-200 hover:scale-105"
+                    >
+                      {isUploadingProfileImage ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Camera className="h-4 w-4" />
+                      )}
+                    </ObjectUploader>
+                  </div>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Profile Photo</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Click the camera icon to upload a new photo</p>
+                </div>
               </div>
-              <div>
-                <Label htmlFor="lastName">Last Name</Label>
-                <Input
-                  id="lastName"
-                  value={studentEditForm.lastName}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, lastName: e.target.value}))}
-                  placeholder="Enter last name"
-                />
-              </div>
-              <div>
-                <Label htmlFor="middleName">Middle Name</Label>
-                <Input
-                  id="middleName"
-                  value={studentEditForm.middleName}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, middleName: e.target.value}))}
-                  placeholder="Enter middle name"
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={studentEditForm.email}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, email: e.target.value}))}
-                  placeholder="Enter email address"
-                />
-              </div>
-              <div>
-                <Label htmlFor="classId">Class</Label>
-                <Select value={studentEditForm.classId} onValueChange={(value) => setStudentEditForm(prev => ({...prev, classId: value}))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sortClassesByOrder(classes).map((classItem) => (
-                      <SelectItem key={classItem.id} value={classItem.id}>
-                        {classItem.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                <Input
-                  id="dateOfBirth"
-                  type="date"
-                  value={studentEditForm.dateOfBirth}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, dateOfBirth: e.target.value}))}
-                />
-              </div>
-              <div>
-                <Label htmlFor="gender">Gender</Label>
-                <Select value={studentEditForm.gender} onValueChange={(value) => setStudentEditForm(prev => ({...prev, gender: value}))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="parentContact">Parent Contact</Label>
-                <Input
-                  id="parentContact"
-                  value={studentEditForm.parentContact}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, parentContact: e.target.value}))}
-                  placeholder="Enter parent phone number"
-                />
-              </div>
-              <div>
-                <Label htmlFor="parentWhatsApp">Parent WhatsApp</Label>
-                <Input
-                  id="parentWhatsApp"
-                  value={studentEditForm.parentWhatsApp}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, parentWhatsApp: e.target.value}))}
-                  placeholder="Enter parent WhatsApp number"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={studentEditForm.address}
-                  onChange={(e) => setStudentEditForm(prev => ({...prev, address: e.target.value}))}
-                  placeholder="Enter home address"
-                />
-              </div>
+
+              {/* Personal Information */}
+              <Card className="border-l-4 border-l-blue-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <User className="h-5 w-5 text-blue-500" />
+                    Personal Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName" className="text-sm font-medium text-gray-700 dark:text-gray-300">First Name *</Label>
+                      <Input
+                        id="firstName"
+                        value={studentEditForm.firstName}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, firstName: e.target.value}))}
+                        placeholder="Enter first name"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName" className="text-sm font-medium text-gray-700 dark:text-gray-300">Last Name *</Label>
+                      <Input
+                        id="lastName"
+                        value={studentEditForm.lastName}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, lastName: e.target.value}))}
+                        placeholder="Enter last name"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="middleName" className="text-sm font-medium text-gray-700 dark:text-gray-300">Middle Name</Label>
+                      <Input
+                        id="middleName"
+                        value={studentEditForm.middleName}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, middleName: e.target.value}))}
+                        placeholder="Enter middle name"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={studentEditForm.email}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, email: e.target.value}))}
+                        placeholder="Enter email address"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth</Label>
+                      <Input
+                        id="dateOfBirth"
+                        type="date"
+                        value={studentEditForm.dateOfBirth}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, dateOfBirth: e.target.value}))}
+                        className="transition-all duration-200 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gender" className="text-sm font-medium text-gray-700 dark:text-gray-300">Gender</Label>
+                      <Select value={studentEditForm.gender} onValueChange={(value) => setStudentEditForm(prev => ({...prev, gender: value}))}>
+                        <SelectTrigger className="transition-all duration-200 focus:ring-2 focus:ring-blue-500">
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Male">Male</SelectItem>
+                          <SelectItem value="Female">Female</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Academic Information */}
+              <Card className="border-l-4 border-l-green-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <GraduationCap className="h-5 w-5 text-green-500" />
+                    Academic Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Label htmlFor="classId" className="text-sm font-medium text-gray-700 dark:text-gray-300">Class *</Label>
+                    <Select value={studentEditForm.classId} onValueChange={(value) => setStudentEditForm(prev => ({...prev, classId: value}))}>
+                      <SelectTrigger className="transition-all duration-200 focus:ring-2 focus:ring-green-500">
+                        <SelectValue placeholder="Select class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sortClassesByOrder(classes).map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Contact Information */}
+              <Card className="border-l-4 border-l-purple-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Phone className="h-5 w-5 text-purple-500" />
+                    Contact Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="parentContact" className="text-sm font-medium text-gray-700 dark:text-gray-300">Parent Contact</Label>
+                      <Input
+                        id="parentContact"
+                        value={studentEditForm.parentContact}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, parentContact: e.target.value}))}
+                        placeholder="Enter parent phone number"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="parentWhatsApp" className="text-sm font-medium text-gray-700 dark:text-gray-300">Parent WhatsApp</Label>
+                      <Input
+                        id="parentWhatsApp"
+                        value={studentEditForm.parentWhatsApp}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, parentWhatsApp: e.target.value}))}
+                        placeholder="Enter parent WhatsApp number"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <Label htmlFor="address" className="text-sm font-medium text-gray-700 dark:text-gray-300">Home Address</Label>
+                      <Textarea
+                        id="address"
+                        value={studentEditForm.address}
+                        onChange={(e) => setStudentEditForm(prev => ({...prev, address: e.target.value}))}
+                        placeholder="Enter complete home address"
+                        className="transition-all duration-200 focus:ring-2 focus:ring-purple-500 min-h-[80px]"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
             
-            <div className="flex flex-col sm:flex-row justify-between gap-2 pt-4">
-              <Button variant="outline" onClick={() => setIsEditStudentDialogOpen(false)} className="order-2 sm:order-1">
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row justify-between gap-3 pt-6 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsEditStudentDialogOpen(false);
+                  setProfileImagePreview("");
+                }}
+                className="transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => {
                   if (editingStudent) {
                     updateStudentMutation.mutate({
@@ -5040,9 +5181,19 @@ export default function AdminDashboard() {
                   }
                 }}
                 disabled={updateStudentMutation.isPending || !editingStudent}
-                className="order-1 sm:order-2"
+                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white transition-all duration-200 transform hover:scale-105"
               >
-                {updateStudentMutation.isPending ? "Updating..." : "Update Student"}
+                {updateStudentMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Update Student
+                  </>
+                )}
               </Button>
             </div>
           </DialogContent>

@@ -5,6 +5,11 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import path from "path";
 import express from "express";
+import {
+  ObjectStorageService,
+  ObjectNotFoundError,
+} from "./objectStorage";
+import { ObjectPermission } from "./objectAcl";
 import { 
   loginSchema, 
   insertUserSchema, 
@@ -100,6 +105,93 @@ const requireMainAdmin = (req: Request, res: Response, next: NextFunction) => {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Serve static assets first (before other routes)
   app.use('/assets', express.static(path.join(process.cwd(), 'client/src/assets')));
+
+  // Object storage routes
+  // Endpoint for serving public assets
+  app.get("/public-objects/:filePath(*)", async (req, res) => {
+    const filePath = req.params.filePath;
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const file = await objectStorageService.searchPublicObject(filePath);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      objectStorageService.downloadObject(file, res);
+    } catch (error) {
+      console.error("Error searching for public object:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Endpoint for serving private objects with ACL check
+  app.get("/objects/:objectPath(*)", authenticate, async (req, res) => {
+    const userId = (req as any).user.id;
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(
+        req.path,
+      );
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId: userId,
+        requestedPermission: ObjectPermission.READ,
+      });
+      if (!canAccess) {
+        return res.sendStatus(401);
+      }
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error checking object access:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
+
+  // Endpoint for getting upload URL for object entities
+  app.post("/api/objects/upload", authenticate, async (req, res) => {
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ error: "Failed to get upload URL" });
+    }
+  });
+
+  // Endpoint for updating profile image after upload
+  app.put("/api/students/:studentId/profile-image", authenticate, requireAdmin, async (req, res) => {
+    if (!req.body.profileImageURL) {
+      return res.status(400).json({ error: "profileImageURL is required" });
+    }
+
+    const userId = (req as any).user.id;
+    const studentId = req.params.studentId;
+
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        req.body.profileImageURL,
+        {
+          owner: userId,
+          visibility: "public", // Profile images should be publicly accessible
+        },
+      );
+
+      // Update student profile image in database
+      const updatedStudent = await storage.updateStudentProfileImage(studentId, objectPath);
+      
+      res.status(200).json({
+        objectPath: objectPath,
+        student: updatedStudent
+      });
+    } catch (error) {
+      console.error("Error setting profile image:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 
   // Authentication routes
   app.post('/api/auth/login', async (req, res) => {
