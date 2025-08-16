@@ -157,8 +157,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get student and assessment data
       const student = await storage.getStudent(report.studentId);
-      const assessments = await storage.getAssessmentsByStudent(report.studentId, report.term, report.session);
-      const attendance = await storage.getAttendanceByStudent(report.studentId, report.classId, report.term, report.session);
+      const assessments = await storage.getStudentAssessments(report.studentId, report.term, report.session);
+      const attendance = await storage.getAttendanceByStudent(report.studentId, report.term, report.session);
       
       if (!student) {
         return res.status(404).send(`
