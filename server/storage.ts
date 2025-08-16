@@ -331,13 +331,14 @@ export class DatabaseStorage implements IStorage {
         firstName: users.firstName,
         lastName: users.lastName,
         email: users.email,
-        phone: students.phone,
-        parentPhone: students.parentPhone,
+        parentContact: students.parentContact,
+        parentWhatsapp: students.parentWhatsapp,
         address: students.address,
         dateOfBirth: students.dateOfBirth,
         gender: students.gender,
         age: students.age,
         profileImage: students.profileImage,
+        status: students.status,
         userId: students.userId,
         classId: students.classId,
         createdAt: students.createdAt,
@@ -348,6 +349,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(students.id, studentId))
       .limit(1);
     
+    console.log(`[DEBUG] getStudent result for ${studentId}:`, JSON.stringify(result, null, 2));
     return result;
   }
 
