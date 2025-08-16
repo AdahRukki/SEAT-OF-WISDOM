@@ -160,6 +160,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const assessments = await storage.getStudentAssessments(report.studentId, report.term, report.session);
       const attendance = await storage.getAttendanceByStudent(report.studentId, report.term, report.session);
       
+      // Debug logging to see what we're getting
+      console.log(`[REPORT DEBUG] Student data:`, JSON.stringify(student, null, 2));
+      console.log(`[REPORT DEBUG] Report studentId: ${report.studentId}`);
+      
       if (!student) {
         return res.status(404).send(`
           <html>
@@ -183,6 +187,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Ensure student names are available (fallback to 'Unknown Student' if missing)
       const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Unknown Student';
+      console.log(`[REPORT] Student firstName: ${student.firstName}, lastName: ${student.lastName}`);
+      console.log(`[REPORT] Final studentName: ${studentName}`);
       console.log(`[REPORT] Serving report: ${studentName} - ${report.term} ${report.session}`);
       
       // Generate report card using exact student dashboard template structure
