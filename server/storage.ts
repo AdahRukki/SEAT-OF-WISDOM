@@ -87,7 +87,8 @@ export interface IStorage {
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
   getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
   getClassSubjects(classId: string): Promise<Subject[]>;
-  getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
+  getClassAssessments(classId: string, term: string, session: string): Promise<Assessment[]>;
+  getClassAssessmentsWithStudents(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
   
   // Assessment operations
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
@@ -713,7 +714,23 @@ export class DatabaseStorage implements IStorage {
     return subjectsData.map(({ subjects: subject }) => subject);
   }
 
-  async getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
+  // Get all assessments for a class (for calculating class average)
+  async getClassAssessments(classId: string, term: string, session: string): Promise<Assessment[]> {
+    const results = await db
+      .select()
+      .from(assessments)
+      .where(
+        and(
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+    return results;
+  }
+
+  // Get class assessments with student details (existing method with updated signature)
+  async getClassAssessmentsWithStudents(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
     const assessmentsData = await db
       .select()
       .from(assessments)

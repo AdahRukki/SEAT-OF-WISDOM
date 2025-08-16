@@ -92,6 +92,7 @@ export function ReportCardManagement({ classes, user, selectedSchoolId }: Report
   const [showResumptionDialog, setShowResumptionDialog] = useState(false);
   const [selectedStudentForReport, setSelectedStudentForReport] = useState<any>(null);
   const [nextTermResumptionDate, setNextTermResumptionDate] = useState("");
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -294,6 +295,63 @@ export function ReportCardManagement({ classes, user, selectedSchoolId }: Report
     setShowResumptionDialog(true);
   };
 
+  const handleGenerateAllReports = async () => {
+    if (!nextTermResumptionDate) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter the next term resumption date first.",
+        variant: "destructive",
+      });
+      setShowResumptionDialog(true);
+      return;
+    }
+
+    const studentsToGenerate = students.filter(student => canGenerateReport(student.id));
+    if (studentsToGenerate.length === 0) {
+      toast({
+        title: "No Reports to Generate",
+        description: "No students have complete data for report generation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingAll(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (const student of studentsToGenerate) {
+        try {
+          await createReportMutation.mutateAsync({
+            studentId: student.id,
+            classId: selectedClass,
+            term: selectedTerm,
+            session: selectedSession,
+            studentName: `${student.firstName || student.users?.firstName || 'Unknown'} ${student.lastName || student.users?.lastName || 'Student'}`,
+            className: classes.find(c => c.id === selectedClass)?.name || "",
+            totalScore: "0",
+            averageScore: "0",
+            attendancePercentage: "0",
+            nextTermResumptionDate: new Date(nextTermResumptionDate).toISOString(),
+          });
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          console.error(`Failed to generate report for ${student.firstName} ${student.lastName}:`, error);
+        }
+      }
+
+      toast({
+        title: "Bulk Generation Complete",
+        description: `Successfully generated ${successCount} reports. ${errorCount > 0 ? `${errorCount} failed.` : ''}`,
+        variant: successCount > 0 ? "default" : "destructive",
+      });
+    } finally {
+      setIsGeneratingAll(false);
+    }
+  };
+
   const handleConfirmGeneration = () => {
     if (!selectedStudentForReport || !nextTermResumptionDate) {
       toast({
@@ -310,7 +368,7 @@ export function ReportCardManagement({ classes, user, selectedSchoolId }: Report
       classId: selectedClass,
       term: selectedTerm,
       session: selectedSession,
-      studentName: `${selectedStudentForReport.firstName} ${selectedStudentForReport.lastName}`,
+      studentName: `${selectedStudentForReport.firstName || selectedStudentForReport.users?.firstName || 'Unknown'} ${selectedStudentForReport.lastName || selectedStudentForReport.users?.lastName || 'Student'}`,
       className: classes.find(c => c.id === selectedClass)?.name || "",
       totalScore: "0", // This would be calculated from actual scores
       averageScore: "0", // This would be calculated from actual scores
@@ -390,6 +448,14 @@ export function ReportCardManagement({ classes, user, selectedSchoolId }: Report
               <CheckCircle className="w-4 h-4" />
               {isValidating ? "Validating..." : "Validate All Students"}
             </Button>
+            <Button 
+              onClick={handleGenerateAllReports}
+              disabled={!selectedClass || !selectedTerm || !selectedSession || Object.keys(validationResults).length === 0 || isGeneratingAll}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+            >
+              <Download className="w-4 h-4" />
+              {isGeneratingAll ? "Generating..." : "Generate All Complete Reports"}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -413,7 +479,7 @@ export function ReportCardManagement({ classes, user, selectedSchoolId }: Report
                   <div key={student.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-4">
                       <div>
-                        <p className="font-medium">{student.firstName} {student.lastName}</p>
+                        <p className="font-medium">{student.firstName || student.users?.firstName || 'Unknown'} {student.lastName || student.users?.lastName || 'Student'}</p>
                         <p className="text-sm text-muted-foreground">{student.studentId}</p>
                       </div>
                       {status && (

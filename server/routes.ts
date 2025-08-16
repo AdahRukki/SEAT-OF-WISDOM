@@ -122,13 +122,33 @@ function formatDateWithOrdinal(date: Date): string {
   return `${day}${getOrdinalSuffix(day)} of ${month} ${year}`;
 }
 
-// Helper function to calculate grade from score
-function calculateGrade(score: number): { grade: string; color: string } {
-  if (score >= 90) return { grade: 'A', color: 'bg-green-500' };
-  if (score >= 80) return { grade: 'B', color: 'bg-blue-500' };
-  if (score >= 70) return { grade: 'C', color: 'bg-yellow-500' };
-  if (score >= 60) return { grade: 'D', color: 'bg-orange-500' };
-  return { grade: 'F', color: 'bg-red-500' };
+// Helper function to calculate grade from score (updated grade parameters)
+function calculateGrade(score: number): { grade: string; color: string; remark: string } {
+  if (score >= 80) return { grade: 'A', color: '#16a34a', remark: 'Excellent' };
+  if (score >= 70) return { grade: 'B', color: '#2563eb', remark: 'Very Good' };
+  if (score >= 60) return { grade: 'C', color: '#eab308', remark: 'Good' };
+  if (score >= 50) return { grade: 'D', color: '#f97316', remark: 'Fair' };
+  if (score >= 40) return { grade: 'E', color: '#dc2626', remark: 'Pass' };
+  return { grade: 'F', color: '#dc2626', remark: 'Fail' };
+}
+
+// Helper function to get attendance remark
+function getAttendanceRemark(percentage: number): string {
+  if (percentage >= 95) return 'Excellent';
+  if (percentage >= 85) return 'Very Good';
+  if (percentage >= 75) return 'Good';
+  if (percentage >= 65) return 'Fair';
+  return 'Poor';
+}
+
+// Helper function to get overall remark
+function getOverallRemark(average: number): string {
+  if (average >= 80) return 'An excellent performance. Keep it up!';
+  if (average >= 70) return 'A very good performance. Well done!';
+  if (average >= 60) return 'A good performance. You can do better!';
+  if (average >= 50) return 'A fair performance. More effort needed!';
+  if (average >= 40) return 'Below average. Significant improvement required!';
+  return 'Poor performance. Intensive remedial work needed!';
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -177,19 +197,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `);
       }
 
-      // Calculate overall average
+      // Calculate overall average and class average
       const totalScore = assessments.reduce((sum: number, assessment: any) => sum + Number(assessment.total || 0), 0);
       const overallAverage = assessments.length > 0 ? Math.round(totalScore / assessments.length) : 0;
       const overallGrade = calculateGrade(overallAverage);
       
+      // Get class average (fetch all assessments for this class, term, session)
+      const classAssessments = await storage.getClassAssessments(student.classId, report.term, report.session);
+      const classTotal = classAssessments.reduce((sum: number, assessment: any) => sum + Number(assessment.total || 0), 0);
+      const classAverage = classAssessments.length > 0 ? Math.round(classTotal / classAssessments.length) : 0;
+      
       // Calculate attendance percentage
       const attendancePercentage = attendance ? Math.round((attendance.presentDays / attendance.totalDays) * 100) : 0;
+      const attendanceRemark = getAttendanceRemark(attendancePercentage);
+      const overallRemark = getOverallRemark(overallAverage);
 
       // Ensure student names are available (fallback to 'Unknown Student' if missing)
       const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim() || 'Unknown Student';
       console.log(`[REPORT] Student firstName: ${student.firstName}, lastName: ${student.lastName}`);
       console.log(`[REPORT] Final studentName: ${studentName}`);
       console.log(`[REPORT] Serving report: ${studentName} - ${report.term} ${report.session}`);
+      
+      // Get student's class information
+      const studentClass = await storage.getClass(student.classId);
+      const className = studentClass?.name || 'Unknown Class';
       
       // Generate report card using exact student dashboard template structure
       res.send(`
@@ -200,110 +231,332 @@ export async function registerRoutes(app: Express): Promise<Server> {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
               * { box-sizing: border-box; margin: 0; padding: 0; }
-              body { font-family: Arial, sans-serif; line-height: 1.6; background: white; color: #333; padding: 20px; }
-              .report-card { max-width: 800px; margin: 0 auto; background: white; }
+              @page {
+                size: A4;
+                margin: 0.5in;
+              }
+              body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                line-height: 1.4; 
+                background: white; 
+                color: #1a1a1a; 
+                font-size: 11px;
+              }
+              .report-card { 
+                max-width: 100%; 
+                margin: 0 auto; 
+                background: white;
+                position: relative;
+              }
               
-              /* School Header */
-              .school-header { text-align: center; margin-bottom: 30px; }
-              .school-header img { height: 64px; width: 64px; object-fit: contain; border-radius: 6px; background: white; padding: 8px; margin-bottom: 16px; }
-              .school-header h1 { font-size: 24px; font-weight: bold; margin-bottom: 4px; }
-              .school-header p { font-size: 18px; font-weight: 600; }
-              .session-info { border-top: 1px solid #d1d5db; border-bottom: 1px solid #d1d5db; padding: 8px 0; margin: 16px 0; }
-              .session-info p { font-size: 18px; font-weight: 600; margin: 4px 0; }
+              /* Modern Header */
+              .school-header { 
+                text-align: center; 
+                margin-bottom: 15px;
+                padding: 15px;
+                background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+                color: white;
+                border-radius: 8px;
+              }
+              .school-header img { 
+                height: 50px; 
+                width: 50px; 
+                object-fit: contain; 
+                border-radius: 50%; 
+                background: white; 
+                padding: 4px; 
+                margin-bottom: 8px;
+                border: 2px solid white;
+              }
+              .school-header h1 { 
+                font-size: 18px; 
+                font-weight: bold; 
+                margin-bottom: 2px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+              }
+              .school-header .address { 
+                font-size: 11px; 
+                opacity: 0.9;
+                font-weight: 300;
+              }
+              .report-title {
+                text-align: center;
+                background: #f8fafc;
+                padding: 8px;
+                margin: 10px 0;
+                border-radius: 5px;
+                border-left: 4px solid #3b82f6;
+              }
+              .report-title h2 {
+                font-size: 14px;
+                color: #1e40af;
+                font-weight: 600;
+              }
               
-              /* Student Info */
-              .student-info { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; background: #f9fafb; border-radius: 8px; margin-bottom: 24px; }
-              .info-item p:first-child { font-size: 14px; color: #6b7280; margin-bottom: 4px; }
-              .info-item p:last-child { font-weight: 600; }
+              /* Student Info Grid */
+              .student-info { 
+                display: grid; 
+                grid-template-columns: 1fr 1fr 1fr; 
+                gap: 10px; 
+                margin-bottom: 15px;
+                background: #f8fafc;
+                padding: 12px;
+                border-radius: 6px;
+              }
+              .info-item { 
+                display: flex; 
+                flex-direction: column;
+                padding: 4px 0;
+              }
+              .info-label { 
+                font-weight: 600; 
+                font-size: 9px;
+                color: #64748b;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .info-value {
+                font-weight: 500;
+                font-size: 11px;
+                color: #1e293b;
+                margin-top: 2px;
+              }
               
-              /* Grades Table */
-              .grades-table { width: 100%; border-collapse: collapse; border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden; margin-bottom: 24px; }
-              .grades-table thead { background: #f9fafb; }
-              .grades-table th { padding: 12px 16px; text-align: left; font-size: 14px; font-weight: 500; color: #111827; border-bottom: 1px solid #d1d5db; }
-              .grades-table th.text-center { text-align: center; }
-              .grades-table tbody tr { border-bottom: 1px solid #e5e7eb; }
-              .grades-table td { padding: 12px 16px; font-size: 14px; color: #111827; }
-              .grades-table td.text-center { text-align: center; }
-              .grades-table td.font-semibold { font-weight: 600; }
-              .grade-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; color: white; }
-              .grade-badge.bg-green-500 { background-color: #10b981; }
-              .grade-badge.bg-blue-500 { background-color: #3b82f6; }
-              .grade-badge.bg-yellow-500 { background-color: #f59e0b; }
-              .grade-badge.bg-orange-500 { background-color: #f97316; }
-              .grade-badge.bg-red-500 { background-color: #ef4444; }
+              /* Summary Cards */
+              .summary { 
+                display: grid; 
+                grid-template-columns: repeat(4, 1fr); 
+                gap: 8px; 
+                margin-bottom: 15px;
+              }
+              .summary-card { 
+                background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+                border: 1px solid #cbd5e1;
+                border-radius: 6px; 
+                padding: 8px;
+                text-align: center;
+              }
+              .summary-title { 
+                font-weight: 600; 
+                font-size: 8px;
+                color: #475569;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 4px;
+              }
+              .summary-value { 
+                font-size: 16px; 
+                font-weight: bold; 
+                color: #1e293b;
+              }
+              .summary-subtitle {
+                font-size: 8px;
+                color: #64748b;
+                margin-top: 2px;
+              }
               
-              /* Summary */
-              .summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 16px; background: #dbeafe; border-radius: 8px; margin-bottom: 24px; }
-              .summary-item { text-align: center; }
-              .summary-item p:first-child { font-size: 14px; color: #4b5563; margin-bottom: 4px; }
-              .summary-item p:last-child { font-size: 24px; font-weight: bold; color: #2563eb; }
-              .summary-badge { display: inline-block; padding: 8px 16px; border-radius: 6px; font-size: 18px; font-weight: 600; color: white; }
+              /* Modern Grades Table */
+              .grades-section {
+                margin-bottom: 15px;
+              }
+              .section-title {
+                font-size: 12px;
+                font-weight: 600;
+                color: #1e40af;
+                margin-bottom: 8px;
+                padding-bottom: 4px;
+                border-bottom: 2px solid #e2e8f0;
+              }
+              .grades-table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                border-radius: 6px;
+                overflow: hidden;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+              }
+              .grades-table th { 
+                background: linear-gradient(135deg, #334155 0%, #475569 100%);
+                color: white;
+                padding: 8px 6px;
+                font-weight: 600;
+                text-align: center;
+                font-size: 9px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .grades-table td { 
+                border: 1px solid #e2e8f0;
+                padding: 6px;
+                text-align: center;
+                font-size: 10px;
+              }
+              .grades-table td:first-child { 
+                text-align: left; 
+                font-weight: 500;
+                background: #f8fafc;
+                color: #1e293b;
+              }
+              .grades-table tr:nth-child(even) {
+                background-color: #f8fafc;
+              }
               
-              /* Next Term */
-              .next-term { text-align: center; padding: 20px; margin-top: 20px; }
+              /* Grade Badges */
+              .grade-badge { 
+                padding: 2px 6px; 
+                border-radius: 12px; 
+                color: white; 
+                font-weight: 600;
+                font-size: 9px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
               
-              /* Print Buttons */
-              .no-print { margin: 20px 0; text-align: center; }
-              .no-print button { padding: 12px 24px; margin: 0 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
-              .print-btn { background: #2563eb; color: white; }
-              .close-btn { background: #6b7280; color: white; }
-              .no-print button:hover { opacity: 0.9; }
+              /* Attendance Section */
+              .attendance-section {
+                background: #f0f9ff;
+                border: 1px solid #0ea5e9;
+                border-radius: 6px;
+                padding: 10px;
+                margin-bottom: 15px;
+              }
               
+              /* Remarks Section */
+              .remarks-section {
+                background: #fefce8;
+                border: 1px solid #eab308;
+                border-radius: 6px;
+                padding: 10px;
+                margin-bottom: 15px;
+              }
+              .remarks-title {
+                font-weight: 600;
+                color: #92400e;
+                font-size: 11px;
+                margin-bottom: 4px;
+              }
+              .remarks-text {
+                color: #a16207;
+                font-size: 10px;
+                line-height: 1.4;
+              }
+              
+              /* Principal Signature */
+              .signature-section {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 20px;
+                margin-top: 20px;
+                padding-top: 15px;
+                border-top: 1px solid #e2e8f0;
+              }
+              .signature-box {
+                text-align: center;
+              }
+              .signature-line {
+                border-top: 1px solid #334155;
+                margin: 25px 0 5px 0;
+              }
+              .signature-label {
+                font-size: 8px;
+                color: #64748b;
+                text-transform: uppercase;
+                font-weight: 500;
+              }
+              
+              /* Print Optimizations */
               @media print {
-                body { margin: 0; padding: 10px; }
+                body { 
+                  padding: 0;
+                  font-size: 10px;
+                }
+                .report-card { 
+                  max-width: none;
+                  page-break-inside: avoid;
+                }
                 .no-print { display: none !important; }
-                .report-card { max-width: none; }
               }
             </style>
           </head>
           <body>
             <div class="report-card">
-              <!-- School Header -->
+              <!-- Modern School Header -->
               <div class="school-header">
-                <div style="display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 16px;">
-                  <img src="/assets/academy-logo.png" alt="Seat of Wisdom Academy Logo" />
-                  <div>
-                    <h1>SEAT OF WISDOM ACADEMY</h1>
-                    <p>STUDENT REPORT CARD</p>
-                  </div>
-                </div>
-                <div class="session-info">
-                  <p>Academic Session: ${report.session}</p>
-                  <p>Term: ${report.term}</p>
-                </div>
+                <img src="/assets/academy-logo.png" alt="Seat of Wisdom Academy Logo">
+                <h1>SEAT OF WISDOM ACADEMY</h1>
+                <p class="address">Asaba, Delta State</p>
               </div>
 
-              <!-- Student Info -->
+              <!-- Report Title -->
+              <div class="report-title">
+                <h2>ACADEMIC REPORT CARD - ${report.term} ${report.session}</h2>
+              </div>
+
+              <!-- Student Information Grid -->
               <div class="student-info">
                 <div class="info-item">
-                  <p>Student Name</p>
-                  <p>${studentName}</p>
+                  <span class="info-label">Student Name</span>
+                  <span class="info-value">${studentName}</span>
                 </div>
                 <div class="info-item">
-                  <p>Student ID</p>
-                  <p>${student.studentId || 'N/A'}</p>
+                  <span class="info-label">Student ID</span>
+                  <span class="info-value">${student.studentId}</span>
                 </div>
                 <div class="info-item">
-                  <p>Class</p>
-                  <p>${report.className || 'N/A'}</p>
+                  <span class="info-label">Class</span>
+                  <span class="info-value">${className}</span>
                 </div>
                 <div class="info-item">
-                  <p>Term</p>
-                  <p>${report.term}, ${report.session}</p>
+                  <span class="info-label">Term</span>
+                  <span class="info-value">${report.term}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Session</span>
+                  <span class="info-value">${report.session}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Report Date</span>
+                  <span class="info-value">${formatDateWithOrdinal(new Date())}</span>
                 </div>
               </div>
 
-              <!-- Grades Table -->
-              <div style="border: 1px solid #d1d5db; border-radius: 8px; overflow: hidden;">
+              <!-- Performance Summary Cards -->
+              <div class="summary">
+                <div class="summary-card">
+                  <div class="summary-title">Student Average</div>
+                  <div class="summary-value">${overallAverage}%</div>
+                  <div class="summary-subtitle">Grade ${overallGrade.grade}</div>
+                </div>
+                <div class="summary-card">
+                  <div class="summary-title">Class Average</div>
+                  <div class="summary-value">${classAverage}%</div>
+                  <div class="summary-subtitle">Overall Class</div>
+                </div>
+                <div class="summary-card">
+                  <div class="summary-title">Attendance</div>
+                  <div class="summary-value">${attendancePercentage}%</div>
+                  <div class="summary-subtitle">${attendanceRemark}</div>
+                </div>
+                <div class="summary-card">
+                  <div class="summary-title">Total Subjects</div>
+                  <div class="summary-value">${assessments.length}</div>
+                  <div class="summary-subtitle">Subjects Offered</div>
+                </div>
+              </div>
+
+              <!-- Academic Performance Table -->
+              <div class="grades-section">
+                <h3 class="section-title">📚 ACADEMIC PERFORMANCE</h3>
                 <table class="grades-table">
                   <thead>
                     <tr>
                       <th>Subject</th>
-                      <th class="text-center">1st CA</th>
-                      <th class="text-center">2nd CA</th>
-                      <th class="text-center">Exam</th>
-                      <th class="text-center">Total</th>
-                      <th class="text-center">Grade</th>
+                      <th>1st CA<br>(20)</th>
+                      <th>2nd CA<br>(20)</th>
+                      <th>Exam<br>(60)</th>
+                      <th>Total<br>(100)</th>
+                      <th>Grade</th>
+                      <th>Remark</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -313,13 +566,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       return `
                         <tr>
                           <td style="font-weight: 500;">${assessment.subject?.name || 'Unknown Subject'}</td>
-                          <td class="text-center">${assessment.firstCA || '0'}</td>
-                          <td class="text-center">${assessment.secondCA || '0'}</td>
-                          <td class="text-center">${assessment.exam || '0'}</td>
-                          <td class="text-center font-semibold">${total}</td>
-                          <td class="text-center">
-                            <span class="grade-badge ${grade.color}">${grade.grade}</span>
+                          <td>${assessment.firstCA || '0'}</td>
+                          <td>${assessment.secondCA || '0'}</td>
+                          <td>${assessment.exam || '0'}</td>
+                          <td style="font-weight: 600;">${total}</td>
+                          <td>
+                            <span class="grade-badge" style="background-color: ${grade.color}">${grade.grade}</span>
                           </td>
+                          <td style="font-size: 9px; color: #64748b;">${grade.remark}</td>
                         </tr>
                       `;
                     }).join('')}
@@ -327,31 +581,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 </table>
               </div>
 
-              <!-- Summary -->
-              <div class="summary">
-                <div class="summary-item">
-                  <p>Overall Average</p>
-                  <p>${overallAverage}%</p>
-                </div>
-                <div class="summary-item">
-                  <p>Overall Grade</p>
-                  <span class="summary-badge ${overallGrade.color}">${overallGrade.grade}</span>
-                </div>
-                <div class="summary-item">
-                  <p>Total Subjects</p>
-                  <p>${assessments.length}</p>
+              <!-- Attendance Section -->
+              <div class="attendance-section">
+                <h3 class="section-title" style="color: #0ea5e9; margin-bottom: 8px;">📅 ATTENDANCE RECORD</h3>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center;">
+                  <div>
+                    <div style="font-size: 8px; color: #64748b; text-transform: uppercase;">Total Days</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #1e293b;">${attendance?.totalDays || 0}</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 8px; color: #64748b; text-transform: uppercase;">Present Days</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #16a34a;">${attendance?.presentDays || 0}</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 8px; color: #64748b; text-transform: uppercase;">Absent Days</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #dc2626;">${attendance?.absentDays || 0}</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 8px; color: #64748b; text-transform: uppercase;">Percentage</div>
+                    <div style="font-size: 14px; font-weight: 600; color: #0ea5e9;">${attendancePercentage}%</div>
+                  </div>
                 </div>
               </div>
 
-              ${report.nextTermResumptionDate ? `
-                <div class="next-term">
-                  <p style="font-size: 16px; color: #374151;"><strong>Next Term Resumes:</strong> ${formatDateWithOrdinal(new Date(report.nextTermResumptionDate))}</p>
+              <!-- Teacher's Remarks -->
+              <div class="remarks-section">
+                <h3 class="remarks-title">📝 TEACHER'S REMARKS</h3>
+                <p class="remarks-text">${overallRemark}</p>
+              </div>
+
+              <!-- Signatures Section -->
+              <div class="signature-section">
+                <div class="signature-box">
+                  <div class="signature-line"></div>
+                  <div class="signature-label">Class Teacher</div>
                 </div>
-              ` : ''}
-              
-              <div class="no-print">
-                <button class="print-btn" onclick="window.print()">Print Report Card</button>
-                <button class="close-btn" onclick="window.close()">Close Window</button>
+                <div class="signature-box">
+                  <div class="signature-line"></div>
+                  <div class="signature-label">Principal</div>
+                </div>
+                <div class="signature-box">
+                  <div class="signature-line"></div>
+                  <div class="signature-label">Parent/Guardian</div>
+                </div>
+              </div>
+
+              <!-- Footer -->
+              <div style="text-align: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 8px;">
+                <p>📍 Excellence in Education | Next Term Resumes: ${report.nextTermResumptionDate ? formatDateWithOrdinal(new Date(report.nextTermResumptionDate)) : 'TBA'}</p>
+                <p style="margin-top: 4px;">© ${new Date().getFullYear()} Seat of Wisdom Academy, Asaba, Delta State</p>
               </div>
             </div>
           </body>
