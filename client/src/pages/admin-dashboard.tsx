@@ -282,7 +282,8 @@ export default function AdminDashboard() {
   // Class-based student viewing
   const [selectedClassForStudents, setSelectedClassForStudents] = useState("");
   
-  // Student creation form with single-word validation
+  // Multi-step student creation form
+  const [currentStep, setCurrentStep] = useState(1);
   const [studentCreationForm, setStudentCreationForm] = useState({
     firstName: "",
     lastName: "",
@@ -338,11 +339,62 @@ export default function AdminDashboard() {
     }
   };
 
+  // Multi-step form validation
+  const isStep1Valid = () => {
+    const { firstName, lastName, studentId, classId } = studentCreationForm;
+    return firstName && lastName && studentId && classId;
+  };
+
+  const isStep2Valid = () => {
+    const { gender } = studentCreationForm;
+    return gender; // Gender is required
+  };
+
+  const isStep3Valid = () => {
+    const { email, password, parentWhatsApp } = studentCreationForm;
+    return email && password && parentWhatsApp;
+  };
+
+  const isStep4Valid = () => {
+    return true; // Step 4 is optional fields only
+  };
+
   const isStudentFormValid = () => {
-    const { firstName, lastName, email, password, studentId, classId, parentWhatsApp, gender } = studentCreationForm;
-    const hasRequiredFields = firstName && lastName && email && password && studentId && classId && parentWhatsApp && gender;
-    const hasNoErrors = Object.values(studentFormErrors).every(error => !error);
-    return hasRequiredFields && hasNoErrors;
+    return isStep1Valid() && isStep2Valid() && isStep3Valid() && isStep4Valid();
+  };
+
+  // Multi-step navigation
+  const nextStep = () => {
+    if (currentStep < 4) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const resetFormToStep1 = () => {
+    setCurrentStep(1);
+    setStudentCreationForm({
+      firstName: "",
+      lastName: "",
+      middleName: "",
+      email: "",
+      password: "",
+      studentId: "",
+      classId: "",
+      dateOfBirth: "",
+      age: "",
+      gender: "",
+      profileImage: "",
+      parentContact: "",
+      parentWhatsApp: "",
+      address: ""
+    });
+    setStudentFormErrors({});
   };
 
   // Set initial school for sub-admin or first school for main admin
@@ -3887,8 +3939,8 @@ export default function AdminDashboard() {
         <Dialog open={isStudentDialogOpen} onOpenChange={(open) => {
           setIsStudentDialogOpen(open);
           if (!open) {
-            // Reset form when dialog is closed
-            resetStudentForm();
+            // Reset form to step 1 when dialog is closed
+            resetFormToStep1();
           } else {
             // Auto-generate student ID when dialog opens
             if (!studentCreationForm.studentId) {
@@ -3896,231 +3948,311 @@ export default function AdminDashboard() {
             }
           }
         }}>
-          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto student-dialog-content">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto student-dialog-content">
             <DialogHeader>
-              <DialogTitle>Create New Student</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="student-firstname">First Name *</Label>
-                  <Input
-                    id="student-firstname"
-                    value={studentCreationForm.firstName}
-                    onChange={(e) => handleStudentFormChange('firstName', e.target.value)}
-                    placeholder="John"
-                    className={studentFormErrors.firstName ? "border-red-500" : ""}
-                  />
-                  {studentFormErrors.firstName && (
-                    <p className="text-red-500 text-xs mt-1">{studentFormErrors.firstName}</p>
-                  )}
-                </div>
-                <div>
-                  <Label htmlFor="student-lastname">Last Name *</Label>
-                  <Input
-                    id="student-lastname"
-                    value={studentCreationForm.lastName}
-                    onChange={(e) => handleStudentFormChange('lastName', e.target.value)}
-                    placeholder="Doe"
-                    className={studentFormErrors.lastName ? "border-red-500" : ""}
-                  />
-                  {studentFormErrors.lastName && (
-                    <p className="text-red-500 text-xs mt-1">{studentFormErrors.lastName}</p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="student-middlename">Middle Name (Optional)</Label>
-                <Input
-                  id="student-middlename"
-                  value={studentCreationForm.middleName}
-                  onChange={(e) => handleStudentFormChange('middleName', e.target.value)}
-                  placeholder="Smith"
-                  className={studentFormErrors.middleName ? "border-red-500" : ""}
-                />
-                {studentFormErrors.middleName && (
-                  <p className="text-red-500 text-xs mt-1">{studentFormErrors.middleName}</p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="student-email">Email *</Label>
-                <Input
-                  id="student-email"
-                  type="email"
-                  value={studentCreationForm.email}
-                  onChange={(e) => handleStudentFormChange('email', e.target.value)}
-                  placeholder="john.doe@student.com"
-                />
-              </div>
-              <div>
-                <Label htmlFor="student-password">Password *</Label>
-                <div className="relative">
-                  <Input
-                    id="student-password"
-                    type={showPassword ? "text" : "password"}
-                    value={studentCreationForm.password}
-                    onChange={(e) => handleStudentFormChange('password', e.target.value)}
-                    placeholder="Enter password"
-                    className="pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
+              <DialogTitle className="text-center">Create New Student - Step {currentStep} of 4</DialogTitle>
+              
+              {/* Progress Bar */}
+              <div className="flex items-center justify-center space-x-2 mt-4">
+                {[1, 2, 3, 4].map((step) => (
+                  <div key={step} className="flex items-center">
+                    <div 
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                        step === currentStep 
+                          ? 'bg-blue-600 text-white' 
+                          : step < currentStep 
+                          ? 'bg-green-600 text-white' 
+                          : 'bg-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {step < currentStep ? '✓' : step}
+                    </div>
+                    {step < 4 && (
+                      <div className={`w-12 h-1 ${
+                        step < currentStep ? 'bg-green-600' : 'bg-gray-200'
+                      }`} />
                     )}
-                  </Button>
-                </div>
+                  </div>
+                ))}
               </div>
-              <div>
-                <Label htmlFor="student-whatsapp">Parent WhatsApp Number *</Label>
-                <Input
-                  id="student-whatsapp"
-                  value={studentCreationForm.parentWhatsApp}
-                  onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
-                  placeholder="+234 XXX XXX XXXX"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Parent's WhatsApp number for communication and updates
-                </p>
-              </div>
-              <div>
-                <Label htmlFor="student-id">Student ID *</Label>
-                <div className="flex space-x-2">
-                  <Input
-                    id="student-id"
-                    value={studentCreationForm.studentId}
-                    onChange={(e) => handleStudentFormChange('studentId', e.target.value)}
-                    placeholder="e.g., SOWA/1001"
-                    className=""
-                  />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+            </DialogHeader>
+            
+            <div className="space-y-6 mt-6">
+              {/* Step 1: Basic Information */}
+              {currentStep === 1 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-center text-blue-600">Basic Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="student-firstname">First Name *</Label>
+                      <Input
+                        id="student-firstname"
+                        value={studentCreationForm.firstName}
+                        onChange={(e) => handleStudentFormChange('firstName', e.target.value)}
+                        placeholder="John"
+                        className={studentFormErrors.firstName ? "border-red-500" : ""}
+                      />
+                      {studentFormErrors.firstName && (
+                        <p className="text-red-500 text-xs mt-1">{studentFormErrors.firstName}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="student-lastname">Last Name *</Label>
+                      <Input
+                        id="student-lastname"
+                        value={studentCreationForm.lastName}
+                        onChange={(e) => handleStudentFormChange('lastName', e.target.value)}
+                        placeholder="Doe"
+                        className={studentFormErrors.lastName ? "border-red-500" : ""}
+                      />
+                      {studentFormErrors.lastName && (
+                        <p className="text-red-500 text-xs mt-1">{studentFormErrors.lastName}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="student-middlename">Middle Name (Optional)</Label>
+                    <Input
+                      id="student-middlename"
+                      value={studentCreationForm.middleName}
+                      onChange={(e) => handleStudentFormChange('middleName', e.target.value)}
+                      placeholder="Smith"
+                      className={studentFormErrors.middleName ? "border-red-500" : ""}
+                    />
+                    {studentFormErrors.middleName && (
+                      <p className="text-red-500 text-xs mt-1">{studentFormErrors.middleName}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="student-id">Student ID *</Label>
+                    <div className="flex space-x-2">
+                      <Input
+                        id="student-id"
+                        value={studentCreationForm.studentId}
+                        onChange={(e) => handleStudentFormChange('studentId', e.target.value)}
+                        placeholder="e.g., SOWA/1001"
+                      />
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={async () => {
-                          const newId = await generateStudentId();
-                          handleStudentFormChange('studentId', newId);
-                        }}
+                        onClick={generateStudentId}
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Generate a new random SOWA student ID</p>
-                    </TooltipContent>
-                  </Tooltip>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="student-class">Class *</Label>
+                    <Select 
+                      value={studentCreationForm.classId || selectedClassForStudents} 
+                      onValueChange={(value) => handleStudentFormChange('classId', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classes.map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <Label htmlFor="student-class">Class *</Label>
-                <Select 
-                  value={studentCreationForm.classId || selectedClassForStudents} 
-                  onValueChange={(value) => handleStudentFormChange('classId', value)}
+              )}
+
+              {/* Step 2: Personal Details */}
+              {currentStep === 2 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-center text-green-600">Personal Details</h3>
+                  <div>
+                    <Label htmlFor="student-gender">Gender *</Label>
+                    <Select 
+                      value={studentCreationForm.gender} 
+                      onValueChange={(value) => handleStudentFormChange('gender', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent className="z-50">
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Female">Female</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="student-dob">Date of Birth (Optional)</Label>
+                      <Input
+                        id="student-dob"
+                        type="date"
+                        value={studentCreationForm.dateOfBirth}
+                        onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="student-age">Age (Optional)</Label>
+                      <Input
+                        id="student-age"
+                        type="number"
+                        min="5"
+                        max="25"
+                        value={studentCreationForm.age}
+                        onChange={(e) => handleStudentFormChange('age', e.target.value)}
+                        placeholder="Student's age"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Contact Information */}
+              {currentStep === 3 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-center text-orange-600">Contact Information</h3>
+                  <div>
+                    <Label htmlFor="student-email">Email *</Label>
+                    <Input
+                      id="student-email"
+                      type="email"
+                      value={studentCreationForm.email}
+                      onChange={(e) => handleStudentFormChange('email', e.target.value)}
+                      placeholder="john.doe@student.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="student-password">Password *</Label>
+                    <div className="relative">
+                      <Input
+                        id="student-password"
+                        type={showPassword ? "text" : "password"}
+                        value={studentCreationForm.password}
+                        onChange={(e) => handleStudentFormChange('password', e.target.value)}
+                        placeholder="Enter password"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="student-whatsapp">Parent WhatsApp Number *</Label>
+                    <Input
+                      id="student-whatsapp"
+                      value={studentCreationForm.parentWhatsApp}
+                      onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
+                      placeholder="+234 XXX XXX XXXX"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="student-parent-contact">Parent Contact (Optional)</Label>
+                    <Input
+                      id="student-parent-contact"
+                      value={studentCreationForm.parentContact}
+                      onChange={(e) => handleStudentFormChange('parentContact', e.target.value)}
+                      placeholder="Parent phone number"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Additional Information */}
+              {currentStep === 4 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-center text-purple-600">Additional Information</h3>
+                  <div>
+                    <Label htmlFor="student-address">Address (Optional)</Label>
+                    <Input
+                      id="student-address"
+                      value={studentCreationForm.address}
+                      onChange={(e) => handleStudentFormChange('address', e.target.value)}
+                      placeholder="Student's home address"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="student-profile-image">Profile Image (Optional)</Label>
+                    <Input
+                      id="student-profile-image"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const result = event.target?.result as string;
+                            handleStudentFormChange('profileImage', result);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Upload a profile photo (optional). Supported formats: JPG, PNG, GIF
+                    </p>
+                  </div>
+                  
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="text-sm font-medium text-blue-800 mb-2">
+                      Ready to Create Student
+                    </h4>
+                    <p className="text-xs text-blue-700">
+                      Review your information and click "Create Student" to complete the registration.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex justify-between mt-8 pt-6 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={currentStep === 1 ? () => setIsStudentDialogOpen(false) : prevStep}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classes.map((classItem) => (
-                      <SelectItem key={classItem.id} value={classItem.id}>
-                        {classItem.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="student-dob">Date of Birth</Label>
-                <Input
-                  id="student-dob"
-                  type="date"
-                  value={studentCreationForm.dateOfBirth}
-                  onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="student-age">Age</Label>
-                <Input
-                  id="student-age"
-                  type="number"
-                  min="5"
-                  max="25"
-                  value={studentCreationForm.age}
-                  onChange={(e) => handleStudentFormChange('age', e.target.value)}
-                  placeholder="Student's age"
-                />
-              </div>
-              <div>
-                <Label htmlFor="student-gender">Gender *</Label>
-                <Select 
-                  value={studentCreationForm.gender} 
-                  onValueChange={(value) => handleStudentFormChange('gender', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent className="z-50">
-                    <SelectItem value="Male">Male</SelectItem>
-                    <SelectItem value="Female">Female</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="student-profile-image">Profile Image (Optional)</Label>
-                <Input
-                  id="student-profile-image"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const result = event.target?.result as string;
-                        handleStudentFormChange('profileImage', result);
-                      };
-                      reader.readAsDataURL(file);
+                  {currentStep === 1 ? 'Cancel' : 'Previous'}
+                </Button>
+                
+                {currentStep < 4 ? (
+                  <Button 
+                    onClick={nextStep}
+                    disabled={
+                      (currentStep === 1 && !isStep1Valid()) ||
+                      (currentStep === 2 && !isStep2Valid()) ||
+                      (currentStep === 3 && !isStep3Valid())
                     }
-                  }}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Upload a profile photo (optional). Supported formats: JPG, PNG, GIF
-                </p>
-              </div>
-              
-              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                <h4 className="text-sm font-medium text-yellow-800 mb-2">
-                  Single-Word Names Only
-                </h4>
-                <p className="text-xs text-yellow-700">
-                  Only single words are allowed for first name, last name, and middle name (no spaces).
-                  This ensures proper student record management.
-                </p>
-              </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
+                  >
+                    Next
+                  </Button>
+                ) : (
                   <Button 
                     onClick={handleCreateStudent}
-                    disabled={!isStudentFormValid() || createStudentMutation.isPending}
-                    className="w-full"
+                    disabled={createStudentMutation.isPending || !isStudentFormValid()}
+                    className="bg-green-600 hover:bg-green-700"
                   >
-                    {createStudentMutation.isPending ? "Creating..." : "Create Student"}
+                    {createStudentMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        Create Student
+                      </>
+                    )}
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Create student account and enroll in selected class</p>
-                </TooltipContent>
-              </Tooltip>
+                )}
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -4565,241 +4697,6 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* Enhanced Student Creation Dialog with Single-Word Validation and WhatsApp */}
-        <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
-            <DialogHeader className="text-center pb-6">
-              <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
-                <UserPlus className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              </div>
-              <DialogTitle className="text-2xl font-semibold text-gray-900 dark:text-white">Create New Student</DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-8">
-              {/* Personal Information Section */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-gray-700">
-                  <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-                    <User className="w-4 h-4 text-green-600 dark:text-green-400" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">Personal Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="firstName" className="text-sm font-medium text-gray-700 dark:text-gray-300">First Name *</Label>
-                    <Input
-                      id="firstName"
-                      value={studentCreationForm.firstName}
-                      onChange={(e) => handleStudentFormChange('firstName', e.target.value)}
-                      placeholder="Enter first name (single word only)"
-                      className={`transition-all duration-200 ${studentFormErrors.firstName 
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-200" 
-                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-200"}`}
-                    />
-                    {studentFormErrors.firstName && (
-                      <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {studentFormErrors.firstName}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="lastName" className="text-sm font-medium text-gray-700 dark:text-gray-300">Last Name *</Label>
-                    <Input
-                      id="lastName"
-                      value={studentCreationForm.lastName}
-                      onChange={(e) => handleStudentFormChange('lastName', e.target.value)}
-                      placeholder="Enter last name (single word only)"
-                      className={`transition-all duration-200 ${studentFormErrors.lastName 
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-200" 
-                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-200"}`}
-                    />
-                    {studentFormErrors.lastName && (
-                      <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {studentFormErrors.lastName}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="middleName" className="text-sm font-medium text-gray-700 dark:text-gray-300">Middle Name <span className="text-gray-400">(Optional)</span></Label>
-                    <Input
-                      id="middleName"
-                      value={studentCreationForm.middleName}
-                      onChange={(e) => handleStudentFormChange('middleName', e.target.value)}
-                      placeholder="Enter middle name (single word only)"
-                      className={`transition-all duration-200 ${studentFormErrors.middleName 
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-200" 
-                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-200"}`}
-                    />
-                    {studentFormErrors.middleName && (
-                      <p className="text-red-500 text-xs mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {studentFormErrors.middleName}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="dateOfBirth" className="text-sm font-medium text-gray-700 dark:text-gray-300">Date of Birth <span className="text-gray-400">(Optional)</span></Label>
-                    <Input
-                      id="dateOfBirth"
-                      type="date"
-                      value={studentCreationForm.dateOfBirth}
-                      onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
-                      className="transition-all duration-200 border-gray-300 focus:border-blue-500 focus:ring-blue-200"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Account Information Section */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-gray-700">
-                  <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
-                    <Shield className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">Account Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={studentCreationForm.email}
-                      onChange={(e) => handleStudentFormChange('email', e.target.value)}
-                      placeholder="student@example.com"
-                      className="transition-all duration-200 border-gray-300 focus:border-blue-500 focus:ring-blue-200"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-gray-300">Password *</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={studentCreationForm.password}
-                      onChange={(e) => handleStudentFormChange('password', e.target.value)}
-                      placeholder="Enter secure password"
-                      className="transition-all duration-200 border-gray-300 focus:border-blue-500 focus:ring-blue-200"
-                    />
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
-                    <Label htmlFor="classId" className="text-sm font-medium text-gray-700 dark:text-gray-300">Class *</Label>
-                    <Select 
-                      value={studentCreationForm.classId || selectedClassForStudents} 
-                      onValueChange={(value) => handleStudentFormChange('classId', value)}
-                    >
-                      <SelectTrigger className="transition-all duration-200 border-gray-300 focus:border-blue-500 focus:ring-blue-200">
-                        <SelectValue placeholder="Select class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sortClassesByOrder(classes).map((cls) => (
-                          <SelectItem key={cls.id} value={cls.id}>
-                            {cls.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Contact Information Section */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-gray-700">
-                  <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
-                    <Phone className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">Contact Information</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label htmlFor="parentContact" className="text-sm font-medium text-gray-700 dark:text-gray-300">Parent Contact <span className="text-gray-400">(Optional)</span></Label>
-                    <Input
-                      id="parentContact"
-                      value={studentCreationForm.parentContact}
-                      onChange={(e) => handleStudentFormChange('parentContact', e.target.value)}
-                      placeholder="Parent phone number"
-                      className="transition-all duration-200 border-gray-300 focus:border-blue-500 focus:ring-blue-200"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="parentWhatsApp" className="text-sm font-medium text-gray-700 dark:text-gray-300">Parent WhatsApp *</Label>
-                    <Input
-                      id="parentWhatsApp"
-                      value={studentCreationForm.parentWhatsApp}
-                      onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
-                      placeholder="Parent WhatsApp number"
-                      className="transition-all duration-200 border-gray-300 focus:border-blue-500 focus:ring-blue-200"
-                    />
-                  </div>
-                  <div className="md:col-span-2 space-y-1">
-                    <Label htmlFor="address" className="text-sm font-medium text-gray-700 dark:text-gray-300">Address <span className="text-gray-400">(Optional)</span></Label>
-                    <Textarea
-                      id="address"
-                      value={studentCreationForm.address}
-                      onChange={(e) => handleStudentFormChange('address', e.target.value)}
-                      placeholder="Student's home address"
-                      rows={3}
-                      className="transition-all duration-200 border-gray-300 focus:border-blue-500 focus:ring-blue-200 resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-3 pt-6 border-t border-gray-200 dark:border-gray-700">
-                {!isStudentFormValid() && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="w-full">
-                          <Button 
-                            disabled
-                            className="w-full bg-gray-300 text-gray-500 cursor-not-allowed px-6 py-3 rounded-lg text-lg font-medium"
-                          >
-                            <UserPlus className="w-5 h-5 mr-2" />
-                            Create Student
-                          </Button>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent className="bg-red-600 text-white">
-                        <p>Complete all required fields and fix validation errors</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {isStudentFormValid() && (
-                  <Button 
-                    onClick={handleCreateStudent} 
-                    disabled={createStudentMutation.isPending}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg text-lg font-medium transition-all duration-200 transform hover:scale-[1.02] disabled:scale-100 disabled:bg-blue-400"
-                  >
-                    {createStudentMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Creating Student...
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-5 h-5 mr-2" />
-                        Create Student
-                      </>
-                    )}
-                  </Button>
-                )}
-                <Button 
-                  variant="outline" 
-                  onClick={() => setIsStudentDialogOpen(false)}
-                  className="w-full transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800 py-2"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         {/* Universal Settings Dialog */}
         <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
