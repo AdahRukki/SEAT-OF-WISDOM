@@ -219,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[REPORT] Serving report: ${studentName} - ${report.term} ${report.session}`);
       
       // Get student's class information
-      const studentClass = await storage.getClass(student.classId);
+      const studentClass = await storage.getClassById(student.classId);
       const className = studentClass?.name || 'Unknown Class';
       
       // Generate report card using exact student dashboard template structure
