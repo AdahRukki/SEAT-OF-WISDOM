@@ -416,7 +416,16 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                 </div>
                 <div class="info-item">
                   <span class="info-label">Age:</span>
-                  <span class="info-value">${student.age || 'N/A'} years</span>
+                  <span class="info-value">${student.dateOfBirth ? (() => {
+                    const birthDate = new Date(student.dateOfBirth);
+                    const today = new Date();
+                    let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+                    const monthDiff = today.getMonth() - birthDate.getMonth();
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                      calculatedAge--;
+                    }
+                    return calculatedAge;
+                  })() : 'N/A'} years</span>
                 </div>
               </div>
 

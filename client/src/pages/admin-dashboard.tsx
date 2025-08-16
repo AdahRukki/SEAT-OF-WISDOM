@@ -163,7 +163,6 @@ export default function AdminDashboard() {
     email: "",
     classId: "",
     dateOfBirth: "",
-    age: "",
     gender: "",
     profileImage: "",
     parentContact: "",
@@ -293,7 +292,6 @@ export default function AdminDashboard() {
     studentId: "",
     classId: "",
     dateOfBirth: "",
-    age: "",
     gender: "",
     profileImage: "",
     parentContact: "",
@@ -387,7 +385,6 @@ export default function AdminDashboard() {
       studentId: "",
       classId: "",
       dateOfBirth: "",
-      age: "",
       gender: "",
       profileImage: "",
       parentContact: "",
@@ -1429,7 +1426,6 @@ export default function AdminDashboard() {
       studentId: "",
       classId: "",
       dateOfBirth: "",
-      age: "",
       gender: "",
       profileImage: "",
       parentContact: "",
@@ -4091,18 +4087,6 @@ export default function AdminDashboard() {
                         type="date"
                         value={studentCreationForm.dateOfBirth}
                         onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="student-age">Age (Optional)</Label>
-                      <Input
-                        id="student-age"
-                        type="number"
-                        min="5"
-                        max="25"
-                        value={studentCreationForm.age}
-                        onChange={(e) => handleStudentFormChange('age', e.target.value)}
-                        placeholder="Student's age"
                       />
                     </div>
                   </div>
