@@ -88,8 +88,7 @@ import {
   Shield,
   Phone,
   Loader2,
-  Camera,
-  Hash
+  Camera
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -1396,41 +1395,21 @@ export default function AdminDashboard() {
   // Auto-generate student ID in SOWA format
   const generateStudentId = async () => {
     try {
-      // Get the current school ID (for admin use selectedSchoolId, for sub-admin use user.schoolId)
-      const currentSchoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
-      
-      // Extract school number from school name or use a mapping
-      let schoolNumber = '1'; // default
-      if (currentSchoolId && schools.length > 0) {
-        const currentSchool = schools.find(s => s.id === currentSchoolId);
-        if (currentSchool) {
-          // Extract number from school name (e.g., "School 1" -> "1")
-          const nameMatch = currentSchool.name.match(/School\s+(\d+)/);
-          if (nameMatch) {
-            schoolNumber = nameMatch[1];
-          }
-        }
-      } else if (user?.schoolId && user?.role === 'sub-admin') {
-        // For sub-admin, we can determine school number from their assigned school
-        // This is a fallback when schools data isn't loaded yet
-        schoolNumber = '4'; // Assuming current sub-admin is for School 4 based on logs
-      }
-      
       // Get count of existing students to determine next ID
-      const nextNumber = (allStudents.length + 1).toString().padStart(3, '0');
-      const newId = `SOWA/${schoolNumber}${nextNumber}`;
+      const nextNumber = (allStudents.length + 1).toString().padStart(4, '0');
+      const newId = `SOWA/${nextNumber}`;
       setStudentId(newId);
     } catch (error) {
       console.error('Error generating student ID:', error);
-      // Fallback to timestamp-based ID with school number 1
-      const timestamp = Date.now().toString().slice(-3);
-      setStudentId(`SOWA/1${timestamp}`);
+      // Fallback to timestamp-based ID
+      const timestamp = Date.now().toString().slice(-4);
+      setStudentId(`SOWA/${timestamp}`);
     }
   };
 
   // Auto-generate student ID when dialog opens
   useEffect(() => {
-    if (isStudentDialogOpen) {
+    if (isStudentDialogOpen && !studentId) {
       generateStudentId();
     }
   }, [isStudentDialogOpen, allStudents.length]);
@@ -3300,7 +3279,6 @@ export default function AdminDashboard() {
             <ReportCardManagement 
               classes={classes}
               user={user}
-              selectedSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
             />
           </TabsContent>
 
@@ -4005,6 +3983,33 @@ export default function AdminDashboard() {
                 </p>
               </div>
               <div>
+                <Label htmlFor="student-id">Student ID (Auto-generated)</Label>
+                <div className="flex space-x-2">
+                  <Input
+                    id="student-id"
+                    value={studentId}
+                    readOnly
+                    placeholder="SOWA/0001"
+                    className="bg-gray-50"
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={generateStudentId}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Generate a new random SOWA student ID</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+              <div>
                 <Label htmlFor="student-class">Class *</Label>
                 <Select 
                   value={studentCreationForm.classId || selectedClassForStudents} 
@@ -4553,16 +4558,6 @@ export default function AdminDashboard() {
         <Dialog open={isStudentDialogOpen} onOpenChange={setIsStudentDialogOpen}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dialog-content-scrollable">
             <DialogHeader className="text-center pb-6">
-              {/* Close button in top-right corner */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-4 top-4 rounded-sm opacity-70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                onClick={() => setIsStudentDialogOpen(false)}
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
               <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
                 <UserPlus className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               </div>
@@ -4573,18 +4568,6 @@ export default function AdminDashboard() {
             </DialogHeader>
             
             <div className="space-y-8">
-              {/* Student ID Section */}
-              <div className="space-y-2">
-                <Label htmlFor="student-id" className="text-sm font-medium">Student ID</Label>
-                <Input
-                  id="student-id"
-                  value={studentId}
-                  readOnly
-                  placeholder="SOWA/0001"
-                  className="font-mono text-sm"
-                />
-              </div>
-
               {/* Personal Information Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-3 pb-3 border-b border-gray-200 dark:border-gray-700">

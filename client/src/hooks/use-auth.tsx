@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     staleTime: 0, // Always check server
-    gcTime: 0, // Never cache (changed from cacheTime)
+    cacheTime: 0, // Never cache
   });
   
   // If there's an auth error, immediately clear everything
@@ -210,14 +210,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       // Update the global API request function with token
       (window as any).__auth_token = token;
-      
-      // Force refresh of all queries to use new token
-      queryClient.invalidateQueries();
-    } else {
-      // Clear all queries when no token
-      queryClient.clear();
     }
-  }, [token, queryClient]);
+  }, [token]);
 
   const value: AuthContextType = {
     user: user as AuthUser || null,

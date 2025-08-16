@@ -178,7 +178,6 @@ export const generatedReportCards = pgTable("generated_report_cards", {
   totalScore: decimal("total_score", { precision: 5, scale: 2 }),
   averageScore: decimal("average_score", { precision: 5, scale: 2 }),
   attendancePercentage: decimal("attendance_percentage", { precision: 5, scale: 2 }),
-  nextTermResumptionDate: timestamp("next_term_resumption_date"),
   generatedBy: uuid("generated_by").notNull().references(() => users.id),
   generatedAt: timestamp("generated_at").defaultNow(),
 });

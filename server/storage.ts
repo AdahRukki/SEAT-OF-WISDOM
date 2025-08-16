@@ -49,13 +49,12 @@ import {
   type PaymentWithDetails
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql, inArray, or } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
   // Authentication
   authenticateUser(email: string, password: string): Promise<User | null>;
-  authenticateUserByName(firstName: string, lastName: string, password: string): Promise<User | null>;
   authenticateUserByStudentId(studentId: string, password: string): Promise<User | null>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -87,8 +86,7 @@ export interface IStorage {
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
   getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
   getClassSubjects(classId: string): Promise<Subject[]>;
-  getClassAssessments(classId: string, term: string, session: string): Promise<Assessment[]>;
-  getClassAssessmentsWithStudents(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
+  getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
   
   // Assessment operations
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
@@ -173,20 +171,6 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async authenticateUser(email: string, password: string): Promise<User | null> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
-    if (!user || !user.isActive) return null;
-    
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    return isValidPassword ? user : null;
-  }
-
-  async authenticateUserByName(firstName: string, lastName: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users)
-      .where(and(
-        eq(users.firstName, firstName),
-        eq(users.lastName, lastName),
-        or(eq(users.role, 'admin'), eq(users.role, 'sub-admin'))
-      ));
-    
     if (!user || !user.isActive) return null;
     
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -324,34 +308,14 @@ export class DatabaseStorage implements IStorage {
     return updatedStudent;
   }
 
-  async getStudent(studentId: string): Promise<(Student & { firstName?: string; lastName?: string }) | undefined> {
-    const [result] = await db
-      .select({
-        id: students.id,
-        studentId: students.studentId,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-        parentContact: students.parentContact,
-        parentWhatsapp: students.parentWhatsapp,
-        address: students.address,
-        dateOfBirth: students.dateOfBirth,
-        gender: students.gender,
-        age: students.age,
-        profileImage: students.profileImage,
-        status: students.status,
-        userId: students.userId,
-        classId: students.classId,
-        createdAt: students.createdAt,
-        updatedAt: students.updatedAt,
-      })
+  async getStudent(studentId: string): Promise<Student | undefined> {
+    const [student] = await db
+      .select()
       .from(students)
-      .leftJoin(users, eq(students.userId, users.id))
       .where(eq(students.id, studentId))
       .limit(1);
     
-    console.log(`[DEBUG] getStudent result for ${studentId}:`, JSON.stringify(result, null, 2));
-    return result;
+    return student;
   }
 
   async createClass(classData: InsertClass): Promise<Class> {
@@ -714,23 +678,7 @@ export class DatabaseStorage implements IStorage {
     return subjectsData.map(({ subjects: subject }) => subject);
   }
 
-  // Get all assessments for a class (for calculating class average)
-  async getClassAssessments(classId: string, term: string, session: string): Promise<Assessment[]> {
-    const results = await db
-      .select()
-      .from(assessments)
-      .where(
-        and(
-          eq(assessments.classId, classId),
-          eq(assessments.term, term),
-          eq(assessments.session, session)
-        )
-      );
-    return results;
-  }
-
-  // Get class assessments with student details (existing method with updated signature)
-  async getClassAssessmentsWithStudents(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
+  async getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
     const assessmentsData = await db
       .select()
       .from(assessments)
