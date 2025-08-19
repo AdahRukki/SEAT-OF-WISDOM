@@ -593,6 +593,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // PATCH user (admin only) - for partial updates like password changes
+  app.patch('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { password, ...otherData } = req.body;
+      
+      // Check if user exists
+      const existingUser = await storage.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Update password if provided
+      if (password) {
+        await storage.updateUserPassword(id, password);
+        res.json({ message: 'Password updated successfully' });
+      } else if (Object.keys(otherData).length > 0) {
+        // Handle other profile updates
+        const updatedUser = await storage.updateUserProfile(id, otherData);
+        res.json(updatedUser);
+      } else {
+        res.status(400).json({ error: 'No data provided for update' });
+      }
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
   // Delete user (admin only)
   app.delete('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
     try {
