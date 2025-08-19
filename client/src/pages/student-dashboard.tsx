@@ -45,9 +45,7 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      const response = await fetch(`/api/student/assessments?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch assessments');
-      return response.json();
+      return apiRequest(`/api/student/assessments?${params}`);
     },
     enabled: !!profile
   });
@@ -60,9 +58,7 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      const response = await fetch(`/api/student/fees?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch student fees');
-      return response.json();
+      return apiRequest(`/api/student/fees?${params}`);
     },
     enabled: !!profile
   });
@@ -74,9 +70,7 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      const response = await fetch(`/api/student/payments?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch payment history');
-      return response.json();
+      return apiRequest(`/api/student/payments?${params}`);
     },
     enabled: !!profile
   });
