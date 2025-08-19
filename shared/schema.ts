@@ -364,7 +364,14 @@ export const insertGeneratedReportCardSchema = createInsertSchema(generatedRepor
 
 // Additional validation schemas
 export const loginSchema = z.object({
-  email: z.string().email("Valid email is required"),
+  email: z.string().min(1, "Email or Student ID is required").refine((val) => {
+    // Accept either email format or SOWA/#### student ID format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const studentIdRegex = /^SOWA\/\d{4}$/;
+    return emailRegex.test(val) || studentIdRegex.test(val);
+  }, {
+    message: "Please enter a valid email address or student ID (e.g., SOWA/1001)",
+  }),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 

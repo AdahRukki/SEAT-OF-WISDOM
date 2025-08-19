@@ -200,12 +200,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let user = null;
       
-      // Try login by email first
-      user = await storage.authenticateUser(email, password);
-      
-      // If not found and looks like student ID (SOWA/format), try student ID login
-      if (!user && email.includes('/')) {
+      // Check if it's a student ID format (SOWA/####)
+      if (email.includes('/')) {
         user = await storage.authenticateUserByStudentId(email, password);
+      } else {
+        // It's an email - convert to lowercase for case-insensitive lookup
+        const normalizedEmail = email.toLowerCase();
+        user = await storage.authenticateUser(normalizedEmail, password);
       }
       
       if (!user) {

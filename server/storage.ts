@@ -170,7 +170,8 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async authenticateUser(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    // Case-insensitive email lookup using SQL lower() function
+    const [user] = await db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
     if (!user || !user.isActive) return null;
     
     const isValidPassword = await bcrypt.compare(password, user.password);
