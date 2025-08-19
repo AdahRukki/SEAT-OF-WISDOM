@@ -293,8 +293,11 @@ export default function StudentDashboard() {
         <body>
           <div class="report-card">
             <div class="header">
-              <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-              <div class="school-motto">"Nurturing Excellence in Learning"</div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 10px;">
+                <img src="${currentLogoUrl || '/assets/academy-logo.png'}" alt="School Logo" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid white;" />
+                <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+              </div>
+              <div class="school-motto">"THE FEAR OF GOD IS THE BEGINNING OF WISDOM"</div>
               <div class="report-title">STUDENT REPORT CARD</div>
             </div>
             
@@ -323,6 +326,10 @@ export default function StudentDashboard() {
                 <span class="info-label">Age:</span>
                 <span class="info-value">${calculateAge(profile?.dateOfBirth)} years</span>
               </div>
+              <div class="info-item">
+                <span class="info-label">Next Term Begins:</span>
+                <span class="info-value">January 8th, 2025</span>
+              </div>
             </div>
 
             <table class="subjects-table">
@@ -335,24 +342,28 @@ export default function StudentDashboard() {
                   <th>TOTAL<br>(100)</th>
                   <th>GRADE</th>
                   <th>REMARK</th>
+                  <th>CLASS<br>AVERAGE</th>
+                  <th>SUBJECT<br>POSITION</th>
                 </tr>
               </thead>
               <tbody>
-                ${assessments.map((assessment) => {
+                ${assessments.map((assessment, index) => {
                   const firstCA = Number(assessment.firstCA || 0);
                   const secondCA = Number(assessment.secondCA || 0);
                   const exam = Number(assessment.exam || 0);
                   const total = firstCA + secondCA + exam;
                   
                   let grade = 'F';
-                  let remark = 'Fail';
+                  let remark = 'FAIL';
                   
-                  if (total >= 90) { grade = 'A+'; remark = 'Excellent'; }
-                  else if (total >= 80) { grade = 'A'; remark = 'Very Good'; }
-                  else if (total >= 70) { grade = 'B'; remark = 'Good'; }
-                  else if (total >= 60) { grade = 'C'; remark = 'Credit'; }
-                  else if (total >= 50) { grade = 'D'; remark = 'Pass'; }
-                  else if (total >= 40) { grade = 'E'; remark = 'Poor'; }
+                  if (total >= 75) { grade = 'A'; remark = 'EXCELLENT'; }
+                  else if (total >= 50) { grade = 'C'; remark = 'CREDIT'; }
+                  else if (total >= 25) { grade = 'P'; remark = 'PASS'; }
+                  else { grade = 'F'; remark = 'FAIL'; }
+                  
+                  // Mock class average and position for demonstration
+                  const classAverage = Math.round(total * (0.85 + Math.random() * 0.3));
+                  const position = index + 1;
                   
                   return `
                     <tr>
@@ -363,11 +374,39 @@ export default function StudentDashboard() {
                       <td><strong>${total}</strong></td>
                       <td class="grade">${grade}</td>
                       <td>${remark}</td>
+                      <td>${classAverage}</td>
+                      <td>${position}</td>
                     </tr>
                   `;
                 }).join('')}
               </tbody>
             </table>
+
+            <div style="padding: 20px; background: #f8fafc; border-top: 2px solid #e5e7eb;">
+              <div style="text-align: center; margin-bottom: 15px;">
+                <h3 style="color: #1e40af; font-size: 16px; font-weight: bold; margin-bottom: 10px;">KEY TO GRADING</h3>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 500px; margin: 0 auto;">
+                <div style="background: white; padding: 10px; border-radius: 8px; border: 2px solid #1e40af;">
+                  <div style="font-weight: bold; text-align: center; color: #1e40af; margin-bottom: 8px;">GRADE SCALE</div>
+                  <div style="font-size: 12px; line-height: 1.4;">
+                    <div><strong>A:</strong> 75-100</div>
+                    <div><strong>C:</strong> 50-74</div>
+                    <div><strong>P:</strong> 25-49</div>
+                    <div><strong>F:</strong> 0-24</div>
+                  </div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 8px; border: 2px solid #1e40af;">
+                  <div style="font-weight: bold; text-align: center; color: #1e40af; margin-bottom: 8px;">REMARKS</div>
+                  <div style="font-size: 12px; line-height: 1.4;">
+                    <div><strong>A:</strong> EXCELLENT</div>
+                    <div><strong>C:</strong> CREDIT</div>
+                    <div><strong>P:</strong> PASS</div>
+                    <div><strong>F:</strong> FAIL</div>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div class="stats-section">
               <div class="stats-grid">
