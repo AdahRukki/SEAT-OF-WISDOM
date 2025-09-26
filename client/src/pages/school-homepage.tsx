@@ -2,7 +2,15 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, Users, BookOpen, Trophy, MapPin, Phone, Mail, ChevronRight } from "lucide-react";
+import { GraduationCap, Users, BookOpen, Trophy, MapPin, Phone, Mail, ChevronRight, Baby, School, GraduationCap as GraduationIcon, Grid3X3 } from "lucide-react";
+import schoolBuilding1 from "@assets/stock_images/modern_school_buildi_77850497.jpg";
+import schoolBuilding2 from "@assets/stock_images/modern_school_buildi_a486f75c.jpg";
+import classroomImage1 from "@assets/stock_images/children_in_classroo_646d36b7.jpg";
+import classroomImage2 from "@assets/stock_images/children_in_classroo_aaa62f0f.jpg";
+import classroomImage3 from "@assets/stock_images/children_in_classroo_d7f501cb.jpg";
+import classroomImage4 from "@assets/stock_images/children_in_classroo_7e1fd1a4.jpg";
+import classroomImage5 from "@assets/stock_images/children_in_classroo_ebca6607.jpg";
+import classroomImage6 from "@assets/stock_images/children_in_classroo_cd155654.jpg";
 
 export default function SchoolHomepage() {
   return (
@@ -61,23 +69,23 @@ export default function SchoolHomepage() {
               </div>
             </div>
             <div className="relative">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 transform rotate-3 hover:rotate-0 transition-transform duration-300">
-                <div className="grid grid-cols-2 gap-6 text-center">
-                  <div>
-                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-stat-branches">4</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Branches</div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-bold text-green-600 dark:text-green-400" data-testid="text-stat-students">500+</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Students</div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-stat-teachers">50+</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Teachers</div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-stat-years">15+</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Years</div>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
+                <img 
+                  src={schoolBuilding1} 
+                  alt="Seat of Wisdom Academy campus" 
+                  className="w-full h-64 object-cover"
+                  data-testid="img-school-hero"
+                />
+                <div className="p-6">
+                  <div className="grid grid-cols-2 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-stat-branches">4</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Branches</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-stat-years">15+</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Years</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -158,6 +166,119 @@ export default function SchoolHomepage() {
         </div>
       </section>
 
+      {/* Education Programs Section */}
+      <section className="py-20 bg-gray-50 dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-programs-title">
+              Our Education Programs
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300" data-testid="text-programs-description">
+              Comprehensive education from early childhood through secondary school
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-nursery">
+              <div className="relative h-48">
+                <img 
+                  src={classroomImage1} 
+                  alt="Nursery students learning" 
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-4 left-4">
+                  <Badge className="bg-blue-600 text-white">Nursery</Badge>
+                </div>
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Baby className="h-6 w-6 text-blue-600 mr-2" />
+                  <CardTitle>Nursery Education</CardTitle>
+                </div>
+                <CardDescription>Play Class - KG3</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                  Early childhood development through play-based learning, foundational skills, 
+                  and social interaction in a nurturing environment.
+                </p>
+                <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+                  <li>• Play Class (Ages 2-3)</li>
+                  <li>• Kindergarten 1 (Ages 3-4)</li>
+                  <li>• Kindergarten 2 (Ages 4-5)</li>
+                  <li>• Kindergarten 3 (Ages 5-6)</li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-primary">
+              <div className="relative h-48">
+                <img 
+                  src={classroomImage2} 
+                  alt="Primary students in classroom" 
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-4 left-4">
+                  <Badge className="bg-green-600 text-white">Primary</Badge>
+                </div>
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <School className="h-6 w-6 text-green-600 mr-2" />
+                  <CardTitle>Primary Education</CardTitle>
+                </div>
+                <CardDescription>Basic 1 - Basic 5</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                  Building strong foundations in literacy, numeracy, and life skills 
+                  through engaging and interactive learning methods.
+                </p>
+                <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+                  <li>• Basic 1 (Ages 6-7)</li>
+                  <li>• Basic 2 (Ages 7-8)</li>
+                  <li>• Basic 3 (Ages 8-9)</li>
+                  <li>• Basic 4 (Ages 9-10)</li>
+                  <li>• Basic 5 (Ages 10-11)</li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-secondary">
+              <div className="relative h-48">
+                <img 
+                  src={classroomImage3} 
+                  alt="Secondary students studying" 
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-4 left-4">
+                  <Badge className="bg-purple-600 text-white">Secondary</Badge>
+                </div>
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <GraduationIcon className="h-6 w-6 text-purple-600 mr-2" />
+                  <CardTitle>Secondary Education</CardTitle>
+                </div>
+                <CardDescription>JSS1-3, SS1-3</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                  Advanced academic preparation with specialized subjects, 
+                  critical thinking development, and university readiness.
+                </p>
+                <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+                  <li>• Junior Secondary (JSS1-3)</li>
+                  <li>• Senior Secondary (SS1-3)</li>
+                  <li>• Science & Arts Combinations</li>
+                  <li>• University Preparation</li>
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
       {/* Quick Links Section */}
       <section className="py-20 bg-gray-50 dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -227,6 +348,86 @@ export default function SchoolHomepage() {
                 </Link>
               </CardContent>
             </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Gallery Section */}
+      <section className="py-20 bg-white dark:bg-gray-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-gallery-title">
+              Campus Life Gallery
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300" data-testid="text-gallery-description">
+              A glimpse into our vibrant learning environment and student activities
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="relative group overflow-hidden rounded-lg shadow-lg" data-testid="gallery-item-1">
+              <img 
+                src={schoolBuilding2} 
+                alt="School campus exterior" 
+                className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                <p className="text-white text-lg font-semibold">School Campus</p>
+              </div>
+            </div>
+
+            <div className="relative group overflow-hidden rounded-lg shadow-lg" data-testid="gallery-item-2">
+              <img 
+                src={classroomImage4} 
+                alt="Students in classroom" 
+                className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                <p className="text-white text-lg font-semibold">Classroom Learning</p>
+              </div>
+            </div>
+
+            <div className="relative group overflow-hidden rounded-lg shadow-lg" data-testid="gallery-item-3">
+              <img 
+                src={classroomImage5} 
+                alt="Student activities" 
+                className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                <p className="text-white text-lg font-semibold">Interactive Learning</p>
+              </div>
+            </div>
+
+            <div className="relative group overflow-hidden rounded-lg shadow-lg md:col-span-2" data-testid="gallery-item-4">
+              <img 
+                src={classroomImage6} 
+                alt="School facilities" 
+                className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                <p className="text-white text-lg font-semibold">Modern Facilities</p>
+              </div>
+            </div>
+
+            <div className="relative group overflow-hidden rounded-lg shadow-lg" data-testid="gallery-item-5">
+              <img 
+                src={schoolBuilding1} 
+                alt="Students outdoor activities" 
+                className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                <p className="text-white text-lg font-semibold">Campus Grounds</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-center mt-12">
+            <Link href="/contact">
+              <Button size="lg" variant="outline" data-testid="button-visit-campus">
+                Schedule a Campus Visit
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
