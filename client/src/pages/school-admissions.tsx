@@ -133,13 +133,13 @@ export default function SchoolAdmissions() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             <Card className="hover:shadow-lg transition-shadow" data-testid="card-primary-req">
               <CardHeader>
                 <div className="flex items-center space-x-3 mb-4">
-                  <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Primary</Badge>
+                  <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">Nursery</Badge>
                 </div>
-                <CardTitle>Primary School (P1-P7)</CardTitle>
+                <CardTitle>Nursery Education (Play Class-KG3)</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3 text-gray-600 dark:text-gray-300">
@@ -163,18 +163,47 @@ export default function SchoolAdmissions() {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow" data-testid="card-olevel-req">
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-primary-req">
               <CardHeader>
                 <div className="flex items-center space-x-3 mb-4">
-                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">O-Level</Badge>
+                  <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Primary</Badge>
                 </div>
-                <CardTitle>O-Level Secondary (S1-S4)</CardTitle>
+                <CardTitle>Primary Education (Basic 1-5)</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3 text-gray-600 dark:text-gray-300">
                   <li className="flex items-start space-x-2">
                     <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span>Primary Leaving Examination (PLE) certificate</span>
+                    <span>Age-appropriate entry assessment</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>Previous school report (if applicable)</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>Birth certificate</span>
+                  </li>
+                  <li className="flex items-start space-x-2">
+                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>Passport photographs</span>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-olevel-req">
+              <CardHeader>
+                <div className="flex items-center space-x-3 mb-4">
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Junior Secondary</Badge>
+                </div>
+                <CardTitle>Junior Secondary (JSS1-JSS3)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3 text-gray-600 dark:text-gray-300">
+                  <li className="flex items-start space-x-2">
+                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>Primary education completion certificate</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
@@ -195,19 +224,19 @@ export default function SchoolAdmissions() {
             <Card className="hover:shadow-lg transition-shadow" data-testid="card-alevel-req">
               <CardHeader>
                 <div className="flex items-center space-x-3 mb-4">
-                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">A-Level</Badge>
+                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">Senior Secondary</Badge>
                 </div>
-                <CardTitle>A-Level Secondary (S5-S6)</CardTitle>
+                <CardTitle>Senior Secondary (SS1-SS3)</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3 text-gray-600 dark:text-gray-300">
                   <li className="flex items-start space-x-2">
                     <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span>Uganda Certificate of Education (UCE)</span>
+                    <span>Junior Secondary completion certificate</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span>Minimum 5 credits in O-Level subjects</span>
+                    <span>Good performance in JSS examinations</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
@@ -269,19 +298,21 @@ export default function SchoolAdmissions() {
                       <SelectValue placeholder="Select education level" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="p1">Primary 1 (P1)</SelectItem>
-                      <SelectItem value="p2">Primary 2 (P2)</SelectItem>
-                      <SelectItem value="p3">Primary 3 (P3)</SelectItem>
-                      <SelectItem value="p4">Primary 4 (P4)</SelectItem>
-                      <SelectItem value="p5">Primary 5 (P5)</SelectItem>
-                      <SelectItem value="p6">Primary 6 (P6)</SelectItem>
-                      <SelectItem value="p7">Primary 7 (P7)</SelectItem>
-                      <SelectItem value="s1">Secondary 1 (S1)</SelectItem>
-                      <SelectItem value="s2">Secondary 2 (S2)</SelectItem>
-                      <SelectItem value="s3">Secondary 3 (S3)</SelectItem>
-                      <SelectItem value="s4">Secondary 4 (S4)</SelectItem>
-                      <SelectItem value="s5">Secondary 5 (S5)</SelectItem>
-                      <SelectItem value="s6">Secondary 6 (S6)</SelectItem>
+                      <SelectItem value="playclass">Play Class</SelectItem>
+                      <SelectItem value="kg1">Kindergarten 1 (KG1)</SelectItem>
+                      <SelectItem value="kg2">Kindergarten 2 (KG2)</SelectItem>
+                      <SelectItem value="kg3">Kindergarten 3 (KG3)</SelectItem>
+                      <SelectItem value="basic1">Basic 1</SelectItem>
+                      <SelectItem value="basic2">Basic 2</SelectItem>
+                      <SelectItem value="basic3">Basic 3</SelectItem>
+                      <SelectItem value="basic4">Basic 4</SelectItem>
+                      <SelectItem value="basic5">Basic 5</SelectItem>
+                      <SelectItem value="jss1">Junior Secondary 1 (JSS1)</SelectItem>
+                      <SelectItem value="jss2">Junior Secondary 2 (JSS2)</SelectItem>
+                      <SelectItem value="jss3">Junior Secondary 3 (JSS3)</SelectItem>
+                      <SelectItem value="ss1">Senior Secondary 1 (SS1)</SelectItem>
+                      <SelectItem value="ss2">Senior Secondary 2 (SS2)</SelectItem>
+                      <SelectItem value="ss3">Senior Secondary 3 (SS3)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -389,15 +420,19 @@ export default function SchoolAdmissions() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium">Primary (P1-P7):</span>
+                  <span className="font-medium">Nursery (Play Class-KG3):</span>
+                  <span className="text-green-600 dark:text-green-400">UGX 600,000/term</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-medium">Primary (Basic 1-5):</span>
                   <span className="text-green-600 dark:text-green-400">UGX 800,000/term</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="font-medium">O-Level (S1-S4):</span>
+                  <span className="font-medium">Junior Secondary (JSS1-JSS3):</span>
                   <span className="text-green-600 dark:text-green-400">UGX 1,200,000/term</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="font-medium">A-Level (S5-S6):</span>
+                  <span className="font-medium">Senior Secondary (SS1-SS3):</span>
                   <span className="text-green-600 dark:text-green-400">UGX 1,500,000/term</span>
                 </div>
                 <div className="pt-4 border-t">
