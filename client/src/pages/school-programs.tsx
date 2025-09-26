@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, BookOpen, Users, Calculator, Globe, Microscope, Palette, Music, Trophy, ChevronRight } from "lucide-react";
+import { GraduationCap, BookOpen, Users, Calculator, Globe, Microscope, Palette, Music, Trophy, ChevronRight, Baby, School, GraduationCap as GraduationIcon } from "lucide-react";
 
 export default function SchoolPrograms() {
   return (
@@ -40,7 +40,7 @@ export default function SchoolPrograms() {
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto" data-testid="text-programs-hero-description">
             Comprehensive educational programs designed to nurture academic excellence, 
-            critical thinking, and character development from primary through secondary levels.
+            critical thinking, and character development from nursery through secondary levels.
           </p>
         </div>
       </section>
@@ -58,16 +58,41 @@ export default function SchoolPrograms() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-nursery">
+              <CardHeader>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="bg-orange-100 dark:bg-orange-900 rounded-full p-3">
+                    <Baby className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <Badge className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">Play Class - KG3</Badge>
+                </div>
+                <CardTitle className="text-2xl">Nursery Education</CardTitle>
+                <CardDescription>Ages 2-6 | 4 Years</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                  Early childhood development through play-based learning, foundational skills, 
+                  and social interaction in a nurturing environment.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
+                  <li>• Play Class (Ages 2-3)</li>
+                  <li>• Kindergarten 1 (Ages 3-4)</li>
+                  <li>• Kindergarten 2 (Ages 4-5)</li>
+                  <li>• Kindergarten 3 (Ages 5-6)</li>
+                </ul>
+              </CardContent>
+            </Card>
+
             <Card className="hover:shadow-lg transition-shadow" data-testid="card-primary">
               <CardHeader>
                 <div className="flex items-center justify-between mb-4">
                   <div className="bg-blue-100 dark:bg-blue-900 rounded-full p-3">
                     <BookOpen className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">P1 - P7</Badge>
+                  <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Basic 1 - Basic 5</Badge>
                 </div>
                 <CardTitle className="text-2xl">Primary Education</CardTitle>
-                <CardDescription>Ages 6-13 | 7 Years</CardDescription>
+                <CardDescription>Ages 6-11 | 5 Years</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 dark:text-gray-300 mb-4">
@@ -75,60 +100,61 @@ export default function SchoolPrograms() {
                   Our primary program builds essential skills while fostering creativity and curiosity.
                 </p>
                 <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-                  <li>• English Language & Literature</li>
-                  <li>• Mathematics & Science</li>
-                  <li>• Social Studies & Religious Education</li>
-                  <li>• Creative Arts & Physical Education</li>
+                  <li>• Basic 1 (Ages 6-7)</li>
+                  <li>• Basic 2 (Ages 7-8)</li>
+                  <li>• Basic 3 (Ages 8-9)</li>
+                  <li>• Basic 4 (Ages 9-10)</li>
+                  <li>• Basic 5 (Ages 10-11)</li>
                 </ul>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow" data-testid="card-olevel">
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-junior-secondary">
               <CardHeader>
                 <div className="flex items-center justify-between mb-4">
                   <div className="bg-green-100 dark:bg-green-900 rounded-full p-3">
-                    <Users className="h-8 w-8 text-green-600 dark:text-green-400" />
+                    <School className="h-8 w-8 text-green-600 dark:text-green-400" />
                   </div>
-                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">S1 - S4</Badge>
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">JSS1 - JSS3</Badge>
                 </div>
-                <CardTitle className="text-2xl">O-Level Secondary</CardTitle>
-                <CardDescription>Ages 13-17 | 4 Years</CardDescription>
+                <CardTitle className="text-2xl">Junior Secondary</CardTitle>
+                <CardDescription>Ages 11-14 | 3 Years</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 dark:text-gray-300 mb-4">
-                  Comprehensive secondary education preparing students for Uganda Certificate of Education (UCE). 
-                  Broad curriculum with specialization opportunities.
+                  Foundation secondary education building on primary skills with introduction 
+                  to specialized subjects and critical thinking development.
                 </p>
                 <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-                  <li>• Core Subjects (Math, English, Science)</li>
-                  <li>• Languages (Luganda, French)</li>
-                  <li>• Humanities & Social Sciences</li>
-                  <li>• Technical & Vocational Options</li>
+                  <li>• Junior Secondary School 1 (Ages 11-12)</li>
+                  <li>• Junior Secondary School 2 (Ages 12-13)</li>
+                  <li>• Junior Secondary School 3 (Ages 13-14)</li>
+                  <li>• Preparation for Senior Secondary</li>
                 </ul>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow" data-testid="card-alevel">
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-senior-secondary">
               <CardHeader>
                 <div className="flex items-center justify-between mb-4">
                   <div className="bg-purple-100 dark:bg-purple-900 rounded-full p-3">
-                    <GraduationCap className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                    <GraduationIcon className="h-8 w-8 text-purple-600 dark:text-purple-400" />
                   </div>
-                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">S5 - S6</Badge>
+                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">SS1 - SS3</Badge>
                 </div>
-                <CardTitle className="text-2xl">A-Level Secondary</CardTitle>
-                <CardDescription>Ages 17-19 | 2 Years</CardDescription>
+                <CardTitle className="text-2xl">Senior Secondary</CardTitle>
+                <CardDescription>Ages 14-17 | 3 Years</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 dark:text-gray-300 mb-4">
                   Advanced secondary education with specialized subject combinations preparing 
-                  students for university and professional careers.
+                  students for university entrance and professional careers.
                 </p>
                 <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-                  <li>• Science Combinations</li>
-                  <li>• Arts & Humanities</li>
-                  <li>• Business & Economics</li>
-                  <li>• Technical Education</li>
+                  <li>• Senior Secondary School 1 (Ages 14-15)</li>
+                  <li>• Senior Secondary School 2 (Ages 15-16)</li>
+                  <li>• Senior Secondary School 3 (Ages 16-17)</li>
+                  <li>• University Preparation & WAEC</li>
                 </ul>
               </CardContent>
             </Card>
