@@ -10,19 +10,25 @@ import StudentDashboard from "@/pages/student-dashboard";
 import UserManagement from "@/pages/user-management";
 import Profile from "@/pages/profile";
 import NotFound from "@/pages/not-found";
+import SchoolHomepage from "@/pages/school-homepage";
+import SchoolAbout from "@/pages/school-about";
+import SchoolPrograms from "@/pages/school-programs";
+import SchoolAdmissions from "@/pages/school-admissions";
+import SchoolContact from "@/pages/school-contact";
 import { useEffect } from "react";
 
-function AppRoutes() {
+// Portal Routes Component for authenticated users
+function PortalRoutes() {
   const { user, isLoading, isAuthenticated } = useAuth();
 
-  // Simple authentication check
+  // Simple authentication check for portal routes
   useEffect(() => {
-    // Only prevent back navigation for logged out users
+    // Only prevent back navigation for logged out users accessing portal
     if (!isLoading && !isAuthenticated) {
       const preventBackNavigation = (event: PopStateEvent) => {
-        if (window.location.pathname !== '/login') {
+        if (window.location.pathname.startsWith('/portal') && window.location.pathname !== '/portal/login') {
           event.preventDefault();
-          window.location.href = '/login';
+          window.location.href = '/portal/login';
         }
       };
       
@@ -48,8 +54,8 @@ function AppRoutes() {
   if (!isAuthenticated) {
     return (
       <Switch>
-        <Route path="/login" component={Login} />
-        <Route path="/" component={Login} />
+        <Route path="/portal/login" component={Login} />
+        <Route path="/portal" component={Login} />
         <Route component={Login} />
       </Switch>
     );
@@ -57,21 +63,43 @@ function AppRoutes() {
 
   return (
     <Switch>
-      <Route path="/login" component={Login} />
+      <Route path="/portal/login" component={Login} />
       {(user?.role === 'admin' || user?.role === 'sub-admin') ? (
         <>
-          <Route path="/" component={AdminDashboard} />
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/users" component={UserManagement} />
-          <Route path="/profile" component={Profile} />
+          <Route path="/portal" component={AdminDashboard} />
+          <Route path="/portal/admin" component={AdminDashboard} />
+          <Route path="/portal/users" component={UserManagement} />
+          <Route path="/portal/profile" component={Profile} />
         </>
       ) : (
         <>
-          <Route path="/" component={StudentDashboard} />
-          <Route path="/student" component={StudentDashboard} />
-          <Route path="/profile" component={Profile} />
+          <Route path="/portal" component={StudentDashboard} />
+          <Route path="/portal/student" component={StudentDashboard} />
+          <Route path="/portal/profile" component={Profile} />
         </>
       )}
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+// Main App Routes Component
+function AppRoutes() {
+  return (
+    <Switch>
+      {/* Public School Website Routes */}
+      <Route path="/" component={SchoolHomepage} />
+      <Route path="/about" component={SchoolAbout} />
+      <Route path="/programs" component={SchoolPrograms} />
+      <Route path="/admissions" component={SchoolAdmissions} />
+      <Route path="/contact" component={SchoolContact} />
+      
+      {/* Portal Routes - All portal routes start with /portal */}
+      <Route path="/portal" nest>
+        <PortalRoutes />
+      </Route>
+      
+      {/* Fallback */}
       <Route component={NotFound} />
     </Switch>
   );
