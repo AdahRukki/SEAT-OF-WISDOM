@@ -110,7 +110,7 @@ export function TeacherGradesInterface({
     mutationFn: async (data: AddScore) => {
       return apiRequest('/api/admin/assessments', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data,
       });
     },
     onSuccess: () => {
@@ -131,7 +131,7 @@ export function TeacherGradesInterface({
     mutationFn: async (data: UpdateNonAcademicRating) => {
       return apiRequest('/api/admin/non-academic-ratings', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data,
       });
     },
     onSuccess: () => {
