@@ -23,7 +23,7 @@ import type { z } from "zod";
 type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
 
 export default function StudentDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { logoUrl: currentLogoUrl } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -444,10 +444,7 @@ export default function StudentDashboard() {
                 <span className="hidden sm:inline">Profile</span>
               </a>
               <Button 
-                onClick={() => {
-                  localStorage.removeItem('token');
-                  window.location.href = '/login';
-                }} 
+                onClick={logout} 
                 variant="outline" 
                 size="sm"
                 className="flex items-center space-x-1 text-xs sm:text-sm"

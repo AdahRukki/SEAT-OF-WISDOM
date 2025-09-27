@@ -86,8 +86,8 @@ function PortalRoutes() {
   if (!isAuthenticated) {
     return (
       <Switch>
-        <Route path="/login" component={Login} />
-        <Route path="/" component={Login} />
+        <Route path="login" component={Login} />
+        <Route path="" component={Login} />
         <Route component={Login} />
       </Switch>
     );
@@ -95,19 +95,19 @@ function PortalRoutes() {
 
   return (
     <Switch>
-      <Route path="/login" component={Login} />
+      <Route path="login" component={Login} />
       {(user?.role === 'admin' || user?.role === 'sub-admin') ? (
         <>
-          <Route path="/" component={AdminDashboard} />
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/users" component={UserManagement} />
-          <Route path="/profile" component={Profile} />
+          <Route path="" component={AdminDashboard} />
+          <Route path="admin" component={AdminDashboard} />
+          <Route path="users" component={UserManagement} />
+          <Route path="profile" component={Profile} />
         </>
       ) : (
         <>
-          <Route path="/" component={StudentDashboard} />
-          <Route path="/student" component={StudentDashboard} />
-          <Route path="/profile" component={Profile} />
+          <Route path="" component={StudentDashboard} />
+          <Route path="student" component={StudentDashboard} />
+          <Route path="profile" component={Profile} />
         </>
       )}
       <Route component={NotFound} />

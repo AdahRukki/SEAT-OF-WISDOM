@@ -34,7 +34,7 @@ export default function Login() {
         title: "Login Successful",
         description: "Welcome back!",
       });
-      navigate("/");
+      navigate("/portal");
     } catch (error) {
       toast({
         title: "Login Failed",

@@ -116,7 +116,7 @@ type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 type PaymentForm = z.infer<typeof recordPaymentSchema>;
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { logoUrl: currentLogoUrl, isLoading: logoLoading } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -2253,11 +2253,7 @@ export default function AdminDashboard() {
                 <Button 
                   variant="outline" 
                   className="w-full"
-                  onClick={() => {
-                    // Clear local token and redirect to login
-                    localStorage.removeItem('token');
-                    window.location.href = '/login';
-                  }}
+                  onClick={logout}
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Logout
@@ -2412,11 +2408,7 @@ export default function AdminDashboard() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => {
-                      // Clear local token and redirect to login
-                      localStorage.removeItem('token');
-                      window.location.href = '/login';
-                    }}
+                    onClick={logout}
                     className="px-2 sm:px-4"
                   >
                     <LogOut className="h-4 w-4" />

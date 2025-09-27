@@ -274,8 +274,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/logout', (req, res) => {
     // Clear any server-side session or token if applicable
     res.clearCookie('token');
-    res.redirect('/');
+    res.redirect('/portal/login');
   });
+
 
   // Update user profile
   app.put("/api/auth/profile", authenticate, async (req, res) => {

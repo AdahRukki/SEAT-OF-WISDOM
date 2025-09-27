@@ -64,7 +64,7 @@ import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { User, School as SchoolType } from "@shared/schema";
 
 export default function UserManagement() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -339,10 +339,7 @@ export default function UserManagement() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => {
-                  localStorage.removeItem('token');
-                  window.location.href = '/login';
-                }}
+                onClick={logout}
                 className="px-2 sm:px-4"
               >
                 <LogOut className="h-4 w-4" />
