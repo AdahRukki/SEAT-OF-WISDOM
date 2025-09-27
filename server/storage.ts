@@ -17,6 +17,7 @@ import {
   academicTerms,
   nonAcademicRatings,
   calendarEvents,
+  bulkReportRequests,
   type School,
   type User,
   type Student,
@@ -34,6 +35,7 @@ import {
   type AcademicTerm,
   type NonAcademicRating,
   type CalendarEvent,
+  type BulkReportRequest,
   type InsertUser,
   type InsertStudent,
   type InsertClass,
@@ -50,6 +52,9 @@ import {
   type InsertAcademicTerm,
   type InsertNonAcademicRating,
   type InsertCalendarEvent,
+  type InsertBulkReportRequest,
+  type BulkReportProgress,
+  type UpdateTermSettings,
   type StudentWithDetails,
   type StudentFeeWithDetails,
   type PaymentWithDetails,
@@ -182,6 +187,18 @@ export interface IStorage {
   getClassById(classId: string): Promise<Class | undefined>;
   updateSchool(schoolId: string, data: Partial<School>): Promise<School>;
   updateUserProfile(userId: string, data: Partial<User>): Promise<User>;
+  
+  // Bulk report generation operations
+  createBulkReportRequest(requestData: InsertBulkReportRequest): Promise<BulkReportRequest>;
+  getBulkReportRequest(requestId: string): Promise<BulkReportRequest | undefined>;
+  updateBulkReportProgress(requestId: string, processedStudents: number): Promise<BulkReportRequest>;
+  completeBulkReportRequest(requestId: string, errorMessage?: string): Promise<BulkReportRequest>;
+  getBulkReportProgress(requestId: string): Promise<BulkReportProgress | undefined>;
+  
+  // Term settings operations
+  updateTermResumptionDate(termId: string, resumptionDate: string | null): Promise<AcademicTerm>;
+  getTermByNameAndSession(termName: string, session: string): Promise<AcademicTerm | undefined>;
+  updateCurrentTermAndSession(termName: string, session: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1552,6 +1569,105 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(asc(calendarEvents.eventDate));
+  }
+
+  // Bulk report generation operations
+  async createBulkReportRequest(requestData: InsertBulkReportRequest): Promise<BulkReportRequest> {
+    const [request] = await db
+      .insert(bulkReportRequests)
+      .values(requestData)
+      .returning();
+    return request;
+  }
+
+  async getBulkReportRequest(requestId: string): Promise<BulkReportRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(bulkReportRequests)
+      .where(eq(bulkReportRequests.id, requestId));
+    return request;
+  }
+
+  async updateBulkReportProgress(requestId: string, processedStudents: number): Promise<BulkReportRequest> {
+    const [updated] = await db
+      .update(bulkReportRequests)
+      .set({ 
+        processedStudents,
+        status: 'processing',
+        updatedAt: new Date()
+      })
+      .where(eq(bulkReportRequests.id, requestId))
+      .returning();
+    return updated;
+  }
+
+  async completeBulkReportRequest(requestId: string, errorMessage?: string): Promise<BulkReportRequest> {
+    const [updated] = await db
+      .update(bulkReportRequests)
+      .set({ 
+        status: errorMessage ? 'failed' : 'completed',
+        completedAt: new Date(),
+        errorMessage,
+        updatedAt: new Date()
+      })
+      .where(eq(bulkReportRequests.id, requestId))
+      .returning();
+    return updated;
+  }
+
+  async getBulkReportProgress(requestId: string): Promise<BulkReportProgress | undefined> {
+    const request = await this.getBulkReportRequest(requestId);
+    if (!request) return undefined;
+
+    return {
+      id: request.id,
+      status: request.status as 'pending' | 'processing' | 'completed' | 'failed',
+      totalStudents: request.totalStudents,
+      processedStudents: request.processedStudents,
+      percentage: request.totalStudents > 0 ? Math.round((request.processedStudents / request.totalStudents) * 100) : 0,
+      errorMessage: request.errorMessage || undefined
+    };
+  }
+
+  // Term settings operations
+  async updateTermResumptionDate(termId: string, resumptionDate: string | null): Promise<AcademicTerm> {
+    const [updated] = await db
+      .update(academicTerms)
+      .set({ 
+        resumptionDate: resumptionDate ? new Date(resumptionDate) : null,
+        updatedAt: new Date()
+      })
+      .where(eq(academicTerms.id, termId))
+      .returning();
+    return updated;
+  }
+
+  async getTermByNameAndSession(termName: string, session: string): Promise<AcademicTerm | undefined> {
+    const [sessionRecord] = await db
+      .select()
+      .from(academicSessions)
+      .where(eq(academicSessions.sessionYear, session));
+    
+    if (!sessionRecord) return undefined;
+
+    const [term] = await db
+      .select()
+      .from(academicTerms)
+      .where(
+        and(
+          eq(academicTerms.termName, termName),
+          eq(academicTerms.sessionId, sessionRecord.id)
+        )
+      );
+    
+    return term;
+  }
+
+  async updateCurrentTermAndSession(termName: string, session: string): Promise<void> {
+    // Update current term setting
+    await this.setSetting('current_term', termName);
+    // Update current session setting
+    await this.setSetting('current_session', session);
   }
 }
 

@@ -22,6 +22,8 @@ import {
   insertFeeTypeSchema,
   recordPaymentSchema,
   assignFeeSchema,
+  insertBulkReportRequestSchema,
+  updateTermSettingsSchema,
   users,
   students,
   classes
@@ -1808,6 +1810,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching students by class:", error);
       res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  // Bulk report generation routes
+  app.post('/api/admin/reports/bulk', authenticate, requireAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      const requestData = insertBulkReportRequestSchema.parse(req.body);
+      
+      // Count total students for the request
+      let totalStudents = 0;
+      if (requestData.requestType === 'school') {
+        const allStudents = await storage.getAllStudentsWithDetails(requestData.schoolId);
+        totalStudents = allStudents.length;
+      } else if (requestData.requestType === 'class' && requestData.classId) {
+        const classStudents = await storage.getStudentsByClass(requestData.classId);
+        totalStudents = classStudents.length;
+      }
+      
+      const bulkRequest = await storage.createBulkReportRequest({
+        ...requestData,
+        totalStudents,
+        requestedBy: user.id
+      });
+      
+      res.json(bulkRequest);
+    } catch (error) {
+      console.error("Error creating bulk report request:", error);
+      res.status(500).json({ error: "Failed to create bulk report request" });
+    }
+  });
+
+  app.get('/api/admin/reports/bulk/:requestId/progress', authenticate, requireAdmin, async (req: Request, res: Response) => {
+    const { requestId } = req.params;
+    
+    try {
+      const progress = await storage.getBulkReportProgress(requestId);
+      if (!progress) {
+        return res.status(404).json({ error: "Bulk report request not found" });
+      }
+      
+      res.json(progress);
+    } catch (error) {
+      console.error("Error fetching bulk report progress:", error);
+      res.status(500).json({ error: "Failed to fetch progress" });
+    }
+  });
+
+  // Term settings routes
+  app.post('/api/admin/term-settings', authenticate, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const settingsData = updateTermSettingsSchema.parse(req.body);
+      
+      // Update term resumption date if provided
+      if (settingsData.resumptionDate !== undefined && settingsData.termId) {
+        await storage.updateTermResumptionDate(settingsData.termId, settingsData.resumptionDate);
+      }
+      
+      // Update current term and session if provided
+      if (settingsData.currentTerm && settingsData.currentSession) {
+        await storage.updateCurrentTermAndSession(settingsData.currentTerm, settingsData.currentSession);
+      }
+      
+      res.json({ success: true, message: "Term settings updated successfully" });
+    } catch (error) {
+      console.error("Error updating term settings:", error);
+      res.status(500).json({ error: "Failed to update term settings" });
+    }
+  });
+
+  app.get('/api/admin/terms/:termName/:session', authenticate, requireAdmin, async (req: Request, res: Response) => {
+    const { termName, session } = req.params;
+    
+    try {
+      const term = await storage.getTermByNameAndSession(termName, session);
+      res.json(term || null);
+    } catch (error) {
+      console.error("Error fetching term:", error);
+      res.status(500).json({ error: "Failed to fetch term" });
     }
   });
 

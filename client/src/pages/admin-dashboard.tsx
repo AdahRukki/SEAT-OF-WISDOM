@@ -89,7 +89,8 @@ import {
   Shield,
   Phone,
   Loader2,
-  Camera
+  Camera,
+  FileSpreadsheet
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -203,6 +204,17 @@ export default function AdminDashboard() {
   const [nextTermResumptionDate, setNextTermResumptionDate] = useState("");
   const [reportTerm, setReportTerm] = useState("");
   const [reportSession, setReportSession] = useState("");
+  
+  // Bulk report generation states
+  const [selectedBulkReportTerm, setSelectedBulkReportTerm] = useState("First Term");
+  const [selectedBulkReportSession, setSelectedBulkReportSession] = useState("2024/2025");
+  const [selectedBulkClassId, setSelectedBulkClassId] = useState("");
+  const [showBulkProgressDialog, setShowBulkProgressDialog] = useState(false);
+  const [bulkGenerationProgress, setBulkGenerationProgress] = useState(0);
+  
+  // Term settings states
+  const [nextTermDate, setNextTermDate] = useState("");
+  const [selectedNextTerm, setSelectedNextTerm] = useState("");
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
   const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
 
@@ -3193,12 +3205,326 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Report Cards Tab */}
+          {/* Enhanced Report Cards Tab */}
           <TabsContent value="reports" className="space-y-6 table-container">
-            <ReportCardManagement 
-              classes={classes}
-              user={user}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle>Report Card Management</CardTitle>
+                <CardDescription>
+                  Generate individual and bulk report cards for students
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="individual" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="individual">Individual Reports</TabsTrigger>
+                    <TabsTrigger value="bulk">Bulk Generation</TabsTrigger>
+                    <TabsTrigger value="settings">Term Settings</TabsTrigger>
+                  </TabsList>
+                  
+                  {/* Individual Reports Tab */}
+                  <TabsContent value="individual" className="mt-6">
+                    <ReportCardManagement 
+                      classes={classes}
+                      user={user}
+                    />
+                  </TabsContent>
+                  
+                  {/* Bulk Report Generation Tab */}
+                  <TabsContent value="bulk" className="mt-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-5 w-5" />
+                          Bulk Report Generation
+                        </CardTitle>
+                        <CardDescription>
+                          Generate report cards for entire classes or the whole school at once
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {/* School-wide Generation */}
+                        <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20">
+                          <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                            <School className="h-5 w-5" />
+                            Generate for Entire School
+                          </h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            Generate report cards for all students across all classes in this school
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div>
+                              <Label>Term</Label>
+                              <Select defaultValue="First Term">
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select term" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="First Term">First Term</SelectItem>
+                                  <SelectItem value="Second Term">Second Term</SelectItem>
+                                  <SelectItem value="Third Term">Third Term</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>Session</Label>
+                              <Select defaultValue="2024/2025">
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select session" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="2024/2025">2024/2025</SelectItem>
+                                  <SelectItem value="2025/2026">2025/2026</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex items-end">
+                              <Button 
+                                className="w-full bg-blue-600 hover:bg-blue-700"
+                                data-testid="button-generate-school-reports"
+                                onClick={async () => {
+                                  const schoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
+                                  if (!schoolId) {
+                                    toast({ title: "Error", description: "Please select a school", variant: "destructive" });
+                                    return;
+                                  }
+                                  
+                                  try {
+                                    const response = await apiRequest('/api/admin/reports/bulk', {
+                                      method: 'POST',
+                                      body: {
+                                        requestType: 'school',
+                                        schoolId: schoolId,
+                                        term: selectedBulkReportTerm,
+                                        session: selectedBulkReportSession
+                                      }
+                                    });
+                                    toast({ title: "Success", description: "Bulk report generation started successfully!" });
+                                    console.log("Bulk report request:", response);
+                                  } catch (error: any) {
+                                    toast({ title: "Error", description: error.message || "Failed to start bulk report generation", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                                Generate All Reports
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            <strong>Note:</strong> This will generate report cards for all {allStudents.length} students in the school
+                          </div>
+                        </div>
+
+                        {/* Class-wise Generation */}
+                        <div className="border rounded-lg p-4">
+                          <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                            <Users className="h-5 w-5" />
+                            Generate by Class
+                          </h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            Generate report cards for all students in a specific class
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div>
+                              <Label>Select Class</Label>
+                              <Select value={selectedBulkClassId} onValueChange={setSelectedBulkClassId}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Choose class" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {sortClassesByOrder(classes).map((classItem) => (
+                                    <SelectItem key={classItem.id} value={classItem.id}>
+                                      {classItem.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>Term</Label>
+                              <Select value={selectedBulkReportTerm} onValueChange={setSelectedBulkReportTerm}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select term" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="First Term">First Term</SelectItem>
+                                  <SelectItem value="Second Term">Second Term</SelectItem>
+                                  <SelectItem value="Third Term">Third Term</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>Session</Label>
+                              <Select value={selectedBulkReportSession} onValueChange={setSelectedBulkReportSession}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select session" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="2024/2025">2024/2025</SelectItem>
+                                  <SelectItem value="2025/2026">2025/2026</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex items-end">
+                              <Button 
+                                className="w-full"
+                                data-testid="button-generate-class-reports"
+                                onClick={async () => {
+                                  const schoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
+                                  if (!schoolId || !selectedBulkClassId) {
+                                    toast({ title: "Error", description: "Please select a school and class", variant: "destructive" });
+                                    return;
+                                  }
+                                  
+                                  try {
+                                    const response = await apiRequest('/api/admin/reports/bulk', {
+                                      method: 'POST',
+                                      body: {
+                                        requestType: 'class',
+                                        schoolId: schoolId,
+                                        classId: selectedBulkClassId,
+                                        term: selectedBulkReportTerm,
+                                        session: selectedBulkReportSession
+                                      }
+                                    });
+                                    toast({ title: "Success", description: "Class report generation started successfully!" });
+                                    console.log("Class report request:", response);
+                                  } catch (error: any) {
+                                    toast({ title: "Error", description: error.message || "Failed to start class report generation", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <Users className="h-4 w-4 mr-2" />
+                                Generate Class Reports
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Generation Status */}
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                          <h4 className="font-medium mb-2">Generation Status</h4>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            Ready to generate reports. Select options above and click generate.
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                  
+                  {/* Term Settings Tab */}
+                  <TabsContent value="settings" className="mt-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Calendar className="h-5 w-5" />
+                          Term & Session Settings
+                        </CardTitle>
+                        <CardDescription>
+                          Configure term dates and next term resumption information
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {/* Next Term Resumption Date */}
+                        <div className="space-y-4">
+                          <h3 className="font-semibold text-lg">Next Term Resumption</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="next-term-date">Next Term Resume Date</Label>
+                              <Input
+                                id="next-term-date"
+                                type="date"
+                                data-testid="input-next-term-date"
+                                className="w-full"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="next-term-name">Next Term</Label>
+                              <Select>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select next term" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Second Term">Second Term</SelectItem>
+                                  <SelectItem value="Third Term">Third Term</SelectItem>
+                                  <SelectItem value="First Term">First Term (New Session)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <Button 
+                            className="w-full md:w-auto" 
+                            data-testid="button-save-term-settings"
+                            onClick={async () => {
+                              try {
+                                // For now, focus on updating current term and session settings
+                                // TODO: Add academic term management for resumption dates
+                                const response = await apiRequest('/api/admin/term-settings', {
+                                  method: 'POST',
+                                  body: {
+                                    currentTerm: selectedNextTerm || "First Term",
+                                    currentSession: "2024/2025",
+                                    // Note: termId is required by schema but resumption date is optional
+                                    termId: "00000000-0000-0000-0000-000000000000", // TODO: Replace with actual term management
+                                    resumptionDate: null // Skip resumption date for now
+                                  }
+                                });
+                                toast({ title: "Success", description: "Term settings saved successfully!" });
+                                console.log("Term settings response:", response);
+                              } catch (error: any) {
+                                toast({ title: "Error", description: error.message || "Failed to save term settings", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Term Settings
+                          </Button>
+                        </div>
+
+                        {/* Academic Calendar */}
+                        <div className="border-t pt-6">
+                          <h3 className="font-semibold text-lg mb-4">Academic Calendar Settings</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <Label>Current Term</Label>
+                              <Select defaultValue="First Term">
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="First Term">First Term</SelectItem>
+                                  <SelectItem value="Second Term">Second Term</SelectItem>
+                                  <SelectItem value="Third Term">Third Term</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label>Current Session</Label>
+                              <Select defaultValue="2024/2025">
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="2024/2025">2024/2025</SelectItem>
+                                  <SelectItem value="2025/2026">2025/2026</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex items-end">
+                              <Button className="w-full" variant="outline">
+                                <Calendar className="h-4 w-4 mr-2" />
+                                Update Calendar
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Settings Tab */}
