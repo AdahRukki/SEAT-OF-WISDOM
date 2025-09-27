@@ -73,6 +73,7 @@ import {
   EyeOff,
   Upload,
   Edit,
+  Trash2,
   X,
   DollarSign,
   Settings,
@@ -158,6 +159,10 @@ export default function AdminDashboard() {
   // Student editing states
   const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentWithDetails | null>(null);
+  
+  // Student deletion states
+  const [isDeleteStudentDialogOpen, setIsDeleteStudentDialogOpen] = useState(false);
+  const [selectedStudentForDeletion, setSelectedStudentForDeletion] = useState<StudentWithDetails | null>(null);
   const [studentEditForm, setStudentEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -536,6 +541,31 @@ export default function AdminDashboard() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create class", variant: "destructive" });
+    }
+  });
+
+  // Delete student mutation
+  const deleteStudentMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return apiRequest(`/api/admin/users/${userId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      setIsDeleteStudentDialogOpen(false);
+      setSelectedStudentForDeletion(null);
+      toast({
+        title: "Success",
+        description: "Student deleted successfully"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error", 
+        description: error?.message || "Failed to delete student",
+        variant: "destructive"
+      });
     }
   });
 
@@ -2732,15 +2762,31 @@ export default function AdminDashboard() {
                                 {student.parentWhatsapp || 'Not provided'}
                               </td>
                               <td className="px-4 py-3 text-sm">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => openEditStudent(student)}
-                                  className="flex items-center"
-                                >
-                                  <Edit className="h-3 w-3 mr-1" />
-                                  Edit
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openEditStudent(student)}
+                                    className="flex items-center"
+                                    data-testid={`button-edit-student-${student.id}`}
+                                  >
+                                    <Edit className="h-3 w-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedStudentForDeletion(student);
+                                      setIsDeleteStudentDialogOpen(true);
+                                    }}
+                                    className="flex items-center text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    data-testid={`button-delete-student-${student.id}`}
+                                  >
+                                    <Trash2 className="h-3 w-3 mr-1" />
+                                    Delete
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -5425,6 +5471,59 @@ export default function AdminDashboard() {
                   Export as Excel
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Student Confirmation Dialog */}
+        <Dialog open={isDeleteStudentDialogOpen} onOpenChange={setIsDeleteStudentDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Delete Student</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this student? This action cannot be undone and will remove all associated data including grades, attendance records, and financial information.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedStudentForDeletion && (
+              <div className="py-4">
+                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <User className="h-4 w-4 text-red-600" />
+                    <span className="font-medium text-red-800">
+                      {selectedStudentForDeletion.user.firstName} {selectedStudentForDeletion.user.lastName}
+                    </span>
+                  </div>
+                  <p className="text-sm text-red-700">{selectedStudentForDeletion.user.email}</p>
+                  <p className="text-sm text-red-700">Student ID: {selectedStudentForDeletion.studentId}</p>
+                  <Badge className="bg-blue-500 text-white mt-2">
+                    Student
+                  </Badge>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteStudentDialogOpen(false);
+                  setSelectedStudentForDeletion(null);
+                }}
+                data-testid="button-cancel-delete"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (selectedStudentForDeletion) {
+                    deleteStudentMutation.mutate(selectedStudentForDeletion.user.id);
+                  }
+                }}
+                disabled={deleteStudentMutation.isPending}
+                data-testid="button-confirm-delete"
+              >
+                {deleteStudentMutation.isPending ? "Deleting..." : "Delete Student"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
