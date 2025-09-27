@@ -175,6 +175,7 @@ function UsersManagement() {
                   <TableHead>Role</TableHead>
                   <TableHead>School</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -197,6 +198,26 @@ function UsersManagement() {
                         {user.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      {/* Only show delete button for users other than the current user */}
+                      {user.id !== currentUser?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // TODO: Add delete dialog state and functionality
+                            toast({
+                              title: "Delete User",
+                              description: `Delete functionality for ${user.firstName} ${user.lastName}`,
+                            });
+                          }}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          data-testid={`button-delete-${user.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -209,7 +230,7 @@ function UsersManagement() {
 }
 
 export default function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const { logoUrl: currentLogoUrl, isLoading: logoLoading } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -366,7 +387,7 @@ export default function AdminDashboard() {
   // Queries - Move queries to the top to avoid initialization issues
   const { data: schools = [] } = useQuery<SchoolType[]>({ 
     queryKey: ['/api/admin/schools'],
-    enabled: user?.role === 'admin'
+    enabled: currentUser?.role === 'admin'
   });
 
   const { data: academicInfo } = useQuery<{
@@ -506,10 +527,10 @@ export default function AdminDashboard() {
 
   // Set initial school for sub-admin or first school for main admin
   useEffect(() => {
-    if (user?.role === 'sub-admin' && user.schoolId) {
-      setSelectedSchoolId(user.schoolId);
+    if (currentUser?.role === 'sub-admin' && currentUser.schoolId) {
+      setSelectedSchoolId(currentUser.schoolId);
     }
-  }, [user]);
+  }, [currentUser]);
 
   // Don't auto-select school for admin - let them choose manually
 
@@ -525,24 +546,24 @@ export default function AdminDashboard() {
   const { data: classes = [] } = useQuery<Class[]>({ 
     queryKey: ['/api/admin/classes', selectedSchoolId],
     queryFn: () => {
-      const url = user?.role === 'admin' && selectedSchoolId 
+      const url = currentUser?.role === 'admin' && selectedSchoolId 
         ? `/api/admin/classes?schoolId=${selectedSchoolId}`
         : '/api/admin/classes';
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || currentUser?.role === 'sub-admin'
   });
 
   const { data: subjects = [] } = useQuery<Subject[]>({ queryKey: ['/api/admin/subjects'] });
   const { data: allStudents = [] } = useQuery<StudentWithDetails[]>({ 
     queryKey: ['/api/admin/students', selectedSchoolId],
     queryFn: () => {
-      const url = user?.role === 'admin' && selectedSchoolId 
+      const url = currentUser?.role === 'admin' && selectedSchoolId 
         ? `/api/admin/students?schoolId=${selectedSchoolId}`
         : '/api/admin/students';
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || currentUser?.role === 'sub-admin'
   });
   
   // Class subjects query for selected class in details dialog
@@ -577,45 +598,45 @@ export default function AdminDashboard() {
   const { data: feeTypes = [] } = useQuery<FeeType[]>({ 
     queryKey: ['/api/admin/fee-types', selectedSchoolId],
     queryFn: () => {
-      const url = user?.role === 'admin' && selectedSchoolId 
+      const url = currentUser?.role === 'admin' && selectedSchoolId 
         ? `/api/admin/fee-types?schoolId=${selectedSchoolId}`
         : '/api/admin/fee-types';
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || currentUser?.role === 'sub-admin'
   });
 
   const { data: studentFees = [] } = useQuery<any[]>({ 
     queryKey: ['/api/admin/student-fees', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
     queryFn: () => {
       let url = '/api/admin/student-fees?';
-      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
+      if (currentUser?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
       url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || currentUser?.role === 'sub-admin'
   });
 
   const { data: financialSummary } = useQuery<any>({ 
     queryKey: ['/api/admin/financial-summary', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
     queryFn: () => {
       let url = '/api/admin/financial-summary?';
-      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
+      if (currentUser?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
       url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || currentUser?.role === 'sub-admin'
   });
 
   const { data: payments = [] } = useQuery<Payment[]>({ 
     queryKey: ['/api/admin/payments', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
     queryFn: () => {
       let url = '/api/admin/payments?';
-      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
+      if (currentUser?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
       url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || currentUser?.role === 'sub-admin'
   });
 
   // Mutations
@@ -625,7 +646,7 @@ export default function AdminDashboard() {
         method: 'POST',
         body: { 
           ...classData, 
-          schoolId: selectedSchoolId || user?.schoolId 
+          schoolId: selectedSchoolId || currentUser?.schoolId 
         }
       });
       
@@ -678,7 +699,7 @@ export default function AdminDashboard() {
         body: {
           ...studentData,
           parentWhatsapp: studentData.parentWhatsApp,
-          schoolId: selectedSchoolId || user?.schoolId
+          schoolId: selectedSchoolId || currentUser?.schoolId
         }
       });
     },
@@ -1326,7 +1347,7 @@ export default function AdminDashboard() {
         method: 'POST',
         body: {
           ...feeTypeData,
-          schoolId: selectedSchoolId || user?.schoolId
+          schoolId: selectedSchoolId || currentUser?.schoolId
         }
       });
     },
@@ -2334,12 +2355,12 @@ export default function AdminDashboard() {
     }, 500);
   };
 
-  if (!user) {
+  if (!currentUser) {
     return <div>Loading...</div>;
   }
 
   // Show school selector screen for main admin who hasn't selected a school yet
-  if (user.role === 'admin' && !selectedSchoolId) {
+  if (currentUser.role === 'admin' && !selectedSchoolId) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="max-w-md w-full mx-auto">
@@ -2354,7 +2375,7 @@ export default function AdminDashboard() {
               </div>
               <CardTitle className="text-2xl font-bold">Seat of Wisdom Academy</CardTitle>
               <CardDescription>
-                Welcome back, {user.firstName}! Choose which school branch you'd like to manage today.
+                Welcome back, {currentUser.firstName}! Choose which school branch you'd like to manage today.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2422,7 +2443,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="hidden sm:block ml-8 sm:ml-10">
                     <p className="text-xs sm:text-sm text-gray-500">
-                      {user.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
+                      {currentUser.role === 'admin' ? 'Main Administrator' : 'Branch Administrator'}
                     </p>
                     {academicInfo && (academicInfo.currentSession || academicInfo.currentTerm) ? (
                       <p className="text-xs text-blue-600 font-medium">
@@ -2440,7 +2461,7 @@ export default function AdminDashboard() {
               </div>
               
               {/* Active School Display for Main Admin - Hidden on mobile */}
-              {user.role === 'admin' && selectedSchoolId && (
+              {currentUser.role === 'admin' && selectedSchoolId && (
                 <div className="hidden lg:flex items-center space-x-2">
                   <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
                     <SelectTrigger className="w-48">
@@ -2461,11 +2482,11 @@ export default function AdminDashboard() {
               )}
 
               {/* Sub-Admin School Display - Hidden on mobile */}
-              {user.role === 'sub-admin' && (
+              {currentUser.role === 'sub-admin' && (
                 <div className="hidden lg:flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-md border border-blue-200 dark:border-blue-800">
                   <School className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                    {schools?.find(s => s.id === (user as any).schoolId)?.name || 'Loading...'}
+                    {schools?.find(s => s.id === (currentUser as any).schoolId)?.name || 'Loading...'}
                   </span>
                 </div>
               )}
@@ -2508,7 +2529,7 @@ export default function AdminDashboard() {
 
 
               {/* Navigation to User Management - Icon only on mobile */}
-              {user.role === 'admin' && (
+              {currentUser.role === 'admin' && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
@@ -2532,8 +2553,8 @@ export default function AdminDashboard() {
                 className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
               >
                 <User className="h-4 w-4" />
-                <span className="hidden md:inline">{user.firstName} {user.lastName}</span>
-                <span className="md:hidden text-xs">{user.firstName}</span>
+                <span className="hidden md:inline">{currentUser.firstName} {currentUser.lastName}</span>
+                <span className="md:hidden text-xs">{currentUser.firstName}</span>
               </a>
               
               {/* Logout Button - Icon only on mobile */}
@@ -2557,7 +2578,7 @@ export default function AdminDashboard() {
           </div>
           
           {/* Mobile School Selector - Shown below header on mobile for admin */}
-          {user.role === 'admin' && selectedSchoolId && (
+          {currentUser.role === 'admin' && selectedSchoolId && (
             <div className="lg:hidden pb-3 border-t border-gray-200 dark:border-gray-700 pt-3">
               <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
                 <SelectTrigger className="w-full">
@@ -2601,7 +2622,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="reports" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Reports
             </TabsTrigger>
-            {user?.role === 'admin' && (
+            {currentUser?.role === 'admin' && (
               <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
                 Users
               </TabsTrigger>
@@ -2932,7 +2953,7 @@ export default function AdminDashboard() {
                 <TeacherGradesInterface 
                   currentTerm="First Term"
                   currentSession="2024/2025"
-                  userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                  userSchoolId={currentUser?.role === 'admin' ? selectedSchoolId : currentUser?.schoolId}
                 />
               </CardContent>
             </Card>
@@ -2953,7 +2974,7 @@ export default function AdminDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <AttendanceManagement selectedSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId} />
+                <AttendanceManagement selectedSchoolId={currentUser?.role === 'admin' ? selectedSchoolId : currentUser?.schoolId} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -3277,7 +3298,7 @@ export default function AdminDashboard() {
                   <TabsContent value="individual" className="mt-6">
                     <ReportCardManagement 
                       classes={classes}
-                      user={user}
+                      user={currentUser}
                     />
                   </TabsContent>
                   
@@ -3334,7 +3355,7 @@ export default function AdminDashboard() {
                                 className="w-full bg-blue-600 hover:bg-blue-700"
                                 data-testid="button-generate-school-reports"
                                 onClick={async () => {
-                                  const schoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
+                                  const schoolId = currentUser?.role === 'admin' ? selectedSchoolId : currentUser?.schoolId;
                                   if (!schoolId) {
                                     toast({ title: "Error", description: "Please select a school", variant: "destructive" });
                                     return;
@@ -3422,7 +3443,7 @@ export default function AdminDashboard() {
                                 className="w-full"
                                 data-testid="button-generate-class-reports"
                                 onClick={async () => {
-                                  const schoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
+                                  const schoolId = currentUser?.role === 'admin' ? selectedSchoolId : currentUser?.schoolId;
                                   if (!schoolId || !selectedBulkClassId) {
                                     toast({ title: "Error", description: "Please select a school and class", variant: "destructive" });
                                     return;
@@ -3594,7 +3615,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Users Tab */}
-          {user?.role === 'admin' && (
+          {currentUser?.role === 'admin' && (
             <TabsContent value="users" className="space-y-6">
               <UsersManagement />
             </TabsContent>

@@ -64,7 +64,7 @@ import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { User, School as SchoolType } from "@shared/schema";
 
 export default function UserManagement() {
-  const { user, logout } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -112,12 +112,12 @@ export default function UserManagement() {
   // Queries - Filter to show only admin and sub-admin users
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ['/api/admin/users?adminOnly=true'],
-    enabled: user?.role === 'admin'
+    enabled: currentUser?.role === 'admin'
   });
 
   const { data: schools = [] } = useQuery<SchoolType[]>({
     queryKey: ['/api/admin/schools'],
-    enabled: user?.role === 'admin'
+    enabled: currentUser?.role === 'admin'
   });
 
   // Create sub-admin mutation
@@ -259,7 +259,7 @@ export default function UserManagement() {
     return schools.find(s => s.id === schoolId)?.name || 'Unknown School';
   };
 
-  if (user?.role !== 'admin') {
+  if (currentUser?.role !== 'admin') {
     return (
       <div className="container mx-auto p-6">
         <Card>
@@ -598,8 +598,8 @@ export default function UserManagement() {
                             </Tooltip>
                           )}
                           
-                          {/* Delete button - Only show for non-admin users */}
-                          {user.role !== 'admin' && (
+                          {/* Delete button - Allow deletion of any user except yourself */}
+                          {user.id !== currentUser?.id && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
@@ -1006,7 +1006,13 @@ export default function UserManagement() {
             <DialogHeader>
               <DialogTitle className="text-red-600">Delete User</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete this user? This action cannot be undone.
+                {selectedUserForDeletion?.role === 'admin' ? (
+                  <span className="text-red-600 font-semibold">
+                    ⚠️ WARNING: You are about to delete an administrator account. This will remove all administrative access for this user and cannot be undone.
+                  </span>
+                ) : (
+                  "Are you sure you want to delete this user? This action cannot be undone."
+                )}
               </DialogDescription>
             </DialogHeader>
             {selectedUserForDeletion && (
