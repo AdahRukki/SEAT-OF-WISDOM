@@ -50,32 +50,40 @@ export default function SchoolPrograms() {
                       <span>Seat of Wisdom Academy</span>
                     </SheetTitle>
                   </SheetHeader>
-                  <div className="flex flex-col space-y-4 mt-8">
-                    <Link href="/about" onClick={() => setMobileMenuOpen(false)}>
-                      <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-about">
-                        About
-                      </Button>
-                    </Link>
-                    <Link href="/programs" onClick={() => setMobileMenuOpen(false)}>
-                      <Button variant="ghost" className="w-full justify-start text-lg h-12 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" data-testid="link-mobile-programs">
-                        Programs
-                      </Button>
-                    </Link>
-                    <Link href="/admissions" onClick={() => setMobileMenuOpen(false)}>
-                      <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-admissions">
-                        Admissions
-                      </Button>
-                    </Link>
-                    <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
-                      <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-contact">
-                        Contact
-                      </Button>
-                    </Link>
+                  <div className="flex flex-col space-y-6 mt-8">
+                    {/* Prominent Student Portal Button */}
                     <Link href="/portal" onClick={() => setMobileMenuOpen(false)}>
-                      <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg h-12" data-testid="button-mobile-portal">
-                        Student Portal
+                      <Button className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-xl font-bold h-16 shadow-lg border border-blue-500" data-testid="button-mobile-portal">
+                        🎓 Student Portal Login
                       </Button>
                     </Link>
+                    
+                    {/* Divider */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-2"></div>
+                    
+                    {/* Other Navigation Links */}
+                    <div className="flex flex-col space-y-2">
+                      <Link href="/about" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-about">
+                          About
+                        </Button>
+                      </Link>
+                      <Link href="/programs" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start text-lg h-12 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" data-testid="link-mobile-programs">
+                          Programs
+                        </Button>
+                      </Link>
+                      <Link href="/admissions" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-admissions">
+                          Admissions
+                        </Button>
+                      </Link>
+                      <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-contact">
+                          Contact
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </SheetContent>
               </Sheet>
