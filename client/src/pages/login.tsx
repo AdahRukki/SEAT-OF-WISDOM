@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff } from "lucide-react";
+import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 
@@ -100,6 +100,20 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+      {/* Back to Website Button */}
+      <div className="absolute top-4 left-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => window.location.href = '/'}
+          className="flex items-center space-x-2 bg-white/90 hover:bg-white"
+          data-testid="button-back-to-website"
+        >
+          <Home className="h-4 w-4" />
+          <span>Back to Website</span>
+        </Button>
+      </div>
+      
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">

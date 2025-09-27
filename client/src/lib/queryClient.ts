@@ -44,7 +44,7 @@ export async function apiRequest(
     }
     
     // Force immediate redirect
-    window.location.href = '/login?expired=1';
+    window.location.href = '/portal/login?expired=1';
     throw new Error('401: Session expired - redirecting to login');
   }
 
@@ -87,13 +87,13 @@ export const getQueryFn: <T>(options: {
       if (unauthorizedBehavior === "returnNull") {
         // Force redirect even if returning null
         setTimeout(() => {
-          window.location.href = '/login?expired=1';
+          window.location.href = '/portal/login?expired=1';
         }, 100);
         return null;
       }
       
       // Force immediate redirect
-      window.location.href = '/login?expired=1';
+      window.location.href = '/portal/login?expired=1';
       throw new Error('401: Session expired - redirecting to login');
     }
 

@@ -21,9 +21,9 @@ import { useEffect } from "react";
 function PortalRoutes() {
   const { user, isLoading, isAuthenticated } = useAuth();
 
-  // Simple authentication check for portal routes
+  // Enhanced security for portal routes with session monitoring
   useEffect(() => {
-    // Only prevent back navigation for logged out users accessing portal
+    // Prevent back navigation for logged out users accessing portal
     if (!isLoading && !isAuthenticated) {
       const preventBackNavigation = (event: PopStateEvent) => {
         if (window.location.pathname.startsWith('/portal') && window.location.pathname !== '/portal/login') {
@@ -36,6 +36,38 @@ function PortalRoutes() {
       
       return () => {
         window.removeEventListener('popstate', preventBackNavigation);
+      };
+    }
+
+    // Monitor navigation away from portal - auto-logout for security
+    if (isAuthenticated) {
+      const handleNavigationAway = () => {
+        // If user navigates away from /portal paths, trigger logout
+        if (!window.location.pathname.startsWith('/portal')) {
+          // Store flag to logout when they come back
+          localStorage.setItem('portal_exit_timestamp', Date.now().toString());
+        }
+      };
+
+      const handleFocus = () => {
+        // Check if user came back to portal after navigating away
+        const exitTimestamp = localStorage.getItem('portal_exit_timestamp');
+        if (exitTimestamp && window.location.pathname.startsWith('/portal')) {
+          const timeDiff = Date.now() - parseInt(exitTimestamp);
+          // If more than 5 minutes passed, logout
+          if (timeDiff > 300000) {
+            localStorage.removeItem('portal_exit_timestamp');
+            window.location.href = '/portal/login?session_expired=1';
+          }
+        }
+      };
+
+      window.addEventListener('beforeunload', handleNavigationAway);
+      window.addEventListener('focus', handleFocus);
+      
+      return () => {
+        window.removeEventListener('beforeunload', handleNavigationAway);
+        window.removeEventListener('focus', handleFocus);
       };
     }
   }, [isAuthenticated, isLoading]);

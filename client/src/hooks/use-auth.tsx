@@ -31,14 +31,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If force logout flag exists, clear everything
     if (forceLogout === 'true') {
       localStorage.clear();
-      window.location.replace('/login?provider_cleared=' + now);
+      window.location.replace('/portal/login?provider_cleared=' + now);
       return null;
     }
     
     // Check if we're within logout window (30 minutes)
     if (logoutTimestamp && (now - parseInt(logoutTimestamp)) < 1800000) {
       localStorage.clear();
-      window.location.replace('/login?window_cleared=' + now);
+      window.location.replace('/portal/login?window_cleared=' + now);
       return null;
     }
     
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If this token was previously logged out, block it
     if (currentToken && loggedOutToken && currentToken === loggedOutToken) {
       localStorage.clear();
-      window.location.replace('/login?reuse_blocked=' + now);
+      window.location.replace('/portal/login?reuse_blocked=' + now);
       return null;
     }
     
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     staleTime: 0, // Always check server
-    cacheTime: 0, // Never cache
+    gcTime: 0, // Never cache
   });
   
   // If there's an auth error, immediately clear everything
@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     
     // Force redirect
-    window.location.href = '/login?auth_error=1';
+    window.location.href = '/portal/login?auth_error=1';
   }
 
   // Login mutation
@@ -180,8 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Block all back navigation permanently
     const blockNavigation = () => {
-      window.history.pushState(null, '', '/login');
-      window.location.replace('/login?logout=' + timestamp);
+      window.history.pushState(null, '', '/portal/login');
+      window.location.replace('/portal/login?logout=' + timestamp);
     };
     
     // Comprehensive event blocking
@@ -202,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, { capture: true, passive: false });
     
     // Nuclear option - completely refresh and redirect
-    window.location.replace('/login?forced_logout=' + timestamp);
+    window.location.replace('/portal/login?forced_logout=' + timestamp);
   };
 
   // Set up API client with auth token
