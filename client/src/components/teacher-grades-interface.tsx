@@ -59,6 +59,7 @@ export function TeacherGradesInterface({
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
   const [editingCell, setEditingCell] = useState<{studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam'} | null>(null);
   const [tempScores, setTempScores] = useState<{[key: string]: string}>({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Form state for non-academic ratings
   const [nonAcademicScores, setNonAcademicScores] = useState({
@@ -106,11 +107,9 @@ export function TeacherGradesInterface({
     },
     onSuccess: (_, variables) => {
       toast({ description: "Academic scores saved successfully!" });
-      // Clear editing state after successful save with a small delay to show the saved value
-      setTimeout(() => {
-        setEditingCell(null);
-        setTempScores({});
-      }, 100);
+      setHasUnsavedChanges(false);
+      setTempScores({});
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
     },
     onError: (error: any) => {
       toast({ 
@@ -202,25 +201,84 @@ export function TeacherGradesInterface({
     setEditingCell({ studentId, subjectId, field });
     const existing = getStudentAssessment(studentId, subjectId);
     const currentValue = existing?.[field]?.toString() || "";
-    setTempScores({ [`${studentId}-${subjectId}-${field}`]: currentValue });
+    setTempScores(prev => ({
+      ...prev,
+      [`${studentId}-${subjectId}-${field}`]: currentValue
+    }));
+  };
+
+  const handleScoreChange = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam', value: string) => {
+    setTempScores(prev => ({
+      ...prev,
+      [`${studentId}-${subjectId}-${field}`]: value
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleSaveAllChanges = () => {
+    if (!hasUnsavedChanges) return;
+    
+    // Group changes by student and subject
+    const changesByStudent: {[key: string]: {studentId: string, subjectId: string, scores: any}} = {};
+    
+    Object.entries(tempScores).forEach(([key, value]) => {
+      const [studentId, subjectId, field] = key.split('-');
+      const changeKey = `${studentId}-${subjectId}`;
+      
+      if (!changesByStudent[changeKey]) {
+        const existing = getStudentAssessment(studentId, subjectId);
+        changesByStudent[changeKey] = {
+          studentId,
+          subjectId,
+          scores: {
+            classId: selectedClassId,
+            term: currentTerm,
+            session: currentSession,
+            firstCA: existing?.firstCA || 0,
+            secondCA: existing?.secondCA || 0,
+            exam: existing?.exam || 0
+          }
+        };
+      }
+      
+      const numValue = value ? parseInt(value, 10) : 0;
+      changesByStudent[changeKey].scores[field] = numValue;
+    });
+    
+    // Save all changes
+    Object.values(changesByStudent).forEach(({ studentId, subjectId, scores }) => {
+      const finalScores = {
+        studentId,
+        subjectId,
+        ...scores
+      };
+      saveAcademicScoreMutation.mutate(finalScores);
+    });
+  };
+
+  const getCurrentScore = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
+    const tempKey = `${studentId}-${subjectId}-${field}`;
+    if (tempScores[tempKey] !== undefined) {
+      return tempScores[tempKey];
+    }
+    const assessment = getStudentAssessment(studentId, subjectId);
+    return assessment?.[field]?.toString() || "";
   };
 
   const handleKeyPress = (e: React.KeyboardEvent, studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      const key = `${studentId}-${subjectId}-${field}`;
-      const value = tempScores[key] || "";
-      
-      if (value.trim()) {
-        handleSaveScore(studentId, subjectId, field, value);
-      } else {
-        // If no value, just move to next field
-        setEditingCell(null);
-        setTempScores({});
-      }
-    } else if (e.key === 'Escape') {
+      // Just move to next cell, don't save
       setEditingCell(null);
-      setTempScores({});
+    } else if (e.key === 'Escape') {
+      // Cancel editing and revert to saved value
+      const assessment = getStudentAssessment(studentId, subjectId);
+      const savedValue = assessment?.[field]?.toString() || "";
+      setTempScores(prev => ({
+        ...prev,
+        [`${studentId}-${subjectId}-${field}`]: savedValue
+      }));
+      setEditingCell(null);
     }
   };
 
@@ -301,9 +359,22 @@ export function TeacherGradesInterface({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <div>Term: <Badge variant="outline">{currentTerm}</Badge></div>
-              <div>Session: <Badge variant="outline">{currentSession}</Badge></div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div>Term: <Badge variant="outline">{currentTerm}</Badge></div>
+                <div>Session: <Badge variant="outline">{currentSession}</Badge></div>
+              </div>
+              {selectedClassId && selectedSubjectId && (
+                <Button 
+                  onClick={handleSaveAllChanges}
+                  disabled={!hasUnsavedChanges || saveAcademicScoreMutation.isPending}
+                  className="ml-4"
+                  data-testid="button-save-all"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {saveAcademicScoreMutation.isPending ? 'Saving...' : hasUnsavedChanges ? 'Save All Changes' : 'All Saved'}
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -375,19 +446,10 @@ export function TeacherGradesInterface({
                                         type="number"
                                         min="0"
                                         max="20"
-                                        value={tempScores[`${student.id}-${selectedSubjectId}-firstCA`] || ""}
-                                        onChange={(e) => setTempScores(prev => ({ 
-                                          ...prev, 
-                                          [`${student.id}-${selectedSubjectId}-firstCA`]: e.target.value 
-                                        }))}
+                                        value={getCurrentScore(student.id, selectedSubjectId, 'firstCA')}
+                                        onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'firstCA', e.target.value)}
                                         onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'firstCA')}
-                                        onBlur={() => {
-                                          const key = `${student.id}-${selectedSubjectId}-firstCA`;
-                                          const value = tempScores[key] || "";
-                                          if (value) handleSaveScore(student.id, selectedSubjectId, 'firstCA', value);
-                                          setEditingCell(null);
-                                          setTempScores({});
-                                        }}
+                                        onBlur={() => setEditingCell(null)}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-ca1-${student.id}-${selectedSubjectId}`}
@@ -417,19 +479,10 @@ export function TeacherGradesInterface({
                                         type="number"
                                         min="0"
                                         max="20"
-                                        value={tempScores[`${student.id}-${selectedSubjectId}-secondCA`] || ""}
-                                        onChange={(e) => setTempScores(prev => ({ 
-                                          ...prev, 
-                                          [`${student.id}-${selectedSubjectId}-secondCA`]: e.target.value 
-                                        }))}
+                                        value={getCurrentScore(student.id, selectedSubjectId, 'secondCA')}
+                                        onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'secondCA', e.target.value)}
                                         onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'secondCA')}
-                                        onBlur={() => {
-                                          const key = `${student.id}-${selectedSubjectId}-secondCA`;
-                                          const value = tempScores[key] || "";
-                                          if (value) handleSaveScore(student.id, selectedSubjectId, 'secondCA', value);
-                                          setEditingCell(null);
-                                          setTempScores({});
-                                        }}
+                                        onBlur={() => setEditingCell(null)}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-ca2-${student.id}-${selectedSubjectId}`}
@@ -459,19 +512,10 @@ export function TeacherGradesInterface({
                                         type="number"
                                         min="0"
                                         max="60"
-                                        value={tempScores[`${student.id}-${selectedSubjectId}-exam`] || ""}
-                                        onChange={(e) => setTempScores(prev => ({ 
-                                          ...prev, 
-                                          [`${student.id}-${selectedSubjectId}-exam`]: e.target.value 
-                                        }))}
+                                        value={getCurrentScore(student.id, selectedSubjectId, 'exam')}
+                                        onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'exam', e.target.value)}
                                         onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'exam')}
-                                        onBlur={() => {
-                                          const key = `${student.id}-${selectedSubjectId}-exam`;
-                                          const value = tempScores[key] || "";
-                                          if (value) handleSaveScore(student.id, selectedSubjectId, 'exam', value);
-                                          setEditingCell(null);
-                                          setTempScores({});
-                                        }}
+                                        onBlur={() => setEditingCell(null)}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-exam-${student.id}-${selectedSubjectId}`}
@@ -511,7 +555,7 @@ export function TeacherGradesInterface({
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleOpenRatingDialog(student)}
+                                  onClick={() => openRatingDialog(student)}
                                   className="h-7"
                                   data-testid={`button-rating-${student.id}`}
                                 >
