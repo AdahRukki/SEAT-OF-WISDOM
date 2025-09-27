@@ -3486,13 +3486,15 @@ export default function AdminDashboard() {
                               <Input
                                 id="next-term-date"
                                 type="date"
+                                value={nextTermDate}
+                                onChange={(e) => setNextTermDate(e.target.value)}
                                 data-testid="input-next-term-date"
                                 className="w-full"
                               />
                             </div>
                             <div>
                               <Label htmlFor="next-term-name">Next Term</Label>
-                              <Select>
+                              <Select value={selectedNextTerm} onValueChange={setSelectedNextTerm}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select next term" />
                                 </SelectTrigger>
@@ -3509,19 +3511,32 @@ export default function AdminDashboard() {
                             data-testid="button-save-term-settings"
                             onClick={async () => {
                               try {
-                                // For now, focus on updating current term and session settings
-                                // TODO: Add academic term management for resumption dates
+                                if (!selectedNextTerm || !nextTermDate) {
+                                  toast({ 
+                                    title: "Missing Information", 
+                                    description: "Please select next term and resumption date", 
+                                    variant: "destructive" 
+                                  });
+                                  return;
+                                }
+                                
+                                // Generate a UUID for the term
+                                const termId = crypto.randomUUID();
+                                
                                 const response = await apiRequest('/api/admin/term-settings', {
                                   method: 'POST',
                                   body: {
-                                    currentTerm: selectedNextTerm || "First Term",
+                                    currentTerm: selectedNextTerm,
                                     currentSession: "2024/2025",
-                                    // Note: termId is required by schema but resumption date is optional
-                                    termId: "00000000-0000-0000-0000-000000000000", // TODO: Replace with actual term management
-                                    resumptionDate: null // Skip resumption date for now
+                                    termId: termId,
+                                    resumptionDate: nextTermDate
                                   }
                                 });
-                                toast({ title: "Success", description: "Term settings saved successfully!" });
+                                toast({ 
+                                  title: "Success", 
+                                  description: `Next term resumption date set for ${nextTermDate}!`,
+                                  className: "bg-green-50 text-green-800 border-green-200"
+                                });
                                 console.log("Term settings response:", response);
                               } catch (error: any) {
                                 toast({ title: "Error", description: error.message || "Failed to save term settings", variant: "destructive" });
