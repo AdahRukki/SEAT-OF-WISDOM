@@ -106,7 +106,6 @@ export function TeacherGradesInterface({
     },
     onSuccess: (_, variables) => {
       toast({ description: "Academic scores saved successfully!" });
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
       // Clear editing state after successful save with a small delay to show the saved value
       setTimeout(() => {
         setEditingCell(null);
