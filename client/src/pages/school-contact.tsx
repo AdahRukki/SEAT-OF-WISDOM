@@ -425,10 +425,10 @@ export default function SchoolContact() {
             <div>
               <h3 className="font-semibold mb-4">Our Branches</h3>
               <ul className="space-y-2 text-gray-400">
-                <li>Asaba Main Campus</li>
-                <li>Lugazi Branch</li>
-                <li>Kampala Branch</li>
-                <li>Mukono Branch</li>
+                <li>BONSAAC</li>
+                <li>IKPOTO POWERLINE</li>
+                <li>AKWUOFOR</li>
+                <li>AKWUOSE</li>
               </ul>
             </div>
             
