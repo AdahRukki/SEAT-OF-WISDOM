@@ -584,10 +584,10 @@ export default function SchoolAdmissions() {
             <div>
               <h3 className="font-semibold mb-4">Our Branches</h3>
               <ul className="space-y-2 text-gray-400">
-                <li>BONSAAC</li>
-                <li>IKPOTO POWERLINE</li>
-                <li>AKWUOFOR</li>
-                <li>AKWUOSE</li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-bonsaac">BONSAAC</Link></li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-ikpoto">IKPOTO POWERLINE</Link></li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-akwuofor">AKWUOFOR ALONG AMUSEMENT PARK KOKA</Link></li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-akwuose">AKWUOSE BEHIND MAMA'S MART ALONG IBUSA ROAD</Link></li>
               </ul>
             </div>
             
@@ -595,7 +595,7 @@ export default function SchoolAdmissions() {
               <h3 className="font-semibold mb-4">Connect With Us</h3>
               <p className="text-gray-400 mb-2">admissions@seatofwisdomasaba.org</p>
               <p className="text-gray-400 mb-2">+256 123 456 789</p>
-              <p className="text-gray-400">Asaba, Uganda</p>
+              <p className="text-gray-400">Asaba, Delta State, Nigeria</p>
             </div>
           </div>
           
