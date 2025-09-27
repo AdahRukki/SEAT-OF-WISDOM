@@ -203,14 +203,14 @@ export function TeacherGradesInterface({
     const currentValue = existing?.[field]?.toString() || "";
     setTempScores(prev => ({
       ...prev,
-      [`${studentId}-${subjectId}-${field}`]: currentValue
+      [`${studentId}|${subjectId}|${field}`]: currentValue
     }));
   };
 
   const handleScoreChange = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam', value: string) => {
     setTempScores(prev => ({
       ...prev,
-      [`${studentId}-${subjectId}-${field}`]: value
+      [`${studentId}|${subjectId}|${field}`]: value
     }));
     setHasUnsavedChanges(true);
   };
@@ -222,8 +222,12 @@ export function TeacherGradesInterface({
     const changesByStudent: {[key: string]: {studentId: string, subjectId: string, scores: any}} = {};
     
     Object.entries(tempScores).forEach(([key, value]) => {
-      const [studentId, subjectId, field] = key.split('-');
-      const changeKey = `${studentId}-${subjectId}`;
+      // Use better parsing since UUIDs contain dashes
+      const parts = key.split('|');
+      if (parts.length !== 3) return; // Skip malformed keys
+      
+      const [studentId, subjectId, field] = parts;
+      const changeKey = `${studentId}|${subjectId}`;
       
       if (!changesByStudent[changeKey]) {
         const existing = getStudentAssessment(studentId, subjectId);
@@ -257,7 +261,7 @@ export function TeacherGradesInterface({
   };
 
   const getCurrentScore = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
-    const tempKey = `${studentId}-${subjectId}-${field}`;
+    const tempKey = `${studentId}|${subjectId}|${field}`;
     if (tempScores[tempKey] !== undefined) {
       return tempScores[tempKey];
     }
@@ -276,7 +280,7 @@ export function TeacherGradesInterface({
       const savedValue = assessment?.[field]?.toString() || "";
       setTempScores(prev => ({
         ...prev,
-        [`${studentId}-${subjectId}-${field}`]: savedValue
+        [`${studentId}|${subjectId}|${field}`]: savedValue
       }));
       setEditingCell(null);
     }
