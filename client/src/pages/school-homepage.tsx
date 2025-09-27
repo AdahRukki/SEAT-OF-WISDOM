@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, Users, BookOpen, Trophy, MapPin, Phone, Mail, ChevronRight, Baby, School, GraduationCap as GraduationIcon, Grid3X3 } from "lucide-react";
+import { GraduationCap, Users, BookOpen, Trophy, MapPin, Phone, Mail, ChevronRight, Baby, School, GraduationCap as GraduationIcon, Grid3X3, ExternalLink, Activity, Dumbbell, Music, Palette, Building, Microscope, Calculator, Award } from "lucide-react";
 import schoolBuilding1 from "@assets/stock_images/modern_school_buildi_77850497.jpg";
 import schoolBuilding2 from "@assets/stock_images/modern_school_buildi_a486f75c.jpg";
 import classroomImage1 from "@assets/stock_images/children_in_classroo_646d36b7.jpg";
@@ -11,6 +11,14 @@ import classroomImage3 from "@assets/stock_images/children_in_classroo_d7f501cb.
 import classroomImage4 from "@assets/stock_images/children_in_classroo_7e1fd1a4.jpg";
 import classroomImage5 from "@assets/stock_images/children_in_classroo_ebca6607.jpg";
 import classroomImage6 from "@assets/stock_images/children_in_classroo_cd155654.jpg";
+import sportsImage1 from "@assets/stock_images/students_playing_spo_5fbb199e.jpg";
+import sportsImage2 from "@assets/stock_images/students_playing_spo_b955460a.jpg";
+import sportsImage3 from "@assets/stock_images/students_playing_spo_dc5ee1e8.jpg";
+import sportsImage4 from "@assets/stock_images/students_playing_spo_89a50a23.jpg";
+import libraryImage1 from "@assets/stock_images/school_library_labor_57146f98.jpg";
+import libraryImage2 from "@assets/stock_images/school_library_labor_4709a4fa.jpg";
+import labImage1 from "@assets/stock_images/school_library_labor_50c8c89f.jpg";
+import labImage2 from "@assets/stock_images/school_library_labor_35422e2d.jpg";
 
 export default function SchoolHomepage() {
   return (
@@ -275,6 +283,403 @@ export default function SchoolHomepage() {
                 </ul>
               </CardContent>
             </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Visit Our School Section */}
+      <section className="py-20 bg-white dark:bg-gray-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-locations-title">
+              Visit Our School
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300" data-testid="text-locations-description">
+              Four convenient locations across Asaba, Delta State
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-location-1">
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <MapPin className="h-5 w-5 text-blue-600 mr-2" />
+                  <CardTitle className="text-lg">BONSAAC</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
+                  Bonsaac, Asaba
+                </p>
+                <a 
+                  href="https://maps.google.com/?q=Bonsaac,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm"
+                  data-testid="link-location-1"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-location-2">
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <MapPin className="h-5 w-5 text-green-600 mr-2" />
+                  <CardTitle className="text-lg">IKPOTO POWERLINE</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
+                  Ikpoto Powerline, Asaba
+                </p>
+                <a 
+                  href="https://maps.google.com/?q=Ikpoto+Powerline,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm"
+                  data-testid="link-location-2"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-location-3">
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <MapPin className="h-5 w-5 text-purple-600 mr-2" />
+                  <CardTitle className="text-lg">AKWUOFOR</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
+                  Akwuofor along Amusement Park, Koka
+                </p>
+                <a 
+                  href="https://maps.google.com/?q=Akwuofor+Amusement+Park+Koka,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm"
+                  data-testid="link-location-3"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow" data-testid="card-location-4">
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <MapPin className="h-5 w-5 text-orange-600 mr-2" />
+                  <CardTitle className="text-lg">AKWUOSE</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
+                  Akwuose behind Mama's Mart along Ibusa Road
+                </p>
+                <a 
+                  href="https://maps.google.com/?q=Akwuose+Mama%27s+Mart+Ibusa+Road,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm"
+                  data-testid="link-location-4"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Extracurricular Activities Section */}
+      <section className="py-20 bg-gray-50 dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-activities-title">
+              Extracurricular Activities
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300" data-testid="text-activities-description">
+              Developing talents and building character beyond the classroom
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-activity-1">
+              <div className="relative h-48">
+                <img 
+                  src={sportsImage1} 
+                  alt="Students playing sports" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Dumbbell className="h-5 w-5 text-blue-600 mr-2" />
+                  <CardTitle className="text-lg">Sports</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Football, Basketball, Athletics, and more sports programs to build teamwork and fitness.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-activity-2">
+              <div className="relative h-48">
+                <img 
+                  src={sportsImage2} 
+                  alt="Music and arts activities" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Music className="h-5 w-5 text-green-600 mr-2" />
+                  <CardTitle className="text-lg">Music & Arts</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Creative expression through music, dance, drama, and visual arts programs.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-activity-3">
+              <div className="relative h-48">
+                <img 
+                  src={sportsImage3} 
+                  alt="Academic competitions" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Trophy className="h-5 w-5 text-purple-600 mr-2" />
+                  <CardTitle className="text-lg">Competitions</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Academic competitions, debates, quiz contests, and science fairs.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-activity-4">
+              <div className="relative h-48">
+                <img 
+                  src={sportsImage4} 
+                  alt="Leadership activities" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Users className="h-5 w-5 text-orange-600 mr-2" />
+                  <CardTitle className="text-lg">Leadership</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Student council, peer mentoring, and leadership development programs.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* School Facilities Section */}
+      <section className="py-20 bg-white dark:bg-gray-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-facilities-title">
+              School Facilities
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300" data-testid="text-facilities-description">
+              Modern facilities designed for optimal learning experiences
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-facility-1">
+              <div className="relative h-48">
+                <img 
+                  src={libraryImage1} 
+                  alt="School library" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <BookOpen className="h-5 w-5 text-blue-600 mr-2" />
+                  <CardTitle className="text-lg">Library</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Well-stocked library with diverse books, research materials, and quiet study areas.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-facility-2">
+              <div className="relative h-48">
+                <img 
+                  src={labImage1} 
+                  alt="Science laboratory" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Microscope className="h-5 w-5 text-green-600 mr-2" />
+                  <CardTitle className="text-lg">Science Labs</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Fully equipped laboratories for Physics, Chemistry, and Biology experiments.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-facility-3">
+              <div className="relative h-48">
+                <img 
+                  src={libraryImage2} 
+                  alt="Computer laboratory" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Calculator className="h-5 w-5 text-purple-600 mr-2" />
+                  <CardTitle className="text-lg">Computer Lab</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Modern computer lab with internet access for digital literacy and research.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-facility-4">
+              <div className="relative h-48">
+                <img 
+                  src={labImage2} 
+                  alt="Multi-purpose hall" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <CardHeader>
+                <div className="flex items-center mb-2">
+                  <Building className="h-5 w-5 text-orange-600 mr-2" />
+                  <CardTitle className="text-lg">Multi-Purpose Hall</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Large hall for assemblies, events, performances, and community gatherings.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Approved Examinations Section */}
+      <section className="py-20 bg-blue-50 dark:bg-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-exams-title">
+              Approved Examinations
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-300" data-testid="text-exams-description">
+              Officially recognized examination center for national and international assessments
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="bg-white dark:bg-gray-900 border-blue-200 dark:border-blue-800 hover:shadow-lg transition-shadow" data-testid="card-exam-1">
+              <CardHeader className="text-center">
+                <div className="mx-auto bg-blue-100 dark:bg-blue-900 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+                  <Award className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <CardTitle className="text-lg">Common Entrance</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Approved center for Common Entrance examinations into secondary schools.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white dark:bg-gray-900 border-green-200 dark:border-green-800 hover:shadow-lg transition-shadow" data-testid="card-exam-2">
+              <CardHeader className="text-center">
+                <div className="mx-auto bg-green-100 dark:bg-green-900 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+                  <Award className="h-8 w-8 text-green-600 dark:text-green-400" />
+                </div>
+                <CardTitle className="text-lg">BECE</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Basic Education Certificate Examination for JSS3 students.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white dark:bg-gray-900 border-purple-200 dark:border-purple-800 hover:shadow-lg transition-shadow" data-testid="card-exam-3">
+              <CardHeader className="text-center">
+                <div className="mx-auto bg-purple-100 dark:bg-purple-900 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+                  <Award className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                </div>
+                <CardTitle className="text-lg">NECO</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  National Examinations Council examinations for SS3 students.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white dark:bg-gray-900 border-orange-200 dark:border-orange-800 hover:shadow-lg transition-shadow" data-testid="card-exam-4">
+              <CardHeader className="text-center">
+                <div className="mx-auto bg-orange-100 dark:bg-orange-900 rounded-full p-3 w-16 h-16 flex items-center justify-center mb-4">
+                  <Award className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                </div>
+                <CardTitle className="text-lg">WAEC</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  West African Examinations Council (SSCE) for SS3 students.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="text-center mt-12">
+            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-3xl mx-auto shadow-lg">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                Examination Excellence
+              </h3>
+              <p className="text-gray-600 dark:text-gray-300">
+                As an approved examination center, we ensure students receive proper preparation and 
+                examination support for all major national and international assessments. Our experienced 
+                faculty and comprehensive curriculum guarantee students are well-prepared for academic success.
+              </p>
+            </div>
           </div>
         </div>
       </section>
