@@ -352,11 +352,12 @@ export function TeacherGradesInterface({
                             const gradeInfo = calculateGrade(total);
                             
                             return (
-                              <TableCell key={subject.id} className="p-1">
-                                <div className="space-y-1">
-                                  {/* First CA Input */}
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs w-8">CA1:</span>
+                              <TableCell key={subject.id} className="p-2">
+                                {/* Horizontal layout with CA1, CA2, Exam in a row */}
+                                <div className="flex items-center gap-2 mb-2">
+                                  {/* CA1 Input */}
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-xs font-medium mb-1">CA1</span>
                                     {editingCell?.studentId === student.id && editingCell?.subjectId === subject.id && editingCell?.field === 'firstCA' ? (
                                       <Input
                                         type="number"
@@ -375,13 +376,13 @@ export function TeacherGradesInterface({
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
-                                        className="h-6 text-xs w-12 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50"
+                                        className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-ca1-${student.id}-${subject.id}`}
                                       />
                                     ) : (
                                       <div 
-                                        className={`h-6 w-12 text-xs border rounded px-1 cursor-pointer transition-colors duration-200 flex items-center justify-center ${
+                                        className={`h-7 w-16 text-sm border rounded p-1 cursor-pointer transition-colors duration-200 flex items-center justify-center font-medium ${
                                           (assessment?.firstCA || 0) >= 16 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
                                           (assessment?.firstCA || 0) >= 12 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
                                           (assessment?.firstCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
@@ -396,9 +397,9 @@ export function TeacherGradesInterface({
                                     )}
                                   </div>
                                   
-                                  {/* Second CA Input */}
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs w-8">CA2:</span>
+                                  {/* CA2 Input */}
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-xs font-medium mb-1">CA2</span>
                                     {editingCell?.studentId === student.id && editingCell?.subjectId === subject.id && editingCell?.field === 'secondCA' ? (
                                       <Input
                                         type="number"
@@ -417,13 +418,13 @@ export function TeacherGradesInterface({
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
-                                        className="h-6 text-xs w-12 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50"
+                                        className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-ca2-${student.id}-${subject.id}`}
                                       />
                                     ) : (
                                       <div 
-                                        className={`h-6 w-12 text-xs border rounded px-1 cursor-pointer transition-colors duration-200 flex items-center justify-center ${
+                                        className={`h-7 w-16 text-sm border rounded p-1 cursor-pointer transition-colors duration-200 flex items-center justify-center font-medium ${
                                           (assessment?.secondCA || 0) >= 16 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
                                           (assessment?.secondCA || 0) >= 12 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
                                           (assessment?.secondCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
@@ -439,8 +440,8 @@ export function TeacherGradesInterface({
                                   </div>
                                   
                                   {/* Exam Input */}
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs w-8">Exam:</span>
+                                  <div className="flex flex-col items-center">
+                                    <span className="text-xs font-medium mb-1">Exam</span>
                                     {editingCell?.studentId === student.id && editingCell?.subjectId === subject.id && editingCell?.field === 'exam' ? (
                                       <Input
                                         type="number"
@@ -459,13 +460,13 @@ export function TeacherGradesInterface({
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
-                                        className="h-6 text-xs w-12 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50"
+                                        className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-exam-${student.id}-${subject.id}`}
                                       />
                                     ) : (
                                       <div 
-                                        className={`h-6 w-12 text-xs border rounded px-1 cursor-pointer transition-colors duration-200 flex items-center justify-center ${
+                                        className={`h-7 w-16 text-sm border rounded p-1 cursor-pointer transition-colors duration-200 flex items-center justify-center font-medium ${
                                           (assessment?.exam || 0) >= 48 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
                                           (assessment?.exam || 0) >= 36 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
                                           (assessment?.exam || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
@@ -479,16 +480,16 @@ export function TeacherGradesInterface({
                                       </div>
                                     )}
                                   </div>
-                                  
-                                  {/* Total and Grade */}
-                                  <div className="text-center mt-1">
-                                    <Badge 
-                                      variant="secondary" 
-                                      className={`text-xs ${gradeInfo.color} text-white`}
-                                    >
-                                      {total}% ({gradeInfo.grade})
-                                    </Badge>
-                                  </div>
+                                </div>
+                                
+                                {/* Total and Grade - Horizontal layout */}
+                                <div className="text-center">
+                                  <Badge 
+                                    variant="secondary" 
+                                    className={`text-xs ${gradeInfo.color} text-white`}
+                                  >
+                                    {total}% ({gradeInfo.grade})
+                                  </Badge>
                                 </div>
                               </TableCell>
                             );
