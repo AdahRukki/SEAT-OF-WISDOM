@@ -231,6 +231,19 @@ export function TeacherGradesInterface({
   };
 
   const handleScoreChange = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam', value: string) => {
+    // Validate max values
+    const numValue = parseInt(value, 10);
+    if (value && !isNaN(numValue)) {
+      const maxValue = field === 'exam' ? 60 : 20;
+      if (numValue > maxValue) {
+        toast({ 
+          description: `${field === 'exam' ? 'Exam' : field === 'firstCA' ? 'CA1' : 'CA2'} cannot exceed ${maxValue}`, 
+          variant: "destructive" 
+        });
+        return; // Don't update if exceeds max
+      }
+    }
+    
     setTempScores(prev => ({
       ...prev,
       [`${studentId}|${subjectId}|${field}`]: value
@@ -480,7 +493,13 @@ export function TeacherGradesInterface({
                                         value={getCurrentScore(student.id, selectedSubjectId, 'firstCA')}
                                         onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'firstCA', e.target.value)}
                                         onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'firstCA')}
-                                        onBlur={() => setEditingCell(null)}
+                                        onBlur={(e) => {
+                                          // Don't close edit mode if moving to another input field
+                                          const relatedTarget = e.relatedTarget as HTMLElement;
+                                          if (!relatedTarget || relatedTarget.tagName !== 'INPUT') {
+                                            setEditingCell(null);
+                                          }
+                                        }}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-ca1-${student.id}-${selectedSubjectId}`}
@@ -497,7 +516,7 @@ export function TeacherGradesInterface({
                                         data-testid={`cell-ca1-${student.id}-${selectedSubjectId}`}
                                         title={`CA1 Score: ${assessment?.firstCA || 0}/20 - Click to edit`}
                                       >
-                                        {assessment?.firstCA || 0}
+                                        {getCurrentScore(student.id, selectedSubjectId, 'firstCA') || 0}
                                       </div>
                                     )}
                                   </div>
@@ -513,7 +532,13 @@ export function TeacherGradesInterface({
                                         value={getCurrentScore(student.id, selectedSubjectId, 'secondCA')}
                                         onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'secondCA', e.target.value)}
                                         onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'secondCA')}
-                                        onBlur={() => setEditingCell(null)}
+                                        onBlur={(e) => {
+                                          // Don't close edit mode if moving to another input field
+                                          const relatedTarget = e.relatedTarget as HTMLElement;
+                                          if (!relatedTarget || relatedTarget.tagName !== 'INPUT') {
+                                            setEditingCell(null);
+                                          }
+                                        }}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-ca2-${student.id}-${selectedSubjectId}`}
@@ -530,7 +555,7 @@ export function TeacherGradesInterface({
                                         data-testid={`cell-ca2-${student.id}-${selectedSubjectId}`}
                                         title={`CA2 Score: ${assessment?.secondCA || 0}/20 - Click to edit`}
                                       >
-                                        {assessment?.secondCA || 0}
+                                        {getCurrentScore(student.id, selectedSubjectId, 'secondCA') || 0}
                                       </div>
                                     )}
                                   </div>
@@ -546,7 +571,13 @@ export function TeacherGradesInterface({
                                         value={getCurrentScore(student.id, selectedSubjectId, 'exam')}
                                         onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'exam', e.target.value)}
                                         onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'exam')}
-                                        onBlur={() => setEditingCell(null)}
+                                        onBlur={(e) => {
+                                          // Don't close edit mode if moving to another input field
+                                          const relatedTarget = e.relatedTarget as HTMLElement;
+                                          if (!relatedTarget || relatedTarget.tagName !== 'INPUT') {
+                                            setEditingCell(null);
+                                          }
+                                        }}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
                                         data-testid={`input-exam-${student.id}-${selectedSubjectId}`}
@@ -563,7 +594,7 @@ export function TeacherGradesInterface({
                                         data-testid={`cell-exam-${student.id}-${selectedSubjectId}`}
                                         title={`Exam Score: ${assessment?.exam || 0}/60 - Click to edit`}
                                       >
-                                        {assessment?.exam || 0}
+                                        {getCurrentScore(student.id, selectedSubjectId, 'exam') || 0}
                                       </div>
                                     )}
                                   </div>
