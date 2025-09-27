@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, Users, BookOpen, Trophy, MapPin, Phone, Mail, ChevronRight, Baby, School, GraduationCap as GraduationIcon, Grid3X3, ExternalLink, Activity, Dumbbell, Music, Palette, Building, Microscope, Calculator, Award } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { GraduationCap, Users, BookOpen, Trophy, MapPin, Phone, Mail, ChevronRight, Baby, School, GraduationCap as GraduationIcon, Grid3X3, ExternalLink, Activity, Dumbbell, Music, Palette, Building, Microscope, Calculator, Award, Menu } from "lucide-react";
 import schoolBuilding1 from "@assets/stock_images/modern_school_buildi_77850497.jpg";
 import schoolBuilding2 from "@assets/stock_images/modern_school_buildi_a486f75c.jpg";
 import classroomImage1 from "@assets/stock_images/children_in_classroo_646d36b7.jpg";
@@ -22,6 +24,8 @@ import labImage2 from "@assets/stock_images/school_library_labor_35422e2d.jpg";
 import academyLogo from "@assets/academy-logo.png";
 
 export default function SchoolHomepage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       {/* Navigation */}
@@ -32,16 +36,63 @@ export default function SchoolHomepage() {
               <img src={academyLogo} alt="Academy Logo" className="h-8 w-8 object-contain" />
               <span className="text-xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</span>
             </div>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link href="/about" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">About</Link>
-              <Link href="/programs" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Programs</Link>
-              <Link href="/admissions" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Admissions</Link>
-              <Link href="/contact" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Contact</Link>
-              <Link href="/portal">
-                <Button variant="default" className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-portal-login">
-                  Student Portal
-                </Button>
-              </Link>
+            <div className="flex items-center space-x-4">
+              <div className="hidden md:flex items-center space-x-8">
+                <Link href="/about" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">About</Link>
+                <Link href="/programs" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Programs</Link>
+                <Link href="/admissions" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Admissions</Link>
+                <Link href="/contact" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Contact</Link>
+                <Link href="/portal">
+                  <Button variant="default" className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-portal-login">
+                    Student Portal
+                  </Button>
+                </Link>
+              </div>
+              
+              {/* Mobile menu */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="md:hidden" data-testid="button-mobile-menu">
+                    <Menu className="h-6 w-6" />
+                    <span className="sr-only">Toggle menu</span>
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+                  <SheetHeader>
+                    <SheetTitle className="flex items-center space-x-2">
+                      <img src={academyLogo} alt="Academy Logo" className="h-6 w-6 object-contain" />
+                      <span>Seat of Wisdom Academy</span>
+                    </SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col space-y-4 mt-8">
+                    <Link href="/about" onClick={() => setMobileMenuOpen(false)}>
+                      <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-about">
+                        About
+                      </Button>
+                    </Link>
+                    <Link href="/programs" onClick={() => setMobileMenuOpen(false)}>
+                      <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-programs">
+                        Programs
+                      </Button>
+                    </Link>
+                    <Link href="/admissions" onClick={() => setMobileMenuOpen(false)}>
+                      <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-admissions">
+                        Admissions
+                      </Button>
+                    </Link>
+                    <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
+                      <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-contact">
+                        Contact
+                      </Button>
+                    </Link>
+                    <Link href="/portal" onClick={() => setMobileMenuOpen(false)}>
+                      <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg h-12" data-testid="button-mobile-portal">
+                        Student Portal
+                      </Button>
+                    </Link>
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </div>
