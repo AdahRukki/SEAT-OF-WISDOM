@@ -404,8 +404,8 @@ export default function AdminDashboard() {
 
   // Set initial school for sub-admin or first school for main admin
   useEffect(() => {
-    if (user?.role === 'sub-admin' && (user as any).schoolId) {
-      setSelectedSchoolId((user as any).schoolId);
+    if (user?.role === 'sub-admin' && user.schoolId) {
+      setSelectedSchoolId(user.schoolId);
     }
   }, [user]);
 
@@ -3074,7 +3074,7 @@ export default function AdminDashboard() {
             <TeacherGradesInterface 
               currentTerm="First Term"
               currentSession="2024/2025"
-              userSchoolId={user.schoolId || ''}
+              userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
             />
           </TabsContent>
 

@@ -9,6 +9,7 @@ interface AuthUser {
   firstName: string;
   lastName: string;
   role: string;
+  schoolId?: string;
 }
 
 interface AuthContextType {
