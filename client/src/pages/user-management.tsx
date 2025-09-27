@@ -333,8 +333,8 @@ export default function UserManagement() {
               
               <div className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300">
                 <UserIcon className="h-4 w-4" />
-                <span className="hidden md:inline">{user?.firstName} {user?.lastName}</span>
-                <span className="md:hidden text-xs">{user?.firstName}</span>
+                <span className="hidden md:inline">{currentUser?.firstName} {currentUser?.lastName}</span>
+                <span className="md:hidden text-xs">{currentUser?.firstName}</span>
               </div>
               <Button 
                 variant="outline" 

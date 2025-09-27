@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
@@ -127,107 +128,6 @@ import * as XLSX from 'xlsx';
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 type PaymentForm = z.infer<typeof recordPaymentSchema>;
 
-// Users Management Component
-function UsersManagement() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  // Fetch admin users
-  const { data: users = [], isLoading: usersLoading } = useQuery<any[]>({
-    queryKey: ['/api/admin/users'],
-  });
-
-  // Fetch schools for sub-admin creation
-  const { data: schools = [] } = useQuery<any[]>({
-    queryKey: ['/api/admin/schools']
-  });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          User Management
-        </CardTitle>
-        <CardDescription>
-          Manage admin and sub-admin accounts
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {usersLoading ? (
-          <div className="flex items-center justify-center p-8">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-              <p className="text-sm text-muted-foreground">Loading users...</p>
-            </div>
-          </div>
-        ) : users.length === 0 ? (
-          <div className="text-center p-8">
-            <p className="text-muted-foreground">No admin users found.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>School</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.filter((user: any) => user.role === 'admin' || user.role === 'sub-admin').map((user: any) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">
-                      {user.firstName} {user.lastName}
-                    </TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Badge className={user.role === 'admin' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {user.schoolId ? schools.find((s: any) => s.id === user.schoolId)?.name || 'Unknown School' : 'All Schools'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.isActive ? 'default' : 'secondary'}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {/* Only show delete button for users other than the current user */}
-                      {user.id !== currentUser?.id && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            // TODO: Add delete dialog state and functionality
-                            toast({
-                              title: "Delete User",
-                              description: `Delete functionality for ${user.firstName} ${user.lastName}`,
-                            });
-                          }}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          data-testid={`button-delete-${user.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function AdminDashboard() {
   const { user: currentUser, logout } = useAuth();
@@ -3617,7 +3517,32 @@ export default function AdminDashboard() {
           {/* Users Tab */}
           {currentUser?.role === 'admin' && (
             <TabsContent value="users" className="space-y-6">
-              <UsersManagement />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    User Management
+                  </CardTitle>
+                  <CardDescription>
+                    Access the full user management interface to add, edit, and delete admin users
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-center py-8">
+                  <div className="mb-4">
+                    <Users className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">User Management</h3>
+                    <p className="text-muted-foreground mb-6">
+                      Manage admin and sub-admin accounts, including the ability to delete admin users
+                    </p>
+                  </div>
+                  <Link href="/portal/users">
+                    <Button size="lg" className="bg-blue-600 hover:bg-blue-700" data-testid="button-open-user-management">
+                      <Users className="h-4 w-4 mr-2" />
+                      Open User Management
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
 
