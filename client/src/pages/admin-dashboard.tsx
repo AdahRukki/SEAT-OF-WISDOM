@@ -94,6 +94,7 @@ import {
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
 import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
+import { BehavioralRatingsInterface } from "@/components/behavioral-ratings-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
@@ -2811,271 +2812,68 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Scores Management Tab */}
+          {/* Enhanced Scores & Ratings Management Tab */}
           <TabsContent value="scores" className="space-y-6 table-container">
             <Card>
               <CardHeader>
-                <CardTitle>Score Entry System</CardTitle>
+                <CardTitle>Scores & Ratings Management</CardTitle>
                 <CardDescription>
-                  Enter and manage student assessment scores (1st CA: 20 marks, 2nd CA: 20 marks, Exam: 60 marks)
+                  Complete student assessment system - academic scores and behavioral ratings
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <Label>Term & Session</Label>
-                    <Select value={`${scoresTerm}-${scoresSession}`} onValueChange={(value) => {
-                      const [term, session] = value.split('-');
-                      setScoresTerm(term.replace('_', ' '));
-                      setScoresSession(session);
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select term" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="First Term-2024/2025">First Term 2024/2025</SelectItem>
-                        <SelectItem value="Second Term-2024/2025">Second Term 2024/2025</SelectItem>
-                        <SelectItem value="Third Term-2024/2025">Third Term 2024/2025</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Select Class</Label>
-                    <Select value={scoresClassId} onValueChange={setScoresClassId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sortClassesByOrder(classes).map((classItem) => (
-                          <SelectItem key={classItem.id} value={classItem.id}>
-                            {classItem.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Select Subject</Label>
-                    <Select value={scoresSubjectId} onValueChange={(subjectId) => {
-                      setScoresSubjectId(subjectId);
-                      // Auto-refresh assessments when subject changes
-                      if (scoresClassId && subjectId) {
-                        queryClient.invalidateQueries({ 
-                          queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId }] 
-                        });
-                      }
-                    }} disabled={!scoresClassId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a subject" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classSubjects.map((subject) => (
-                          <SelectItem key={subject.id} value={subject.id}>
-                            {subject.name.toUpperCase()}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          onClick={handleSaveAllScores} 
-                          disabled={!scoresClassId || !scoresSubjectId || Object.keys(scoreInputs).length === 0}
-                          className="w-full"
-                        >
-                          <Save className="h-4 w-4 mr-2" />
-                          Save All Scores
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Save all entered scores for the selected class and subject</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    <div className="flex gap-1">
-                      <input
-                        type="file"
-                        id="excel-upload"
-                        accept=".xlsx,.xls,.csv"
-                        style={{ display: 'none' }}
-                        onChange={handleExcelUpload}
-                      />
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={() => document.getElementById('excel-upload')?.click()}
-                            disabled={!scoresClassId || !scoresSubjectId}
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                          >
-                            <Upload className="h-4 w-4 mr-1" />
-                            Upload
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Upload scores from Excel file (XLSX, XLS, CSV)</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={handleDownloadTemplate}
-                            disabled={!scoresClassId}
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            Template
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Download Excel template with student IDs</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                </div>
-
-                {scoresClassId && scoresSubjectId ? (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 dark:bg-gray-800">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">1st CA (20)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">2nd CA (20)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Exam (60)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Total (100)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Grade</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {allStudents
-                          .filter(student => student.classId === scoresClassId)
-                          .map((student) => {
-                            const assessment = classAssessments.find(a => a.studentId === student.id);
-                            const currentScores = scoreInputs[student.id] || {};
-                            
-                            // Convert to numbers properly, handling both string and number inputs
-                            const firstCA = Number(currentScores.firstCA || assessment?.firstCA || 0);
-                            const secondCA = Number(currentScores.secondCA || assessment?.secondCA || 0);
-                            const exam = Number(currentScores.exam || assessment?.exam || 0);
-                            const total = firstCA + secondCA + exam;
-                            const grade = calculateGrade(total);
-                            
-                            return (
-                              <tr key={student.id}>
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                                  {student.user.firstName} {student.user.lastName}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
-                                  {student.studentId}
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    max="20"
-                                    className="w-16 h-8 text-center"
-                                    value={currentScores.firstCA || assessment?.firstCA || ''}
-                                    onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
-                                    data-student-id={student.id}
-                                    data-field="firstCA"
-                                    placeholder="0"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    max="20"
-                                    className="w-16 h-8 text-center"
-                                    value={currentScores.secondCA || assessment?.secondCA || ''}
-                                    onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
-                                    data-student-id={student.id}
-                                    data-field="secondCA"
-                                    placeholder="0"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    max="60"
-                                    className="w-16 h-8 text-center"
-                                    value={currentScores.exam || assessment?.exam || ''}
-                                    onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
-                                    data-student-id={student.id}
-                                    data-field="exam"
-                                    placeholder="0"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900 dark:text-white">
-                                  {total}
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                                    grade === 'A' ? 'bg-green-500' : 
-                                    grade === 'B' ? 'bg-blue-500' : 
-                                    grade === 'C' ? 'bg-yellow-500' : 
-                                    grade === 'D' ? 'bg-orange-500' : 'bg-red-500'
-                                  } text-white`}>
-                                    {grade}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        }
-                      </tbody>
-                    </table>
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            className="w-full"
-                            onClick={handleSaveAllScores}
-                            disabled={updateScoresMutation.isPending}
-                          >
-                            {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Save all entered scores to the database</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      Select Class and Subject
-                    </h3>
-                    <p className="text-gray-500">
-                      Choose a class and subject above to view and manage student scores.
-                    </p>
-                  </div>
-                )}
+                <Tabs defaultValue="academic" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="academic">Academic Scores</TabsTrigger>
+                    <TabsTrigger value="behavioral">Behavioral Ratings</TabsTrigger>
+                  </TabsList>
+                  
+                  {/* Academic Scores Tab */}
+                  <TabsContent value="academic" className="mt-6">
+                    <TeacherGradesInterface 
+                      currentTerm="First Term"
+                      currentSession="2024/2025"
+                      userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                    />
+                  </TabsContent>
+                  
+                  {/* Behavioral Ratings Tab */}
+                  <TabsContent value="behavioral" className="mt-6">
+                    <BehavioralRatingsInterface 
+                      currentTerm="First Term"
+                      currentSession="2024/2025"
+                      userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                    />
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Teacher Grading Interface Tab */}
+          {/* Simplified Grading Interface Tab */}
           <TabsContent value="grading" className="space-y-6 table-container">
-            <TeacherGradesInterface 
-              currentTerm="First Term"
-              currentSession="2024/2025"
-              userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-            />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <GraduationCap className="h-5 w-5" />
+                  <span>Class Management</span>
+                </CardTitle>
+                <CardDescription>
+                  Basic class and subject management tools
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-gray-500">
+                  <GraduationCap className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p className="mb-2">Grading tools have been moved to specialized sections:</p>
+                  <div className="space-y-2">
+                    <p>• <strong>Academic Scores</strong>: Go to "Scores" tab</p>
+                    <p>• <strong>Behavioral Ratings</strong>: Go to "Scores" tab</p>
+                    <p>• <strong>Report Cards</strong>: Go to "Reports" tab</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Financial Management Tab */}
