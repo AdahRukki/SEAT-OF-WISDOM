@@ -85,9 +85,11 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     queryKey: ["/api/admin/generated-reports"],
   });
 
-  // Fetch students for selected class
+  // Fetch students for selected class or all students if whole school is selected
   const { data: students = [] } = useQuery<any[]>({
-    queryKey: [`/api/admin/students/class/${selectedClass}`],
+    queryKey: selectedClass === 'whole-school' 
+      ? ['/api/admin/students'] 
+      : [`/api/admin/students/class/${selectedClass}`],
     enabled: !!selectedClass,
   });
 
@@ -194,7 +196,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       for (const student of students) {
         await validateMutation.mutateAsync({
           studentId: student.id,
-          classId: selectedClass,
+          classId: selectedClass === 'whole-school' ? student.classId : selectedClass,
           term: selectedTerm,
           session: selectedSession,
         });
@@ -601,11 +603,13 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     // Create report card record
     createReportMutation.mutate({
       studentId: student.id,
-      classId: selectedClass,
+      classId: selectedClass === 'whole-school' ? student.classId : selectedClass,
       term: selectedTerm,
       session: selectedSession,
       studentName: `${student.user.firstName} ${student.user.lastName}`,
-      className: classes.find(c => c.id === selectedClass)?.name || "",
+      className: selectedClass === 'whole-school' 
+        ? (student.class?.name || 'Unknown Class')
+        : (classes.find(c => c.id === selectedClass)?.name || ""),
       totalScore: "0", // This would be calculated from actual scores
       averageScore: "0", // This would be calculated from actual scores
       attendancePercentage: "0", // This would be calculated from attendance data
@@ -633,11 +637,13 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           // Create report card record for each student
           await createReportMutation.mutateAsync({
             studentId: student.id,
-            classId: selectedClass,
+            classId: selectedClass === 'whole-school' ? student.classId : selectedClass,
             term: selectedTerm,
             session: selectedSession,
             studentName: `${student.user.firstName} ${student.user.lastName}`,
-            className: classes.find(c => c.id === selectedClass)?.name || "",
+            className: selectedClass === 'whole-school' 
+              ? (student.class?.name || 'Unknown Class')
+              : (classes.find(c => c.id === selectedClass)?.name || ""),
             totalScore: "0", // This would be calculated from actual scores
             averageScore: "0", // This would be calculated from actual scores
             attendancePercentage: "0", // This would be calculated from attendance data
@@ -647,11 +653,13 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           await handleViewReportCard({
             id: student.id,
             studentId: student.id,
-            classId: selectedClass,
+            classId: selectedClass === 'whole-school' ? student.classId : selectedClass,
             term: selectedTerm,
             session: selectedSession,
             studentName: `${student.user.firstName} ${student.user.lastName}`,
-            className: classes.find(c => c.id === selectedClass)?.name || "",
+            className: selectedClass === 'whole-school' 
+              ? (student.class?.name || 'Unknown Class')
+              : (classes.find(c => c.id === selectedClass)?.name || ""),
             totalScore: "0",
             averageScore: "0", 
             attendancePercentage: "0",
@@ -705,6 +713,12 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                   <SelectValue placeholder="Choose a class" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="whole-school">
+                    <div className="flex items-center gap-2">
+                      <School className="w-4 h-4" />
+                      <span className="font-semibold text-blue-600">🏫 Whole School (All Classes)</span>
+                    </div>
+                  </SelectItem>
                   {classes.map((classItem) => (
                     <SelectItem key={classItem.id} value={classItem.id}>
                       {classItem.name}
