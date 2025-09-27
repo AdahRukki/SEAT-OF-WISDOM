@@ -53,6 +53,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
+import { 
   Plus, 
   Save,
   Download,
@@ -118,6 +126,87 @@ import * as XLSX from 'xlsx';
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 type PaymentForm = z.infer<typeof recordPaymentSchema>;
+
+// Users Management Component
+function UsersManagement() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Fetch admin users
+  const { data: users = [], isLoading: usersLoading } = useQuery({
+    queryKey: ['/api/admin/users'],
+  });
+
+  // Fetch schools for sub-admin creation
+  const { data: schools = [] } = useQuery({
+    queryKey: ['/api/admin/schools']
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Users className="h-5 w-5" />
+          User Management
+        </CardTitle>
+        <CardDescription>
+          Manage admin and sub-admin accounts
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {usersLoading ? (
+          <div className="flex items-center justify-center p-8">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+              <p className="text-sm text-muted-foreground">Loading users...</p>
+            </div>
+          </div>
+        ) : users.length === 0 ? (
+          <div className="text-center p-8">
+            <p className="text-muted-foreground">No admin users found.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>School</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.filter((user: any) => user.role === 'admin' || user.role === 'sub-admin').map((user: any) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">
+                      {user.firstName} {user.lastName}
+                    </TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      <Badge className={user.role === 'admin' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.schoolId ? schools.find((s: any) => s.id === user.schoolId)?.name || 'Unknown School' : 'All Schools'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.isActive ? 'default' : 'secondary'}>
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -2492,7 +2581,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 h-auto p-1">
             <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Overview
             </TabsTrigger>
@@ -2511,6 +2600,11 @@ export default function AdminDashboard() {
             <TabsTrigger value="reports" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Reports
             </TabsTrigger>
+            {user?.role === 'admin' && (
+              <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+                Users
+              </TabsTrigger>
+            )}
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Settings
             </TabsTrigger>
@@ -3482,6 +3576,13 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Users Tab */}
+          {user?.role === 'admin' && (
+            <TabsContent value="users" className="space-y-6">
+              <UsersManagement />
+            </TabsContent>
+          )}
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6 table-container">
