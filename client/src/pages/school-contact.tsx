@@ -97,8 +97,8 @@ export default function SchoolContact() {
               <CardDescription className="mb-4">
                 Schedule a tour to see our facilities and meet our team
               </CardDescription>
-              <p className="text-purple-600 dark:text-purple-400 font-semibold">Asaba Main Campus</p>
-              <p className="text-gray-600 dark:text-gray-300">Asaba, Uganda</p>
+              <p className="text-purple-600 dark:text-purple-400 font-semibold">Four Locations in Asaba</p>
+              <p className="text-gray-600 dark:text-gray-300">Asaba, Delta State, Nigeria</p>
             </Card>
           </div>
 
@@ -265,71 +265,71 @@ export default function SchoolContact() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-asaba">
+            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-bonsaac">
               <div className="mb-4">
                 <div className="mx-auto bg-blue-100 dark:bg-blue-900 rounded-full p-3 w-16 h-16 flex items-center justify-center">
                   <MapPin className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 </div>
               </div>
-              <CardTitle className="text-lg mb-2">Asaba Main Campus</CardTitle>
+              <CardTitle className="text-lg mb-2">BONSAAC</CardTitle>
               <CardDescription className="mb-4">
-                Main Campus, Asaba<br />
-                Uganda
+                Bonsaac, Asaba<br />
+                Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>📞 +256 123 456 789</p>
-                <p>✉️ asaba@seatofwisdomasaba.org</p>
+                <p>📞 +234 123 456 789</p>
+                <p>✉️ bonsaac@seatofwisdomasaba.org</p>
               </div>
             </Card>
 
-            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-lugazi">
+            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-ikpoto">
               <div className="mb-4">
                 <div className="mx-auto bg-green-100 dark:bg-green-900 rounded-full p-3 w-16 h-16 flex items-center justify-center">
                   <MapPin className="h-8 w-8 text-green-600 dark:text-green-400" />
                 </div>
               </div>
-              <CardTitle className="text-lg mb-2">Lugazi Branch</CardTitle>
+              <CardTitle className="text-lg mb-2">IKPOTO POWERLINE</CardTitle>
               <CardDescription className="mb-4">
-                Lugazi Town<br />
-                Mukono District
+                Ikpoto Powerline, Asaba<br />
+                Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>📞 +256 123 456 791</p>
-                <p>✉️ lugazi@seatofwisdomasaba.org</p>
+                <p>📞 +234 123 456 791</p>
+                <p>✉️ ikpoto@seatofwisdomasaba.org</p>
               </div>
             </Card>
 
-            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-kampala">
+            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-akwuofor">
               <div className="mb-4">
                 <div className="mx-auto bg-purple-100 dark:bg-purple-900 rounded-full p-3 w-16 h-16 flex items-center justify-center">
                   <MapPin className="h-8 w-8 text-purple-600 dark:text-purple-400" />
                 </div>
               </div>
-              <CardTitle className="text-lg mb-2">Kampala Branch</CardTitle>
+              <CardTitle className="text-lg mb-2">AKWUOFOR</CardTitle>
               <CardDescription className="mb-4">
-                Kampala City<br />
-                Central Region
+                Akwuofor along Amusement Park, Koka<br />
+                Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>📞 +256 123 456 792</p>
-                <p>✉️ kampala@seatofwisdomasaba.org</p>
+                <p>📞 +234 123 456 792</p>
+                <p>✉️ akwuofor@seatofwisdomasaba.org</p>
               </div>
             </Card>
 
-            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-mukono">
+            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-akwuose">
               <div className="mb-4">
                 <div className="mx-auto bg-orange-100 dark:bg-orange-900 rounded-full p-3 w-16 h-16 flex items-center justify-center">
                   <MapPin className="h-8 w-8 text-orange-600 dark:text-orange-400" />
                 </div>
               </div>
-              <CardTitle className="text-lg mb-2">Mukono Branch</CardTitle>
+              <CardTitle className="text-lg mb-2">AKWUOSE</CardTitle>
               <CardDescription className="mb-4">
-                Mukono Municipality<br />
-                Central Region
+                Akwuose behind Mama's Mart along Ibusa Road<br />
+                Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>📞 +256 123 456 793</p>
-                <p>✉️ mukono@seatofwisdomasaba.org</p>
+                <p>📞 +234 123 456 793</p>
+                <p>✉️ akwuose@seatofwisdomasaba.org</p>
               </div>
             </Card>
           </div>
