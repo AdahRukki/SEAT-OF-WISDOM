@@ -103,12 +103,14 @@ export function TeacherGradesInterface({
         body: data,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast({ description: "Academic scores saved successfully!" });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
-      // Clear editing state after successful save
-      setEditingCell(null);
-      setTempScores({});
+      // Clear editing state after successful save with a small delay to show the saved value
+      setTimeout(() => {
+        setEditingCell(null);
+        setTempScores({});
+      }, 100);
     },
     onError: (error: any) => {
       toast({ 
@@ -208,25 +210,13 @@ export function TeacherGradesInterface({
       e.preventDefault();
       const key = `${studentId}-${subjectId}-${field}`;
       const value = tempScores[key] || "";
-      handleSaveScore(studentId, subjectId, field, value);
-      setEditingCell(null);
-      setTempScores({});
       
-      // Move to next field or next student
-      const students = classStudents;
-      const subjects = data?.subjects || [];
-      const currentStudentIndex = students.findIndex(s => s.id === studentId);
-      const currentSubjectIndex = subjects.findIndex(s => s.id === subjectId);
-      
-      if (field === 'firstCA') {
-        handleCellEdit(studentId, subjectId, 'secondCA');
-      } else if (field === 'secondCA') {
-        handleCellEdit(studentId, subjectId, 'exam');
-      } else if (field === 'exam') {
-        // Move to next student, first field
-        if (currentStudentIndex < students.length - 1) {
-          handleCellEdit(students[currentStudentIndex + 1].id, subjectId, 'firstCA');
-        }
+      if (value.trim()) {
+        handleSaveScore(studentId, subjectId, field, value);
+      } else {
+        // If no value, just move to next field
+        setEditingCell(null);
+        setTempScores({});
       }
     } else if (e.key === 'Escape') {
       setEditingCell(null);
