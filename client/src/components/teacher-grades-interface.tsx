@@ -105,33 +105,8 @@ export function TeacherGradesInterface({
         body: data,
       });
     },
-    onSuccess: (_, variables) => {
-      toast({ description: "Academic scores saved successfully!" });
-      
-      // Only clear the specific scores that were saved, not all tempScores
-      setTempScores(prev => {
-        const newTempScores = { ...prev };
-        // Remove the saved student-subject combinations
-        Object.keys(newTempScores).forEach(key => {
-          const [studentId, subjectId] = key.split('|');
-          if (studentId === variables.studentId && subjectId === variables.subjectId) {
-            delete newTempScores[key];
-          }
-        });
-        return newTempScores;
-      });
-      
-      // Check if all scores are saved
-      setTimeout(() => {
-        setTempScores(prev => {
-          const remainingScores = Object.keys(prev).length;
-          if (remainingScores === 0) {
-            setHasUnsavedChanges(false);
-          }
-          return prev;
-        });
-      }, 100);
-      
+    onSuccess: () => {
+      // Only invalidate query, let handleSaveAllChanges handle the rest
       queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
     },
     onError: (error: any) => {
@@ -251,7 +226,7 @@ export function TeacherGradesInterface({
     setHasUnsavedChanges(true);
   };
 
-  const handleSaveAllChanges = () => {
+  const handleSaveAllChanges = async () => {
     if (!hasUnsavedChanges) return;
     
     // Group changes by student and subject
@@ -285,15 +260,35 @@ export function TeacherGradesInterface({
       changesByStudent[changeKey].scores[field] = numValue;
     });
     
-    // Save all changes
-    Object.values(changesByStudent).forEach(({ studentId, subjectId, scores }) => {
-      const finalScores = {
-        studentId,
-        subjectId,
-        ...scores
-      };
-      saveAcademicScoreMutation.mutate(finalScores);
-    });
+    // Save all changes sequentially to avoid race conditions
+    try {
+      const savePromises = Object.values(changesByStudent).map(({ studentId, subjectId, scores }) => {
+        const finalScores = {
+          studentId,
+          subjectId,
+          ...scores
+        };
+        return new Promise((resolve, reject) => {
+          saveAcademicScoreMutation.mutate(finalScores, {
+            onSuccess: resolve,
+            onError: reject
+          });
+        });
+      });
+      
+      await Promise.all(savePromises);
+      
+      // Clear all temp scores after successful save
+      setTempScores({});
+      setHasUnsavedChanges(false);
+      toast({ description: "All scores saved successfully!" });
+      
+    } catch (error) {
+      toast({ 
+        description: "Failed to save some scores. Please try again.", 
+        variant: "destructive" 
+      });
+    }
   };
 
   const getCurrentScore = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
