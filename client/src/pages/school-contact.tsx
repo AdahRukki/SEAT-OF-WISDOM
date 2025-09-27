@@ -468,13 +468,13 @@ export default function SchoolContact() {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <MessageCircle className="h-5 w-5 text-blue-600 mr-2" />
-                  Do you offer scholarship programs?
+                  Can I transfer my child from one branch to another?
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 dark:text-gray-300">
-                  Yes, we offer merit-based scholarships and need-based financial assistance. 
-                  Contact our admissions office to learn about available scholarship opportunities and application procedures.
+                  Yes, we allow transfers between our four branches in Asaba. Contact our main office to discuss 
+                  availability and complete the transfer process. We'll ensure a smooth transition for your child.
                 </p>
               </CardContent>
             </Card>
