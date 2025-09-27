@@ -137,6 +137,7 @@ function UsersManagement() {
   const [isDeleteUserDialogOpen, setIsDeleteUserDialogOpen] = useState(false);
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<any>(null);
   const [selectedUserForDeletion, setSelectedUserForDeletion] = useState<any>(null);
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [userEditForm, setUserEditForm] = useState({
     firstName: "",
     lastName: "",
@@ -366,14 +367,31 @@ function UsersManagement() {
 
           <div>
             <Label htmlFor="edit-new-password">New Password (leave empty to keep current)</Label>
-            <Input
-              id="edit-new-password"
-              type="password"
-              value={userEditForm.newPassword}
-              onChange={(e) => setUserEditForm({...userEditForm, newPassword: e.target.value})}
-              data-testid="input-edit-user-password"
-              placeholder="Enter new password or leave empty"
-            />
+            <div className="relative">
+              <Input
+                id="edit-new-password"
+                type={showEditPassword ? "text" : "password"}
+                value={userEditForm.newPassword}
+                onChange={(e) => setUserEditForm({...userEditForm, newPassword: e.target.value})}
+                data-testid="input-edit-user-password"
+                placeholder="Enter new password or leave empty"
+                className="pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowEditPassword(!showEditPassword)}
+                data-testid="button-toggle-edit-password"
+              >
+                {showEditPassword ? (
+                  <EyeOff className="h-4 w-4 text-gray-500" />
+                ) : (
+                  <Eye className="h-4 w-4 text-gray-500" />
+                )}
+              </Button>
+            </div>
           </div>
 
           <div className="flex items-center space-x-2">
