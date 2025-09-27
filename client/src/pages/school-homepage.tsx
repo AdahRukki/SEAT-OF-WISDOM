@@ -129,9 +129,9 @@ export default function SchoolHomepage() {
                     <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
                 </Link>
-                <Link href="/programs">
-                  <Button size="lg" variant="outline" data-testid="button-learn-more">
-                    Learn More
+                <Link href="/portal">
+                  <Button size="lg" variant="outline" data-testid="button-student-portal">
+                    Student Portal
                   </Button>
                 </Link>
               </div>
