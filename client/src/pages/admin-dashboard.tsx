@@ -2511,13 +2511,14 @@ export default function AdminDashboard() {
               {user.role === 'admin' && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <a
-                      href="/users"
+                    <button
+                      onClick={() => setActiveTab("users")}
                       className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
+                      data-testid="button-users-header"
                     >
                       <Users className="w-4 h-4" />
                       <span className="hidden sm:inline">Users</span>
-                    </a>
+                    </button>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Manage users, create sub-admins, and configure school settings</p>
