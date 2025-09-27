@@ -92,6 +92,7 @@ import {
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
+import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
@@ -2458,6 +2459,9 @@ export default function AdminDashboard() {
             <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Scores
             </TabsTrigger>
+            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+              Grading
+            </TabsTrigger>
             <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Attendance
             </TabsTrigger>
@@ -3017,6 +3021,15 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Teacher Grading Interface Tab */}
+          <TabsContent value="grading" className="space-y-6 table-container">
+            <TeacherGradesInterface 
+              currentTerm="First Term"
+              currentSession="2024/2025"
+              userSchoolId={user.schoolId || ''}
+            />
           </TabsContent>
 
           {/* Financial Management Tab */}

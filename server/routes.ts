@@ -971,13 +971,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get students by class (for teacher interface)
-  app.get('/api/students/by-class/:classId', authenticate, async (req, res) => {
+  app.get('/api/admin/students/by-class/:classId', authenticate, requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).user;
-      if (user.role !== 'admin' && user.role !== 'sub-admin') {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
       const { classId } = req.params;
       const students = await storage.getStudentsByClass(classId);
       res.json(students);
@@ -988,13 +983,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get assessments with filtering (for teacher interface)
-  app.get('/api/assessments/:classId/:term/:session', authenticate, async (req, res) => {
+  app.get('/api/admin/assessments/:classId/:term/:session', authenticate, requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).user;
-      if (user.role !== 'admin' && user.role !== 'sub-admin') {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
       const { classId, term, session } = req.params;
       const assessments = await storage.getAssessmentsByClassTermSession(classId, term, session);
       res.json(assessments);
@@ -1005,13 +995,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Non-academic ratings endpoints
-  app.get('/api/non-academic-ratings/:classId/:term/:session', authenticate, async (req, res) => {
+  app.get('/api/admin/non-academic-ratings/:classId/:term/:session', authenticate, requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).user;
-      if (user.role !== 'admin' && user.role !== 'sub-admin') {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
       const { classId, term, session } = req.params;
       const ratings = await storage.getNonAcademicRatingsByClass(classId, term, session);
       res.json(ratings);
@@ -1021,13 +1006,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/non-academic-ratings', authenticate, async (req, res) => {
+  app.post('/api/admin/non-academic-ratings', authenticate, requireAdmin, async (req, res) => {
     try {
       const user = (req as any).user;
-      if (user.role !== 'admin' && user.role !== 'sub-admin') {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
       const ratingData = req.body; // Will validate in storage layer
       const rating = await storage.createOrUpdateNonAcademicRating({
         ...ratingData,
@@ -1042,13 +1023,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin/Teacher routes - Assessment management
-  app.post('/api/assessments', authenticate, async (req, res) => {
+  app.post('/api/admin/assessments', authenticate, requireAdmin, async (req, res) => {
     try {
-      const user = (req as any).user;
-      if (user.role !== 'admin' && user.role !== 'sub-admin') {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
       const assessmentData = addScoreSchema.parse(req.body);
       
       console.log("[DEBUG] Assessment data received:", assessmentData);

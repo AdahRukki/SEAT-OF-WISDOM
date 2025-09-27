@@ -82,40 +82,40 @@ export function TeacherGradesInterface({
 
   // Queries
   const { data: classes = [] } = useQuery<Class[]>({
-    queryKey: ['/api/classes', userSchoolId],
+    queryKey: ['/api/admin/classes', userSchoolId],
     enabled: !!userSchoolId
   });
 
   const { data: subjects = [] } = useQuery<Subject[]>({
-    queryKey: ['/api/subjects']
+    queryKey: ['/api/admin/subjects']
   });
 
-  const { data: classStudents = [] } = useQuery<StudentWithDetails[]>({
-    queryKey: ['/api/students/by-class', selectedClassId],
+  const { data: classStudents = [], isLoading: studentsLoading } = useQuery<StudentWithDetails[]>({
+    queryKey: [`/api/admin/students/by-class/${selectedClassId}`],
     enabled: !!selectedClassId
   });
 
-  const { data: assessments = [] } = useQuery<(Assessment & { subject: Subject })[]>({
-    queryKey: ['/api/assessments', selectedClassId, currentTerm, currentSession],
+  const { data: assessments = [], isLoading: assessmentsLoading } = useQuery<(Assessment & { subject: Subject })[]>({
+    queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`],
     enabled: !!selectedClassId
   });
 
-  const { data: nonAcademicRatings = [] } = useQuery<NonAcademicRating[]>({
-    queryKey: ['/api/non-academic-ratings', selectedClassId, currentTerm, currentSession],
+  const { data: nonAcademicRatings = [], isLoading: ratingsLoading } = useQuery<NonAcademicRating[]>({
+    queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${currentTerm}/${currentSession}`],
     enabled: !!selectedClassId
   });
 
   // Mutations
   const saveAcademicScoreMutation = useMutation({
     mutationFn: async (data: AddScore) => {
-      return apiRequest('/api/assessments', {
+      return apiRequest('/api/admin/assessments', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
     onSuccess: () => {
       toast({ description: "Academic scores saved successfully!" });
-      queryClient.invalidateQueries({ queryKey: ['/api/assessments'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
       setIsGradeDialogOpen(false);
       setAcademicScores({ firstCA: "", secondCA: "", exam: "" });
     },
@@ -129,14 +129,14 @@ export function TeacherGradesInterface({
 
   const saveNonAcademicRatingMutation = useMutation({
     mutationFn: async (data: UpdateNonAcademicRating) => {
-      return apiRequest('/api/non-academic-ratings', {
+      return apiRequest('/api/admin/non-academic-ratings', {
         method: 'POST',
         body: JSON.stringify(data),
       });
     },
     onSuccess: () => {
       toast({ description: "Non-academic ratings saved successfully!" });
-      queryClient.invalidateQueries({ queryKey: ['/api/non-academic-ratings'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${currentTerm}/${currentSession}`] });
       setIsRatingDialogOpen(false);
       setNonAcademicScores({
         attendancePunctuality: 3,
@@ -491,12 +491,12 @@ export function TeacherGradesInterface({
               />
             </div>
             
-            {/* Preview calculation */}
+            {/* Real-time preview calculation */}
             {(academicScores.firstCA || academicScores.secondCA || academicScores.exam) && (
-              <div className="p-3 bg-muted rounded-lg">
+              <div className="p-3 bg-muted rounded-lg" data-testid="grade-preview">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Calculator className="h-4 w-4" />
-                  Preview
+                  Live Preview
                 </div>
                 <div className="mt-2 text-sm">
                   {(() => {
@@ -505,8 +505,12 @@ export function TeacherGradesInterface({
                                   (parseInt(academicScores.exam) || 0);
                     const gradeInfo = calculateGrade(total);
                     return (
-                      <div>
-                        Total: {total}/100 | Grade: <Badge className={gradeInfo.color}>{gradeInfo.grade}</Badge> | {gradeInfo.remark}
+                      <div className="space-y-1">
+                        <div>Total: <span className="font-semibold">{total}/100</span></div>
+                        <div className="flex items-center gap-2">
+                          Grade: <Badge className={`${gradeInfo.color} text-white`}>{gradeInfo.grade}</Badge>
+                          <span className="text-muted-foreground">({gradeInfo.remark})</span>
+                        </div>
                       </div>
                     );
                   })()}
@@ -518,7 +522,11 @@ export function TeacherGradesInterface({
               <Button variant="outline" onClick={() => setIsGradeDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveAcademicScore} disabled={saveAcademicScoreMutation.isPending}>
+              <Button 
+                onClick={handleSaveAcademicScore} 
+                disabled={saveAcademicScoreMutation.isPending}
+                data-testid="button-save-academic-scores"
+              >
                 <Save className="h-4 w-4 mr-2" />
                 {saveAcademicScoreMutation.isPending ? "Saving..." : "Save Scores"}
               </Button>
@@ -571,7 +579,11 @@ export function TeacherGradesInterface({
               <Button variant="outline" onClick={() => setIsRatingDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveNonAcademicRating} disabled={saveNonAcademicRatingMutation.isPending}>
+              <Button 
+                onClick={handleSaveNonAcademicRating} 
+                disabled={saveNonAcademicRatingMutation.isPending}
+                data-testid="button-save-ratings"
+              >
                 <Save className="h-4 w-4 mr-2" />
                 {saveNonAcademicRatingMutation.isPending ? "Saving..." : "Save Ratings"}
               </Button>
