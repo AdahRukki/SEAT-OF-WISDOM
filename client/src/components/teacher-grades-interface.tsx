@@ -451,7 +451,11 @@ export function TeacherGradesInterface({
                       <TableBody>
                         {classStudents.map(student => {
                           const assessment = getStudentAssessment(student.id, selectedSubjectId);
-                          const total = (assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0);
+                          // Calculate total using current scores (including temporary ones)
+                          const ca1Score = parseInt(getCurrentScore(student.id, selectedSubjectId, 'firstCA')) || 0;
+                          const ca2Score = parseInt(getCurrentScore(student.id, selectedSubjectId, 'secondCA')) || 0;
+                          const examScore = parseInt(getCurrentScore(student.id, selectedSubjectId, 'exam')) || 0;
+                          const total = ca1Score + ca2Score + examScore;
                           const gradeInfo = calculateGrade(total);
                           
                           return (
