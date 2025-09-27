@@ -133,12 +133,12 @@ function UsersManagement() {
   const queryClient = useQueryClient();
   
   // Fetch admin users
-  const { data: users = [], isLoading: usersLoading } = useQuery({
+  const { data: users = [], isLoading: usersLoading } = useQuery<any[]>({
     queryKey: ['/api/admin/users'],
   });
 
   // Fetch schools for sub-admin creation
-  const { data: schools = [] } = useQuery({
+  const { data: schools = [] } = useQuery<any[]>({
     queryKey: ['/api/admin/schools']
   });
 
