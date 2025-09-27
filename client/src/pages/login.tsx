@@ -191,16 +191,19 @@ export default function Login() {
               </div>
               
               <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <h3 className="font-semibold text-sm mb-2">Demo Accounts:</h3>
+                <h3 className="font-semibold text-sm mb-2">Available Accounts:</h3>
                 <div className="text-xs space-y-1">
                   <p><strong>Main Admin:</strong> adahrukki@gmail.com (Firebase Auth)</p>
-                  <p><strong>School Admin:</strong> admin1@seatofwisdom.edu / password123</p>
-                  <p><strong>Student:</strong> john.doe@student.com / password123</p>
+                  <p><strong>Sub-Admin:</strong> kanayojoy@gmail.com</p>
+                  <p><strong>Sub-Admin:</strong> okaforeunice@gmail.com</p>
+                  <p><strong>Student:</strong> ike@gmail.com</p>
+                  <p><strong>Student:</strong> Bassey@gmail.com</p>
+                  <p><strong>Student:</strong> SUPERMAN@GMAIL.COM</p>
                 </div>
-                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border-l-4 border-blue-400">
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    <strong>Note:</strong> To receive password reset emails for adahrukki@gmail.com, 
-                    you need to set up Firebase Authentication in your Firebase Console.
+                <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 rounded border-l-4 border-amber-400">
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    <strong>Note:</strong> Contact your administrator for login credentials. 
+                    Some accounts may use Firebase Authentication or local passwords.
                   </p>
                 </div>
               </div>
