@@ -56,6 +56,7 @@ export function TeacherGradesInterface({
   
   // State
   const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
   const [editingCell, setEditingCell] = useState<{studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam'} | null>(null);
   const [tempScores, setTempScores] = useState<{[key: string]: string}>({});
 
@@ -263,10 +264,13 @@ export function TeacherGradesInterface({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div>
               <Label htmlFor="class-select">Select Class</Label>
-              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+              <Select value={selectedClassId} onValueChange={(value) => {
+                setSelectedClassId(value);
+                setSelectedSubjectId(""); // Reset subject when class changes
+              }}>
                 <SelectTrigger data-testid="select-class">
                   <SelectValue placeholder="Choose a class" />
                 </SelectTrigger>
@@ -274,6 +278,25 @@ export function TeacherGradesInterface({
                   {classes.map((cls) => (
                     <SelectItem key={cls.id} value={cls.id}>
                       {cls.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="subject-select">Select Subject</Label>
+              <Select 
+                value={selectedSubjectId} 
+                onValueChange={setSelectedSubjectId}
+                disabled={!selectedClassId}
+              >
+                <SelectTrigger data-testid="select-subject">
+                  <SelectValue placeholder="Choose a subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((subject) => (
+                    <SelectItem key={subject.id} value={subject.id}>
+                      {subject.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -287,12 +310,12 @@ export function TeacherGradesInterface({
         </CardContent>
       </Card>
 
-      {selectedClassId && (
+      {selectedClassId && selectedSubjectId && (
         <Card>
           <CardHeader>
-            <CardTitle>Students in Class</CardTitle>
+            <CardTitle>Students in Class - {subjects.find(s => s.id === selectedSubjectId)?.name}</CardTitle>
             <CardDescription>
-              Click on score cells to input grades, or use the rating button for behavioral assessments
+              Click on score cells to input grades for {subjects.find(s => s.id === selectedSubjectId)?.name}, or use the rating button for behavioral assessments
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -320,55 +343,55 @@ export function TeacherGradesInterface({
                       <TableHeader>
                         <TableRow>
                           <TableHead>Student</TableHead>
-                          {subjects.map(subject => (
-                            <TableHead key={subject.id} className="text-center min-w-[120px]">
-                              {subject.name}
-                            </TableHead>
-                          ))}
+                          <TableHead className="text-center min-w-[200px]">
+                            {subjects.find(s => s.id === selectedSubjectId)?.name} Scores
+                          </TableHead>
+                          <TableHead className="text-center">Total</TableHead>
+                          <TableHead className="text-center">Grade</TableHead>
+                          <TableHead className="text-center">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {classStudents.map(student => (
-                        <TableRow key={student.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4" />
-                              {student.user.firstName} {student.user.lastName}
-                            </div>
-                          </TableCell>
-                          {subjects.map(subject => {
-                            const assessment = getStudentAssessment(student.id, subject.id);
-                            const total = (assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0);
-                            const gradeInfo = calculateGrade(total);
-                            
-                            return (
-                              <TableCell key={subject.id} className="p-2">
+                        {classStudents.map(student => {
+                          const assessment = getStudentAssessment(student.id, selectedSubjectId);
+                          const total = (assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0);
+                          const gradeInfo = calculateGrade(total);
+                          
+                          return (
+                            <TableRow key={student.id}>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4" />
+                                  {student.user.firstName} {student.user.lastName}
+                                </div>
+                              </TableCell>
+                              <TableCell className="p-2">
                                 {/* Horizontal layout with CA1, CA2, Exam in a row */}
                                 <div className="flex items-center gap-2 mb-2">
                                   {/* CA1 Input */}
                                   <div className="flex flex-col items-center">
                                     <span className="text-xs font-medium mb-1">CA1</span>
-                                    {editingCell?.studentId === student.id && editingCell?.subjectId === subject.id && editingCell?.field === 'firstCA' ? (
+                                    {editingCell?.studentId === student.id && editingCell?.subjectId === selectedSubjectId && editingCell?.field === 'firstCA' ? (
                                       <Input
                                         type="number"
                                         min="0"
                                         max="20"
-                                        value={tempScores[`${student.id}-${subject.id}-firstCA`] || ""}
+                                        value={tempScores[`${student.id}-${selectedSubjectId}-firstCA`] || ""}
                                         onChange={(e) => setTempScores(prev => ({ 
                                           ...prev, 
-                                          [`${student.id}-${subject.id}-firstCA`]: e.target.value 
+                                          [`${student.id}-${selectedSubjectId}-firstCA`]: e.target.value 
                                         }))}
-                                        onKeyDown={(e) => handleKeyPress(e, student.id, subject.id, 'firstCA')}
+                                        onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'firstCA')}
                                         onBlur={() => {
-                                          const key = `${student.id}-${subject.id}-firstCA`;
+                                          const key = `${student.id}-${selectedSubjectId}-firstCA`;
                                           const value = tempScores[key] || "";
-                                          if (value) handleSaveScore(student.id, subject.id, 'firstCA', value);
+                                          if (value) handleSaveScore(student.id, selectedSubjectId, 'firstCA', value);
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
-                                        data-testid={`input-ca1-${student.id}-${subject.id}`}
+                                        data-testid={`input-ca1-${student.id}-${selectedSubjectId}`}
                                       />
                                     ) : (
                                       <div 
@@ -378,8 +401,8 @@ export function TeacherGradesInterface({
                                           (assessment?.firstCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
                                           'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
                                         }`}
-                                        onClick={() => handleCellEdit(student.id, subject.id, 'firstCA')}
-                                        data-testid={`cell-ca1-${student.id}-${subject.id}`}
+                                        onClick={() => handleCellEdit(student.id, selectedSubjectId, 'firstCA')}
+                                        data-testid={`cell-ca1-${student.id}-${selectedSubjectId}`}
                                         title={`CA1 Score: ${assessment?.firstCA || 0}/20 - Click to edit`}
                                       >
                                         {assessment?.firstCA || 0}
@@ -390,27 +413,27 @@ export function TeacherGradesInterface({
                                   {/* CA2 Input */}
                                   <div className="flex flex-col items-center">
                                     <span className="text-xs font-medium mb-1">CA2</span>
-                                    {editingCell?.studentId === student.id && editingCell?.subjectId === subject.id && editingCell?.field === 'secondCA' ? (
+                                    {editingCell?.studentId === student.id && editingCell?.subjectId === selectedSubjectId && editingCell?.field === 'secondCA' ? (
                                       <Input
                                         type="number"
                                         min="0"
                                         max="20"
-                                        value={tempScores[`${student.id}-${subject.id}-secondCA`] || ""}
+                                        value={tempScores[`${student.id}-${selectedSubjectId}-secondCA`] || ""}
                                         onChange={(e) => setTempScores(prev => ({ 
                                           ...prev, 
-                                          [`${student.id}-${subject.id}-secondCA`]: e.target.value 
+                                          [`${student.id}-${selectedSubjectId}-secondCA`]: e.target.value 
                                         }))}
-                                        onKeyDown={(e) => handleKeyPress(e, student.id, subject.id, 'secondCA')}
+                                        onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'secondCA')}
                                         onBlur={() => {
-                                          const key = `${student.id}-${subject.id}-secondCA`;
+                                          const key = `${student.id}-${selectedSubjectId}-secondCA`;
                                           const value = tempScores[key] || "";
-                                          if (value) handleSaveScore(student.id, subject.id, 'secondCA', value);
+                                          if (value) handleSaveScore(student.id, selectedSubjectId, 'secondCA', value);
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
-                                        data-testid={`input-ca2-${student.id}-${subject.id}`}
+                                        data-testid={`input-ca2-${student.id}-${selectedSubjectId}`}
                                       />
                                     ) : (
                                       <div 
@@ -420,8 +443,8 @@ export function TeacherGradesInterface({
                                           (assessment?.secondCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
                                           'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
                                         }`}
-                                        onClick={() => handleCellEdit(student.id, subject.id, 'secondCA')}
-                                        data-testid={`cell-ca2-${student.id}-${subject.id}`}
+                                        onClick={() => handleCellEdit(student.id, selectedSubjectId, 'secondCA')}
+                                        data-testid={`cell-ca2-${student.id}-${selectedSubjectId}`}
                                         title={`CA2 Score: ${assessment?.secondCA || 0}/20 - Click to edit`}
                                       >
                                         {assessment?.secondCA || 0}
@@ -432,27 +455,27 @@ export function TeacherGradesInterface({
                                   {/* Exam Input */}
                                   <div className="flex flex-col items-center">
                                     <span className="text-xs font-medium mb-1">Exam</span>
-                                    {editingCell?.studentId === student.id && editingCell?.subjectId === subject.id && editingCell?.field === 'exam' ? (
+                                    {editingCell?.studentId === student.id && editingCell?.subjectId === selectedSubjectId && editingCell?.field === 'exam' ? (
                                       <Input
                                         type="number"
                                         min="0"
                                         max="60"
-                                        value={tempScores[`${student.id}-${subject.id}-exam`] || ""}
+                                        value={tempScores[`${student.id}-${selectedSubjectId}-exam`] || ""}
                                         onChange={(e) => setTempScores(prev => ({ 
                                           ...prev, 
-                                          [`${student.id}-${subject.id}-exam`]: e.target.value 
+                                          [`${student.id}-${selectedSubjectId}-exam`]: e.target.value 
                                         }))}
-                                        onKeyDown={(e) => handleKeyPress(e, student.id, subject.id, 'exam')}
+                                        onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'exam')}
                                         onBlur={() => {
-                                          const key = `${student.id}-${subject.id}-exam`;
+                                          const key = `${student.id}-${selectedSubjectId}-exam`;
                                           const value = tempScores[key] || "";
-                                          if (value) handleSaveScore(student.id, subject.id, 'exam', value);
+                                          if (value) handleSaveScore(student.id, selectedSubjectId, 'exam', value);
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
                                         className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
                                         autoFocus
-                                        data-testid={`input-exam-${student.id}-${subject.id}`}
+                                        data-testid={`input-exam-${student.id}-${selectedSubjectId}`}
                                       />
                                     ) : (
                                       <div 
@@ -462,8 +485,8 @@ export function TeacherGradesInterface({
                                           (assessment?.exam || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
                                           'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
                                         }`}
-                                        onClick={() => handleCellEdit(student.id, subject.id, 'exam')}
-                                        data-testid={`cell-exam-${student.id}-${subject.id}`}
+                                        onClick={() => handleCellEdit(student.id, selectedSubjectId, 'exam')}
+                                        data-testid={`cell-exam-${student.id}-${selectedSubjectId}`}
                                         title={`Exam Score: ${assessment?.exam || 0}/60 - Click to edit`}
                                       >
                                         {assessment?.exam || 0}
@@ -471,21 +494,35 @@ export function TeacherGradesInterface({
                                     )}
                                   </div>
                                 </div>
-                                
-                                {/* Total and Grade - Horizontal layout */}
-                                <div className="text-center">
-                                  <Badge 
-                                    variant="secondary" 
-                                    className={`text-xs ${gradeInfo.color} text-white`}
-                                  >
-                                    {total}% ({gradeInfo.grade})
-                                  </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="font-medium text-lg">
+                                  {total}
                                 </div>
                               </TableCell>
-                            );
-                          })}
-                        </TableRow>
-                        ))}
+                              <TableCell className="text-center">
+                                <Badge 
+                                  variant="secondary" 
+                                  className={`text-xs ${gradeInfo.color} text-white font-medium`}
+                                >
+                                  {gradeInfo.grade}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenRatingDialog(student)}
+                                  className="h-7"
+                                  data-testid={`button-rating-${student.id}`}
+                                >
+                                  <Star className="h-3 w-3 mr-1" />
+                                  Rate
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
