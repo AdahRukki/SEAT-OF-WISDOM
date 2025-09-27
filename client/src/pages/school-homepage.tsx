@@ -19,6 +19,7 @@ import libraryImage1 from "@assets/stock_images/school_library_labor_57146f98.jp
 import libraryImage2 from "@assets/stock_images/school_library_labor_4709a4fa.jpg";
 import labImage1 from "@assets/stock_images/school_library_labor_50c8c89f.jpg";
 import labImage2 from "@assets/stock_images/school_library_labor_35422e2d.jpg";
+import academyLogo from "@assets/academy-logo.png";
 
 export default function SchoolHomepage() {
   return (
@@ -28,7 +29,7 @@ export default function SchoolHomepage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-2">
-              <GraduationCap className="h-8 w-8 text-blue-600" />
+              <img src={academyLogo} alt="Academy Logo" className="h-8 w-8 object-contain" />
               <span className="text-xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
@@ -843,7 +844,7 @@ export default function SchoolHomepage() {
           <div className="grid md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <GraduationCap className="h-6 w-6 text-blue-400" />
+                <img src={academyLogo} alt="Academy Logo" className="h-6 w-6 object-contain" />
                 <span className="text-lg font-bold">Seat of Wisdom Academy</span>
               </div>
               <p className="text-gray-400" data-testid="text-footer-description">

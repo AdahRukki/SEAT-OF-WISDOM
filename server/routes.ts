@@ -1210,7 +1210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get the logo from settings table
       const logoSetting = await storage.getSetting('academy_logo');
-      const logoUrl = logoSetting?.value || "/assets/4oWHptM_1754171230437.gif"; // Default fallback logo
+      const logoUrl = logoSetting?.value || "/attached_assets/academy-logo.png"; // Default fallback logo
       res.json({ logoUrl });
     } catch (error) {
       console.error("Get logo error:", error);
@@ -1223,7 +1223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get the logo from settings table
       const logoSetting = await storage.getSetting('academy_logo');
-      const logoUrl = logoSetting?.value || "/assets/4oWHptM_1754171230437.gif"; // Default fallback logo
+      const logoUrl = logoSetting?.value || "/attached_assets/academy-logo.png"; // Default fallback logo
       res.json({ logoUrl });
     } catch (error) {
       console.error("Get logo error:", error);

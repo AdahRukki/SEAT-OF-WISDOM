@@ -11,7 +11,7 @@ export function useLogo() {
   });
 
   return {
-    logoUrl: data?.logoUrl || "/assets/academy-logo.png", // Fallback to your logo
+    logoUrl: data?.logoUrl || "/attached_assets/academy-logo.png", // Fallback to your logo
     isLoading,
     error
   };

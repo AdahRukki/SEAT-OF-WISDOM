@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { GraduationCap, BookOpen, Users, Calculator, Globe, Microscope, Palette, Music, Trophy, ChevronRight, Baby, School, GraduationCap as GraduationIcon } from "lucide-react";
+import academyLogo from "@assets/academy-logo.png";
 
 export default function SchoolPrograms() {
   return (
@@ -13,7 +14,7 @@ export default function SchoolPrograms() {
           <div className="flex justify-between items-center py-4">
             <Link href="/">
               <div className="flex items-center space-x-2 cursor-pointer">
-                <GraduationCap className="h-8 w-8 text-blue-600" />
+                <img src={academyLogo} alt="Academy Logo" className="h-8 w-8 object-contain" />
                 <span className="text-xl font-bold text-gray-900 dark:text-white">Seat of Wisdom Academy</span>
               </div>
             </Link>
@@ -400,7 +401,7 @@ export default function SchoolPrograms() {
           <div className="grid md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <GraduationCap className="h-6 w-6 text-blue-400" />
+                <img src={academyLogo} alt="Academy Logo" className="h-6 w-6 object-contain" />
                 <span className="text-lg font-bold">Seat of Wisdom Academy</span>
               </div>
               <p className="text-gray-400" data-testid="text-footer-description">
