@@ -106,8 +106,9 @@ export function TeacherGradesInterface({
     onSuccess: () => {
       toast({ description: "Academic scores saved successfully!" });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
-      setIsGradeDialogOpen(false);
-      setAcademicScores({ firstCA: "", secondCA: "", exam: "" });
+      // Clear editing state after successful save
+      setEditingCell(null);
+      setTempScores({});
     },
     onError: (error: any) => {
       toast({ 
@@ -312,20 +313,32 @@ export function TeacherGradesInterface({
               </TabsList>
               
               <TabsContent value="academic" className="space-y-4">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Student</TableHead>
-                        {subjects.map(subject => (
-                          <TableHead key={subject.id} className="text-center min-w-[120px]">
-                            {subject.name}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {classStudents.map(student => (
+                {studentsLoading || assessmentsLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                      <p className="text-sm text-muted-foreground">Loading students and assessments...</p>
+                    </div>
+                  </div>
+                ) : classStudents.length === 0 ? (
+                  <div className="text-center p-8">
+                    <p className="text-muted-foreground">No students found in this class.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Student</TableHead>
+                          {subjects.map(subject => (
+                            <TableHead key={subject.id} className="text-center min-w-[120px]">
+                              {subject.name}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {classStudents.map(student => (
                         <TableRow key={student.id}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
@@ -362,15 +375,21 @@ export function TeacherGradesInterface({
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
-                                        className="h-6 text-xs w-12"
+                                        className="h-6 text-xs w-12 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50"
                                         autoFocus
                                         data-testid={`input-ca1-${student.id}-${subject.id}`}
                                       />
                                     ) : (
                                       <div 
-                                        className="h-6 w-12 text-xs border rounded px-1 cursor-pointer hover:bg-gray-50 flex items-center justify-center"
+                                        className={`h-6 w-12 text-xs border rounded px-1 cursor-pointer transition-colors duration-200 flex items-center justify-center ${
+                                          (assessment?.firstCA || 0) >= 16 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
+                                          (assessment?.firstCA || 0) >= 12 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
+                                          (assessment?.firstCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
+                                          'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
+                                        }`}
                                         onClick={() => handleCellEdit(student.id, subject.id, 'firstCA')}
                                         data-testid={`cell-ca1-${student.id}-${subject.id}`}
+                                        title={`CA1 Score: ${assessment?.firstCA || 0}/20 - Click to edit`}
                                       >
                                         {assessment?.firstCA || 0}
                                       </div>
@@ -398,15 +417,21 @@ export function TeacherGradesInterface({
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
-                                        className="h-6 text-xs w-12"
+                                        className="h-6 text-xs w-12 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50"
                                         autoFocus
                                         data-testid={`input-ca2-${student.id}-${subject.id}`}
                                       />
                                     ) : (
                                       <div 
-                                        className="h-6 w-12 text-xs border rounded px-1 cursor-pointer hover:bg-gray-50 flex items-center justify-center"
+                                        className={`h-6 w-12 text-xs border rounded px-1 cursor-pointer transition-colors duration-200 flex items-center justify-center ${
+                                          (assessment?.secondCA || 0) >= 16 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
+                                          (assessment?.secondCA || 0) >= 12 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
+                                          (assessment?.secondCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
+                                          'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
+                                        }`}
                                         onClick={() => handleCellEdit(student.id, subject.id, 'secondCA')}
                                         data-testid={`cell-ca2-${student.id}-${subject.id}`}
+                                        title={`CA2 Score: ${assessment?.secondCA || 0}/20 - Click to edit`}
                                       >
                                         {assessment?.secondCA || 0}
                                       </div>
@@ -434,15 +459,21 @@ export function TeacherGradesInterface({
                                           setEditingCell(null);
                                           setTempScores({});
                                         }}
-                                        className="h-6 text-xs w-12"
+                                        className="h-6 text-xs w-12 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50"
                                         autoFocus
                                         data-testid={`input-exam-${student.id}-${subject.id}`}
                                       />
                                     ) : (
                                       <div 
-                                        className="h-6 w-12 text-xs border rounded px-1 cursor-pointer hover:bg-gray-50 flex items-center justify-center"
+                                        className={`h-6 w-12 text-xs border rounded px-1 cursor-pointer transition-colors duration-200 flex items-center justify-center ${
+                                          (assessment?.exam || 0) >= 48 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
+                                          (assessment?.exam || 0) >= 36 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
+                                          (assessment?.exam || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
+                                          'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
+                                        }`}
                                         onClick={() => handleCellEdit(student.id, subject.id, 'exam')}
                                         data-testid={`cell-exam-${student.id}-${subject.id}`}
+                                        title={`Exam Score: ${assessment?.exam || 0}/60 - Click to edit`}
                                       >
                                         {assessment?.exam || 0}
                                       </div>
@@ -463,10 +494,11 @@ export function TeacherGradesInterface({
                             );
                           })}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </TabsContent>
               
               <TabsContent value="behavioral" className="space-y-4">
