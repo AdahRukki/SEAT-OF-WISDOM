@@ -132,17 +132,75 @@ function UsersManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // User management states
+  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
+  const [isDeleteUserDialogOpen, setIsDeleteUserDialogOpen] = useState(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<any>(null);
+  const [selectedUserForDeletion, setSelectedUserForDeletion] = useState<any>(null);
+  const [userEditForm, setUserEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    schoolId: "",
+    isActive: true,
+    newPassword: ""
+  });
+  
   // Fetch admin users
   const { data: users = [], isLoading: usersLoading } = useQuery<any[]>({
     queryKey: ['/api/admin/users'],
+    queryFn: () => apiRequest('/api/admin/users?adminOnly=true')
   });
 
   // Fetch schools for sub-admin creation
   const { data: schools = [] } = useQuery<any[]>({
     queryKey: ['/api/admin/schools']
   });
+  
+  // User management mutations
+  const editUserMutation = useMutation({
+    mutationFn: async (userData: any) => {
+      const response = await apiRequest(`/api/admin/users/${userData.id}`, {
+        method: 'PUT',
+        body: {
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          email: userData.email,
+          schoolId: userData.schoolId || null,
+          isActive: userData.isActive,
+          ...(userData.newPassword && { password: userData.newPassword })
+        }
+      });
+      return response;
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "User updated successfully" });
+      setIsEditUserDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update user", variant: "destructive" });
+    }
+  });
+  
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await apiRequest(`/api/admin/users/${userId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "User deleted successfully" });
+      setIsDeleteUserDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete user", variant: "destructive" });
+    }
+  });
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
@@ -175,6 +233,7 @@ function UsersManagement() {
                   <TableHead>Role</TableHead>
                   <TableHead>School</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -197,6 +256,41 @@ function UsersManagement() {
                         {user.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedUserForEdit(user);
+                            setUserEditForm({
+                              firstName: user.firstName,
+                              lastName: user.lastName,
+                              email: user.email,
+                              schoolId: user.schoolId || "",
+                              isActive: user.isActive,
+                              newPassword: ""
+                            });
+                            setIsEditUserDialogOpen(true);
+                          }}
+                          data-testid={`button-edit-user-${user.id}`}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            setSelectedUserForDeletion(user);
+                            setIsDeleteUserDialogOpen(true);
+                          }}
+                          data-testid={`button-delete-user-${user.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -205,6 +299,173 @@ function UsersManagement() {
         )}
       </CardContent>
     </Card>
+    
+    {/* Edit User Dialog */}
+    <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit User</DialogTitle>
+          <DialogDescription>
+            Update user information and settings
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="edit-first-name">First Name</Label>
+              <Input
+                id="edit-first-name"
+                value={userEditForm.firstName}
+                onChange={(e) => setUserEditForm({...userEditForm, firstName: e.target.value})}
+                data-testid="input-edit-user-firstname"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-last-name">Last Name</Label>
+              <Input
+                id="edit-last-name"
+                value={userEditForm.lastName}
+                onChange={(e) => setUserEditForm({...userEditForm, lastName: e.target.value})}
+                data-testid="input-edit-user-lastname"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-email">Email</Label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={userEditForm.email}
+              onChange={(e) => setUserEditForm({...userEditForm, email: e.target.value})}
+              data-testid="input-edit-user-email"
+            />
+          </div>
+
+          {selectedUserForEdit?.role === 'sub-admin' && (
+            <div>
+              <Label htmlFor="edit-school">School</Label>
+              <Select 
+                value={userEditForm.schoolId || ""} 
+                onValueChange={(value) => setUserEditForm({...userEditForm, schoolId: value})}
+              >
+                <SelectTrigger data-testid="select-edit-user-school">
+                  <SelectValue placeholder="Select school" />
+                </SelectTrigger>
+                <SelectContent>
+                  {schools.map((school: any) => (
+                    <SelectItem key={school.id} value={school.id}>
+                      {school.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div>
+            <Label htmlFor="edit-new-password">New Password (leave empty to keep current)</Label>
+            <Input
+              id="edit-new-password"
+              type="password"
+              value={userEditForm.newPassword}
+              onChange={(e) => setUserEditForm({...userEditForm, newPassword: e.target.value})}
+              data-testid="input-edit-user-password"
+              placeholder="Enter new password or leave empty"
+            />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="edit-is-active"
+              checked={userEditForm.isActive}
+              onChange={(e) => setUserEditForm({...userEditForm, isActive: e.target.checked})}
+              data-testid="checkbox-edit-user-active"
+            />
+            <Label htmlFor="edit-is-active">User is active</Label>
+          </div>
+        </div>
+
+        <div className="flex justify-end space-x-3 mt-6">
+          <Button
+            variant="outline"
+            onClick={() => setIsEditUserDialogOpen(false)}
+            data-testid="button-cancel-edit-user"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (selectedUserForEdit) {
+                editUserMutation.mutate({
+                  id: selectedUserForEdit.id,
+                  ...userEditForm
+                });
+              }
+            }}
+            disabled={editUserMutation.isPending}
+            data-testid="button-save-edit-user"
+          >
+            {editUserMutation.isPending ? "Saving..." : "Save Changes"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Delete User Confirmation Dialog */}
+    <Dialog open={isDeleteUserDialogOpen} onOpenChange={setIsDeleteUserDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-red-600">Delete User</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete this user? This action cannot be undone and will remove all associated data.
+          </DialogDescription>
+        </DialogHeader>
+        {selectedUserForDeletion && (
+          <div className="py-4">
+            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <div className="flex items-center space-x-2 mb-2">
+                <User className="h-4 w-4 text-red-600" />
+                <span className="font-medium text-red-800">
+                  {selectedUserForDeletion.firstName} {selectedUserForDeletion.lastName}
+                </span>
+              </div>
+              <p className="text-sm text-red-700">{selectedUserForDeletion.email}</p>
+              <Badge className={selectedUserForDeletion.role === 'admin' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
+                {selectedUserForDeletion.role}
+              </Badge>
+            </div>
+          </div>
+        )}
+        <div className="flex justify-end space-x-3">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setIsDeleteUserDialogOpen(false);
+              setSelectedUserForDeletion(null);
+            }}
+            data-testid="button-cancel-delete-user"
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              if (selectedUserForDeletion) {
+                deleteUserMutation.mutate(selectedUserForDeletion.id);
+              }
+            }}
+            disabled={deleteUserMutation.isPending}
+            data-testid="button-confirm-delete-user"
+          >
+            {deleteUserMutation.isPending ? "Deleting..." : "Delete User"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
@@ -617,6 +878,7 @@ export default function AdminDashboard() {
     },
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
+  
 
   // Mutations
   const createClassMutation = useMutation({
@@ -5724,6 +5986,7 @@ export default function AdminDashboard() {
             </div>
           </DialogContent>
         </Dialog>
+
       </div>
     </TooltipProvider>
   );
