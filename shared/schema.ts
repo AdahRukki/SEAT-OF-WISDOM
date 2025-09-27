@@ -166,6 +166,37 @@ export const reportCardTemplates = pgTable("report_card_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Non-Academic Ratings table (for behavioral assessments)
+export const nonAcademicRatings = pgTable("non_academic_ratings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
+  term: varchar("term", { length: 20 }).notNull(),
+  session: varchar("session", { length: 20 }).notNull(),
+  attendancePunctuality: integer("attendance_punctuality").default(3), // 1-5 scale
+  neatnessOrganization: integer("neatness_organization").default(3), // 1-5 scale
+  respectPoliteness: integer("respect_politeness").default(3), // 1-5 scale
+  participationTeamwork: integer("participation_teamwork").default(3), // 1-5 scale
+  responsibility: integer("responsibility").default(3), // 1-5 scale
+  ratedBy: uuid("rated_by").references(() => users.id), // Teacher who gave the rating
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Academic Calendar Events table
+export const calendarEvents = pgTable("calendar_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 200 }).notNull(),
+  description: text("description"),
+  eventDate: timestamp("event_date").notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // term_start, term_end, exam, holiday, etc.
+  schoolId: uuid("school_id").references(() => schools.id), // null means all schools
+  isSystemWide: boolean("is_system_wide").default(false), // true for events affecting all branches
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Generated Report Cards table
 export const generatedReportCards = pgTable("generated_report_cards", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -178,6 +209,8 @@ export const generatedReportCards = pgTable("generated_report_cards", {
   totalScore: decimal("total_score", { precision: 5, scale: 2 }),
   averageScore: decimal("average_score", { precision: 5, scale: 2 }),
   attendancePercentage: decimal("attendance_percentage", { precision: 5, scale: 2 }),
+  attendanceDays: varchar("attendance_days", { length: 20 }), // e.g., "85 out of 90 days"
+  nextTermResume: timestamp("next_term_resume"), // Next term resumption date
   generatedBy: uuid("generated_by").notNull().references(() => users.id),
   generatedAt: timestamp("generated_at").defaultNow(),
 });
@@ -337,6 +370,32 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   }),
 }));
 
+export const nonAcademicRatingsRelations = relations(nonAcademicRatings, ({ one }) => ({
+  student: one(students, {
+    fields: [nonAcademicRatings.studentId],
+    references: [students.id],
+  }),
+  class: one(classes, {
+    fields: [nonAcademicRatings.classId],
+    references: [classes.id],
+  }),
+  ratedBy: one(users, {
+    fields: [nonAcademicRatings.ratedBy],
+    references: [users.id],
+  }),
+}));
+
+export const calendarEventsRelations = relations(calendarEvents, ({ one }) => ({
+  school: one(schools, {
+    fields: [calendarEvents.schoolId],
+    references: [schools.id],
+  }),
+  createdBy: one(users, {
+    fields: [calendarEvents.createdBy],
+    references: [users.id],
+  }),
+}));
+
 export const generatedReportCardsRelations = relations(generatedReportCards, ({ one }) => ({
   student: one(students, {
     fields: [generatedReportCards.studentId],
@@ -442,6 +501,56 @@ export const assignFeeSchema = z.object({
   notes: z.string().optional(),
 });
 
+// Non-academic rating validation
+export const insertNonAcademicRatingSchema = createInsertSchema(nonAcademicRatings).omit({ id: true, createdAt: true, updatedAt: true });
+export const updateNonAcademicRatingSchema = z.object({
+  studentId: z.string(),
+  classId: z.string(),
+  term: z.string(),
+  session: z.string(),
+  attendancePunctuality: z.number().min(1).max(5),
+  neatnessOrganization: z.number().min(1).max(5),
+  respectPoliteness: z.number().min(1).max(5),
+  participationTeamwork: z.number().min(1).max(5),
+  responsibility: z.number().min(1).max(5),
+});
+
+// Calendar event validation
+export const insertCalendarEventSchema = createInsertSchema(calendarEvents).omit({ id: true, createdAt: true, updatedAt: true });
+export const createCalendarEventSchema = z.object({
+  title: z.string().min(1, "Event title is required"),
+  description: z.string().optional(),
+  eventDate: z.string().min(1, "Event date is required"),
+  eventType: z.string().min(1, "Event type is required"),
+  schoolId: z.string().optional(), // Optional - null means all schools
+  isSystemWide: z.boolean().default(false),
+});
+
+// Updated grading utility functions
+export const calculateGrade = (total: number): { grade: string; remark: string; color: string } => {
+  if (total >= 75) return { grade: 'A1', remark: 'Excellent', color: 'bg-green-600' };
+  if (total >= 70) return { grade: 'B2', remark: 'Very Good', color: 'bg-green-500' };
+  if (total >= 65) return { grade: 'B3', remark: 'Good', color: 'bg-blue-500' };
+  if (total >= 60) return { grade: 'C4', remark: 'Credit', color: 'bg-blue-400' };
+  if (total >= 55) return { grade: 'C5', remark: 'Credit', color: 'bg-blue-300' };
+  if (total >= 50) return { grade: 'C6', remark: 'Credit', color: 'bg-yellow-500' };
+  if (total >= 45) return { grade: 'D7', remark: 'Pass', color: 'bg-orange-500' };
+  if (total >= 40) return { grade: 'E8', remark: 'Pass', color: 'bg-orange-400' };
+  return { grade: 'F9', remark: 'Fail', color: 'bg-red-500' };
+};
+
+// Non-academic rating text conversion
+export const getRatingText = (rating: number): string => {
+  switch (rating) {
+    case 5: return 'Excellent';
+    case 4: return 'Very Good';
+    case 3: return 'Good';
+    case 2: return 'Fair';
+    case 1: return 'Poor';
+    default: return 'Not Rated';
+  }
+};
+
 // Types
 export type School = typeof schools.$inferSelect;
 export type InsertSchool = z.infer<typeof insertSchoolSchema>;
@@ -525,3 +634,19 @@ export type AcademicSession = typeof academicSessions.$inferSelect;
 export type InsertAcademicSession = typeof academicSessions.$inferInsert;
 export type AcademicTerm = typeof academicTerms.$inferSelect;
 export type InsertAcademicTerm = typeof academicTerms.$inferInsert;
+
+// Non-academic rating types
+export type NonAcademicRating = typeof nonAcademicRatings.$inferSelect;
+export type InsertNonAcademicRating = z.infer<typeof insertNonAcademicRatingSchema>;
+export type UpdateNonAcademicRating = z.infer<typeof updateNonAcademicRatingSchema>;
+
+// Calendar event types
+export type CalendarEvent = typeof calendarEvents.$inferSelect;
+export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
+export type CreateCalendarEvent = z.infer<typeof createCalendarEventSchema>;
+
+// Enhanced student with non-academic ratings
+export type StudentWithFullDetails = StudentWithDetails & {
+  nonAcademicRating?: NonAcademicRating;
+  attendance?: Attendance;
+};

@@ -970,6 +970,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get students by class (for teacher interface)
+  app.get('/api/students/by-class/:classId', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { classId } = req.params;
+      const students = await storage.getStudentsByClass(classId);
+      res.json(students);
+    } catch (error) {
+      console.error("Get students by class error:", error);
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  // Get assessments with filtering (for teacher interface)
+  app.get('/api/assessments/:classId/:term/:session', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { classId, term, session } = req.params;
+      const assessments = await storage.getAssessmentsByClassTermSession(classId, term, session);
+      res.json(assessments);
+    } catch (error) {
+      console.error("Get assessments error:", error);
+      res.status(500).json({ error: "Failed to fetch assessments" });
+    }
+  });
+
+  // Non-academic ratings endpoints
+  app.get('/api/non-academic-ratings/:classId/:term/:session', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { classId, term, session } = req.params;
+      const ratings = await storage.getNonAcademicRatingsByClass(classId, term, session);
+      res.json(ratings);
+    } catch (error) {
+      console.error("Get non-academic ratings error:", error);
+      res.status(500).json({ error: "Failed to fetch ratings" });
+    }
+  });
+
+  app.post('/api/non-academic-ratings', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const ratingData = req.body; // Will validate in storage layer
+      const rating = await storage.createOrUpdateNonAcademicRating({
+        ...ratingData,
+        ratedBy: user.id
+      });
+      
+      res.json(rating);
+    } catch (error) {
+      console.error("Create/update non-academic rating error:", error);
+      res.status(400).json({ error: "Failed to save rating" });
+    }
+  });
+
   // Admin/Teacher routes - Assessment management
   app.post('/api/assessments', authenticate, async (req, res) => {
     try {

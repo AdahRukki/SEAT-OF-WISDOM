@@ -15,6 +15,8 @@ import {
   settings,
   academicSessions,
   academicTerms,
+  nonAcademicRatings,
+  calendarEvents,
   type School,
   type User,
   type Student,
@@ -30,6 +32,8 @@ import {
   type Setting,
   type AcademicSession,
   type AcademicTerm,
+  type NonAcademicRating,
+  type CalendarEvent,
   type InsertUser,
   type InsertStudent,
   type InsertClass,
@@ -44,9 +48,12 @@ import {
   type InsertSetting,
   type InsertAcademicSession,
   type InsertAcademicTerm,
+  type InsertNonAcademicRating,
+  type InsertCalendarEvent,
   type StudentWithDetails,
   type StudentFeeWithDetails,
-  type PaymentWithDetails
+  type PaymentWithDetails,
+  calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
@@ -91,6 +98,15 @@ export interface IStorage {
   // Assessment operations
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
   getStudentAssessments(studentId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
+  getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
+  
+  // Non-academic rating operations
+  createOrUpdateNonAcademicRating(ratingData: InsertNonAcademicRating): Promise<NonAcademicRating>;
+  getNonAcademicRatingsByClass(classId: string, term: string, session: string): Promise<NonAcademicRating[]>;
+  
+  // Calendar operations
+  createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent>;
+  getCalendarEvents(schoolId?: string): Promise<CalendarEvent[]>;
   
   // Report card templates
   createReportCardTemplate(templateData: InsertReportCardTemplate): Promise<ReportCardTemplate>;
@@ -1419,6 +1435,123 @@ export class DatabaseStorage implements IStorage {
     }
     
     return updated;
+  }
+
+  // New methods for teacher grading interface
+  async getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]> {
+    const result = await db
+      .select({
+        id: assessments.id,
+        studentId: assessments.studentId,
+        subjectId: assessments.subjectId,
+        classId: assessments.classId,
+        term: assessments.term,
+        session: assessments.session,
+        firstCA: assessments.firstCA,
+        secondCA: assessments.secondCA,
+        exam: assessments.exam,
+        total: assessments.total,
+        grade: assessments.grade,
+        remark: assessments.remark,
+        createdAt: assessments.createdAt,
+        updatedAt: assessments.updatedAt,
+        subject: {
+          id: subjects.id,
+          name: subjects.name,
+          code: subjects.code,
+          description: subjects.description,
+          createdAt: subjects.createdAt,
+          updatedAt: subjects.updatedAt
+        }
+      })
+      .from(assessments)
+      .leftJoin(subjects, eq(assessments.subjectId, subjects.id))
+      .where(
+        and(
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+
+    return result.map(row => ({
+      ...row,
+      subject: row.subject as Subject
+    })) as (Assessment & { subject: Subject })[];
+  }
+
+  async createOrUpdateNonAcademicRating(ratingData: InsertNonAcademicRating): Promise<NonAcademicRating> {
+    // Check if rating already exists
+    const existing = await db
+      .select()
+      .from(nonAcademicRatings)
+      .where(
+        and(
+          eq(nonAcademicRatings.studentId, ratingData.studentId),
+          eq(nonAcademicRatings.classId, ratingData.classId),
+          eq(nonAcademicRatings.term, ratingData.term),
+          eq(nonAcademicRatings.session, ratingData.session)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing rating
+      const [updated] = await db
+        .update(nonAcademicRatings)
+        .set({
+          ...ratingData,
+          updatedAt: new Date()
+        })
+        .where(eq(nonAcademicRatings.id, existing[0].id))
+        .returning();
+      return updated;
+    } else {
+      // Create new rating
+      const [created] = await db
+        .insert(nonAcademicRatings)
+        .values(ratingData)
+        .returning();
+      return created;
+    }
+  }
+
+  async getNonAcademicRatingsByClass(classId: string, term: string, session: string): Promise<NonAcademicRating[]> {
+    return await db
+      .select()
+      .from(nonAcademicRatings)
+      .where(
+        and(
+          eq(nonAcademicRatings.classId, classId),
+          eq(nonAcademicRatings.term, term),
+          eq(nonAcademicRatings.session, session)
+        )
+      );
+  }
+
+  async createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent> {
+    const [event] = await db
+      .insert(calendarEvents)
+      .values(eventData)
+      .returning();
+    return event;
+  }
+
+  async getCalendarEvents(schoolId?: string): Promise<CalendarEvent[]> {
+    let query = db.select().from(calendarEvents);
+    
+    if (schoolId) {
+      query = query.where(
+        and(
+          eq(calendarEvents.schoolId, schoolId),
+          eq(calendarEvents.isSystemWide, false)
+        )
+      ) as any;
+    } else {
+      query = query.where(eq(calendarEvents.isSystemWide, true)) as any;
+    }
+    
+    return await query.orderBy(asc(calendarEvents.eventDate));
   }
 }
 
