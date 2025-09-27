@@ -107,8 +107,31 @@ export function TeacherGradesInterface({
     },
     onSuccess: (_, variables) => {
       toast({ description: "Academic scores saved successfully!" });
-      setHasUnsavedChanges(false);
-      setTempScores({});
+      
+      // Only clear the specific scores that were saved, not all tempScores
+      setTempScores(prev => {
+        const newTempScores = { ...prev };
+        // Remove the saved student-subject combinations
+        Object.keys(newTempScores).forEach(key => {
+          const [studentId, subjectId] = key.split('|');
+          if (studentId === variables.studentId && subjectId === variables.subjectId) {
+            delete newTempScores[key];
+          }
+        });
+        return newTempScores;
+      });
+      
+      // Check if all scores are saved
+      setTimeout(() => {
+        setTempScores(prev => {
+          const remainingScores = Object.keys(prev).length;
+          if (remainingScores === 0) {
+            setHasUnsavedChanges(false);
+          }
+          return prev;
+        });
+      }, 100);
+      
       queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
     },
     onError: (error: any) => {
