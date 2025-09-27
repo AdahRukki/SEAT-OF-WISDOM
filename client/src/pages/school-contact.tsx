@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { GraduationCap, Phone, Mail, MapPin, Clock, Send, MessageCircle } from "lucide-react";
+import { GraduationCap, Phone, Mail, MapPin, Clock, Send, MessageCircle, ExternalLink } from "lucide-react";
 
 export default function SchoolContact() {
   return (
@@ -279,6 +279,16 @@ export default function SchoolContact() {
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                 <p>📞 +234 123 456 789</p>
                 <p>✉️ bonsaac@seatofwisdomasaba.org</p>
+                <a 
+                  href="https://maps.google.com/?q=Bonsaac,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm mt-2"
+                  data-testid="link-maps-bonsaac"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
               </div>
             </Card>
 
@@ -296,6 +306,16 @@ export default function SchoolContact() {
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                 <p>📞 +234 123 456 791</p>
                 <p>✉️ ikpoto@seatofwisdomasaba.org</p>
+                <a 
+                  href="https://maps.google.com/?q=Ikpoto+Powerline,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm mt-2"
+                  data-testid="link-maps-ikpoto"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
               </div>
             </Card>
 
@@ -313,6 +333,16 @@ export default function SchoolContact() {
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                 <p>📞 +234 123 456 792</p>
                 <p>✉️ akwuofor@seatofwisdomasaba.org</p>
+                <a 
+                  href="https://maps.google.com/?q=Akwuofor+Amusement+Park+Koka,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm mt-2"
+                  data-testid="link-maps-akwuofor"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
               </div>
             </Card>
 
@@ -330,6 +360,16 @@ export default function SchoolContact() {
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                 <p>📞 +234 123 456 793</p>
                 <p>✉️ akwuose@seatofwisdomasaba.org</p>
+                <a 
+                  href="https://maps.google.com/?q=Akwuose+Mama%27s+Mart+Ibusa+Road,+Asaba,+Delta+State,+Nigeria" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm mt-2"
+                  data-testid="link-maps-akwuose"
+                >
+                  View on Google Maps
+                  <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
               </div>
             </Card>
           </div>
