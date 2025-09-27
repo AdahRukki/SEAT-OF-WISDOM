@@ -2492,7 +2492,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1 h-auto p-1">
             <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Overview
             </TabsTrigger>
@@ -2501,9 +2501,6 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Scores
-            </TabsTrigger>
-            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Grading
             </TabsTrigger>
             <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Attendance
@@ -2824,69 +2821,28 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Enhanced Scores & Ratings Management Tab */}
+          {/* Academic Scores Tab - Excel-like Interface */}
           <TabsContent value="scores" className="space-y-6 table-container">
             <Card>
               <CardHeader>
-                <CardTitle>Scores & Ratings Management</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  <span>Academic Scores</span>
+                </CardTitle>
                 <CardDescription>
-                  Complete student assessment system - academic scores and behavioral ratings
+                  Enter and manage academic scores for students in an excel-like interface
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="academic" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="academic">Academic Scores</TabsTrigger>
-                    <TabsTrigger value="behavioral">Behavioral Ratings</TabsTrigger>
-                  </TabsList>
-                  
-                  {/* Academic Scores Tab */}
-                  <TabsContent value="academic" className="mt-6">
-                    <TeacherGradesInterface 
-                      currentTerm="First Term"
-                      currentSession="2024/2025"
-                      userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-                    />
-                  </TabsContent>
-                  
-                  {/* Behavioral Ratings Tab */}
-                  <TabsContent value="behavioral" className="mt-6">
-                    <BehavioralRatingsInterface 
-                      currentTerm="First Term"
-                      currentSession="2024/2025"
-                      userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-                    />
-                  </TabsContent>
-                </Tabs>
+                <TeacherGradesInterface 
+                  currentTerm="First Term"
+                  currentSession="2024/2025"
+                  userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                />
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Simplified Grading Interface Tab */}
-          <TabsContent value="grading" className="space-y-6 table-container">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <GraduationCap className="h-5 w-5" />
-                  <span>Class Management</span>
-                </CardTitle>
-                <CardDescription>
-                  Basic class and subject management tools
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                  <GraduationCap className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p className="mb-2">Grading tools have been moved to specialized sections:</p>
-                  <div className="space-y-2">
-                    <p>• <strong>Academic Scores</strong>: Go to "Scores" tab</p>
-                    <p>• <strong>Behavioral Ratings</strong>: Go to "Scores" tab</p>
-                    <p>• <strong>Report Cards</strong>: Go to "Reports" tab</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           {/* Financial Management Tab */}
           {/* Attendance Tab */}
