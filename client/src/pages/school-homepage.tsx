@@ -934,7 +934,7 @@ export default function SchoolHomepage() {
                 </li>
                 <li className="flex items-center" data-testid="text-footer-location">
                   <MapPin className="h-4 w-4 mr-2" />
-                  Asaba, Uganda
+                  Asaba, Delta State, Nigeria
                 </li>
               </ul>
             </div>
@@ -942,10 +942,10 @@ export default function SchoolHomepage() {
             <div>
               <h3 className="font-semibold mb-4">Our Branches</h3>
               <ul className="space-y-2 text-gray-400">
-                <li>BONSAAC</li>
-                <li>IKPOTO POWERLINE</li>
-                <li>AKWUOFOR</li>
-                <li>AKWUOSE</li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-bonsaac">BONSAAC</Link></li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-ikpoto">IKPOTO POWERLINE</Link></li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-akwuofor">AKWUOFOR ALONG AMUSEMENT PARK KOKA</Link></li>
+                <li><Link href="/contact#branches" className="hover:text-white transition-colors" data-testid="link-footer-akwuose">AKWUOSE BEHIND MAMA'S MART ALONG IBUSA ROAD</Link></li>
               </ul>
             </div>
           </div>
