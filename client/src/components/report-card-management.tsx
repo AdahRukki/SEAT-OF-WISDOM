@@ -38,7 +38,8 @@ import {
   Eye,
   Download,
   Calendar,
-  School
+  School,
+  ArrowRight
 } from "lucide-react";
 
 interface ReportCardManagementProps {
@@ -213,6 +214,86 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     } finally {
       setIsValidating(false);
     }
+  };
+
+  // Mass validation for entire school branch
+  const handleValidateEntireSchool = async () => {
+    if (!selectedTerm || !selectedSession) {
+      toast({
+        title: "Missing Selection",
+        description: "Please select term and session first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsValidating(true);
+    setValidationResults({});
+
+    try {
+      let totalStudents = 0;
+      let validatedStudents = 0;
+
+      for (const classItem of classes) {
+        const classStudents = await apiRequest(`/api/admin/students/class/${classItem.id}`);
+        totalStudents += classStudents.length;
+
+        for (const student of classStudents) {
+          try {
+            await validateMutation.mutateAsync({
+              studentId: student.id,
+              classId: classItem.id,
+              term: selectedTerm,
+              session: selectedSession,
+            });
+            validatedStudents++;
+          } catch (error) {
+            console.error(`Failed to validate student ${student.id}:`, error);
+          }
+        }
+      }
+      
+      toast({
+        title: "School-wide Validation Complete",
+        description: `Validated ${validatedStudents} out of ${totalStudents} students across all classes.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Mass Validation Error",
+        description: "Some validations failed during school-wide validation.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  // Term progression system
+  const advanceAcademicTerm = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/admin/advance-term', {
+        method: 'POST'
+      });
+    },
+    onSuccess: (response) => {
+      toast({
+        title: "Term Advanced Successfully",
+        description: `School has been advanced to ${response.newTerm} ${response.newSession}`,
+      });
+      // Refresh current academic info
+      queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to advance academic term",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAdvanceTerm = () => {
+    advanceAcademicTerm.mutate();
   };
 
   const getValidationStatus = (studentId: string) => {
@@ -741,7 +822,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
             </div>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <Button 
               onClick={handleValidateAll}
               disabled={!selectedClass || !selectedTerm || !selectedSession || isValidating}
@@ -749,6 +830,24 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
             >
               <CheckCircle className="w-4 h-4" />
               {isValidating ? "Validating..." : "Validate All Students"}
+            </Button>
+            
+            <Button 
+              onClick={handleValidateEntireSchool}
+              disabled={!selectedTerm || !selectedSession || isValidating}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <School className="w-4 h-4" />
+              {isValidating ? "Validating..." : "Validate Entire School Branch"}
+            </Button>
+
+            <Button 
+              onClick={handleAdvanceTerm}
+              disabled={advanceAcademicTerm.isPending}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+            >
+              <ArrowRight className="w-4 h-4" />
+              {advanceAcademicTerm.isPending ? "Advancing..." : "Advance to Next Term"}
             </Button>
             
             {/* Batch Report Generation */}

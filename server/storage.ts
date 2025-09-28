@@ -1099,6 +1099,118 @@ export class DatabaseStorage implements IStorage {
 
   // Enhanced student creation helper methods
 
+  // Advanced term progression system
+  async advanceAcademicTerm(): Promise<{ newTerm: string; newSession: string }> {
+    try {
+      // Get current active term and session
+      const currentAcademicInfo = await this.getCurrentAcademicInfo();
+      const currentTerm = currentAcademicInfo.currentTerm;
+      const currentSession = currentAcademicInfo.currentSession;
+
+      if (!currentTerm || !currentSession) {
+        throw new Error("No active term or session found");
+      }
+
+      let newTerm: string;
+      let newSession: string;
+
+      // Determine next term progression
+      if (currentTerm === "First Term") {
+        newTerm = "Second Term";
+        newSession = currentSession;
+      } else if (currentTerm === "Second Term") {
+        newTerm = "Third Term";
+        newSession = currentSession;
+      } else if (currentTerm === "Third Term") {
+        // Advance to next session
+        newTerm = "First Term";
+        const [startYear, endYear] = currentSession.split('/');
+        const nextStartYear = parseInt(startYear) + 1;
+        const nextEndYear = parseInt(endYear) + 1;
+        newSession = `${nextStartYear}/${nextEndYear}`;
+      } else {
+        throw new Error("Invalid current term");
+      }
+
+      // Check if new session needs to be created
+      if (newSession !== currentSession) {
+        const existingSession = await db
+          .select()
+          .from(academicSessions)
+          .where(eq(academicSessions.sessionYear, newSession))
+          .limit(1);
+
+        if (existingSession.length === 0) {
+          // Create new session
+          await db.insert(academicSessions).values({
+            sessionYear: newSession,
+            startDate: new Date(),
+            endDate: new Date(new Date().getFullYear() + 1, 7, 31), // End of next August
+            isActive: false
+          });
+        }
+      }
+
+      // Get the session ID
+      const [session] = await db
+        .select()
+        .from(academicSessions)
+        .where(eq(academicSessions.sessionYear, newSession));
+
+      if (!session) {
+        throw new Error("Failed to find or create session");
+      }
+
+      // Check if new term exists for this session
+      const existingTerm = await db
+        .select()
+        .from(academicTerms)
+        .where(
+          and(
+            eq(academicTerms.sessionId, session.id),
+            eq(academicTerms.termName, newTerm)
+          )
+        )
+        .limit(1);
+
+      let termId: string;
+
+      if (existingTerm.length === 0) {
+        // Create new term
+        const [newTermRecord] = await db.insert(academicTerms).values({
+          sessionId: session.id,
+          termName: newTerm,
+          startDate: new Date(),
+          endDate: new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000), // 90 days later
+          isActive: false
+        }).returning();
+        termId = newTermRecord.id;
+      } else {
+        termId = existingTerm[0].id;
+      }
+
+      // Deactivate all current terms and sessions (scoped by school if needed)
+      await db.update(academicTerms).set({ isActive: false });
+      await db.update(academicSessions).set({ isActive: false });
+
+      // Activate new session and term
+      await db
+        .update(academicSessions)
+        .set({ isActive: true })
+        .where(eq(academicSessions.id, session.id));
+
+      await db
+        .update(academicTerms)
+        .set({ isActive: true })
+        .where(eq(academicTerms.id, termId));
+
+      return { newTerm, newSession };
+    } catch (error) {
+      console.error("Error advancing academic term:", error);
+      throw error;
+    }
+  }
+
 
 
 
@@ -1284,6 +1396,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async validateReportCardData(studentId: string, classId: string, term: string, session: string): Promise<{ hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }> {
+    // Get class information to determine if it's SS2 or SS3
+    const [classInfo] = await db
+      .select()
+      .from(classes)
+      .where(eq(classes.id, classId));
+
     // Get all subjects assigned to the class
     const classSubjectsQuery = await db
       .select({ subject: subjects })
@@ -1318,7 +1436,25 @@ export class DatabaseStorage implements IStorage {
       .filter(subject => !subjectsWithCompleteScores.find(assessment => assessment.subjectId === subject.id))
       .map(subject => subject.name);
 
-    const hasAllScores = missingSubjects.length === 0 && assignedSubjects.length > 0;
+    // Special validation logic for SS2 and SS3 - they only need 9 subjects
+    const isSSClass = classInfo && (classInfo.name.includes('S.S.S 2') || classInfo.name.includes('S.S.S 3'));
+    const minimumRequiredSubjects = isSSClass ? 9 : assignedSubjects.length;
+    const completedSubjectsCount = subjectsWithCompleteScores.length;
+
+    let hasAllScores: boolean;
+    let adjustedMissingSubjects = missingSubjects;
+    
+    if (isSSClass) {
+      // For SS2/SS3: Pass if they have at least 9 subjects with complete scores
+      hasAllScores = completedSubjectsCount >= minimumRequiredSubjects;
+      // If they have 9+ subjects, ignore missing subjects for validation
+      if (hasAllScores) {
+        adjustedMissingSubjects = [];
+      }
+    } else {
+      // For other classes: Must have all assigned subjects
+      hasAllScores = missingSubjects.length === 0 && assignedSubjects.length > 0;
+    }
 
     // Check attendance data
     const attendanceRecord = await db
@@ -1339,7 +1475,7 @@ export class DatabaseStorage implements IStorage {
     return {
       hasAllScores,
       hasAttendance,
-      missingSubjects
+      missingSubjects: adjustedMissingSubjects
     };
   }
 

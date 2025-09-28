@@ -410,6 +410,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Advance term automatically: First → Second → Third → First (next session)
+  app.post('/api/admin/advance-term', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const result = await storage.advanceAcademicTerm();
+      res.json(result);
+    } catch (error) {
+      console.error("Advance term error:", error);
+      res.status(400).json({ error: "Failed to advance academic term" });
+    }
+  });
+
   // Student Promotion System
   app.post('/api/admin/promote-students', authenticate, requireAdmin, async (req, res) => {
     try {
