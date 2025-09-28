@@ -170,23 +170,6 @@ export default function Login() {
                 </Button>
               </div>
               
-              <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <h3 className="font-semibold text-sm mb-2">Available Accounts:</h3>
-                <div className="text-xs space-y-1">
-                  <p><strong>Main Admin:</strong> adahrukki@gmail.com (Firebase Auth)</p>
-                  <p><strong>Sub-Admin:</strong> kanayojoy@gmail.com</p>
-                  <p><strong>Sub-Admin:</strong> okaforeunice@gmail.com</p>
-                  <p><strong>Student:</strong> ike@gmail.com</p>
-                  <p><strong>Student:</strong> Bassey@gmail.com</p>
-                  <p><strong>Student:</strong> SUPERMAN@GMAIL.COM</p>
-                </div>
-                <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 rounded border-l-4 border-amber-400">
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    <strong>Note:</strong> Contact your administrator for login credentials. 
-                    Password reset is available for Firebase-authenticated accounts only.
-                  </p>
-                </div>
-              </div>
             </>
           ) : (
             <div className="space-y-4">
