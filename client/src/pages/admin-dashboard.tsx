@@ -218,6 +218,8 @@ export default function AdminDashboard() {
   const [isCreateMainAdminDialogOpen, setIsCreateMainAdminDialogOpen] = useState(false);
   const [isUserProfileDialogOpen, setIsUserProfileDialogOpen] = useState(false);
   const [selectedUserForProfile, setSelectedUserForProfile] = useState<User | null>(null);
+  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<User | null>(null);
   
   // User form states
   const [adminFirstName, setAdminFirstName] = useState("");
@@ -225,6 +227,14 @@ export default function AdminDashboard() {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [selectedSchoolForAdmin, setSelectedSchoolForAdmin] = useState("");
+  
+  // Edit user form states
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [editSchoolId, setEditSchoolId] = useState("");
+  const [editIsActive, setEditIsActive] = useState(true);
   
   // User management password visibility
   const [showAdminPassword, setShowAdminPassword] = useState(false);
@@ -734,6 +744,46 @@ export default function AdminDashboard() {
       toast({
         title: "Creation Failed",
         description: error.message || "Failed to create main admin. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async (data: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      role: string;
+      schoolId?: string;
+      isActive: boolean;
+    }) => {
+      return apiRequest(`/api/admin/users/${data.id}`, {
+        method: 'PATCH',
+        body: data
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "User Updated",
+        description: "User information has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
+      setIsEditUserDialogOpen(false);
+      // Reset form
+      setEditFirstName("");
+      setEditLastName("");
+      setEditEmail("");
+      setEditRole("");
+      setEditSchoolId("all");
+      setEditIsActive(true);
+      setSelectedUserForEdit(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update user. Please try again.",
         variant: "destructive",
       });
     }
@@ -3655,11 +3705,14 @@ export default function AdminDashboard() {
                                 variant="outline" 
                                 size="sm"
                                 onClick={() => {
-                                  // TODO: Implement edit functionality
-                                  toast({
-                                    title: "Coming Soon",
-                                    description: "Edit user functionality will be added soon.",
-                                  });
+                                  setSelectedUserForEdit(adminUser);
+                                  setEditFirstName(adminUser.firstName);
+                                  setEditLastName(adminUser.lastName);
+                                  setEditEmail(adminUser.email);
+                                  setEditRole(adminUser.role);
+                                  setEditSchoolId(adminUser.schoolId || "all");
+                                  setEditIsActive(adminUser.isActive);
+                                  setIsEditUserDialogOpen(true);
                                 }}
                               >
                                 <Edit className="w-4 h-4" />
@@ -3916,6 +3969,114 @@ export default function AdminDashboard() {
                 <div className="flex justify-end">
                   <Button variant="outline" onClick={() => setIsUserProfileDialogOpen(false)}>
                     Close
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Edit User Dialog */}
+            <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Edit User</DialogTitle>
+                  <DialogDescription>
+                    Update user information and settings
+                  </DialogDescription>
+                </DialogHeader>
+                {selectedUserForEdit && (
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-firstName">First Name</Label>
+                        <Input
+                          id="edit-firstName"
+                          value={editFirstName}
+                          onChange={(e) => setEditFirstName(e.target.value)}
+                          placeholder="Enter first name"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-lastName">Last Name</Label>
+                        <Input
+                          id="edit-lastName"
+                          value={editLastName}
+                          onChange={(e) => setEditLastName(e.target.value)}
+                          placeholder="Enter last name"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-email">Email</Label>
+                      <Input
+                        id="edit-email"
+                        type="email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="Enter email address"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="edit-role">Role</Label>
+                        <Select value={editRole} onValueChange={setEditRole}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="sub-admin">Sub-Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-school">School</Label>
+                        <Select value={editSchoolId} onValueChange={setEditSchoolId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select school (optional for admins)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Schools (Admin only)</SelectItem>
+                            {schools.map(school => (
+                              <SelectItem key={school.id} value={school.id}>
+                                {school.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="edit-isActive"
+                        checked={editIsActive}
+                        onChange={(e) => setEditIsActive(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="edit-isActive">User is active</Label>
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-end gap-3">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsEditUserDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => selectedUserForEdit && updateUserMutation.mutate({ 
+                      id: selectedUserForEdit.id,
+                      firstName: editFirstName, 
+                      lastName: editLastName, 
+                      email: editEmail, 
+                      role: editRole,
+                      schoolId: editRole === 'admin' || editSchoolId === 'all' ? undefined : editSchoolId,
+                      isActive: editIsActive
+                    })}
+                    disabled={!editFirstName || !editLastName || !editEmail || !editRole || updateUserMutation.isPending}
+                  >
+                    {updateUserMutation.isPending ? "Updating..." : "Update User"}
                   </Button>
                 </div>
               </DialogContent>
