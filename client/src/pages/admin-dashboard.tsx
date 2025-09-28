@@ -235,9 +235,14 @@ export default function AdminDashboard() {
   const [editRole, setEditRole] = useState("");
   const [editSchoolId, setEditSchoolId] = useState("");
   const [editIsActive, setEditIsActive] = useState(true);
+  const [editPassword, setEditPassword] = useState("");
+  const [editConfirmPassword, setEditConfirmPassword] = useState("");
+  const [editChangePassword, setEditChangePassword] = useState(false);
   
   // User management password visibility
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
+  const [showEditConfirmPassword, setShowEditConfirmPassword] = useState(false);
 
   // Fee type management states
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
@@ -3712,6 +3717,10 @@ export default function AdminDashboard() {
                                   setEditRole(adminUser.role);
                                   setEditSchoolId(adminUser.schoolId || "all");
                                   setEditIsActive(adminUser.isActive);
+                                  // Reset password fields
+                                  setEditPassword("");
+                                  setEditConfirmPassword("");
+                                  setEditChangePassword(false);
                                   setIsEditUserDialogOpen(true);
                                 }}
                               >
@@ -4055,6 +4064,79 @@ export default function AdminDashboard() {
                       />
                       <Label htmlFor="edit-isActive">User is active</Label>
                     </div>
+
+                    {/* Password Change Section - Only for main admins */}
+                    {user?.role === 'admin' && (
+                      <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+                        <div className="flex items-center space-x-2 mb-3">
+                          <input
+                            type="checkbox"
+                            id="edit-change-password"
+                            checked={editChangePassword}
+                            onChange={(e) => {
+                              setEditChangePassword(e.target.checked);
+                              if (!e.target.checked) {
+                                setEditPassword("");
+                                setEditConfirmPassword("");
+                              }
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          <Label htmlFor="edit-change-password" className="text-sm font-medium">
+                            Change user password
+                          </Label>
+                        </div>
+
+                        {editChangePassword && (
+                          <div className="space-y-3">
+                            <div>
+                              <Label htmlFor="edit-new-password">New Password</Label>
+                              <div className="relative">
+                                <Input
+                                  id="edit-new-password"
+                                  data-testid="input-edit-new-password"
+                                  type={showEditPassword ? "text" : "password"}
+                                  value={editPassword}
+                                  onChange={(e) => setEditPassword(e.target.value)}
+                                  placeholder="Enter new password"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                  onClick={() => setShowEditPassword(!showEditPassword)}
+                                >
+                                  {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </Button>
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor="edit-confirm-password">Confirm New Password</Label>
+                              <div className="relative">
+                                <Input
+                                  id="edit-confirm-password"
+                                  data-testid="input-edit-confirm-password"
+                                  type={showEditConfirmPassword ? "text" : "password"}
+                                  value={editConfirmPassword}
+                                  onChange={(e) => setEditConfirmPassword(e.target.value)}
+                                  placeholder="Confirm new password"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                                  onClick={() => setShowEditConfirmPassword(!showEditConfirmPassword)}
+                                >
+                                  {showEditConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="flex justify-end gap-3">
@@ -4065,16 +4147,54 @@ export default function AdminDashboard() {
                     Cancel
                   </Button>
                   <Button
-                    onClick={() => selectedUserForEdit && updateUserMutation.mutate({ 
-                      id: selectedUserForEdit.id,
-                      firstName: editFirstName, 
-                      lastName: editLastName, 
-                      email: editEmail, 
-                      role: editRole,
-                      schoolId: editRole === 'admin' || editSchoolId === 'all' ? undefined : editSchoolId,
-                      isActive: editIsActive
-                    })}
+                    onClick={() => {
+                      if (!selectedUserForEdit) return;
+                      
+                      // Password validation if changing password
+                      if (editChangePassword) {
+                        if (!editPassword || !editConfirmPassword) {
+                          toast({
+                            title: "Missing Password",
+                            description: "Please fill in both password fields.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        
+                        if (editPassword !== editConfirmPassword) {
+                          toast({
+                            title: "Password Mismatch",
+                            description: "The passwords do not match. Please try again.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        
+                        if (editPassword.length < 6) {
+                          toast({
+                            title: "Password Too Short",
+                            description: "Password must be at least 6 characters long.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                      }
+                      
+                      updateUserMutation.mutate({ 
+                        id: selectedUserForEdit.id,
+                        firstName: editFirstName, 
+                        lastName: editLastName, 
+                        email: editEmail, 
+                        role: editRole,
+                        schoolId: editRole === 'admin' || editSchoolId === 'all' ? undefined : editSchoolId,
+                        isActive: editIsActive,
+                        ...(editChangePassword && editPassword && {
+                          password: editPassword
+                        })
+                      });
+                    }}
                     disabled={!editFirstName || !editLastName || !editEmail || !editRole || updateUserMutation.isPending}
+                    data-testid="button-save-edit"
                   >
                     {updateUserMutation.isPending ? "Updating..." : "Update User"}
                   </Button>

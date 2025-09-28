@@ -101,11 +101,21 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(401).json({ error: "Token has been invalidated" });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; iat?: number };
     const user = await storage.getUserById(decoded.userId);
     
     if (!user) {
       return res.status(401).json({ error: "Invalid token" });
+    }
+
+    // Check if token was issued before password was last updated (session invalidation)
+    if (decoded.iat && user.passwordUpdatedAt) {
+      const tokenIssuedAt = decoded.iat * 1000; // Convert JWT iat (seconds) to milliseconds
+      const passwordUpdatedAt = new Date(user.passwordUpdatedAt).getTime();
+      
+      if (tokenIssuedAt < passwordUpdatedAt) {
+        return res.status(401).json({ error: "Token expired due to password change" });
+      }
     }
 
     (req as any).user = user;
