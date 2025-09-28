@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { emailService } from "./email";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import path from "path";
@@ -807,10 +808,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate reset token
       const resetToken = await storage.createPasswordResetToken(user.id);
       
-      // TODO: Send email with reset token
-      // For now, log the reset token for testing
-      console.log(`Password reset token for ${email}: ${resetToken}`);
-      console.log(`Reset link: http://localhost:5000/reset-password?token=${resetToken}`);
+      // Send password reset email
+      await emailService.sendPasswordResetEmail(email, resetToken);
+      
+      console.log(`Password reset email sent to ${email}`);
       
     } catch (error) {
       console.error('Error requesting password reset:', error);

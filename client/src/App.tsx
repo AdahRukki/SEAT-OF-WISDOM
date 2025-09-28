@@ -9,6 +9,7 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import StudentDashboard from "@/pages/student-dashboard";
 import UserManagement from "@/pages/user-management";
 import Profile from "@/pages/profile";
+import ResetPassword from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
 import SchoolHomepage from "@/pages/school-homepage";
 import SchoolAbout from "@/pages/school-about";
@@ -125,6 +126,9 @@ function AppRoutes() {
       <Route path="/programs" component={SchoolPrograms} />
       <Route path="/admissions" component={SchoolAdmissions} />
       <Route path="/contact" component={SchoolContact} />
+      
+      {/* Password Reset Route - Public access */}
+      <Route path="/reset-password" component={ResetPassword} />
       
       {/* Portal Routes - All portal routes start with /portal */}
       <Route path="/portal" nest>
