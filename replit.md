@@ -4,9 +4,11 @@
 Seat of Wisdom Academy is a comprehensive multi-branch academy management system designed for efficient administration and student performance tracking. Built with a React frontend and Express backend, it integrates Firebase for offline-first capabilities and real-time data synchronization. The system supports four school branches and features role-based access for administrators, sub-administrators, and students. Key capabilities include a 20+20+60 scoring system, professional report card generation, robust student financial tracking, and complete teacher grading interface. The project provides a streamlined, scalable solution for academy management with full CRUD operations for students, functional class-based grading, and comprehensive educational oversight tools.
 
 ## Recent Updates (September 2025)
+- ✅ **Password Management System**: Complete implementation with admin password changes and email-based user resets
+- ✅ **Security Enhancement**: Fixed critical JWT session invalidation vulnerability after password changes
 - ✅ **Teacher Grading Interface**: Fully functional with class selection and student loading
 - ✅ **Student Management**: Complete CRUD operations with secure deletion functionality
-- ✅ **Authentication System**: Fixed AuthUser interface with proper schoolId support
+- ✅ **Authentication System**: Enhanced with proper schoolId support and password security
 - ✅ **Multi-School Support**: Proper admin/sub-admin role-based school access
 - ✅ **Test Data**: Created sample students across multiple classes for testing grading workflows
 
