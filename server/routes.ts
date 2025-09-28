@@ -257,6 +257,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Temporary password reset endpoint that actually works
+  app.post('/api/auth/temp-reset-password', async (req, res) => {
+    try {
+      const { email, newPassword } = req.body;
+
+      if (!email || !newPassword) {
+        return res.status(400).json({ error: 'Email and new password are required' });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Update the password
+      await storage.updateUserPassword(user.id, newPassword);
+      console.log(`Password successfully reset for: ${email}`);
+      
+      res.json({ message: 'Password reset successfully. You can now log in with your new password.' });
+    } catch (error) {
+      console.error('Temp password reset error:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
   // Get current user
   app.get('/api/auth/me', authenticate, async (req, res) => {
     const user = (req as any).user;
