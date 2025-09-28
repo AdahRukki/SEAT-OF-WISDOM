@@ -274,6 +274,16 @@ export default function AdminDashboard() {
     queryKey: ['/api/current-academic-info'],
   });
 
+  // Sync Settings form with actual academic calendar
+  useEffect(() => {
+    if (academicInfo?.currentTerm) {
+      setGlobalTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession) {
+      setGlobalSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
+
   // Check Firebase data on mount
   useEffect(() => {
     checkFirebaseData();
