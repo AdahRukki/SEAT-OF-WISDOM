@@ -404,22 +404,6 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(schools).orderBy(asc(schools.sortOrder), asc(schools.name));
   }
 
-  async updateSchool(schoolId: string, updateData: { name?: string; address?: string; phone?: string; email?: string }): Promise<School> {
-    const [updatedSchool] = await db
-      .update(schools)
-      .set({
-        ...updateData,
-        updatedAt: new Date()
-      })
-      .where(eq(schools.id, schoolId))
-      .returning();
-    
-    if (!updatedSchool) {
-      throw new Error('School not found');
-    }
-    
-    return updatedSchool;
-  }
 
   async getSchoolById(id: string): Promise<School | undefined> {
     const [school] = await db.select().from(schools).where(eq(schools.id, id));
@@ -505,17 +489,6 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(subjects);
   }
 
-  async createSubject(subjectData: { name: string; code: string; description?: string }): Promise<Subject> {
-    const [subject] = await db
-      .insert(subjects)
-      .values({
-        name: subjectData.name,
-        code: subjectData.code,
-        description: subjectData.description || null,
-      })
-      .returning();
-    return subject;
-  }
 
 
 
@@ -1131,14 +1104,6 @@ export class DatabaseStorage implements IStorage {
 
 
 
-  async updateSchool(schoolId: string, data: Partial<School>): Promise<School> {
-    const [updatedSchool] = await db
-      .update(schools)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(schools.id, schoolId))
-      .returning();
-    return updatedSchool;
-  }
 
 
 
