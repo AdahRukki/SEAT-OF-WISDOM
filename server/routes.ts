@@ -688,6 +688,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create sub-admin (with school assignment)
+  app.post('/api/admin/create-sub-admin', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { firstName, lastName, email, password, schoolId } = req.body;
+      
+      if (!firstName || !lastName || !email || !password || !schoolId) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).json({ error: "User with this email already exists" });
+      }
+
+      const userData = {
+        firstName,
+        lastName,
+        email,
+        password,
+        role: 'sub-admin' as const,
+        schoolId,
+        isActive: true
+      };
+
+      const newUser = await storage.createUser(userData);
+      res.json(newUser);
+    } catch (error) {
+      console.error("Create sub-admin error:", error);
+      res.status(400).json({ error: "Failed to create sub-admin" });
+    }
+  });
+
+  // Create main admin (no school assignment)
+  app.post('/api/admin/create-main-admin', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { firstName, lastName, email, password } = req.body;
+      
+      if (!firstName || !lastName || !email || !password) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).json({ error: "User with this email already exists" });
+      }
+
+      const userData = {
+        firstName,
+        lastName,
+        email,
+        password,
+        role: 'admin' as const,
+        schoolId: null, // Main admins have access to all schools
+        isActive: true
+      };
+
+      const newUser = await storage.createUser(userData);
+      res.json(newUser);
+    } catch (error) {
+      console.error("Create main admin error:", error);
+      res.status(400).json({ error: "Failed to create main admin" });
+    }
+  });
+
   // School logo upload route
   app.post('/api/admin/schools/logo', authenticate, requireAdmin, async (req, res) => {
     try {
