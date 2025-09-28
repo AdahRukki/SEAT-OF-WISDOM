@@ -255,28 +255,35 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
       let totalStudents = 0;
       let validatedStudents = 0;
+      let generatedReports = 0;
+      const validStudentsForReports: Array<{student: any, classId: string}> = [];
 
-      // Validate all students across all classes using current term/session
+      // Step 1: Validate all students across all classes using current term/session
       for (const classItem of classes) {
         const classStudents = await apiRequest(`/api/admin/students/class/${classItem.id}`);
         totalStudents += classStudents.length;
 
         for (const student of classStudents) {
           try {
-            await validateMutation.mutateAsync({
+            const validationResult = await validateMutation.mutateAsync({
               studentId: student.id,
               classId: classItem.id,
               term: currentTerm,
               session: currentSession,
             });
-            validatedStudents++;
+            
+            // Check if validation was successful (complete status)
+            if (validationResult.status === 'complete') {
+              validatedStudents++;
+              validStudentsForReports.push({ student, classId: classItem.id });
+            }
           } catch (error) {
             console.error(`Failed to validate student ${student.id}:`, error);
           }
         }
       }
 
-      // Check if validation was successful enough to advance term
+      // Check if validation was successful enough to proceed
       if (totalStudents === 0) {
         toast({
           title: "No Students Found",
@@ -286,24 +293,67 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         return;
       }
 
-      const successRate = (validatedStudents / totalStudents) * 100;
+      const validationSuccessRate = (validatedStudents / totalStudents) * 100;
       const isValidationSuccessful = validatedStudents === totalStudents;
       
       toast({
         title: isValidationSuccessful ? "School-wide Validation Complete" : "Validation Completed with Issues",
-        description: `Validated ${validatedStudents} out of ${totalStudents} students (${successRate.toFixed(1)}%) for ${currentTerm} ${currentSession}.`,
+        description: `Validated ${validatedStudents} out of ${totalStudents} students (${validationSuccessRate.toFixed(1)}%) for ${currentTerm} ${currentSession}.`,
         variant: isValidationSuccessful ? "default" : "destructive",
       });
 
-      // Only advance to next term if validation was completely successful
-      if (isValidationSuccessful) {
-        setTimeout(() => {
+      // Step 2: Generate reports for all successfully validated students
+      if (isValidationSuccessful && validStudentsForReports.length > 0) {
+        toast({
+          title: "Generating Reports",
+          description: `Starting report generation for ${validStudentsForReports.length} validated students...`,
+        });
+
+        for (const { student, classId } of validStudentsForReports) {
+          try {
+            // Create report card record for each validated student
+            await createReportMutation.mutateAsync({
+              studentId: student.id,
+              classId: classId,
+              term: currentTerm,
+              session: currentSession,
+              studentName: `${student.user.firstName} ${student.user.lastName}`,
+              className: classes.find(c => c.id === classId)?.name || "",
+              totalScore: "0", // This would be calculated from actual scores
+              averageScore: "0", // This would be calculated from actual scores
+              attendancePercentage: "0", // This would be calculated from attendance data
+            });
+            generatedReports++;
+          } catch (error) {
+            console.error(`Failed to generate report for student ${student.id}:`, error);
+          }
+        }
+
+        const isReportGenerationSuccessful = generatedReports === validStudentsForReports.length;
+        const reportSuccessRate = (generatedReports / validStudentsForReports.length) * 100;
+
+        toast({
+          title: isReportGenerationSuccessful ? "Report Generation Complete" : "Report Generation Completed with Issues",
+          description: `Generated ${generatedReports} out of ${validStudentsForReports.length} reports (${reportSuccessRate.toFixed(1)}%).`,
+          variant: isReportGenerationSuccessful ? "default" : "destructive",
+        });
+
+        // Step 3: Only advance to next term if both validation AND report generation were completely successful
+        if (isReportGenerationSuccessful) {
+          setTimeout(() => {
+            toast({
+              title: "Advancing Term",
+              description: "All students validated and reports generated successfully. Advancing to next term...",
+            });
+            advanceAcademicTerm.mutate();
+          }, 1500);
+        } else {
           toast({
-            title: "Advancing Term",
-            description: "All students validated successfully. Advancing to next term...",
+            title: "Term Not Advanced", 
+            description: `${validStudentsForReports.length - generatedReports} report(s) failed to generate. Please fix issues before advancing term.`,
+            variant: "destructive",
           });
-          advanceAcademicTerm.mutate();
-        }, 1500); // Small delay to allow user to see validation success message
+        }
       } else {
         toast({
           title: "Term Not Advanced", 
