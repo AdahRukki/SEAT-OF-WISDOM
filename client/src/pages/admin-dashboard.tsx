@@ -2959,8 +2959,8 @@ export default function AdminDashboard() {
                 </div>
 
                 {scoresClassId && scoresSubjectId ? (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
+                  <div className="border rounded-lg overflow-x-auto">
+                    <table className="w-full min-w-[600px]">
                       <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
