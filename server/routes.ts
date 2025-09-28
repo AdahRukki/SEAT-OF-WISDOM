@@ -46,6 +46,27 @@ if (process.env.NODE_ENV !== 'development' && JWT_SECRET === 'development-jwt-se
 // Store invalidated tokens (in production, use Redis or database)
 const invalidatedTokens = new Set<string>();
 
+// Rate limiting storage (in production, use Redis or database)
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+// Rate limiting helper
+function checkRateLimit(key: string, maxAttempts: number, windowMs: number): boolean {
+  const now = Date.now();
+  const record = rateLimitStore.get(key);
+  
+  if (!record || now > record.resetTime) {
+    rateLimitStore.set(key, { count: 1, resetTime: now + windowMs });
+    return true;
+  }
+  
+  if (record.count >= maxAttempts) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
 // Configure multer for file uploads
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -250,6 +271,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Email is required' });
       }
 
+      // Rate limiting: max 3 reset requests per IP per 15 minutes
+      const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
+      if (!checkRateLimit(`reset_ip_${clientIp}`, 3, 15 * 60 * 1000)) {
+        return res.status(429).json({ error: 'Too many reset requests. Please try again later.' });
+      }
+
+      // Rate limiting: max 1 reset request per email per hour
+      if (!checkRateLimit(`reset_email_${email}`, 1, 60 * 60 * 1000)) {
+        return res.status(429).json({ error: 'Password reset already requested for this email. Please check your email or try again later.' });
+      }
+
       const user = await storage.getUserByEmail(email);
       if (!user) {
         // Don't reveal if email exists or not for security
@@ -260,13 +292,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const resetToken = await storage.createPasswordResetToken(user.id);
       
       // In a real production environment, you would send this via email
-      // For now, we'll log it securely (remove this in production)
-      console.log(`Password reset token for ${email}: ${resetToken}`);
-      console.log(`Reset URL: ${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`);
+      // For development only - never log tokens in production
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Password reset requested for: ${email}`);
+        console.log(`Reset URL: ${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`);
+      }
       
       res.json({ 
         message: 'If this email exists, you will receive reset instructions.',
-        // REMOVE THIS IN PRODUCTION - only for development
+        // ONLY for development - never in production
         ...(process.env.NODE_ENV === 'development' && { 
           developmentToken: resetToken,
           resetUrl: `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`
@@ -285,6 +319,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!token || !newPassword) {
         return res.status(400).json({ error: 'Token and new password are required' });
+      }
+
+      // Rate limiting: max 5 confirmation attempts per IP per 15 minutes
+      const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
+      if (!checkRateLimit(`confirm_ip_${clientIp}`, 5, 15 * 60 * 1000)) {
+        return res.status(429).json({ error: 'Too many attempts. Please try again later.' });
       }
 
       // Validate password strength

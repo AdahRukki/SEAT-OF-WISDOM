@@ -240,11 +240,15 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
-  // Production-ready password reset token methods
+  // Production-ready password reset token methods with secure hashing
   async createPasswordResetToken(userId: string): Promise<string> {
-    // Generate cryptographically secure token
     const crypto = require('crypto');
+    
+    // Generate cryptographically secure token
     const token = crypto.randomBytes(32).toString('hex');
+    
+    // Hash the token before storing (never store plaintext tokens)
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     
     // Set expiration to 1 hour from now
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
@@ -252,28 +256,34 @@ export class DatabaseStorage implements IStorage {
     // Delete any existing tokens for this user
     await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
     
-    // Create new token
+    // Store only the hashed token
     await db.insert(passwordResetTokens).values({
       userId,
-      token,
+      token: tokenHash,
       expiresAt,
     });
     
+    // Return the unhashed token (this goes to user via email)
     return token;
   }
 
   async getPasswordResetToken(token: string): Promise<{ userId: string } | null> {
+    const crypto = require('crypto');
+    
+    // Hash the provided token to compare with stored hash
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
     const [resetToken] = await db
       .select()
       .from(passwordResetTokens)
-      .where(eq(passwordResetTokens.token, token));
+      .where(eq(passwordResetTokens.token, tokenHash));
     
     if (!resetToken) return null;
     
     // Check if token is expired
     if (new Date() > resetToken.expiresAt) {
       // Delete expired token
-      await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+      await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, tokenHash));
       return null;
     }
     
@@ -281,7 +291,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePasswordResetToken(token: string): Promise<void> {
-    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+    const crypto = require('crypto');
+    
+    // Hash the token to match stored hash
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, tokenHash));
   }
 
   async cleanupExpiredTokens(): Promise<void> {
