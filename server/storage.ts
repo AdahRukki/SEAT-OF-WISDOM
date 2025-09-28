@@ -15,6 +15,9 @@ import {
   settings,
   academicSessions,
   academicTerms,
+  nonAcademicRatings,
+  calendarEvents,
+  bulkReportRequests,
   type School,
   type User,
   type Student,
@@ -30,6 +33,9 @@ import {
   type Setting,
   type AcademicSession,
   type AcademicTerm,
+  type NonAcademicRating,
+  type CalendarEvent,
+  type BulkReportRequest,
   type InsertUser,
   type InsertStudent,
   type InsertClass,
@@ -44,18 +50,23 @@ import {
   type InsertSetting,
   type InsertAcademicSession,
   type InsertAcademicTerm,
+  type InsertNonAcademicRating,
+  type InsertCalendarEvent,
+  type InsertBulkReportRequest,
+  type BulkReportProgress,
+  type UpdateTermSettings,
   type StudentWithDetails,
   type StudentFeeWithDetails,
-  type PaymentWithDetails
+  type PaymentWithDetails,
+  calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql, inArray, or } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
   // Authentication
   authenticateUser(email: string, password: string): Promise<User | null>;
-  authenticateUserByName(firstName: string, lastName: string, password: string): Promise<User | null>;
   authenticateUserByStudentId(studentId: string, password: string): Promise<User | null>;
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -87,12 +98,20 @@ export interface IStorage {
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
   getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
   getClassSubjects(classId: string): Promise<Subject[]>;
-  getClassAssessments(classId: string, term: string, session: string): Promise<Assessment[]>;
-  getClassAssessmentsWithStudents(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
+  getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
   
   // Assessment operations
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
   getStudentAssessments(studentId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
+  getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
+  
+  // Non-academic rating operations
+  createOrUpdateNonAcademicRating(ratingData: InsertNonAcademicRating): Promise<NonAcademicRating>;
+  getNonAcademicRatingsByClass(classId: string, term: string, session: string): Promise<NonAcademicRating[]>;
+  
+  // Calendar operations
+  createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent>;
+  getCalendarEvents(schoolId?: string): Promise<CalendarEvent[]>;
   
   // Report card templates
   createReportCardTemplate(templateData: InsertReportCardTemplate): Promise<ReportCardTemplate>;
@@ -168,25 +187,24 @@ export interface IStorage {
   getClassById(classId: string): Promise<Class | undefined>;
   updateSchool(schoolId: string, data: Partial<School>): Promise<School>;
   updateUserProfile(userId: string, data: Partial<User>): Promise<User>;
+  
+  // Bulk report generation operations
+  createBulkReportRequest(requestData: InsertBulkReportRequest): Promise<BulkReportRequest>;
+  getBulkReportRequest(requestId: string): Promise<BulkReportRequest | undefined>;
+  updateBulkReportProgress(requestId: string, processedStudents: number): Promise<BulkReportRequest>;
+  completeBulkReportRequest(requestId: string, errorMessage?: string): Promise<BulkReportRequest>;
+  getBulkReportProgress(requestId: string): Promise<BulkReportProgress | undefined>;
+  
+  // Term settings operations
+  updateTermResumptionDate(termId: string, resumptionDate: string | null): Promise<AcademicTerm>;
+  getTermByNameAndSession(termName: string, session: string): Promise<AcademicTerm | undefined>;
+  updateCurrentTermAndSession(termName: string, session: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
   async authenticateUser(email: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    if (!user || !user.isActive) return null;
-    
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    return isValidPassword ? user : null;
-  }
-
-  async authenticateUserByName(firstName: string, lastName: string, password: string): Promise<User | null> {
-    const [user] = await db.select().from(users)
-      .where(and(
-        eq(users.firstName, firstName),
-        eq(users.lastName, lastName),
-        or(eq(users.role, 'admin'), eq(users.role, 'sub-admin'))
-      ));
-    
+    // Case-insensitive email lookup using SQL lower() function
+    const [user] = await db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
     if (!user || !user.isActive) return null;
     
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -324,34 +342,14 @@ export class DatabaseStorage implements IStorage {
     return updatedStudent;
   }
 
-  async getStudent(studentId: string): Promise<(Student & { firstName?: string; lastName?: string }) | undefined> {
-    const [result] = await db
-      .select({
-        id: students.id,
-        studentId: students.studentId,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-        parentContact: students.parentContact,
-        parentWhatsapp: students.parentWhatsapp,
-        address: students.address,
-        dateOfBirth: students.dateOfBirth,
-        gender: students.gender,
-        age: students.age,
-        profileImage: students.profileImage,
-        status: students.status,
-        userId: students.userId,
-        classId: students.classId,
-        createdAt: students.createdAt,
-        updatedAt: students.updatedAt,
-      })
+  async getStudent(studentId: string): Promise<Student | undefined> {
+    const [student] = await db
+      .select()
       .from(students)
-      .leftJoin(users, eq(students.userId, users.id))
       .where(eq(students.id, studentId))
       .limit(1);
     
-    console.log(`[DEBUG] getStudent result for ${studentId}:`, JSON.stringify(result, null, 2));
-    return result;
+    return student;
   }
 
   async createClass(classData: InsertClass): Promise<Class> {
@@ -714,23 +712,7 @@ export class DatabaseStorage implements IStorage {
     return subjectsData.map(({ subjects: subject }) => subject);
   }
 
-  // Get all assessments for a class (for calculating class average)
-  async getClassAssessments(classId: string, term: string, session: string): Promise<Assessment[]> {
-    const results = await db
-      .select()
-      .from(assessments)
-      .where(
-        and(
-          eq(assessments.classId, classId),
-          eq(assessments.term, term),
-          eq(assessments.session, session)
-        )
-      );
-    return results;
-  }
-
-  // Get class assessments with student details (existing method with updated signature)
-  async getClassAssessmentsWithStudents(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
+  async getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
     const assessmentsData = await db
       .select()
       .from(assessments)
@@ -1470,6 +1452,222 @@ export class DatabaseStorage implements IStorage {
     }
     
     return updated;
+  }
+
+  // New methods for teacher grading interface
+  async getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]> {
+    const result = await db
+      .select({
+        id: assessments.id,
+        studentId: assessments.studentId,
+        subjectId: assessments.subjectId,
+        classId: assessments.classId,
+        term: assessments.term,
+        session: assessments.session,
+        firstCA: assessments.firstCA,
+        secondCA: assessments.secondCA,
+        exam: assessments.exam,
+        total: assessments.total,
+        grade: assessments.grade,
+        remark: assessments.remark,
+        createdAt: assessments.createdAt,
+        updatedAt: assessments.updatedAt,
+        subject: {
+          id: subjects.id,
+          name: subjects.name,
+          code: subjects.code,
+          description: subjects.description,
+          createdAt: subjects.createdAt,
+          updatedAt: subjects.updatedAt
+        }
+      })
+      .from(assessments)
+      .leftJoin(subjects, eq(assessments.subjectId, subjects.id))
+      .where(
+        and(
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+
+    return result.map(row => ({
+      ...row,
+      subject: row.subject as Subject
+    })) as (Assessment & { subject: Subject })[];
+  }
+
+  async createOrUpdateNonAcademicRating(ratingData: InsertNonAcademicRating): Promise<NonAcademicRating> {
+    // Check if rating already exists
+    const existing = await db
+      .select()
+      .from(nonAcademicRatings)
+      .where(
+        and(
+          eq(nonAcademicRatings.studentId, ratingData.studentId),
+          eq(nonAcademicRatings.classId, ratingData.classId),
+          eq(nonAcademicRatings.term, ratingData.term),
+          eq(nonAcademicRatings.session, ratingData.session)
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing rating
+      const [updated] = await db
+        .update(nonAcademicRatings)
+        .set({
+          ...ratingData,
+          updatedAt: new Date()
+        })
+        .where(eq(nonAcademicRatings.id, existing[0].id))
+        .returning();
+      return updated;
+    } else {
+      // Create new rating
+      const [created] = await db
+        .insert(nonAcademicRatings)
+        .values(ratingData)
+        .returning();
+      return created;
+    }
+  }
+
+  async getNonAcademicRatingsByClass(classId: string, term: string, session: string): Promise<NonAcademicRating[]> {
+    return await db
+      .select()
+      .from(nonAcademicRatings)
+      .where(
+        and(
+          eq(nonAcademicRatings.classId, classId),
+          eq(nonAcademicRatings.term, term),
+          eq(nonAcademicRatings.session, session)
+        )
+      );
+  }
+
+  async createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent> {
+    const [event] = await db
+      .insert(calendarEvents)
+      .values(eventData)
+      .returning();
+    return event;
+  }
+
+  async getCalendarEvents(schoolId?: string): Promise<CalendarEvent[]> {
+    let query = db.select().from(calendarEvents);
+    
+    if (schoolId) {
+      query = query.where(
+        and(
+          eq(calendarEvents.schoolId, schoolId),
+          eq(calendarEvents.isSystemWide, false)
+        )
+      ) as any;
+    } else {
+      query = query.where(eq(calendarEvents.isSystemWide, true)) as any;
+    }
+    
+    return await query.orderBy(asc(calendarEvents.eventDate));
+  }
+
+  // Bulk report generation operations
+  async createBulkReportRequest(requestData: InsertBulkReportRequest): Promise<BulkReportRequest> {
+    const [request] = await db
+      .insert(bulkReportRequests)
+      .values(requestData)
+      .returning();
+    return request;
+  }
+
+  async getBulkReportRequest(requestId: string): Promise<BulkReportRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(bulkReportRequests)
+      .where(eq(bulkReportRequests.id, requestId));
+    return request;
+  }
+
+  async updateBulkReportProgress(requestId: string, processedStudents: number): Promise<BulkReportRequest> {
+    const [updated] = await db
+      .update(bulkReportRequests)
+      .set({ 
+        processedStudents,
+        status: 'processing',
+        updatedAt: new Date()
+      })
+      .where(eq(bulkReportRequests.id, requestId))
+      .returning();
+    return updated;
+  }
+
+  async completeBulkReportRequest(requestId: string, errorMessage?: string): Promise<BulkReportRequest> {
+    const [updated] = await db
+      .update(bulkReportRequests)
+      .set({ 
+        status: errorMessage ? 'failed' : 'completed',
+        completedAt: new Date(),
+        errorMessage,
+        updatedAt: new Date()
+      })
+      .where(eq(bulkReportRequests.id, requestId))
+      .returning();
+    return updated;
+  }
+
+  async getBulkReportProgress(requestId: string): Promise<BulkReportProgress | undefined> {
+    const request = await this.getBulkReportRequest(requestId);
+    if (!request) return undefined;
+
+    return {
+      id: request.id,
+      status: request.status as 'pending' | 'processing' | 'completed' | 'failed',
+      totalStudents: request.totalStudents,
+      processedStudents: request.processedStudents,
+      percentage: request.totalStudents > 0 ? Math.round((request.processedStudents / request.totalStudents) * 100) : 0,
+      errorMessage: request.errorMessage || undefined
+    };
+  }
+
+  // Term settings operations
+  async updateTermResumptionDate(termId: string, resumptionDate: string | null): Promise<AcademicTerm> {
+    const [updated] = await db
+      .update(academicTerms)
+      .set({ 
+        resumptionDate: resumptionDate ? new Date(resumptionDate) : null,
+        updatedAt: new Date()
+      })
+      .where(eq(academicTerms.id, termId))
+      .returning();
+    return updated;
+  }
+
+  async getTermByNameAndSession(termName: string, session: string): Promise<AcademicTerm | undefined> {
+    const [sessionRecord] = await db
+      .select()
+      .from(academicSessions)
+      .where(eq(academicSessions.sessionYear, session));
+    
+    if (!sessionRecord) return undefined;
+
+    const [term] = await db
+      .select()
+      .from(academicTerms)
+      .where(
+        and(
+          eq(academicTerms.termName, termName),
+          eq(academicTerms.sessionId, sessionRecord.id)
+        )
+      );
+    
+    return term;
+  }
+
+  async updateCurrentTermAndSession(termName: string, session: string): Promise<void> {
+    // Update current term setting
+    await this.setSetting('current_term', termName);
+    // Update current session setting
+    await this.setSetting('current_session', session);
   }
 }
 
