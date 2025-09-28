@@ -23,7 +23,10 @@ import {
 } from "@/components/ui/table";
 import {
   Dialog,
+  DialogContent,
   DialogDescription,
+  DialogHeader,
+  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -57,9 +60,16 @@ export function TeacherGradesInterface({
   // State
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
-  const [editingCell, setEditingCell] = useState<{studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam'} | null>(null);
-  const [tempScores, setTempScores] = useState<{[key: string]: string}>({});
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<StudentWithDetails | null>(null);
+  const [isGradeDialogOpen, setIsGradeDialogOpen] = useState(false);
+  const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
+
+  // Form state for academic scores
+  const [academicScores, setAcademicScores] = useState({
+    firstCA: "",
+    secondCA: "",
+    exam: ""
+  });
 
   // Form state for non-academic ratings
   const [nonAcademicScores, setNonAcademicScores] = useState({
@@ -69,8 +79,6 @@ export function TeacherGradesInterface({
     participationTeamwork: 3,
     responsibility: 3
   });
-  const [selectedStudent, setSelectedStudent] = useState<StudentWithDetails | null>(null);
-  const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
 
   // Queries
   const { data: classes = [] } = useQuery<Class[]>({
@@ -102,14 +110,14 @@ export function TeacherGradesInterface({
     mutationFn: async (data: AddScore) => {
       return apiRequest('/api/admin/assessments', {
         method: 'POST',
-        body: data,
+        body: JSON.stringify(data),
       });
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       toast({ description: "Academic scores saved successfully!" });
-      setHasUnsavedChanges(false);
-      setTempScores({});
       queryClient.invalidateQueries({ queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] });
+      setIsGradeDialogOpen(false);
+      setAcademicScores({ firstCA: "", secondCA: "", exam: "" });
     },
     onError: (error: any) => {
       toast({ 
@@ -123,7 +131,7 @@ export function TeacherGradesInterface({
     mutationFn: async (data: UpdateNonAcademicRating) => {
       return apiRequest('/api/admin/non-academic-ratings', {
         method: 'POST',
-        body: data,
+        body: JSON.stringify(data),
       });
     },
     onSuccess: () => {
@@ -155,34 +163,37 @@ export function TeacherGradesInterface({
     return nonAcademicRatings.find(r => r.studentId === studentId);
   };
 
-  const handleSaveScore = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam', value: string) => {
-    const numValue = parseInt(value) || 0;
+  const handleSaveAcademicScore = () => {
+    if (!selectedStudent || !selectedSubjectId) return;
+    
+    const firstCA = parseInt(academicScores.firstCA) || 0;
+    const secondCA = parseInt(academicScores.secondCA) || 0;
+    const exam = parseInt(academicScores.exam) || 0;
     
     // Validation
-    const maxValue = field === 'exam' ? 60 : 20;
-    if (numValue < 0 || numValue > maxValue) {
-      toast({ 
-        description: `${field === 'exam' ? 'Exam' : field === 'firstCA' ? 'First CA' : 'Second CA'} must be between 0 and ${maxValue}`, 
-        variant: "destructive" 
-      });
+    if (firstCA < 0 || firstCA > 20) {
+      toast({ description: "First CA must be between 0 and 20", variant: "destructive" });
+      return;
+    }
+    if (secondCA < 0 || secondCA > 20) {
+      toast({ description: "Second CA must be between 0 and 20", variant: "destructive" });
+      return;
+    }
+    if (exam < 0 || exam > 60) {
+      toast({ description: "Exam score must be between 0 and 60", variant: "destructive" });
       return;
     }
 
-    // Get existing scores for this student/subject
-    const existing = getStudentAssessment(studentId, subjectId);
-    const updatedScores = {
-      studentId,
-      subjectId,
+    saveAcademicScoreMutation.mutate({
+      studentId: selectedStudent.id,
+      subjectId: selectedSubjectId,
       classId: selectedClassId,
       term: currentTerm,
       session: currentSession,
-      firstCA: existing?.firstCA || 0,
-      secondCA: existing?.secondCA || 0,
-      exam: existing?.exam || 0,
-      [field]: numValue
-    };
-
-    saveAcademicScoreMutation.mutate(updatedScores);
+      firstCA,
+      secondCA,
+      exam
+    });
   };
 
   const handleSaveNonAcademicRating = () => {
@@ -197,93 +208,23 @@ export function TeacherGradesInterface({
     });
   };
 
-  const handleCellEdit = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
-    setEditingCell({ studentId, subjectId, field });
-    const existing = getStudentAssessment(studentId, subjectId);
-    const currentValue = existing?.[field]?.toString() || "";
-    setTempScores(prev => ({
-      ...prev,
-      [`${studentId}|${subjectId}|${field}`]: currentValue
-    }));
-  };
-
-  const handleScoreChange = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam', value: string) => {
-    setTempScores(prev => ({
-      ...prev,
-      [`${studentId}|${subjectId}|${field}`]: value
-    }));
-    setHasUnsavedChanges(true);
-  };
-
-  const handleSaveAllChanges = () => {
-    if (!hasUnsavedChanges) return;
+  const openGradeDialog = (student: StudentWithDetails, subjectId: string) => {
+    setSelectedStudent(student);
+    setSelectedSubjectId(subjectId);
     
-    // Group changes by student and subject
-    const changesByStudent: {[key: string]: {studentId: string, subjectId: string, scores: any}} = {};
-    
-    Object.entries(tempScores).forEach(([key, value]) => {
-      // Use better parsing since UUIDs contain dashes
-      const parts = key.split('|');
-      if (parts.length !== 3) return; // Skip malformed keys
-      
-      const [studentId, subjectId, field] = parts;
-      const changeKey = `${studentId}|${subjectId}`;
-      
-      if (!changesByStudent[changeKey]) {
-        const existing = getStudentAssessment(studentId, subjectId);
-        changesByStudent[changeKey] = {
-          studentId,
-          subjectId,
-          scores: {
-            classId: selectedClassId,
-            term: currentTerm,
-            session: currentSession,
-            firstCA: existing?.firstCA || 0,
-            secondCA: existing?.secondCA || 0,
-            exam: existing?.exam || 0
-          }
-        };
-      }
-      
-      const numValue = value ? parseInt(value, 10) : 0;
-      changesByStudent[changeKey].scores[field] = numValue;
-    });
-    
-    // Save all changes
-    Object.values(changesByStudent).forEach(({ studentId, subjectId, scores }) => {
-      const finalScores = {
-        studentId,
-        subjectId,
-        ...scores
-      };
-      saveAcademicScoreMutation.mutate(finalScores);
-    });
-  };
-
-  const getCurrentScore = (studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
-    const tempKey = `${studentId}|${subjectId}|${field}`;
-    if (tempScores[tempKey] !== undefined) {
-      return tempScores[tempKey];
+    // Pre-fill with existing scores if available
+    const existing = getStudentAssessment(student.id, subjectId);
+    if (existing) {
+      setAcademicScores({
+        firstCA: existing.firstCA?.toString() || "",
+        secondCA: existing.secondCA?.toString() || "",
+        exam: existing.exam?.toString() || ""
+      });
+    } else {
+      setAcademicScores({ firstCA: "", secondCA: "", exam: "" });
     }
-    const assessment = getStudentAssessment(studentId, subjectId);
-    return assessment?.[field]?.toString() || "";
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent, studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      // Just move to next cell, don't save
-      setEditingCell(null);
-    } else if (e.key === 'Escape') {
-      // Cancel editing and revert to saved value
-      const assessment = getStudentAssessment(studentId, subjectId);
-      const savedValue = assessment?.[field]?.toString() || "";
-      setTempScores(prev => ({
-        ...prev,
-        [`${studentId}|${subjectId}|${field}`]: savedValue
-      }));
-      setEditingCell(null);
-    }
+    
+    setIsGradeDialogOpen(true);
   };
 
   const openRatingDialog = (student: StudentWithDetails) => {
@@ -325,13 +266,10 @@ export function TeacherGradesInterface({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <Label htmlFor="class-select">Select Class</Label>
-              <Select value={selectedClassId} onValueChange={(value) => {
-                setSelectedClassId(value);
-                setSelectedSubjectId(""); // Reset subject when class changes
-              }}>
+              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
                 <SelectTrigger data-testid="select-class">
                   <SelectValue placeholder="Choose a class" />
                 </SelectTrigger>
@@ -344,52 +282,20 @@ export function TeacherGradesInterface({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="subject-select">Select Subject</Label>
-              <Select 
-                value={selectedSubjectId} 
-                onValueChange={setSelectedSubjectId}
-                disabled={!selectedClassId}
-              >
-                <SelectTrigger data-testid="select-subject">
-                  <SelectValue placeholder="Choose a subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((subject) => (
-                    <SelectItem key={subject.id} value={subject.id}>
-                      {subject.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div>Term: <Badge variant="outline">{currentTerm}</Badge></div>
-                <div>Session: <Badge variant="outline">{currentSession}</Badge></div>
-              </div>
-              {selectedClassId && selectedSubjectId && (
-                <Button 
-                  onClick={handleSaveAllChanges}
-                  disabled={!hasUnsavedChanges || saveAcademicScoreMutation.isPending}
-                  className="ml-4"
-                  data-testid="button-save-all"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  {saveAcademicScoreMutation.isPending ? 'Saving...' : hasUnsavedChanges ? 'Save All Changes' : 'All Saved'}
-                </Button>
-              )}
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <div>Term: <Badge variant="outline">{currentTerm}</Badge></div>
+              <div>Session: <Badge variant="outline">{currentSession}</Badge></div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {selectedClassId && selectedSubjectId && (
+      {selectedClassId && (
         <Card>
           <CardHeader>
-            <CardTitle>Students in Class - {subjects.find(s => s.id === selectedSubjectId)?.name}</CardTitle>
+            <CardTitle>Students in Class</CardTitle>
             <CardDescription>
-              Click on score cells to input grades for {subjects.find(s => s.id === selectedSubjectId)?.name}, or use the rating button for behavioral assessments
+              Click on score cells to input grades, or use the rating button for behavioral assessments
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -400,180 +306,65 @@ export function TeacherGradesInterface({
               </TabsList>
               
               <TabsContent value="academic" className="space-y-4">
-                {studentsLoading || assessmentsLoading ? (
-                  <div className="flex items-center justify-center p-8">
-                    <div className="text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                      <p className="text-sm text-muted-foreground">Loading students and assessments...</p>
-                    </div>
-                  </div>
-                ) : classStudents.length === 0 ? (
-                  <div className="text-center p-8">
-                    <p className="text-muted-foreground">No students found in this class.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Student</TableHead>
-                          <TableHead className="text-center min-w-[200px]">
-                            {subjects.find(s => s.id === selectedSubjectId)?.name} Scores
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        {subjects.map(subject => (
+                          <TableHead key={subject.id} className="text-center min-w-[120px]">
+                            {subject.name}
                           </TableHead>
-                          <TableHead className="text-center">Total</TableHead>
-                          <TableHead className="text-center">Grade</TableHead>
-                          <TableHead className="text-center">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {classStudents.map(student => {
-                          const assessment = getStudentAssessment(student.id, selectedSubjectId);
-                          const total = (assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0);
-                          const gradeInfo = calculateGrade(total);
-                          
-                          return (
-                            <TableRow key={student.id}>
-                              <TableCell className="font-medium">
-                                <div className="flex items-center gap-2">
-                                  <User className="h-4 w-4" />
-                                  {student.user.firstName} {student.user.lastName}
-                                </div>
-                              </TableCell>
-                              <TableCell className="p-2">
-                                {/* Horizontal layout with CA1, CA2, Exam in a row */}
-                                <div className="flex items-center gap-2 mb-2">
-                                  {/* CA1 Input */}
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-xs font-medium mb-1">CA1</span>
-                                    {editingCell?.studentId === student.id && editingCell?.subjectId === selectedSubjectId && editingCell?.field === 'firstCA' ? (
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        max="20"
-                                        value={getCurrentScore(student.id, selectedSubjectId, 'firstCA')}
-                                        onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'firstCA', e.target.value)}
-                                        onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'firstCA')}
-                                        onBlur={() => setEditingCell(null)}
-                                        className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
-                                        autoFocus
-                                        data-testid={`input-ca1-${student.id}-${selectedSubjectId}`}
-                                      />
-                                    ) : (
-                                      <div 
-                                        className={`h-7 w-16 text-sm border rounded p-1 cursor-pointer transition-colors duration-200 flex items-center justify-center font-medium ${
-                                          (assessment?.firstCA || 0) >= 16 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
-                                          (assessment?.firstCA || 0) >= 12 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
-                                          (assessment?.firstCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
-                                          'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
-                                        }`}
-                                        onClick={() => handleCellEdit(student.id, selectedSubjectId, 'firstCA')}
-                                        data-testid={`cell-ca1-${student.id}-${selectedSubjectId}`}
-                                        title={`CA1 Score: ${assessment?.firstCA || 0}/20 - Click to edit`}
-                                      >
-                                        {assessment?.firstCA || 0}
-                                      </div>
-                                    )}
-                                  </div>
-                                  
-                                  {/* CA2 Input */}
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-xs font-medium mb-1">CA2</span>
-                                    {editingCell?.studentId === student.id && editingCell?.subjectId === selectedSubjectId && editingCell?.field === 'secondCA' ? (
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        max="20"
-                                        value={getCurrentScore(student.id, selectedSubjectId, 'secondCA')}
-                                        onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'secondCA', e.target.value)}
-                                        onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'secondCA')}
-                                        onBlur={() => setEditingCell(null)}
-                                        className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
-                                        autoFocus
-                                        data-testid={`input-ca2-${student.id}-${selectedSubjectId}`}
-                                      />
-                                    ) : (
-                                      <div 
-                                        className={`h-7 w-16 text-sm border rounded p-1 cursor-pointer transition-colors duration-200 flex items-center justify-center font-medium ${
-                                          (assessment?.secondCA || 0) >= 16 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
-                                          (assessment?.secondCA || 0) >= 12 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
-                                          (assessment?.secondCA || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
-                                          'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
-                                        }`}
-                                        onClick={() => handleCellEdit(student.id, selectedSubjectId, 'secondCA')}
-                                        data-testid={`cell-ca2-${student.id}-${selectedSubjectId}`}
-                                        title={`CA2 Score: ${assessment?.secondCA || 0}/20 - Click to edit`}
-                                      >
-                                        {assessment?.secondCA || 0}
-                                      </div>
-                                    )}
-                                  </div>
-                                  
-                                  {/* Exam Input */}
-                                  <div className="flex flex-col items-center">
-                                    <span className="text-xs font-medium mb-1">Exam</span>
-                                    {editingCell?.studentId === student.id && editingCell?.subjectId === selectedSubjectId && editingCell?.field === 'exam' ? (
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        max="60"
-                                        value={getCurrentScore(student.id, selectedSubjectId, 'exam')}
-                                        onChange={(e) => handleScoreChange(student.id, selectedSubjectId, 'exam', e.target.value)}
-                                        onKeyDown={(e) => handleKeyPress(e, student.id, selectedSubjectId, 'exam')}
-                                        onBlur={() => setEditingCell(null)}
-                                        className="h-7 text-sm w-16 p-1 border-blue-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all duration-200 bg-blue-50 text-center"
-                                        autoFocus
-                                        data-testid={`input-exam-${student.id}-${selectedSubjectId}`}
-                                      />
-                                    ) : (
-                                      <div 
-                                        className={`h-7 w-16 text-sm border rounded p-1 cursor-pointer transition-colors duration-200 flex items-center justify-center font-medium ${
-                                          (assessment?.exam || 0) >= 48 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' :
-                                          (assessment?.exam || 0) >= 36 ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100' :
-                                          (assessment?.exam || 0) > 0 ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100' :
-                                          'bg-gray-50 border-gray-200 text-gray-500 hover:bg-blue-50 hover:border-blue-200'
-                                        }`}
-                                        onClick={() => handleCellEdit(student.id, selectedSubjectId, 'exam')}
-                                        data-testid={`cell-exam-${student.id}-${selectedSubjectId}`}
-                                        title={`Exam Score: ${assessment?.exam || 0}/60 - Click to edit`}
-                                      >
-                                        {assessment?.exam || 0}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <div className="font-medium text-lg">
-                                  {total}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <Badge 
-                                  variant="secondary" 
-                                  className={`text-xs ${gradeInfo.color} text-white font-medium`}
-                                >
-                                  {gradeInfo.grade}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {classStudents.map(student => (
+                        <TableRow key={student.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              {student.user.firstName} {student.user.lastName}
+                            </div>
+                          </TableCell>
+                          {subjects.map(subject => {
+                            const assessment = getStudentAssessment(student.id, subject.id);
+                            const total = (assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0);
+                            const gradeInfo = calculateGrade(total);
+                            
+                            return (
+                              <TableCell key={subject.id} className="text-center">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => openRatingDialog(student)}
-                                  className="h-7"
-                                  data-testid={`button-rating-${student.id}`}
+                                  onClick={() => openGradeDialog(student, subject.id)}
+                                  className="w-full"
+                                  data-testid={`grade-button-${student.id}-${subject.id}`}
                                 >
-                                  <Star className="h-3 w-3 mr-1" />
-                                  Rate
+                                  {assessment ? (
+                                    <div className="space-y-1">
+                                      <div className="text-xs">
+                                        {assessment.firstCA || 0}+{assessment.secondCA || 0}+{assessment.exam || 0}
+                                      </div>
+                                      <Badge 
+                                        variant="secondary" 
+                                        className={`text-xs ${gradeInfo.color} text-white`}
+                                      >
+                                        {total}% ({gradeInfo.grade})
+                                      </Badge>
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">Add Score</span>
+                                  )}
                                 </Button>
                               </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                            );
+                          })}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </TabsContent>
               
               <TabsContent value="behavioral" className="space-y-4">
@@ -650,7 +441,156 @@ export function TeacherGradesInterface({
         </Card>
       )}
 
+      {/* Academic Score Input Dialog */}
+      <Dialog open={isGradeDialogOpen} onOpenChange={setIsGradeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Input Academic Scores</DialogTitle>
+            <DialogDescription>
+              Enter scores for {selectedStudent?.user.firstName} {selectedStudent?.user.lastName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="first-ca">First CA (out of 20)</Label>
+              <Input
+                id="first-ca"
+                type="number"
+                min="0"
+                max="20"
+                value={academicScores.firstCA}
+                onChange={(e) => setAcademicScores(prev => ({ ...prev, firstCA: e.target.value }))}
+                placeholder="0-20"
+                data-testid="input-first-ca"
+              />
+            </div>
+            <div>
+              <Label htmlFor="second-ca">Second CA (out of 20)</Label>
+              <Input
+                id="second-ca"
+                type="number"
+                min="0"
+                max="20"
+                value={academicScores.secondCA}
+                onChange={(e) => setAcademicScores(prev => ({ ...prev, secondCA: e.target.value }))}
+                placeholder="0-20"
+                data-testid="input-second-ca"
+              />
+            </div>
+            <div>
+              <Label htmlFor="exam">Exam (out of 60)</Label>
+              <Input
+                id="exam"
+                type="number"
+                min="0"
+                max="60"
+                value={academicScores.exam}
+                onChange={(e) => setAcademicScores(prev => ({ ...prev, exam: e.target.value }))}
+                placeholder="0-60"
+                data-testid="input-exam"
+              />
+            </div>
+            
+            {/* Real-time preview calculation */}
+            {(academicScores.firstCA || academicScores.secondCA || academicScores.exam) && (
+              <div className="p-3 bg-muted rounded-lg" data-testid="grade-preview">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Calculator className="h-4 w-4" />
+                  Live Preview
+                </div>
+                <div className="mt-2 text-sm">
+                  {(() => {
+                    const total = (parseInt(academicScores.firstCA) || 0) + 
+                                  (parseInt(academicScores.secondCA) || 0) + 
+                                  (parseInt(academicScores.exam) || 0);
+                    const gradeInfo = calculateGrade(total);
+                    return (
+                      <div className="space-y-1">
+                        <div>Total: <span className="font-semibold">{total}/100</span></div>
+                        <div className="flex items-center gap-2">
+                          Grade: <Badge className={`${gradeInfo.color} text-white`}>{gradeInfo.grade}</Badge>
+                          <span className="text-muted-foreground">({gradeInfo.remark})</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsGradeDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveAcademicScore} 
+                disabled={saveAcademicScoreMutation.isPending}
+                data-testid="button-save-academic-scores"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saveAcademicScoreMutation.isPending ? "Saving..." : "Save Scores"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
+      {/* Non-Academic Rating Dialog */}
+      <Dialog open={isRatingDialogOpen} onOpenChange={setIsRatingDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Non-Academic Ratings</DialogTitle>
+            <DialogDescription>
+              Rate {selectedStudent?.user.firstName} {selectedStudent?.user.lastName} on behavioral aspects (1-5 scale)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {[
+              { key: 'attendancePunctuality', label: 'Attendance & Punctuality' },
+              { key: 'neatnessOrganization', label: 'Neatness & Organization' },
+              { key: 'respectPoliteness', label: 'Respect & Politeness' },
+              { key: 'participationTeamwork', label: 'Participation/Teamwork' },
+              { key: 'responsibility', label: 'Responsibility' }
+            ].map(({ key, label }) => (
+              <div key={key}>
+                <Label htmlFor={key}>{label}</Label>
+                <Select 
+                  value={nonAcademicScores[key as keyof typeof nonAcademicScores].toString()} 
+                  onValueChange={(value) => setNonAcademicScores(prev => ({ 
+                    ...prev, 
+                    [key]: parseInt(value) 
+                  }))}
+                >
+                  <SelectTrigger data-testid={`select-${key}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map(rating => (
+                      <SelectItem key={rating} value={rating.toString()}>
+                        {rating} - {getRatingText(rating)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+            
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsRatingDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveNonAcademicRating} 
+                disabled={saveNonAcademicRatingMutation.isPending}
+                data-testid="button-save-ratings"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saveNonAcademicRatingMutation.isPending ? "Saving..." : "Save Ratings"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

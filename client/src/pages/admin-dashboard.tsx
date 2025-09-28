@@ -53,14 +53,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { 
   Plus, 
   Save,
   Download,
@@ -97,13 +89,11 @@ import {
   Shield,
   Phone,
   Loader2,
-  Camera,
-  FileSpreadsheet
+  Camera
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
 import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
-import { BehavioralRatingsInterface } from "@/components/behavioral-ratings-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
@@ -126,366 +116,6 @@ import * as XLSX from 'xlsx';
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 type PaymentForm = z.infer<typeof recordPaymentSchema>;
-
-// Users Management Component
-function UsersManagement() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  // User management states
-  const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
-  const [isDeleteUserDialogOpen, setIsDeleteUserDialogOpen] = useState(false);
-  const [selectedUserForEdit, setSelectedUserForEdit] = useState<any>(null);
-  const [selectedUserForDeletion, setSelectedUserForDeletion] = useState<any>(null);
-  const [showEditPassword, setShowEditPassword] = useState(false);
-  const [userEditForm, setUserEditForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    schoolId: "",
-    isActive: true,
-    newPassword: ""
-  });
-  
-  // Fetch admin users
-  const { data: users = [], isLoading: usersLoading } = useQuery<any[]>({
-    queryKey: ['/api/admin/users'],
-    queryFn: () => apiRequest('/api/admin/users?adminOnly=true')
-  });
-
-  // Fetch schools for sub-admin creation
-  const { data: schools = [] } = useQuery<any[]>({
-    queryKey: ['/api/admin/schools']
-  });
-  
-  // User management mutations
-  const editUserMutation = useMutation({
-    mutationFn: async (userData: any) => {
-      const response = await apiRequest(`/api/admin/users/${userData.id}`, {
-        method: 'PUT',
-        body: {
-          firstName: userData.firstName,
-          lastName: userData.lastName,
-          email: userData.email,
-          schoolId: userData.schoolId || null,
-          isActive: userData.isActive,
-          ...(userData.newPassword && { password: userData.newPassword })
-        }
-      });
-      return response;
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "User updated successfully" });
-      setIsEditUserDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to update user", variant: "destructive" });
-    }
-  });
-  
-  const deleteUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      return await apiRequest(`/api/admin/users/${userId}`, {
-        method: 'DELETE'
-      });
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "User deleted successfully" });
-      setIsDeleteUserDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to delete user", variant: "destructive" });
-    }
-  });
-
-  return (
-    <>
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          User Management
-        </CardTitle>
-        <CardDescription>
-          Manage admin and sub-admin accounts
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {usersLoading ? (
-          <div className="flex items-center justify-center p-8">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-              <p className="text-sm text-muted-foreground">Loading users...</p>
-            </div>
-          </div>
-        ) : users.length === 0 ? (
-          <div className="text-center p-8">
-            <p className="text-muted-foreground">No admin users found.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>School</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.filter((user: any) => user.role === 'admin' || user.role === 'sub-admin').map((user: any) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">
-                      {user.firstName} {user.lastName}
-                    </TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Badge className={user.role === 'admin' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {user.schoolId ? schools.find((s: any) => s.id === user.schoolId)?.name || 'Unknown School' : 'All Schools'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.isActive ? 'default' : 'secondary'}>
-                        {user.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedUserForEdit(user);
-                            setUserEditForm({
-                              firstName: user.firstName,
-                              lastName: user.lastName,
-                              email: user.email,
-                              schoolId: user.schoolId || "",
-                              isActive: user.isActive,
-                              newPassword: ""
-                            });
-                            setIsEditUserDialogOpen(true);
-                          }}
-                          data-testid={`button-edit-user-${user.id}`}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setSelectedUserForDeletion(user);
-                            setIsDeleteUserDialogOpen(true);
-                          }}
-                          data-testid={`button-delete-user-${user.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-    
-    {/* Edit User Dialog */}
-    <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Edit User</DialogTitle>
-          <DialogDescription>
-            Update user information and settings
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="edit-first-name">First Name</Label>
-              <Input
-                id="edit-first-name"
-                value={userEditForm.firstName}
-                onChange={(e) => setUserEditForm({...userEditForm, firstName: e.target.value})}
-                data-testid="input-edit-user-firstname"
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-last-name">Last Name</Label>
-              <Input
-                id="edit-last-name"
-                value={userEditForm.lastName}
-                onChange={(e) => setUserEditForm({...userEditForm, lastName: e.target.value})}
-                data-testid="input-edit-user-lastname"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="edit-email">Email</Label>
-            <Input
-              id="edit-email"
-              type="email"
-              value={userEditForm.email}
-              onChange={(e) => setUserEditForm({...userEditForm, email: e.target.value})}
-              data-testid="input-edit-user-email"
-            />
-          </div>
-
-          {selectedUserForEdit?.role === 'sub-admin' && (
-            <div>
-              <Label htmlFor="edit-school">School</Label>
-              <Select 
-                value={userEditForm.schoolId || ""} 
-                onValueChange={(value) => setUserEditForm({...userEditForm, schoolId: value})}
-              >
-                <SelectTrigger data-testid="select-edit-user-school">
-                  <SelectValue placeholder="Select school" />
-                </SelectTrigger>
-                <SelectContent>
-                  {schools.map((school: any) => (
-                    <SelectItem key={school.id} value={school.id}>
-                      {school.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div>
-            <Label htmlFor="edit-new-password">New Password (leave empty to keep current)</Label>
-            <div className="relative">
-              <Input
-                id="edit-new-password"
-                type={showEditPassword ? "text" : "password"}
-                value={userEditForm.newPassword}
-                onChange={(e) => setUserEditForm({...userEditForm, newPassword: e.target.value})}
-                data-testid="input-edit-user-password"
-                placeholder="Enter new password or leave empty"
-                className="pr-10"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                onClick={() => setShowEditPassword(!showEditPassword)}
-                data-testid="button-toggle-edit-password"
-              >
-                {showEditPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-500" />
-                ) : (
-                  <Eye className="h-4 w-4 text-gray-500" />
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="edit-is-active"
-              checked={userEditForm.isActive}
-              onChange={(e) => setUserEditForm({...userEditForm, isActive: e.target.checked})}
-              data-testid="checkbox-edit-user-active"
-            />
-            <Label htmlFor="edit-is-active">User is active</Label>
-          </div>
-        </div>
-
-        <div className="flex justify-end space-x-3 mt-6">
-          <Button
-            variant="outline"
-            onClick={() => setIsEditUserDialogOpen(false)}
-            data-testid="button-cancel-edit-user"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              if (selectedUserForEdit) {
-                editUserMutation.mutate({
-                  id: selectedUserForEdit.id,
-                  ...userEditForm
-                });
-              }
-            }}
-            disabled={editUserMutation.isPending}
-            data-testid="button-save-edit-user"
-          >
-            {editUserMutation.isPending ? "Saving..." : "Save Changes"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-
-    {/* Delete User Confirmation Dialog */}
-    <Dialog open={isDeleteUserDialogOpen} onOpenChange={setIsDeleteUserDialogOpen}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-red-600">Delete User</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this user? This action cannot be undone and will remove all associated data.
-          </DialogDescription>
-        </DialogHeader>
-        {selectedUserForDeletion && (
-          <div className="py-4">
-            <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-              <div className="flex items-center space-x-2 mb-2">
-                <User className="h-4 w-4 text-red-600" />
-                <span className="font-medium text-red-800">
-                  {selectedUserForDeletion.firstName} {selectedUserForDeletion.lastName}
-                </span>
-              </div>
-              <p className="text-sm text-red-700">{selectedUserForDeletion.email}</p>
-              <Badge className={selectedUserForDeletion.role === 'admin' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
-                {selectedUserForDeletion.role}
-              </Badge>
-            </div>
-          </div>
-        )}
-        <div className="flex justify-end space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setIsDeleteUserDialogOpen(false);
-              setSelectedUserForDeletion(null);
-            }}
-            data-testid="button-cancel-delete-user"
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              if (selectedUserForDeletion) {
-                deleteUserMutation.mutate(selectedUserForDeletion.id);
-              }
-            }}
-            disabled={deleteUserMutation.isPending}
-            data-testid="button-confirm-delete-user"
-          >
-            {deleteUserMutation.isPending ? "Deleting..." : "Delete User"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-    </>
-  );
-}
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -572,17 +202,6 @@ export default function AdminDashboard() {
   const [nextTermResumptionDate, setNextTermResumptionDate] = useState("");
   const [reportTerm, setReportTerm] = useState("");
   const [reportSession, setReportSession] = useState("");
-  
-  // Bulk report generation states
-  const [selectedBulkReportTerm, setSelectedBulkReportTerm] = useState("First Term");
-  const [selectedBulkReportSession, setSelectedBulkReportSession] = useState("2024/2025");
-  const [selectedBulkClassId, setSelectedBulkClassId] = useState("");
-  const [showBulkProgressDialog, setShowBulkProgressDialog] = useState(false);
-  const [bulkGenerationProgress, setBulkGenerationProgress] = useState(0);
-  
-  // Term settings states
-  const [nextTermDate, setNextTermDate] = useState("");
-  const [selectedNextTerm, setSelectedNextTerm] = useState("");
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
   const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
 
@@ -896,7 +515,6 @@ export default function AdminDashboard() {
     },
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
-  
 
   // Mutations
   const createClassMutation = useMutation({
@@ -2791,14 +2409,13 @@ export default function AdminDashboard() {
               {user.role === 'admin' && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setActiveTab("users")}
+                    <a
+                      href="/users"
                       className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
-                      data-testid="button-users-header"
                     >
                       <Users className="w-4 h-4" />
                       <span className="hidden sm:inline">Users</span>
-                    </button>
+                    </a>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>Manage users, create sub-admins, and configure school settings</p>
@@ -2872,6 +2489,9 @@ export default function AdminDashboard() {
             <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Scores
             </TabsTrigger>
+            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+              Grading
+            </TabsTrigger>
             <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Attendance
             </TabsTrigger>
@@ -2881,11 +2501,6 @@ export default function AdminDashboard() {
             <TabsTrigger value="reports" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Reports
             </TabsTrigger>
-            {user?.role === 'admin' && (
-              <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-                Users
-              </TabsTrigger>
-            )}
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Settings
             </TabsTrigger>
@@ -3196,28 +2811,272 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Academic Scores Tab - Excel-like Interface */}
+          {/* Scores Management Tab */}
           <TabsContent value="scores" className="space-y-6 table-container">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5" />
-                  <span>Academic Scores</span>
-                </CardTitle>
+                <CardTitle>Score Entry System</CardTitle>
                 <CardDescription>
-                  Enter and manage academic scores for students in an excel-like interface
+                  Enter and manage student assessment scores (1st CA: 20 marks, 2nd CA: 20 marks, Exam: 60 marks)
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <TeacherGradesInterface 
-                  currentTerm="First Term"
-                  currentSession="2024/2025"
-                  userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-                />
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div>
+                    <Label>Term & Session</Label>
+                    <Select value={`${scoresTerm}-${scoresSession}`} onValueChange={(value) => {
+                      const [term, session] = value.split('-');
+                      setScoresTerm(term.replace('_', ' '));
+                      setScoresSession(session);
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select term" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="First Term-2024/2025">First Term 2024/2025</SelectItem>
+                        <SelectItem value="Second Term-2024/2025">Second Term 2024/2025</SelectItem>
+                        <SelectItem value="Third Term-2024/2025">Third Term 2024/2025</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Select Class</Label>
+                    <Select value={scoresClassId} onValueChange={setScoresClassId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sortClassesByOrder(classes).map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Select Subject</Label>
+                    <Select value={scoresSubjectId} onValueChange={(subjectId) => {
+                      setScoresSubjectId(subjectId);
+                      // Auto-refresh assessments when subject changes
+                      if (scoresClassId && subjectId) {
+                        queryClient.invalidateQueries({ 
+                          queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId }] 
+                        });
+                      }
+                    }} disabled={!scoresClassId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classSubjects.map((subject) => (
+                          <SelectItem key={subject.id} value={subject.id}>
+                            {subject.name.toUpperCase()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          onClick={handleSaveAllScores} 
+                          disabled={!scoresClassId || !scoresSubjectId || Object.keys(scoreInputs).length === 0}
+                          className="w-full"
+                        >
+                          <Save className="h-4 w-4 mr-2" />
+                          Save All Scores
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Save all entered scores for the selected class and subject</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="flex gap-1">
+                      <input
+                        type="file"
+                        id="excel-upload"
+                        accept=".xlsx,.xls,.csv"
+                        style={{ display: 'none' }}
+                        onChange={handleExcelUpload}
+                      />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => document.getElementById('excel-upload')?.click()}
+                            disabled={!scoresClassId || !scoresSubjectId}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                          >
+                            <Upload className="h-4 w-4 mr-1" />
+                            Upload
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Upload scores from Excel file (XLSX, XLS, CSV)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={handleDownloadTemplate}
+                            disabled={!scoresClassId}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Template
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Download Excel template with student IDs</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                </div>
+
+                {scoresClassId && scoresSubjectId ? (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">1st CA (20)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">2nd CA (20)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Exam (60)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Total (100)</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Grade</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {allStudents
+                          .filter(student => student.classId === scoresClassId)
+                          .map((student) => {
+                            const assessment = classAssessments.find(a => a.studentId === student.id);
+                            const currentScores = scoreInputs[student.id] || {};
+                            
+                            // Convert to numbers properly, handling both string and number inputs
+                            const firstCA = Number(currentScores.firstCA || assessment?.firstCA || 0);
+                            const secondCA = Number(currentScores.secondCA || assessment?.secondCA || 0);
+                            const exam = Number(currentScores.exam || assessment?.exam || 0);
+                            const total = firstCA + secondCA + exam;
+                            const grade = calculateGrade(total);
+                            
+                            return (
+                              <tr key={student.id}>
+                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                  {student.user.firstName} {student.user.lastName}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
+                                  {student.studentId}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    className="w-16 h-8 text-center"
+                                    value={currentScores.firstCA || assessment?.firstCA || ''}
+                                    onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
+                                    data-student-id={student.id}
+                                    data-field="firstCA"
+                                    placeholder="0"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    className="w-16 h-8 text-center"
+                                    value={currentScores.secondCA || assessment?.secondCA || ''}
+                                    onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
+                                    data-student-id={student.id}
+                                    data-field="secondCA"
+                                    placeholder="0"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max="60"
+                                    className="w-16 h-8 text-center"
+                                    value={currentScores.exam || assessment?.exam || ''}
+                                    onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
+                                    data-student-id={student.id}
+                                    data-field="exam"
+                                    placeholder="0"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900 dark:text-white">
+                                  {total}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                    grade === 'A' ? 'bg-green-500' : 
+                                    grade === 'B' ? 'bg-blue-500' : 
+                                    grade === 'C' ? 'bg-yellow-500' : 
+                                    grade === 'D' ? 'bg-orange-500' : 'bg-red-500'
+                                  } text-white`}>
+                                    {grade}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        }
+                      </tbody>
+                    </table>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            className="w-full"
+                            onClick={handleSaveAllScores}
+                            disabled={updateScoresMutation.isPending}
+                          >
+                            {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Save all entered scores to the database</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                      Select Class and Subject
+                    </h3>
+                    <p className="text-gray-500">
+                      Choose a class and subject above to view and manage student scores.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Teacher Grading Interface Tab */}
+          <TabsContent value="grading" className="space-y-6 table-container">
+            <TeacherGradesInterface 
+              currentTerm="First Term"
+              currentSession="2024/2025"
+              userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+            />
+          </TabsContent>
 
           {/* Financial Management Tab */}
           {/* Attendance Tab */}
@@ -3536,349 +3395,13 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Enhanced Report Cards Tab */}
+          {/* Report Cards Tab */}
           <TabsContent value="reports" className="space-y-6 table-container">
-            <Card>
-              <CardHeader>
-                <CardTitle>Report Card Management</CardTitle>
-                <CardDescription>
-                  Generate individual and bulk report cards for students
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="individual" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="individual">Individual Reports</TabsTrigger>
-                    <TabsTrigger value="bulk">Bulk Generation</TabsTrigger>
-                    <TabsTrigger value="settings">Term Settings</TabsTrigger>
-                  </TabsList>
-                  
-                  {/* Individual Reports Tab */}
-                  <TabsContent value="individual" className="mt-6">
-                    <ReportCardManagement 
-                      classes={classes}
-                      user={user}
-                    />
-                  </TabsContent>
-                  
-                  {/* Bulk Report Generation Tab */}
-                  <TabsContent value="bulk" className="mt-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <FileSpreadsheet className="h-5 w-5" />
-                          Bulk Report Generation
-                        </CardTitle>
-                        <CardDescription>
-                          Generate report cards for entire classes or the whole school at once
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-6">
-                        {/* School-wide Generation */}
-                        <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20">
-                          <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                            <School className="h-5 w-5" />
-                            Generate for Entire School
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                            Generate report cards for all students across all classes in this school
-                          </p>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                            <div>
-                              <Label>Term</Label>
-                              <Select defaultValue="First Term">
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select term" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="First Term">First Term</SelectItem>
-                                  <SelectItem value="Second Term">Second Term</SelectItem>
-                                  <SelectItem value="Third Term">Third Term</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label>Session</Label>
-                              <Select defaultValue="2024/2025">
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select session" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="2024/2025">2024/2025</SelectItem>
-                                  <SelectItem value="2025/2026">2025/2026</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="flex items-end">
-                              <Button 
-                                className="w-full bg-blue-600 hover:bg-blue-700"
-                                data-testid="button-generate-school-reports"
-                                onClick={async () => {
-                                  const schoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
-                                  if (!schoolId) {
-                                    toast({ title: "Error", description: "Please select a school", variant: "destructive" });
-                                    return;
-                                  }
-                                  
-                                  try {
-                                    const response = await apiRequest('/api/admin/reports/bulk', {
-                                      method: 'POST',
-                                      body: {
-                                        requestType: 'school',
-                                        schoolId: schoolId,
-                                        term: selectedBulkReportTerm,
-                                        session: selectedBulkReportSession
-                                      }
-                                    });
-                                    toast({ title: "Success", description: "Bulk report generation started successfully!" });
-                                    console.log("Bulk report request:", response);
-                                  } catch (error: any) {
-                                    toast({ title: "Error", description: error.message || "Failed to start bulk report generation", variant: "destructive" });
-                                  }
-                                }}
-                              >
-                                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                                Generate All Reports
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            <strong>Note:</strong> This will generate report cards for all {allStudents.length} students in the school
-                          </div>
-                        </div>
-
-                        {/* Class-wise Generation */}
-                        <div className="border rounded-lg p-4">
-                          <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-                            <Users className="h-5 w-5" />
-                            Generate by Class
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                            Generate report cards for all students in a specific class
-                          </p>
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                            <div>
-                              <Label>Select Class</Label>
-                              <Select value={selectedBulkClassId} onValueChange={setSelectedBulkClassId}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Choose class" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {sortClassesByOrder(classes).map((classItem) => (
-                                    <SelectItem key={classItem.id} value={classItem.id}>
-                                      {classItem.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label>Term</Label>
-                              <Select value={selectedBulkReportTerm} onValueChange={setSelectedBulkReportTerm}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select term" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="First Term">First Term</SelectItem>
-                                  <SelectItem value="Second Term">Second Term</SelectItem>
-                                  <SelectItem value="Third Term">Third Term</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label>Session</Label>
-                              <Select value={selectedBulkReportSession} onValueChange={setSelectedBulkReportSession}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select session" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="2024/2025">2024/2025</SelectItem>
-                                  <SelectItem value="2025/2026">2025/2026</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="flex items-end">
-                              <Button 
-                                className="w-full"
-                                data-testid="button-generate-class-reports"
-                                onClick={async () => {
-                                  const schoolId = user?.role === 'admin' ? selectedSchoolId : user?.schoolId;
-                                  if (!schoolId || !selectedBulkClassId) {
-                                    toast({ title: "Error", description: "Please select a school and class", variant: "destructive" });
-                                    return;
-                                  }
-                                  
-                                  try {
-                                    const response = await apiRequest('/api/admin/reports/bulk', {
-                                      method: 'POST',
-                                      body: {
-                                        requestType: 'class',
-                                        schoolId: schoolId,
-                                        classId: selectedBulkClassId,
-                                        term: selectedBulkReportTerm,
-                                        session: selectedBulkReportSession
-                                      }
-                                    });
-                                    toast({ title: "Success", description: "Class report generation started successfully!" });
-                                    console.log("Class report request:", response);
-                                  } catch (error: any) {
-                                    toast({ title: "Error", description: error.message || "Failed to start class report generation", variant: "destructive" });
-                                  }
-                                }}
-                              >
-                                <Users className="h-4 w-4 mr-2" />
-                                Generate Class Reports
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Generation Status */}
-                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                          <h4 className="font-medium mb-2">Generation Status</h4>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            Ready to generate reports. Select options above and click generate.
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-                  
-                  {/* Term Settings Tab */}
-                  <TabsContent value="settings" className="mt-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Calendar className="h-5 w-5" />
-                          Term & Session Settings
-                        </CardTitle>
-                        <CardDescription>
-                          Configure term dates and next term resumption information
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-6">
-                        {/* Next Term Resumption Date */}
-                        <div className="space-y-4">
-                          <h3 className="font-semibold text-lg">Next Term Resumption</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <Label htmlFor="next-term-date">Next Term Resume Date</Label>
-                              <Input
-                                id="next-term-date"
-                                type="date"
-                                value={nextTermDate}
-                                onChange={(e) => setNextTermDate(e.target.value)}
-                                data-testid="input-next-term-date"
-                                className="w-full"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor="next-term-name">Next Term</Label>
-                              <Select value={selectedNextTerm} onValueChange={setSelectedNextTerm}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select next term" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Second Term">Second Term</SelectItem>
-                                  <SelectItem value="Third Term">Third Term</SelectItem>
-                                  <SelectItem value="First Term">First Term (New Session)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <Button 
-                            className="w-full md:w-auto" 
-                            data-testid="button-save-term-settings"
-                            onClick={async () => {
-                              try {
-                                if (!selectedNextTerm || !nextTermDate) {
-                                  toast({ 
-                                    title: "Missing Information", 
-                                    description: "Please select next term and resumption date", 
-                                    variant: "destructive" 
-                                  });
-                                  return;
-                                }
-                                
-                                // Generate a UUID for the term
-                                const termId = crypto.randomUUID();
-                                
-                                const response = await apiRequest('/api/admin/term-settings', {
-                                  method: 'POST',
-                                  body: {
-                                    currentTerm: selectedNextTerm,
-                                    currentSession: "2024/2025",
-                                    termId: termId,
-                                    resumptionDate: nextTermDate
-                                  }
-                                });
-                                toast({ 
-                                  title: "Success", 
-                                  description: `Next term resumption date set for ${nextTermDate}!`,
-                                  className: "bg-green-50 text-green-800 border-green-200"
-                                });
-                                console.log("Term settings response:", response);
-                              } catch (error: any) {
-                                toast({ title: "Error", description: error.message || "Failed to save term settings", variant: "destructive" });
-                              }
-                            }}
-                          >
-                            <Save className="h-4 w-4 mr-2" />
-                            Save Term Settings
-                          </Button>
-                        </div>
-
-                        {/* Academic Calendar */}
-                        <div className="border-t pt-6">
-                          <h3 className="font-semibold text-lg mb-4">Academic Calendar Settings</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <Label>Current Term</Label>
-                              <Select defaultValue="First Term">
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="First Term">First Term</SelectItem>
-                                  <SelectItem value="Second Term">Second Term</SelectItem>
-                                  <SelectItem value="Third Term">Third Term</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label>Current Session</Label>
-                              <Select defaultValue="2024/2025">
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="2024/2025">2024/2025</SelectItem>
-                                  <SelectItem value="2025/2026">2025/2026</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="flex items-end">
-                              <Button className="w-full" variant="outline">
-                                <Calendar className="h-4 w-4 mr-2" />
-                                Update Calendar
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
+            <ReportCardManagement 
+              classes={classes}
+              user={user}
+            />
           </TabsContent>
-
-          {/* Users Tab */}
-          {user?.role === 'admin' && (
-            <TabsContent value="users" className="space-y-6">
-              <UsersManagement />
-            </TabsContent>
-          )}
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6 table-container">
@@ -6004,7 +5527,6 @@ export default function AdminDashboard() {
             </div>
           </DialogContent>
         </Dialog>
-
       </div>
     </TooltipProvider>
   );
