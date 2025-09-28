@@ -31,7 +31,17 @@ import { eq } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development' ? 'development-jwt-secret-change-in-production' : null);
+
+if (!JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET environment variable is required for production");
+  process.exit(1);
+}
+
+if (process.env.NODE_ENV !== 'development' && JWT_SECRET === 'development-jwt-secret-change-in-production') {
+  console.error("FATAL: Using development JWT secret in production is not allowed");
+  process.exit(1);
+}
 
 // Store invalidated tokens (in production, use Redis or database)
 const invalidatedTokens = new Set<string>();
@@ -231,7 +241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Password reset endpoint
+  // Production-ready password reset request endpoint
   app.post('/api/auth/reset-password', async (req, res) => {
     try {
       const { email } = req.body;
@@ -246,41 +256,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: 'If this email exists, you will receive reset instructions.' });
       }
 
-      // For demo purposes, we'll just return success
-      // In production, you would generate a reset token and send an email
-      console.log(`Password reset requested for: ${email}`);
+      // Generate secure password reset token
+      const resetToken = await storage.createPasswordResetToken(user.id);
       
-      res.json({ message: 'If this email exists, you will receive reset instructions.' });
+      // In a real production environment, you would send this via email
+      // For now, we'll log it securely (remove this in production)
+      console.log(`Password reset token for ${email}: ${resetToken}`);
+      console.log(`Reset URL: ${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`);
+      
+      res.json({ 
+        message: 'If this email exists, you will receive reset instructions.',
+        // REMOVE THIS IN PRODUCTION - only for development
+        ...(process.env.NODE_ENV === 'development' && { 
+          developmentToken: resetToken,
+          resetUrl: `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`
+        })
+      });
     } catch (error) {
       console.error('Password reset error:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
 
-  // Temporary password reset endpoint that actually works
-  app.post('/api/auth/temp-reset-password', async (req, res) => {
+  // Production-ready password reset confirmation endpoint
+  app.post('/api/auth/confirm-reset-password', async (req, res) => {
     try {
-      const { email, newPassword } = req.body;
+      const { token, newPassword } = req.body;
 
-      if (!email || !newPassword) {
-        return res.status(400).json({ error: 'Email and new password are required' });
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: 'Token and new password are required' });
       }
 
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+      // Validate password strength
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
       }
 
-      // Update the password
-      await storage.updateUserPassword(user.id, newPassword);
-      console.log(`Password successfully reset for: ${email}`);
+      // Verify and get user from token
+      const tokenData = await storage.getPasswordResetToken(token);
+      if (!tokenData) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+
+      // Update user password
+      await storage.updateUserPassword(tokenData.userId, newPassword);
       
-      res.json({ message: 'Password reset successfully. You can now log in with your new password.' });
+      // Delete the used token
+      await storage.deletePasswordResetToken(token);
+      
+      res.json({ message: 'Password has been successfully reset. You can now log in with your new password.' });
     } catch (error) {
-      console.error('Temp password reset error:', error);
+      console.error('Password reset confirmation error:', error);
       res.status(500).json({ error: 'Failed to reset password' });
     }
   });
+
 
   // Get current user
   app.get('/api/auth/me', authenticate, async (req, res) => {

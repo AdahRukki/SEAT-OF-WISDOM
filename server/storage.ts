@@ -15,6 +15,7 @@ import {
   settings,
   academicSessions,
   academicTerms,
+  passwordResetTokens,
   nonAcademicRatings,
   calendarEvents,
   type School,
@@ -237,6 +238,54 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date()
       })
       .where(eq(users.id, userId));
+  }
+
+  // Production-ready password reset token methods
+  async createPasswordResetToken(userId: string): Promise<string> {
+    // Generate cryptographically secure token
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    
+    // Set expiration to 1 hour from now
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    
+    // Delete any existing tokens for this user
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
+    
+    // Create new token
+    await db.insert(passwordResetTokens).values({
+      userId,
+      token,
+      expiresAt,
+    });
+    
+    return token;
+  }
+
+  async getPasswordResetToken(token: string): Promise<{ userId: string } | null> {
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token));
+    
+    if (!resetToken) return null;
+    
+    // Check if token is expired
+    if (new Date() > resetToken.expiresAt) {
+      // Delete expired token
+      await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+      return null;
+    }
+    
+    return { userId: resetToken.userId };
+  }
+
+  async deletePasswordResetToken(token: string): Promise<void> {
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+  }
+
+  async cleanupExpiredTokens(): Promise<void> {
+    await db.delete(passwordResetTokens).where(sql`expires_at < NOW()`);
   }
 
   async createUser(userData: InsertUser): Promise<User> {
