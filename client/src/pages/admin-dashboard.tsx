@@ -2534,7 +2534,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-1 h-auto p-1">
             <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Overview
             </TabsTrigger>
@@ -2553,6 +2553,9 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="reports" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Reports
+            </TabsTrigger>
+            <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+              Users
             </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Settings
