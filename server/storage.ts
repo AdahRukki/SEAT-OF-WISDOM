@@ -17,6 +17,7 @@ import {
   academicTerms,
   nonAcademicRatings,
   calendarEvents,
+  passwordResetTokens,
   type School,
   type User,
   type Student,
@@ -34,6 +35,8 @@ import {
   type AcademicTerm,
   type NonAcademicRating,
   type CalendarEvent,
+  type PasswordResetToken,
+  type InsertPasswordResetToken,
   type InsertUser,
   type InsertStudent,
   type InsertClass,
@@ -58,6 +61,7 @@ import {
 import { db } from "./db";
 import { eq, and, asc, desc, sql, inArray, ne } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 export interface IStorage {
   // Authentication
@@ -67,6 +71,10 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   verifyPassword(email: string, password: string): Promise<boolean>;
   updateUserPassword(userId: string, newPassword: string): Promise<void>;
+  
+  // Password reset operations
+  createPasswordResetToken(userId: string): Promise<string>;
+  verifyAndUsePasswordResetToken(token: string): Promise<string | null>;
   
   // School operations
   getAllSchools(): Promise<School[]>;
@@ -234,9 +242,62 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ 
         password: hashedPassword,
+        passwordUpdatedAt: new Date(),
         updatedAt: new Date()
       })
       .where(eq(users.id, userId));
+  }
+
+  async createPasswordResetToken(userId: string): Promise<string> {
+    // Generate a secure random token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    
+    // Hash the token for storage
+    const hashedToken = await bcrypt.hash(resetToken, 10);
+    
+    // Set expiration to 1 hour from now
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    
+    // Store the hashed token in database
+    await db.insert(passwordResetTokens).values({
+      userId,
+      tokenHash: hashedToken,
+      expiresAt
+    });
+    
+    // Return the plain token (to be sent in email)
+    return resetToken;
+  }
+
+  async verifyAndUsePasswordResetToken(token: string): Promise<string | null> {
+    // Get all non-expired, unused tokens
+    const tokens = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(
+        and(
+          eq(passwordResetTokens.usedAt, null),
+          sql`${passwordResetTokens.expiresAt} > NOW()`
+        )
+      );
+    
+    // Check each token to find a match
+    for (const dbToken of tokens) {
+      const isValidToken = await bcrypt.compare(token, dbToken.tokenHash);
+      
+      if (isValidToken) {
+        // Mark token as used
+        await db
+          .update(passwordResetTokens)
+          .set({ usedAt: new Date() })
+          .where(eq(passwordResetTokens.id, dbToken.id));
+        
+        return dbToken.userId;
+      }
+    }
+    
+    // No matching token found
+    return null;
   }
 
 
