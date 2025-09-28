@@ -1009,7 +1009,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/non-academic-ratings', authenticate, requireAdmin, async (req, res) => {
     try {
       const user = (req as any).user;
-      const ratingData = req.body; // Will validate in storage layer
+      const ratingData = req.body;
       const rating = await storage.createOrUpdateNonAcademicRating({
         ...ratingData,
         ratedBy: user.id
