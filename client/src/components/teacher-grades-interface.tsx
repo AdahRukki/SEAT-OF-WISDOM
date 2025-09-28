@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -91,6 +91,7 @@ export function TeacherGradesInterface({
     queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`],
     enabled: !!selectedClassId
   });
+
 
   const { data: nonAcademicRatings = [], isLoading: ratingsLoading } = useQuery<NonAcademicRating[]>({
     queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${currentTerm}/${currentSession}`],
@@ -262,26 +263,33 @@ export function TeacherGradesInterface({
     
     // Save all changes sequentially to avoid race conditions
     try {
-      const savePromises = Object.values(changesByStudent).map(({ studentId, subjectId, scores }) => {
+      // Process saves one by one to avoid race conditions
+      for (const { studentId, subjectId, scores } of Object.values(changesByStudent)) {
         const finalScores = {
           studentId,
           subjectId,
           ...scores
         };
-        return new Promise((resolve, reject) => {
+        
+        await new Promise((resolve, reject) => {
           saveAcademicScoreMutation.mutate(finalScores, {
             onSuccess: resolve,
             onError: reject
           });
         });
+      }
+      
+      // Wait for query to refetch before clearing temp scores
+      await queryClient.invalidateQueries({ 
+        queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] 
       });
       
-      await Promise.all(savePromises);
-      
-      // Clear all temp scores after successful save
-      setTempScores({});
-      setHasUnsavedChanges(false);
-      toast({ description: "All scores saved successfully!" });
+      // Small delay to ensure query refetch completes
+      setTimeout(() => {
+        setTempScores({});
+        setHasUnsavedChanges(false);
+        toast({ description: "All scores saved successfully!" });
+      }, 500);
       
     } catch (error) {
       toast({ 
