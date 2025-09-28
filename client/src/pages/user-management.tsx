@@ -37,6 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -250,7 +251,7 @@ export default function UserManagement() {
       lastName: userData.lastName,
       email: userData.email,
       schoolId: userData.schoolId || "",
-      isActive: userData.isActive,
+      isActive: userData.isActive ?? true,
       password: "",
       confirmPassword: "",
       changePassword: false
@@ -662,6 +663,202 @@ export default function UserManagement() {
             <div className="flex justify-end">
               <Button variant="outline" onClick={() => setIsProfileDialogOpen(false)}>
                 Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit User Dialog */}
+        <Dialog open={isEditUserDialogOpen} onOpenChange={setIsEditUserDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit User</DialogTitle>
+              <DialogDescription>
+                Update user account information and settings
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
+              {/* Basic Information */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-firstName">First Name</Label>
+                  <Input
+                    id="edit-firstName"
+                    data-testid="input-edit-firstName"
+                    value={editUserForm.firstName}
+                    onChange={(e) => setEditUserForm(prev => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="Enter first name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-lastName">Last Name</Label>
+                  <Input
+                    id="edit-lastName"
+                    data-testid="input-edit-lastName"
+                    value={editUserForm.lastName}
+                    onChange={(e) => setEditUserForm(prev => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Enter last name"
+                  />
+                </div>
+              </div>
+
+              {/* Email and School */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-email">Email Address</Label>
+                  <Input
+                    id="edit-email"
+                    data-testid="input-edit-email"
+                    type="email"
+                    value={editUserForm.email}
+                    onChange={(e) => setEditUserForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="Enter email address"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-school">School Assignment</Label>
+                  <Select
+                    value={editUserForm.schoolId}
+                    onValueChange={(value) => setEditUserForm(prev => ({ ...prev, schoolId: value }))}
+                  >
+                    <SelectTrigger data-testid="select-edit-school">
+                      <SelectValue placeholder="Select school" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All Schools (Admin)</SelectItem>
+                      {schools.map((school) => (
+                        <SelectItem key={school.id} value={school.id}>
+                          {school.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Account Status */}
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="edit-active-status"
+                  data-testid="switch-edit-active"
+                  checked={editUserForm.isActive}
+                  onCheckedChange={(checked) => setEditUserForm(prev => ({ ...prev, isActive: checked }))}
+                />
+                <Label htmlFor="edit-active-status">Account is active</Label>
+              </div>
+
+              {/* Password Change Section - Only for main admins */}
+              {user?.role === 'admin' && (
+                <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Switch
+                      id="change-password"
+                      data-testid="switch-change-password"
+                      checked={editUserForm.changePassword}
+                      onCheckedChange={(checked) => setEditUserForm(prev => ({ 
+                        ...prev, 
+                        changePassword: checked,
+                        password: checked ? prev.password : "",
+                        confirmPassword: checked ? prev.confirmPassword : ""
+                      }))}
+                    />
+                    <Label htmlFor="change-password" className="text-sm font-medium">
+                      Change user password
+                    </Label>
+                  </div>
+
+                  {editUserForm.changePassword && (
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="edit-new-password">New Password</Label>
+                        <div className="relative">
+                          <Input
+                            id="edit-new-password"
+                            data-testid="input-edit-new-password"
+                            type={showEditPassword ? "text" : "password"}
+                            value={editUserForm.password}
+                            onChange={(e) => setEditUserForm(prev => ({ ...prev, password: e.target.value }))}
+                            placeholder="Enter new password"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowEditPassword(!showEditPassword)}
+                          >
+                            {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-confirm-password">Confirm New Password</Label>
+                        <div className="relative">
+                          <Input
+                            id="edit-confirm-password"
+                            data-testid="input-edit-confirm-password"
+                            type={showConfirmPassword ? "text" : "password"}
+                            value={editUserForm.confirmPassword}
+                            onChange={(e) => setEditUserForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                            placeholder="Confirm new password"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          >
+                            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  setIsEditUserDialogOpen(false);
+                  setSelectedUser(null);
+                }}
+                data-testid="button-cancel-edit"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (editUserForm.changePassword && editUserForm.password !== editUserForm.confirmPassword) {
+                    toast({
+                      title: "Password Mismatch",
+                      description: "The new password and confirmation password do not match.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  const updateData = {
+                    id: selectedUser?.id,
+                    firstName: editUserForm.firstName,
+                    lastName: editUserForm.lastName,
+                    email: editUserForm.email,
+                    schoolId: editUserForm.schoolId || null,
+                    isActive: editUserForm.isActive,
+                    ...(editUserForm.changePassword && editUserForm.password && {
+                      password: editUserForm.password
+                    })
+                  };
+                  
+                  editUserMutation.mutate(updateData);
+                }}
+                disabled={editUserMutation.isPending}
+                data-testid="button-save-edit"
+              >
+                {editUserMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </DialogContent>
