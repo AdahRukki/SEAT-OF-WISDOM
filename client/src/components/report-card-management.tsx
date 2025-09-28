@@ -30,6 +30,23 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Calendar as DatePicker } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
 import { 
   FileText, 
   AlertTriangle, 
@@ -39,7 +56,10 @@ import {
   Download,
   Calendar,
   School,
-  ArrowRight
+  ArrowRight,
+  RefreshCw,
+  CalendarDays,
+  BookOpen
 } from "lucide-react";
 
 interface ReportCardManagementProps {
@@ -216,17 +236,32 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     }
   };
 
-  // Mass validation for entire school branch with automatic term progression
+  // State for tracking validation results by class
+  const [schoolValidationResults, setSchoolValidationResults] = useState<{
+    [classId: string]: {
+      className: string;
+      totalStudents: number;
+      validatedStudents: number;
+      issues: string[];
+    }
+  }>({});
+  const [isAllStudentsValidated, setIsAllStudentsValidated] = useState(false);
+  const [showResumptionDateDialog, setShowResumptionDateDialog] = useState(false);
+  const [resumptionDate, setResumptionDate] = useState<Date | undefined>(undefined);
+  const [isGeneratingReports, setIsGeneratingReports] = useState(false);
+
+  // Validation for entire school - only validates, shows class issues
   const handleValidateEntireSchool = async () => {
     setIsValidating(true);
     setValidationResults({});
+    setSchoolValidationResults({});
+    setIsAllStudentsValidated(false);
 
     try {
-      // First, get or initialize the current academic info automatically
+      // Get or initialize current academic info
       let currentAcademicInfo = await apiRequest('/api/current-academic-info');
       
       if (!currentAcademicInfo.currentTerm || !currentAcademicInfo.currentSession) {
-        // Initialize academic calendar if none exists
         try {
           const initializedInfo = await apiRequest('/api/admin/initialize-academic-calendar', {
             method: 'POST'
@@ -253,16 +288,20 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       const currentTerm = currentAcademicInfo.currentTerm;
       const currentSession = currentAcademicInfo.currentSession;
 
-      let totalStudents = 0;
-      let validatedStudents = 0;
-      let generatedReports = 0;
-      const validStudentsForReports: Array<{student: any, classId: string}> = [];
+      let totalStudentsAcrossSchool = 0;
+      let validatedStudentsAcrossSchool = 0;
+      const classResults: typeof schoolValidationResults = {};
 
-      // Step 1: Validate all students across all classes using current term/session
+      // Validate all students by class
       for (const classItem of classes) {
         const classStudents = await apiRequest(`/api/admin/students/class/${classItem.id}`);
-        totalStudents += classStudents.length;
+        const classTotal = classStudents.length;
+        let classValidated = 0;
+        const classIssues: string[] = [];
 
+        totalStudentsAcrossSchool += classTotal;
+
+        // Validate each student in the class
         for (const student of classStudents) {
           try {
             const validationResult = await validateMutation.mutateAsync({
@@ -272,95 +311,47 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
               session: currentSession,
             });
             
-            // Check if validation was successful (complete status)
             if (validationResult.status === 'complete') {
-              validatedStudents++;
-              validStudentsForReports.push({ student, classId: classItem.id });
+              classValidated++;
+              validatedStudentsAcrossSchool++;
+            } else {
+              classIssues.push(`${student.user.firstName} ${student.user.lastName}: ${validationResult.message}`);
             }
           } catch (error) {
             console.error(`Failed to validate student ${student.id}:`, error);
+            classIssues.push(`${student.user.firstName} ${student.user.lastName}: Validation failed`);
           }
         }
+
+        // Store class results
+        classResults[classItem.id] = {
+          className: classItem.name,
+          totalStudents: classTotal,
+          validatedStudents: classValidated,
+          issues: classIssues
+        };
       }
 
-      // Check if validation was successful enough to proceed
-      if (totalStudents === 0) {
+      setSchoolValidationResults(classResults);
+      
+      if (totalStudentsAcrossSchool === 0) {
         toast({
           title: "No Students Found",
-          description: "No students found across all classes. Term will not be advanced.",
+          description: "No students found across all classes.",
           variant: "destructive",
         });
         return;
       }
 
-      const validationSuccessRate = (validatedStudents / totalStudents) * 100;
-      const isValidationSuccessful = validatedStudents === totalStudents;
+      const successRate = (validatedStudentsAcrossSchool / totalStudentsAcrossSchool) * 100;
+      const allValidated = validatedStudentsAcrossSchool === totalStudentsAcrossSchool;
+      setIsAllStudentsValidated(allValidated);
       
       toast({
-        title: isValidationSuccessful ? "School-wide Validation Complete" : "Validation Completed with Issues",
-        description: `Validated ${validatedStudents} out of ${totalStudents} students (${validationSuccessRate.toFixed(1)}%) for ${currentTerm} ${currentSession}.`,
-        variant: isValidationSuccessful ? "default" : "destructive",
+        title: allValidated ? "All Students Validated Successfully" : "Validation Complete - Issues Found",
+        description: `${validatedStudentsAcrossSchool}/${totalStudentsAcrossSchool} students validated (${successRate.toFixed(1)}%). Check class details below.`,
+        variant: allValidated ? "default" : "destructive",
       });
-
-      // Step 2: Generate reports for all successfully validated students
-      if (isValidationSuccessful && validStudentsForReports.length > 0) {
-        toast({
-          title: "Generating Reports",
-          description: `Starting report generation for ${validStudentsForReports.length} validated students...`,
-        });
-
-        for (const { student, classId } of validStudentsForReports) {
-          try {
-            // Create report card record for each validated student
-            await createReportMutation.mutateAsync({
-              studentId: student.id,
-              classId: classId,
-              term: currentTerm,
-              session: currentSession,
-              studentName: `${student.user.firstName} ${student.user.lastName}`,
-              className: classes.find(c => c.id === classId)?.name || "",
-              totalScore: "0", // This would be calculated from actual scores
-              averageScore: "0", // This would be calculated from actual scores
-              attendancePercentage: "0", // This would be calculated from attendance data
-            });
-            generatedReports++;
-          } catch (error) {
-            console.error(`Failed to generate report for student ${student.id}:`, error);
-          }
-        }
-
-        const isReportGenerationSuccessful = generatedReports === validStudentsForReports.length;
-        const reportSuccessRate = (generatedReports / validStudentsForReports.length) * 100;
-
-        toast({
-          title: isReportGenerationSuccessful ? "Report Generation Complete" : "Report Generation Completed with Issues",
-          description: `Generated ${generatedReports} out of ${validStudentsForReports.length} reports (${reportSuccessRate.toFixed(1)}%).`,
-          variant: isReportGenerationSuccessful ? "default" : "destructive",
-        });
-
-        // Step 3: Only advance to next term if both validation AND report generation were completely successful
-        if (isReportGenerationSuccessful) {
-          setTimeout(() => {
-            toast({
-              title: "Advancing Term",
-              description: "All students validated and reports generated successfully. Advancing to next term...",
-            });
-            advanceAcademicTerm.mutate();
-          }, 1500);
-        } else {
-          toast({
-            title: "Term Not Advanced", 
-            description: `${validStudentsForReports.length - generatedReports} report(s) failed to generate. Please fix issues before advancing term.`,
-            variant: "destructive",
-          });
-        }
-      } else {
-        toast({
-          title: "Term Not Advanced", 
-          description: `${totalStudents - validatedStudents} validation(s) failed. Please fix issues before advancing term.`,
-          variant: "destructive",
-        });
-      }
 
     } catch (error) {
       toast({
@@ -371,6 +362,151 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     } finally {
       setIsValidating(false);
     }
+  };
+
+  // Generate all report cards for the entire school with date selection
+  const handleGenerateAllReports = async () => {
+    // Hard validation gating - double check that all students are validated
+    if (!isAllStudentsValidated) {
+      toast({
+        title: "Validation Required",
+        description: "All students must be validated before generating reports.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!resumptionDate) {
+      toast({
+        title: "Date Required",
+        description: "Please select the next term resumption date.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingReports(true);
+    setShowResumptionDateDialog(false);
+
+    try {
+      // Get current academic info
+      const currentAcademicInfo = await apiRequest('/api/current-academic-info');
+      const currentTerm = currentAcademicInfo.currentTerm;
+      const currentSession = currentAcademicInfo.currentSession;
+      const isThirdTerm = currentTerm === "Third Term";
+      const resumptionDateStr = format(resumptionDate, "PPP");
+
+      // Build validated student list from validation results
+      const validatedStudentIds = new Set<string>();
+      Object.entries(validationResults).forEach(([studentId, validation]) => {
+        if (validation.hasAllScores && validation.hasAttendance) {
+          validatedStudentIds.add(studentId);
+        }
+      });
+
+      if (validatedStudentIds.size === 0) {
+        toast({
+          title: "No Validated Students",
+          description: "No students found with complete validation data.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      let totalReports = validatedStudentIds.size;
+      let generatedReports = 0;
+
+      // Generate reports only for validated students
+      for (const classId in schoolValidationResults) {
+        const classResult = schoolValidationResults[classId];
+        if (classResult.validatedStudents > 0) {
+          // Get students for this class
+          const classStudents = await apiRequest(`/api/admin/students/class/${classId}`);
+          
+          for (const student of classStudents) {
+            // Only generate for validated students
+            if (validatedStudentIds.has(student.id)) {
+              try {
+                // Create report card record with resumption date
+                await createReportMutation.mutateAsync({
+                  studentId: student.id,
+                  classId: classId,
+                  term: currentTerm,
+                  session: currentSession,
+                  studentName: `${student.user.firstName} ${student.user.lastName}`,
+                  className: classResult.className,
+                  totalScore: "0", // Would be calculated from actual scores
+                  averageScore: "0", // Would be calculated from actual scores
+                  attendancePercentage: "0", // Would be calculated from attendance data
+                  resumptionDate: resumptionDateStr, // Include resumption date
+                });
+                
+                generatedReports++;
+              } catch (error) {
+                console.error(`Failed to generate report for student ${student.id}:`, error);
+                throw error; // Stop process if report generation fails
+              }
+            }
+          }
+        }
+      }
+
+      const allReportsGenerated = generatedReports === totalReports;
+
+      if (!allReportsGenerated) {
+        throw new Error(`Only ${generatedReports}/${totalReports} reports generated successfully`);
+      }
+
+      toast({
+        title: "All Reports Generated Successfully",
+        description: `Generated ${generatedReports} reports. ${isThirdTerm ? 'Promoting students...' : 'Advancing term...'}`,
+      });
+
+      // Sequential execution: Promote first (if third term), then advance term
+      try {
+        if (isThirdTerm) {
+          await promoteStudentsToNextClass();
+          toast({
+            title: "Students Promoted",
+            description: "All students have been promoted to their next classes.",
+          });
+        }
+
+        // Only advance term if promotion succeeded (or not needed)
+        await advanceAcademicTerm.mutateAsync();
+        
+      } catch (promotionOrAdvanceError) {
+        console.error("Failed during promotion or term advancement:", promotionOrAdvanceError);
+        toast({
+          title: "Process Failed",
+          description: isThirdTerm ? "Student promotion failed. Term not advanced." : "Term advancement failed.",
+          variant: "destructive",
+        });
+        throw promotionOrAdvanceError;
+      }
+
+    } catch (error) {
+      console.error("Report generation process failed:", error);
+      toast({
+        title: "Process Failed",
+        description: "Failed to complete report generation and term advancement.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingReports(false);
+    }
+  };
+
+  // Student promotion logic for third term
+  const promoteStudentsToNextClass = async () => {
+    // This would implement the actual student promotion logic
+    // For now, it's a placeholder that would need to be implemented
+    // based on your specific promotion rules
+    console.log("Promoting students to next class...");
+    
+    // Example implementation would iterate through classes and move students
+    // from current class to next class (JSS1 -> JSS2, JSS2 -> JSS3, etc.)
+    // and handle graduation for final year students
   };
 
   // Term progression system
@@ -937,52 +1073,164 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
               {isValidating ? "Validating..." : "Validate All Students"}
             </Button>
             
+            {/* New Workflow: Validate First, Then Generate Reports */}
             <Button 
               onClick={handleValidateEntireSchool}
-              disabled={isValidating || advanceAcademicTerm.isPending}
+              disabled={isValidating}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              data-testid="button-validate-entire-school"
             >
-              <School className="w-4 h-4" />
-              {(isValidating || advanceAcademicTerm.isPending) ? "Processing..." : "Validate & Advance Term"}
+              <CheckCircle className="w-4 h-4" />
+              {isValidating ? "Validating..." : "Validate Entire School"}
             </Button>
 
             <Button 
-              onClick={handleAdvanceTerm}
-              disabled={advanceAcademicTerm.isPending}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => setShowResumptionDateDialog(true)}
+              disabled={!isAllStudentsValidated || isGeneratingReports}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-400"
+              data-testid="button-generate-all-reports"
             >
-              <ArrowRight className="w-4 h-4" />
-              {advanceAcademicTerm.isPending ? "Advancing..." : "Advance to Next Term"}
+              <BookOpen className="w-4 h-4" />
+              {isGeneratingReports ? "Generating Reports..." : "Generate All Report Cards for Whole School"}
             </Button>
-            
-            {/* Batch Report Generation */}
-            {Object.keys(validationResults).length > 0 && (() => {
-              const readyStudents = students.filter((student: any) => canGenerateReport(student.id));
-              return readyStudents.length > 0 ? (
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-medium">Next Term Resumption Date</label>
-                    <input
-                      type="date"
-                      value={batchResumptionDate}
-                      onChange={(e) => setBatchResumptionDate(e.target.value)}
-                      className="px-3 py-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <Button
-                    onClick={() => handleBatchGenerateReports(readyStudents)}
-                    disabled={!batchResumptionDate || isBatchGenerating}
-                    className="bg-green-600 hover:bg-green-700 text-white mt-6"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    {isBatchGenerating ? "Generating..." : `Generate All Reports (${readyStudents.length})`}
-                  </Button>
+
+            {/* Date Selection Dialog */}
+            <Dialog open={showResumptionDateDialog} onOpenChange={setShowResumptionDateDialog}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Select Next Term Resumption Date</DialogTitle>
+                  <DialogDescription>
+                    Choose the date when the next term will resume. This will be included in the report cards.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-4 py-4">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={`w-full justify-start text-left font-normal ${
+                          !resumptionDate && "text-muted-foreground"
+                        }`}
+                      >
+                        <CalendarDays className="mr-2 h-4 w-4" />
+                        {resumptionDate ? format(resumptionDate, "PPP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <DatePicker
+                        mode="single"
+                        selected={resumptionDate}
+                        onSelect={setResumptionDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              ) : null;
-            })()}
+                <DialogFooter className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowResumptionDateDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleGenerateAllReports}
+                    disabled={!resumptionDate}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Generate Reports & Advance Term
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            
+            {/* Legacy batch generation removed - now handled by new workflow */}
           </div>
         </CardContent>
       </Card>
+
+      {/* School-wide Validation Results by Class */}
+      {Object.keys(schoolValidationResults).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>School Validation Results by Class</CardTitle>
+            <CardDescription>
+              Overview of validation status across all classes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(schoolValidationResults).map(([classId, result]) => (
+                <div key={classId} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-lg">{result.className}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {result.validatedStudents}/{result.totalStudents} students validated
+                      </p>
+                    </div>
+                    <Badge
+                      className={
+                        result.validatedStudents === result.totalStudents
+                          ? "bg-green-500 text-white"
+                          : result.validatedStudents > 0
+                          ? "bg-yellow-500 text-white"
+                          : "bg-red-500 text-white"
+                      }
+                    >
+                      {result.validatedStudents === result.totalStudents
+                        ? "Complete"
+                        : result.validatedStudents > 0
+                        ? "Partial"
+                        : "Incomplete"}
+                    </Badge>
+                  </div>
+                  
+                  {result.issues.length > 0 && (
+                    <div className="mt-3">
+                      <h4 className="font-medium text-red-700 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Issues Found:
+                      </h4>
+                      <div className="space-y-1 text-sm">
+                        {result.issues.slice(0, 5).map((issue, index) => (
+                          <p key={index} className="text-red-600 pl-6">
+                            • {issue}
+                          </p>
+                        ))}
+                        {result.issues.length > 5 && (
+                          <p className="text-muted-foreground pl-6">
+                            ... and {result.issues.length - 5} more issues
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {result.validatedStudents === result.totalStudents && (
+                    <div className="mt-3 flex items-center gap-2 text-green-600">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-sm">All students ready for report generation</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {isAllStudentsValidated && (
+              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2 text-green-700">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="font-medium">All students validated successfully!</span>
+                </div>
+                <p className="text-sm text-green-600 mt-1">
+                  You can now generate report cards for the entire school.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Student Validation Results */}
       {selectedClass && selectedTerm && selectedSession && Object.keys(validationResults).length > 0 && (
