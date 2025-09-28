@@ -902,24 +902,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/scores/bulk-update', authenticate, requireAdmin, async (req, res) => {
     try {
       const { scores } = req.body;
-      const results = [];
       
-      for (const scoreData of scores) {
-        const total = (scoreData.firstCA || 0) + (scoreData.secondCA || 0) + (scoreData.exam || 0);
-        const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
-        
-        const assessment = await storage.createOrUpdateAssessment({
-          ...scoreData,
-          total,
-          grade
-        });
-        results.push(assessment);
+      if (!scores || !Array.isArray(scores)) {
+        console.error("Invalid scores data:", req.body);
+        return res.status(400).json({ error: "Invalid scores data - expected array" });
       }
       
+      console.log(`Processing bulk score update for ${scores.length} students`);
+      const results = [];
+      const errors = [];
+      
+      for (let i = 0; i < scores.length; i++) {
+        const scoreData = scores[i];
+        try {
+          // Validate required fields
+          if (!scoreData.studentId || !scoreData.subjectId || !scoreData.classId) {
+            throw new Error(`Missing required fields for score ${i}: studentId, subjectId, or classId`);
+          }
+          
+          const total = (scoreData.firstCA || 0) + (scoreData.secondCA || 0) + (scoreData.exam || 0);
+          const grade = total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 60 ? 'C' : total >= 50 ? 'D' : 'F';
+          
+          const assessment = await storage.createOrUpdateAssessment({
+            ...scoreData,
+            total,
+            grade
+          });
+          results.push(assessment);
+          console.log(`Successfully updated score for student ${scoreData.studentId}`);
+        } catch (scoreError) {
+          console.error(`Error updating score for student ${scoreData.studentId}:`, scoreError);
+          errors.push({
+            studentId: scoreData.studentId,
+            error: scoreError.message
+          });
+        }
+      }
+      
+      if (errors.length > 0) {
+        console.warn(`Bulk update completed with ${errors.length} errors:`, errors);
+        return res.status(207).json({ 
+          message: `${results.length} scores updated successfully, ${errors.length} failed`, 
+          results, 
+          errors 
+        });
+      }
+      
+      console.log(`Bulk score update completed successfully for ${results.length} students`);
       res.json({ message: "Scores updated successfully", results });
     } catch (error) {
       console.error("Bulk score update error:", error);
-      res.status(500).json({ error: "Failed to update scores" });
+      res.status(500).json({ error: "Failed to update scores: " + error.message });
     }
   });
 

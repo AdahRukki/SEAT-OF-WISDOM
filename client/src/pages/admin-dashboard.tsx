@@ -613,29 +613,47 @@ export default function AdminDashboard() {
 
   const updateScoresMutation = useMutation({
     mutationFn: async (scoresArray: any[]) => {
-      // Send scores individually to the single assessment endpoint
-      const promises = scoresArray.map(scoreData => 
-        apiRequest('/api/assessments', {
-          method: 'POST',
-          body: scoreData
-        })
-      );
-      return await Promise.all(promises);
+      // Use the bulk update endpoint for better performance
+      return await apiRequest('/api/admin/scores/bulk-update', {
+        method: 'POST',
+        body: { scores: scoresArray }
+      });
     },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Scores updated successfully" });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/assessments'] });
-      // Also refresh the assessments for the current class/subject
-      if (scoresClassId && scoresSubjectId) {
+    onSuccess: (response) => {
+      // Handle both full success and partial failures (207)
+      if (response.errors && response.errors.length > 0) {
+        const failedCount = response.errors.length;
+        const successCount = response.results?.length || 0;
+        
+        toast({ 
+          title: "Partial Success", 
+          description: `${successCount} scores saved successfully, ${failedCount} failed. Check console for details.`,
+          variant: "destructive"
+        });
+        
+        console.warn("Score save failures:", response.errors);
+      } else {
+        toast({ title: "Success", description: "Scores updated successfully" });
+      }
+      
+      // Invalidate the exact query key that fetches assessments
+      if (scoresClassId && scoresSubjectId && scoresTerm && scoresSession) {
         queryClient.invalidateQueries({ 
-          queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId: scoresSubjectId }] 
+          queryKey: ['/api/admin/assessments', scoresClassId, scoresSubjectId, scoresTerm, scoresSession] 
         });
       }
+      // Also invalidate broader assessment queries for good measure
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/assessments'] });
       setScoreInputs({}); // Clear the input state after successful save
     },
     onError: (error) => {
       console.error("Score update error:", error);
-      toast({ title: "Error", description: "Failed to update scores", variant: "destructive" });
+      const errorMessage = error?.message || "Failed to update scores";
+      toast({ 
+        title: "Error", 
+        description: errorMessage, 
+        variant: "destructive" 
+      });
     }
   });
 
@@ -2859,9 +2877,9 @@ export default function AdminDashboard() {
                     <Select value={scoresSubjectId} onValueChange={(subjectId) => {
                       setScoresSubjectId(subjectId);
                       // Auto-refresh assessments when subject changes
-                      if (scoresClassId && subjectId) {
+                      if (scoresClassId && subjectId && scoresTerm && scoresSession) {
                         queryClient.invalidateQueries({ 
-                          queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId }] 
+                          queryKey: ['/api/admin/assessments', scoresClassId, subjectId, scoresTerm, scoresSession] 
                         });
                       }
                     }} disabled={!scoresClassId}>
