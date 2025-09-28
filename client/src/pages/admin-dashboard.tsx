@@ -213,6 +213,22 @@ export default function AdminDashboard() {
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
   const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
 
+  // User Management states
+  const [isCreateSubAdminDialogOpen, setIsCreateSubAdminDialogOpen] = useState(false);
+  const [isCreateMainAdminDialogOpen, setIsCreateMainAdminDialogOpen] = useState(false);
+  const [isUserProfileDialogOpen, setIsUserProfileDialogOpen] = useState(false);
+  const [selectedUserForProfile, setSelectedUserForProfile] = useState<User | null>(null);
+  
+  // User form states
+  const [adminFirstName, setAdminFirstName] = useState("");
+  const [adminLastName, setAdminLastName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [selectedSchoolForAdmin, setSelectedSchoolForAdmin] = useState("");
+  
+  // User management password visibility
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+
   // Fee type management states
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
   const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
@@ -463,6 +479,26 @@ export default function AdminDashboard() {
     },
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
+
+  // User Management queries
+  const { data: adminUsers = [] } = useQuery<User[]>({
+    queryKey: ['/api/admin/users?adminOnly=true'],
+    enabled: user?.role === 'admin'
+  });
+
+  // Helper functions for user management
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'admin': return 'bg-blue-600';
+      case 'sub-admin': return 'bg-purple-600';
+      default: return 'bg-gray-600';
+    }
+  };
+
+  const getSchoolName = (schoolId: string) => {
+    const school = schools.find(s => s.id === schoolId);
+    return school?.name || 'Unknown School';
+  };
   
   // Class subjects query for selected class in details dialog
   const { data: selectedClassSubjects = [] } = useQuery<Subject[]>({ 
@@ -630,6 +666,77 @@ export default function AdminDashboard() {
         variant: "destructive",
       });
     },
+  });
+
+  // User Management Mutations
+  const createSubAdminMutation = useMutation({
+    mutationFn: async (data: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      password: string;
+      schoolId: string;
+    }) => {
+      return apiRequest('/api/admin/create-sub-admin', {
+        method: 'POST',
+        body: data
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Sub-Admin Created",
+        description: "New sub-administrator has been created successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
+      setIsCreateSubAdminDialogOpen(false);
+      // Reset form
+      setAdminFirstName("");
+      setAdminLastName("");
+      setAdminEmail("");
+      setAdminPassword("");
+      setSelectedSchoolForAdmin("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Creation Failed",
+        description: error.message || "Failed to create sub-admin. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const createMainAdminMutation = useMutation({
+    mutationFn: async (data: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      password: string;
+    }) => {
+      return apiRequest('/api/admin/create-main-admin', {
+        method: 'POST',
+        body: data
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Main Admin Created",
+        description: "New main administrator has been created successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
+      setIsCreateMainAdminDialogOpen(false);
+      // Reset form
+      setAdminFirstName("");
+      setAdminLastName("");
+      setAdminEmail("");
+      setAdminPassword("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Creation Failed",
+        description: error.message || "Failed to create main admin. Please try again.",
+        variant: "destructive",
+      });
+    }
   });
 
   const updateScoresMutation = useMutation({
@@ -3478,11 +3585,14 @@ export default function AdminDashboard() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsCreateMainAdminDialogOpen(true)}
+                  >
                     <UserPlus className="w-4 h-4 mr-2" />
                     Add Main Admin
                   </Button>
-                  <Button>
+                  <Button onClick={() => setIsCreateSubAdminDialogOpen(true)}>
                     <UserPlus className="w-4 h-4 mr-2" />
                     Add Sub-Admin
                   </Button>
@@ -3510,47 +3620,306 @@ export default function AdminDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      <TableRow>
-                        <TableCell className="font-medium">
-                          Ada Hrukevwe
-                        </TableCell>
-                        <TableCell>adahrukevwe@gmail.com</TableCell>
-                        <TableCell>
-                          <Badge className="bg-blue-600 text-white">
-                            admin
-                          </Badge>
-                        </TableCell>
-                        <TableCell>All Schools</TableCell>
-                        <TableCell>
-                          <Badge variant="default">Active</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm">
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      {adminUsers.map((adminUser) => (
+                        <TableRow key={adminUser.id}>
+                          <TableCell className="font-medium">
+                            {adminUser.firstName} {adminUser.lastName}
+                          </TableCell>
+                          <TableCell>{adminUser.email}</TableCell>
+                          <TableCell>
+                            <Badge className={`${getRoleBadgeColor(adminUser.role)} text-white`}>
+                              {adminUser.role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {adminUser.schoolId ? getSchoolName(adminUser.schoolId) : 'All Schools'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={adminUser.isActive ? 'default' : 'secondary'}>
+                              {adminUser.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedUserForProfile(adminUser);
+                                  setIsUserProfileDialogOpen(true);
+                                }}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => {
+                                  // TODO: Implement edit functionality
+                                  toast({
+                                    title: "Coming Soon",
+                                    description: "Edit user functionality will be added soon.",
+                                  });
+                                }}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
                 
-                <div className="text-center py-8 text-muted-foreground">
-                  <p className="text-sm">
-                    User management functionality will be integrated here.
-                    <br />
-                    For now, you can access full user management at 
-                    <a href="/portal/users" className="text-blue-600 hover:underline ml-1">
-                      /portal/users
-                    </a>
-                  </p>
-                </div>
+                {adminUsers.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">
+                      No admin users found. Click "Add Main Admin" or "Add Sub-Admin" to create administrators.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
+
+            {/* Create Main Admin Dialog */}
+            <Dialog open={isCreateMainAdminDialogOpen} onOpenChange={setIsCreateMainAdminDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create Main Administrator</DialogTitle>
+                  <DialogDescription>
+                    Create a new main admin with full system access
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="main-firstName">First Name</Label>
+                      <Input
+                        id="main-firstName"
+                        value={adminFirstName}
+                        onChange={(e) => setAdminFirstName(e.target.value)}
+                        placeholder="Enter first name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="main-lastName">Last Name</Label>
+                      <Input
+                        id="main-lastName"
+                        value={adminLastName}
+                        onChange={(e) => setAdminLastName(e.target.value)}
+                        placeholder="Enter last name"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="main-email">Email</Label>
+                    <Input
+                      id="main-email"
+                      type="email"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      placeholder="Enter email address"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="main-password">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="main-password"
+                        type={showAdminPassword ? "text" : "password"}
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="Enter password"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      >
+                        {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsCreateMainAdminDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => createMainAdminMutation.mutate({ 
+                      firstName: adminFirstName, 
+                      lastName: adminLastName, 
+                      email: adminEmail, 
+                      password: adminPassword 
+                    })}
+                    disabled={!adminFirstName || !adminLastName || !adminEmail || !adminPassword || createMainAdminMutation.isPending}
+                  >
+                    {createMainAdminMutation.isPending ? "Creating..." : "Create Main Admin"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Create Sub-Admin Dialog */}
+            <Dialog open={isCreateSubAdminDialogOpen} onOpenChange={setIsCreateSubAdminDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create Sub-Administrator</DialogTitle>
+                  <DialogDescription>
+                    Create a new sub-admin who will manage a specific school branch
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="sub-firstName">First Name</Label>
+                      <Input
+                        id="sub-firstName"
+                        value={adminFirstName}
+                        onChange={(e) => setAdminFirstName(e.target.value)}
+                        placeholder="Enter first name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="sub-lastName">Last Name</Label>
+                      <Input
+                        id="sub-lastName"
+                        value={adminLastName}
+                        onChange={(e) => setAdminLastName(e.target.value)}
+                        placeholder="Enter last name"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="sub-email">Email</Label>
+                    <Input
+                      id="sub-email"
+                      type="email"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      placeholder="Enter email address"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="sub-password">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="sub-password"
+                        type={showAdminPassword ? "text" : "password"}
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="Enter password"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      >
+                        {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="sub-school">Assign to School</Label>
+                    <Select value={selectedSchoolForAdmin} onValueChange={setSelectedSchoolForAdmin}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a school" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {schools.map(school => (
+                          <SelectItem key={school.id} value={school.id}>
+                            {school.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsCreateSubAdminDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => createSubAdminMutation.mutate({ 
+                      firstName: adminFirstName, 
+                      lastName: adminLastName, 
+                      email: adminEmail, 
+                      password: adminPassword, 
+                      schoolId: selectedSchoolForAdmin 
+                    })}
+                    disabled={!adminFirstName || !adminLastName || !adminEmail || !adminPassword || !selectedSchoolForAdmin || createSubAdminMutation.isPending}
+                  >
+                    {createSubAdminMutation.isPending ? "Creating..." : "Create Sub-Admin"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* User Profile Dialog */}
+            <Dialog open={isUserProfileDialogOpen} onOpenChange={setIsUserProfileDialogOpen}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>User Profile</DialogTitle>
+                  <DialogDescription>
+                    View detailed user information
+                  </DialogDescription>
+                </DialogHeader>
+                {selectedUserForProfile && (
+                  <div className="grid gap-6 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Name</Label>
+                        <p className="text-base">{selectedUserForProfile.firstName} {selectedUserForProfile.lastName}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Email</Label>
+                        <p className="text-base">{selectedUserForProfile.email}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Role</Label>
+                        <Badge className={`${getRoleBadgeColor(selectedUserForProfile.role)} text-white`}>
+                          {selectedUserForProfile.role}
+                        </Badge>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">School</Label>
+                        <p className="text-base">
+                          {selectedUserForProfile.schoolId ? getSchoolName(selectedUserForProfile.schoolId) : 'All Schools'}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                        <Badge variant={selectedUserForProfile.isActive ? 'default' : 'secondary'}>
+                          {selectedUserForProfile.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Created</Label>
+                        <p className="text-base">
+                          {selectedUserForProfile.createdAt ? new Date(selectedUserForProfile.createdAt).toLocaleDateString() : 'Unknown'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={() => setIsUserProfileDialogOpen(false)}>
+                    Close
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Settings Tab */}
