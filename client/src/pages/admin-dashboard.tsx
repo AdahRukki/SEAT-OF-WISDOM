@@ -102,7 +102,6 @@ import {
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
-import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
 import { BehavioralRatingsInterface } from "@/components/behavioral-ratings-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
 // Logo is now loaded dynamically via useLogo hook
@@ -3209,11 +3208,11 @@ export default function AdminDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <TeacherGradesInterface 
-                  currentTerm="First Term"
-                  currentSession="2024/2025"
-                  userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-                />
+                <div className="text-center py-12 border rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <BookOpen className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Score Entry System Restored</h3>
+                  <p className="text-gray-500">The score entry system has been reverted to the previous stable version</p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
