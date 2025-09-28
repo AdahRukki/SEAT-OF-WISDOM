@@ -59,38 +59,18 @@ export default function Login() {
 
     setIsResetting(true);
     try {
-      // Try Firebase password reset first
-      if (resetEmail === "adahrukki@gmail.com") {
-        await sendPasswordResetEmail(auth, resetEmail);
-        toast({
-          title: "Password Reset Email Sent",
-          description: "Check your Gmail inbox for password reset instructions.",
-        });
-      } else {
-        // For local accounts, send reset request to backend
-        const response = await fetch('/api/auth/reset-password', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email: resetEmail }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to send reset email');
-        }
-
-        toast({
-          title: "Password Reset",
-          description: "If this email exists in our system, you'll receive reset instructions.",
-        });
-      }
+      // Use Firebase password reset for all email addresses
+      await sendPasswordResetEmail(auth, resetEmail);
+      toast({
+        title: "Password Reset Email Sent",
+        description: "Check your email inbox for password reset instructions. If you don't receive an email, the address may not be registered with Firebase authentication.",
+      });
       setShowForgotPassword(false);
       setResetEmail("");
     } catch (error) {
       toast({
         title: "Reset Failed",
-        description: error instanceof Error ? error.message : "Please try again later.",
+        description: error instanceof Error ? error.message : "Please check the email address and try again.",
         variant: "destructive",
       });
     } finally {
@@ -203,7 +183,7 @@ export default function Login() {
                 <div className="mt-3 p-2 bg-amber-50 dark:bg-amber-900/20 rounded border-l-4 border-amber-400">
                   <p className="text-xs text-amber-700 dark:text-amber-300">
                     <strong>Note:</strong> Contact your administrator for login credentials. 
-                    Some accounts may use Firebase Authentication or local passwords.
+                    Password reset is available for Firebase-authenticated accounts only.
                   </p>
                 </div>
               </div>
