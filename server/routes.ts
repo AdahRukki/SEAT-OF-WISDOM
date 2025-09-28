@@ -421,6 +421,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Initialize academic calendar if none exists
+  app.post('/api/admin/initialize-academic-calendar', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const result = await storage.initializeAcademicCalendar();
+      res.json(result);
+    } catch (error) {
+      console.error("Initialize academic calendar error:", error);
+      res.status(400).json({ error: "Failed to initialize academic calendar" });
+    }
+  });
+
   // Student Promotion System
   app.post('/api/admin/promote-students', authenticate, requireAdmin, async (req, res) => {
     try {

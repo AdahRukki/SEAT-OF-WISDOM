@@ -216,24 +216,47 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     }
   };
 
-  // Mass validation for entire school branch
+  // Mass validation for entire school branch with automatic term progression
   const handleValidateEntireSchool = async () => {
-    if (!selectedTerm || !selectedSession) {
-      toast({
-        title: "Missing Selection",
-        description: "Please select term and session first",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsValidating(true);
     setValidationResults({});
 
     try {
+      // First, get or initialize the current academic info automatically
+      let currentAcademicInfo = await apiRequest('/api/current-academic-info');
+      
+      if (!currentAcademicInfo.currentTerm || !currentAcademicInfo.currentSession) {
+        // Initialize academic calendar if none exists
+        try {
+          const initializedInfo = await apiRequest('/api/admin/initialize-academic-calendar', {
+            method: 'POST'
+          });
+          currentAcademicInfo = {
+            currentTerm: initializedInfo.term,
+            currentSession: initializedInfo.session
+          };
+          
+          toast({
+            title: "Academic Calendar Initialized",
+            description: `Created ${initializedInfo.term} ${initializedInfo.session} as the active term.`,
+          });
+        } catch (error) {
+          toast({
+            title: "Initialization Failed",
+            description: "Failed to initialize academic calendar. Please contact administrator.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      const currentTerm = currentAcademicInfo.currentTerm;
+      const currentSession = currentAcademicInfo.currentSession;
+
       let totalStudents = 0;
       let validatedStudents = 0;
 
+      // Validate all students across all classes using current term/session
       for (const classItem of classes) {
         const classStudents = await apiRequest(`/api/admin/students/class/${classItem.id}`);
         totalStudents += classStudents.length;
@@ -243,8 +266,8 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
             await validateMutation.mutateAsync({
               studentId: student.id,
               classId: classItem.id,
-              term: selectedTerm,
-              session: selectedSession,
+              term: currentTerm,
+              session: currentSession,
             });
             validatedStudents++;
           } catch (error) {
@@ -252,15 +275,47 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           }
         }
       }
+
+      // Check if validation was successful enough to advance term
+      if (totalStudents === 0) {
+        toast({
+          title: "No Students Found",
+          description: "No students found across all classes. Term will not be advanced.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const successRate = (validatedStudents / totalStudents) * 100;
+      const isValidationSuccessful = validatedStudents === totalStudents;
       
       toast({
-        title: "School-wide Validation Complete",
-        description: `Validated ${validatedStudents} out of ${totalStudents} students across all classes.`,
+        title: isValidationSuccessful ? "School-wide Validation Complete" : "Validation Completed with Issues",
+        description: `Validated ${validatedStudents} out of ${totalStudents} students (${successRate.toFixed(1)}%) for ${currentTerm} ${currentSession}.`,
+        variant: isValidationSuccessful ? "default" : "destructive",
       });
+
+      // Only advance to next term if validation was completely successful
+      if (isValidationSuccessful) {
+        setTimeout(() => {
+          toast({
+            title: "Advancing Term",
+            description: "All students validated successfully. Advancing to next term...",
+          });
+          advanceAcademicTerm.mutate();
+        }, 1500); // Small delay to allow user to see validation success message
+      } else {
+        toast({
+          title: "Term Not Advanced", 
+          description: `${totalStudents - validatedStudents} validation(s) failed. Please fix issues before advancing term.`,
+          variant: "destructive",
+        });
+      }
+
     } catch (error) {
       toast({
-        title: "Mass Validation Error",
-        description: "Some validations failed during school-wide validation.",
+        title: "Validation Error",
+        description: "Failed to complete school-wide validation. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -834,11 +889,11 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
             
             <Button 
               onClick={handleValidateEntireSchool}
-              disabled={!selectedTerm || !selectedSession || isValidating}
+              disabled={isValidating || advanceAcademicTerm.isPending}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
             >
               <School className="w-4 h-4" />
-              {isValidating ? "Validating..." : "Validate Entire School Branch"}
+              {(isValidating || advanceAcademicTerm.isPending) ? "Processing..." : "Validate & Advance Term"}
             </Button>
 
             <Button 

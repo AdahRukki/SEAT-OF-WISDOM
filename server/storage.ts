@@ -56,7 +56,7 @@ import {
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray, ne } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -157,6 +157,10 @@ export interface IStorage {
   getAcademicTerms(sessionId?: string): Promise<AcademicTerm[]>;
   getActiveTerm(): Promise<AcademicTerm | undefined>;
   setActiveTerm(termId: string): Promise<AcademicTerm>;
+  
+  // Academic calendar management
+  initializeAcademicCalendar(): Promise<{ session: string; term: string }>;
+  advanceAcademicTerm(): Promise<{ newTerm: string; newSession: string }>;
   
   // Student promotion system
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
@@ -1218,6 +1222,98 @@ export class DatabaseStorage implements IStorage {
 
 
 
+
+  async initializeAcademicCalendar(): Promise<{ session: string; term: string }> {
+    try {
+      // Check if any active session/term exists
+      const currentInfo = await this.getCurrentAcademicInfo();
+      if (currentInfo.currentSession && currentInfo.currentTerm) {
+        return {
+          session: currentInfo.currentSession,
+          term: currentInfo.currentTerm
+        };
+      }
+
+      // Use transaction for safe initialization
+      return await db.transaction(async (tx) => {
+        // Create default session for current academic year
+        const currentYear = new Date().getFullYear();
+        const sessionYear = `${currentYear}/${currentYear + 1}`;
+
+        // Upsert session - create if doesn't exist
+        let session;
+        const [existingSession] = await tx
+          .select()
+          .from(academicSessions)
+          .where(eq(academicSessions.sessionYear, sessionYear))
+          .limit(1);
+
+        if (existingSession) {
+          session = existingSession;
+        } else {
+          [session] = await tx
+            .insert(academicSessions)
+            .values({
+              sessionYear,
+              startDate: new Date(),
+              endDate: new Date(currentYear + 1, 7, 31), // End of next August
+              isActive: false
+            })
+            .returning();
+        }
+
+        // Check if First Term already exists for this session
+        const [existingTerm] = await tx
+          .select()
+          .from(academicTerms)
+          .where(
+            and(
+              eq(academicTerms.sessionId, session.id),
+              eq(academicTerms.termName, "First Term")
+            )
+          )
+          .limit(1);
+
+        let term;
+        if (existingTerm) {
+          term = existingTerm;
+        } else {
+          // Create First Term for this session
+          [term] = await tx
+            .insert(academicTerms)
+            .values({
+              termName: "First Term",
+              sessionId: session.id,
+              startDate: new Date(),
+              endDate: new Date(currentYear, 11, 15), // Mid December
+              resumptionDate: new Date(currentYear, 8, 15), // Mid September
+              isActive: false
+            })
+            .returning();
+        }
+
+        // Safely deactivate other sessions and terms, then activate the new ones
+        await tx.update(academicSessions).set({ isActive: false }).where(ne(academicSessions.id, session.id));
+        await tx.update(academicTerms).set({ isActive: false }).where(ne(academicTerms.id, term.id));
+        
+        await tx.update(academicSessions)
+          .set({ isActive: true })
+          .where(eq(academicSessions.id, session.id));
+        
+        await tx.update(academicTerms)
+          .set({ isActive: true })
+          .where(eq(academicTerms.id, term.id));
+
+        return {
+          session: sessionYear,
+          term: "First Term"
+        };
+      });
+    } catch (error) {
+      console.error("Error initializing academic calendar:", error);
+      throw error;
+    }
+  }
 
   async getCurrentAcademicInfo(): Promise<{
     currentSession: string | null;
