@@ -2465,7 +2465,7 @@ export default function AdminDashboard() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <a
-                      href="/users"
+                      href="/portal/users"
                       className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
                     >
                       <Users className="w-4 h-4" />
@@ -2480,7 +2480,7 @@ export default function AdminDashboard() {
 
               {/* User Info - Clickable Profile Link */}
               <a 
-                href="/profile"
+                href="/portal/profile"
                 className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
               >
                 <User className="h-4 w-4" />
