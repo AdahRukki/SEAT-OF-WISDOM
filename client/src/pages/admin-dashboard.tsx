@@ -322,8 +322,6 @@ export default function AdminDashboard() {
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [globalTerm, setGlobalTerm] = useState("First Term");
   const [globalSession, setGlobalSession] = useState("2024/2025");
-  const [isCreateSessionDialogOpen, setIsCreateSessionDialogOpen] = useState(false);
-  const [newSessionYear, setNewSessionYear] = useState("");
   
 
   
@@ -1170,22 +1168,6 @@ export default function AdminDashboard() {
   });
 
   // Create new academic session
-  const createSessionMutation = useMutation({
-    mutationFn: async (sessionData: {sessionYear: string}) => {
-      return await apiRequest('/api/admin/sessions', {
-        method: 'POST',
-        body: sessionData
-      });
-    },
-    onSuccess: () => {
-      toast({ title: "Success", description: "New session created" });
-      setIsCreateSessionDialogOpen(false);
-      setNewSessionYear("");
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to create session", variant: "destructive" });
-    }
-  });
 
   // Update student mutation
   const updateStudentMutation = useMutation({
@@ -4852,22 +4834,6 @@ export default function AdminDashboard() {
                 </Select>
               </div>
               
-              <div className="border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Create New Session</Label>
-                    <p className="text-sm text-gray-500">Add a new academic session</p>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setIsCreateSessionDialogOpen(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    New Session
-                  </Button>
-                </div>
-              </div>
-              
               <div className="flex justify-between pt-4">
                 <Button variant="outline" onClick={() => setIsSettingsDialogOpen(false)}>
                   Cancel
@@ -5267,41 +5233,6 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* Create New Session Dialog */}
-        <Dialog open={isCreateSessionDialogOpen} onOpenChange={setIsCreateSessionDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Academic Session</DialogTitle>
-              <DialogDescription>
-                Add a new academic session to the system
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="newSessionYear">Session Year</Label>
-                <Input
-                  id="newSessionYear"
-                  value={newSessionYear}
-                  onChange={(e) => setNewSessionYear(e.target.value)}
-                  placeholder="e.g., 2025/2026"
-                />
-                <p className="text-sm text-gray-500 mt-1">Format: YYYY/YYYY</p>
-              </div>
-              
-              <div className="flex justify-between pt-4">
-                <Button variant="outline" onClick={() => setIsCreateSessionDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={() => createSessionMutation.mutate({sessionYear: newSessionYear})}
-                  disabled={!newSessionYear || createSessionMutation.isPending}
-                >
-                  {createSessionMutation.isPending ? "Creating..." : "Create Session"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         {/* Report Generation Dialog */}
         <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
