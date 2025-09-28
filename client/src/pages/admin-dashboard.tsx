@@ -2507,9 +2507,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Scores
             </TabsTrigger>
-            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Grading
-            </TabsTrigger>
+            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">Ratings</TabsTrigger>
             <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Attendance
             </TabsTrigger>
