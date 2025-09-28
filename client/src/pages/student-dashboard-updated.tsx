@@ -17,7 +17,8 @@ import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeO
 // Logo is now loaded dynamically via useLogo hook
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
-import { changePasswordSchema } from "@shared/schema";
+import { changePasswordSchema, calculateGrade } from "@shared/schema";
+import { InlineReportCard } from "@/components/inline-report-card";
 import type { z } from "zod";
 
 type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
@@ -32,6 +33,7 @@ export default function StudentDashboard() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showInlineReportCard, setShowInlineReportCard] = useState(false);
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
@@ -332,15 +334,8 @@ export default function StudentDashboard() {
                   const exam = Number(assessment.exam || 0);
                   const total = firstCA + secondCA + exam;
                   
-                  let grade = 'F';
-                  let remark = 'Fail';
-                  
-                  if (total >= 90) { grade = 'A+'; remark = 'Excellent'; }
-                  else if (total >= 80) { grade = 'A'; remark = 'Very Good'; }
-                  else if (total >= 70) { grade = 'B'; remark = 'Good'; }
-                  else if (total >= 60) { grade = 'C'; remark = 'Credit'; }
-                  else if (total >= 50) { grade = 'D'; remark = 'Pass'; }
-                  else if (total >= 40) { grade = 'E'; remark = 'Poor'; }
+                  // Use the correct WAEC grading standards
+                  const { grade, remark } = calculateGrade(total);
                   
                   return `
                     <tr>
@@ -597,19 +592,54 @@ export default function StudentDashboard() {
                     Your comprehensive academic report with detailed scores and grades
                   </CardDescription>
                 </div>
-                <Button onClick={handlePrintDetailedReport} className="no-print">
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print Report Card
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => setShowInlineReportCard(!showInlineReportCard)} 
+                    variant="outline"
+                    className="no-print"
+                    data-testid="button-view-report"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
+                  </Button>
+                  <Button onClick={handlePrintDetailedReport} className="no-print" data-testid="button-print-report">
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Report Card
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <Button
-                  onClick={handlePrintDetailedReport}
-                  className="mb-4"
-                >
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print Detailed Report Card
-                </Button>
+                <div className="flex gap-2 mb-4">
+                  <Button
+                    onClick={() => setShowInlineReportCard(!showInlineReportCard)}
+                    variant="outline"
+                    data-testid="button-view-report-content"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
+                  </Button>
+                  <Button
+                    onClick={handlePrintDetailedReport}
+                    data-testid="button-print-report-content"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Detailed Report Card
+                  </Button>
+                </div>
+                
+                {/* Inline Report Card Viewer */}
+                {showInlineReportCard && profile && (
+                  <div className="mb-6" data-testid="inline-report-card">
+                    <InlineReportCard
+                      profile={profile}
+                      assessments={assessments}
+                      user={user}
+                      selectedTerm={selectedTerm}
+                      selectedSession={selectedSession}
+                      calculateAge={calculateAge}
+                    />
+                  </div>
+                )}
                 
                 {/* Preview of the report card data */}
                 <div className="border rounded-lg p-6 space-y-6">
