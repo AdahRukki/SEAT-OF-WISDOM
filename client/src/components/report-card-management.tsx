@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -111,6 +111,19 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     queryKey: [`/api/admin/students/class/${selectedClass}`],
     enabled: !!selectedClass,
   });
+
+  // Use same academic info query as Settings for synchronization
+  const { data: academicInfo } = useQuery({
+    queryKey: ['/api/current-academic-info'],
+  });
+
+  // Sync local state with academic info from database (single source of truth)
+  useEffect(() => {
+    if (academicInfo) {
+      setSelectedTerm(academicInfo.currentTerm);
+      setSelectedSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
 
   // Validation mutation
   const validateMutation = useMutation({
@@ -258,22 +271,18 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     setIsAllStudentsValidated(false);
 
     try {
-      // Get or initialize current academic info
-      let currentAcademicInfo = await apiRequest('/api/current-academic-info');
-      
-      if (!currentAcademicInfo.currentTerm || !currentAcademicInfo.currentSession) {
+      // Use shared academic info instead of direct API call
+      if (!academicInfo?.currentTerm || !academicInfo?.currentSession) {
         try {
-          const initializedInfo = await apiRequest('/api/admin/initialize-academic-calendar', {
+          await apiRequest('/api/admin/initialize-academic-calendar', {
             method: 'POST'
           });
-          currentAcademicInfo = {
-            currentTerm: initializedInfo.term,
-            currentSession: initializedInfo.session
-          };
+          // Refresh the academic info query after initialization
+          queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
           
           toast({
             title: "Academic Calendar Initialized",
-            description: `Created ${initializedInfo.term} ${initializedInfo.session} as the active term.`,
+            description: "Academic calendar has been initialized successfully.",
           });
         } catch (error) {
           toast({
@@ -285,8 +294,8 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         }
       }
 
-      const currentTerm = currentAcademicInfo.currentTerm;
-      const currentSession = currentAcademicInfo.currentSession;
+      const currentTerm = academicInfo?.currentTerm || selectedTerm;
+      const currentSession = academicInfo?.currentSession || selectedSession;
 
       let totalStudentsAcrossSchool = 0;
       let validatedStudentsAcrossSchool = 0;
@@ -389,10 +398,9 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     setShowResumptionDateDialog(false);
 
     try {
-      // Get current academic info
-      const currentAcademicInfo = await apiRequest('/api/current-academic-info');
-      const currentTerm = currentAcademicInfo.currentTerm;
-      const currentSession = currentAcademicInfo.currentSession;
+      // Use shared academic info instead of direct API call
+      const currentTerm = academicInfo?.currentTerm || selectedTerm;
+      const currentSession = academicInfo?.currentSession || selectedSession;
       const isThirdTerm = currentTerm === "Third Term";
       const resumptionDateStr = format(resumptionDate, "PPP");
 
@@ -499,14 +507,115 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
   // Student promotion logic for third term
   const promoteStudentsToNextClass = async () => {
-    // This would implement the actual student promotion logic
-    // For now, it's a placeholder that would need to be implemented
-    // based on your specific promotion rules
-    console.log("Promoting students to next class...");
+    console.log("Starting student promotion process...");
     
-    // Example implementation would iterate through classes and move students
-    // from current class to next class (JSS1 -> JSS2, JSS2 -> JSS3, etc.)
-    // and handle graduation for final year students
+    try {
+      let totalPromoted = 0;
+      let totalGraduated = 0;
+      
+      // Process each class with validated students
+      for (const classId in schoolValidationResults) {
+        const classResult = schoolValidationResults[classId];
+        if (classResult.validatedStudents > 0) {
+          // Get students for this class
+          const classStudents = await apiRequest(`/api/admin/students/class/${classId}`);
+          
+          // Determine next class for this class
+          const nextClassId = getNextClass(classId);
+          
+          if (nextClassId === 'GRADUATE') {
+            // Students graduate (SS3 → Graduate)
+            const studentIds = classStudents.map((s: any) => s.id);
+            if (studentIds.length > 0) {
+              await apiRequest('/api/admin/promote-students', {
+                method: 'POST',
+                body: { 
+                  currentClassId: classId,
+                  nextClassId: 'graduated',
+                  studentIds 
+                }
+              });
+              totalGraduated += studentIds.length;
+              console.log(`Graduated ${studentIds.length} students from ${classId}`);
+            }
+          } else if (nextClassId) {
+            // Promote to next class
+            const studentIds = classStudents.map((s: any) => s.id);
+            if (studentIds.length > 0) {
+              await apiRequest('/api/admin/promote-students', {
+                method: 'POST',
+                body: { 
+                  currentClassId: classId,
+                  nextClassId: nextClassId,
+                  studentIds
+                }
+              });
+              totalPromoted += studentIds.length;
+              console.log(`Promoted ${studentIds.length} students from ${classId} to ${nextClassId}`);
+            }
+          }
+        }
+      }
+      
+      if (totalPromoted > 0 || totalGraduated > 0) {
+        const message = [];
+        if (totalPromoted > 0) message.push(`${totalPromoted} students promoted`);
+        if (totalGraduated > 0) message.push(`${totalGraduated} students graduated`);
+        
+        console.log(`Promotion complete: ${message.join(', ')}`);
+      }
+      
+    } catch (error) {
+      console.error("Error promoting students:", error);
+      throw new Error("Failed to promote students to next classes");
+    }
+  };
+
+  // Helper function to determine next class for promotion
+  const getNextClass = (currentClassId: string): string | null => {
+    // Extract school number and class info from ID (e.g., "SCH1-JSS1")
+    const match = currentClassId.match(/^(SCH\d+)-([A-Z]+)(\d+)$/);
+    if (!match) return null;
+    
+    const [, schoolPrefix, classType, classNumber] = match;
+    const currentNumber = parseInt(classNumber);
+    
+    if (classType === 'JSS') {
+      if (currentNumber === 1) return `${schoolPrefix}-JSS2`;
+      if (currentNumber === 2) return `${schoolPrefix}-JSS3`;
+      if (currentNumber === 3) return `${schoolPrefix}-SS1`;
+    } else if (classType === 'SS') {
+      if (currentNumber === 1) return `${schoolPrefix}-SS2`;
+      if (currentNumber === 2) return `${schoolPrefix}-SS3`;
+      if (currentNumber === 3) return 'GRADUATE'; // SS3 graduates
+    } else if (classType === 'PRI') {
+      // Primary school progression
+      if (currentNumber < 6) return `${schoolPrefix}-PRI${currentNumber + 1}`;
+      if (currentNumber === 6) return `${schoolPrefix}-JSS1`; // Primary 6 → JSS1
+    }
+    
+    return null; // Unknown class type or final year
+  };
+
+  // Helper function to get promotion message for report cards
+  const getPromotionMessage = (studentClassId: string): string => {
+    const nextClass = getNextClass(studentClassId);
+    
+    if (nextClass === 'GRADUATE') {
+      return "Congratulations! You have successfully graduated.";
+    } else if (nextClass) {
+      // Convert class ID to readable name (SCH1-JSS2 → "J.S.S 2")
+      const match = nextClass.match(/^SCH\d+-([A-Z]+)(\d+)$/);
+      if (match) {
+        const [, classType, number] = match;
+        if (classType === 'JSS') return `Promoted to J.S.S ${number}`;
+        if (classType === 'SS') return `Promoted to S.S.S ${number}`;
+        if (classType === 'PRI') return `Promoted to Primary ${number}`;
+      }
+      return `Promoted to ${nextClass}`;
+    }
+    
+    return "Continue to next session";
   };
 
   // Term progression system
@@ -521,8 +630,12 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         title: "Term Advanced Successfully",
         description: `School has been advanced to ${response.newTerm} ${response.newSession}`,
       });
-      // Refresh current academic info
+      // Refresh current academic info to sync with Settings page
       queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
+      // Also reset validation results since we're in a new term
+      setSchoolValidationResults({});
+      setValidationResults({});
+      setIsAllStudentsValidated(false);
     },
     onError: (error) => {
       toast({
@@ -689,6 +802,26 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                 color: #451a03;
                 font-size: 16px;
                 font-weight: bold;
+              }
+              .promotion-section {
+                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                border: 2px solid #16a34a;
+                border-radius: 10px;
+                padding: 15px;
+                margin: 20px 0;
+                text-align: center;
+              }
+              .promotion-section h4 {
+                color: #15803d;
+                font-size: 14px;
+                font-weight: bold;
+                margin-bottom: 5px;
+              }
+              .promotion-message {
+                color: #14532d;
+                font-size: 16px;
+                font-weight: bold;
+                margin: 0;
               }
               .stats-grid {
                 display: grid;
@@ -882,6 +1015,13 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                 <div class="resumption-section">
                   <h4>📅 NEXT TERM RESUMPTION</h4>
                   <p>${new Date(resumptionDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                </div>
+                ` : ''}
+                
+                ${academicInfo?.currentTerm === 'Third Term' ? `
+                <div class="promotion-section">
+                  <h4>🎓 ACADEMIC PROGRESSION</h4>
+                  <p class="promotion-message">${getPromotionMessage(student.classId)}</p>
                 </div>
                 ` : ''}
                 

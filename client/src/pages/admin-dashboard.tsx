@@ -1097,25 +1097,65 @@ export default function AdminDashboard() {
     }
   };
 
-  // Universal settings management
+  // Universal settings management - now uses the same academic calendar system as Report Cards
   const updateGlobalSettings = useMutation({
     mutationFn: async (settings: {term: string, session: string}) => {
-      return await apiRequest('/api/admin/settings/global', {
-        method: 'POST',
-        body: settings
+      // Step 1: Ensure the session exists
+      const sessions = await apiRequest('/api/admin/academic-sessions');
+      let sessionId = sessions.find((s: any) => s.sessionYear === settings.session)?.id;
+      
+      if (!sessionId) {
+        // Create the session if it doesn't exist
+        const newSession = await apiRequest('/api/admin/academic-sessions', {
+          method: 'POST',
+          body: {
+            sessionYear: settings.session,
+            startDate: new Date(),
+            endDate: new Date(new Date().getFullYear() + 1, 7, 31) // End of next August
+          }
+        });
+        sessionId = newSession.id;
+      }
+      
+      // Step 2: Ensure the term exists for this session
+      const terms = await apiRequest(`/api/admin/academic-terms?sessionId=${sessionId}`);
+      let termId = terms.find((t: any) => t.termName === settings.term)?.id;
+      
+      if (!termId) {
+        // Create the term if it doesn't exist
+        const newTerm = await apiRequest('/api/admin/academic-terms', {
+          method: 'POST',
+          body: {
+            termName: settings.term,
+            sessionId: sessionId,
+            startDate: new Date(),
+            endDate: new Date(),
+            resumptionDate: new Date()
+          }
+        });
+        termId = newTerm.id;
+      }
+      
+      // Step 3: Activate the session and term
+      await apiRequest(`/api/admin/academic-sessions/${sessionId}/activate`, {
+        method: 'PUT'
       });
+      
+      await apiRequest(`/api/admin/academic-terms/${termId}/activate`, {
+        method: 'PUT'
+      });
+      
+      return { term: settings.term, session: settings.session };
     },
     onSuccess: () => {
-      toast({ title: "Success", description: "Global settings updated" });
+      toast({ title: "Success", description: "Academic calendar updated successfully" });
       setIsSettingsDialogOpen(false);
-      // Update local state
-      setScoresTerm(globalTerm);
-      setScoresSession(globalSession);
-      setSelectedFinanceTerm(globalTerm);
-      setSelectedFinanceSession(globalSession);
+      // Invalidate the academic info query to refresh both Settings and Report Cards
+      queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update settings", variant: "destructive" });
+    onError: (error) => {
+      console.error('Failed to update academic calendar:', error);
+      toast({ title: "Error", description: "Failed to update academic calendar", variant: "destructive" });
     }
   });
 
@@ -3513,11 +3553,11 @@ export default function AdminDashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                         <div className="text-lg font-bold text-blue-600">Current Term</div>
-                        <p className="text-sm text-blue-600">{scoresTerm}</p>
+                        <p className="text-sm text-blue-600">{academicInfo?.currentTerm || "Not Set"}</p>
                       </div>
                       <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
                         <div className="text-lg font-bold text-green-600">Current Session</div>
-                        <p className="text-sm text-green-600">{scoresSession}</p>
+                        <p className="text-sm text-green-600">{academicInfo?.currentSession || "Not Set"}</p>
                       </div>
                     </div>
                   </div>
