@@ -3459,6 +3459,92 @@ export default function AdminDashboard() {
             />
           </TabsContent>
 
+          {/* User Management Tab */}
+          <TabsContent value="users" className="space-y-6 table-container">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>User Management</CardTitle>
+                  <CardDescription>
+                    Manage admin accounts and create sub-administrators for schools
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline">
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Add Main Admin
+                  </Button>
+                  <Button>
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Add Sub-Admin
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2 mb-4">
+                  <Users className="w-5 h-5" />
+                  <span className="text-lg font-semibold">
+                    Admin Accounts
+                  </span>
+                </div>
+                
+                {/* Users Table */}
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>School</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell className="font-medium">
+                          Ada Hrukevwe
+                        </TableCell>
+                        <TableCell>adahrukevwe@gmail.com</TableCell>
+                        <TableCell>
+                          <Badge className="bg-blue-600 text-white">
+                            admin
+                          </Badge>
+                        </TableCell>
+                        <TableCell>All Schools</TableCell>
+                        <TableCell>
+                          <Badge variant="default">Active</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm">
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+                
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">
+                    User management functionality will be integrated here.
+                    <br />
+                    For now, you can access full user management at 
+                    <a href="/portal/users" className="text-blue-600 hover:underline ml-1">
+                      /portal/users
+                    </a>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6 table-container">
             <Card>
