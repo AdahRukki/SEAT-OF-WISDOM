@@ -97,8 +97,20 @@ export const users = pgTable("users", {
   role: varchar("role", { length: 20 }).notNull().default("student"), // admin, sub-admin, student
   schoolId: uuid("school_id").references(() => schools.id), // sub-admins and students are tied to specific schools
   isActive: boolean("is_active").default(true),
+  passwordUpdatedAt: timestamp("password_updated_at").defaultNow(), // For session invalidation after password changes
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Password reset tokens table
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 255 }).notNull(), // Hashed reset token
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"), // null if unused, timestamp when used
+  createdIp: varchar("created_ip", { length: 45 }), // Optional: IP address for audit
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 
@@ -417,7 +429,8 @@ export const generatedReportCardsRelations = relations(generatedReportCards, ({ 
 export const insertSchoolSchema = createInsertSchema(schools).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertClassSchema = createInsertSchema(classes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true, passwordUpdatedAt: true });
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true, createdAt: true });
 export const insertStudentSchema = createInsertSchema(students).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAssessmentSchema = createInsertSchema(assessments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertReportCardTemplateSchema = createInsertSchema(reportCardTemplates);
@@ -565,6 +578,9 @@ export type InsertSubject = z.infer<typeof insertSubjectSchema>;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 
 export type Student = typeof students.$inferSelect;
 export type InsertStudent = z.infer<typeof insertStudentSchema>;

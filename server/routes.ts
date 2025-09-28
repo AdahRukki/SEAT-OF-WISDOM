@@ -754,6 +754,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // === PASSWORD MANAGEMENT ROUTES ===
+  
+  // Change user password (main admin only)
+  app.patch('/api/admin/users/:id/password', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { newPassword } = req.body;
+      
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+      }
+      
+      // Check if user exists
+      const user = await storage.getUserById(id);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Update password
+      await storage.updateUserPassword(id, newPassword);
+      
+      // Log the password change for audit
+      console.log(`Password changed for user ${user.email} by admin ${req.user?.email}`);
+      
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      console.error('Error changing password:', error);
+      res.status(500).json({ error: 'Failed to update password' });
+    }
+  });
+
+  // Request password reset
+  app.post('/api/auth/request-password-reset', async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: 'Email is required' });
+      }
+      
+      // Always return success to avoid user enumeration
+      res.json({ message: 'If an account with that email exists, you will receive a password reset link.' });
+      
+      // Check if user exists (but don't reveal this to the client)
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        console.log(`Password reset requested for non-existent email: ${email}`);
+        return; // Silent fail to prevent user enumeration
+      }
+      
+      // Generate reset token
+      const resetToken = await storage.createPasswordResetToken(user.id);
+      
+      // TODO: Send email with reset token
+      // For now, log the reset token for testing
+      console.log(`Password reset token for ${email}: ${resetToken}`);
+      console.log(`Reset link: http://localhost:5000/reset-password?token=${resetToken}`);
+      
+    } catch (error) {
+      console.error('Error requesting password reset:', error);
+      // Still return success to avoid revealing errors
+      res.json({ message: 'If an account with that email exists, you will receive a password reset link.' });
+    }
+  });
+
+  // Reset password with token
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: 'Token and new password are required' });
+      }
+      
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+      }
+      
+      // Verify and use the reset token
+      const userId = await storage.verifyAndUsePasswordResetToken(token);
+      if (!userId) {
+        return res.status(400).json({ error: 'Invalid or expired reset token' });
+      }
+      
+      // Update the password
+      await storage.updateUserPassword(userId, newPassword);
+      
+      console.log(`Password reset completed for user ID: ${userId}`);
+      
+      res.json({ message: 'Password reset successful' });
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      res.status(500).json({ error: 'Failed to reset password' });
+    }
+  });
+
   // School logo upload route
   app.post('/api/admin/schools/logo', authenticate, requireAdmin, async (req, res) => {
     try {
