@@ -279,17 +279,15 @@ export function TeacherGradesInterface({
         });
       }
       
-      // Wait for query to refetch before clearing temp scores
-      await queryClient.invalidateQueries({ 
+      // Wait for query to refetch and complete before clearing temp scores
+      await queryClient.refetchQueries({ 
         queryKey: [`/api/admin/assessments/${selectedClassId}/${currentTerm}/${currentSession}`] 
       });
       
-      // Small delay to ensure query refetch completes
-      setTimeout(() => {
-        setTempScores({});
-        setHasUnsavedChanges(false);
-        toast({ description: "All scores saved successfully!" });
-      }, 500);
+      // Now it's safe to clear temp scores since fresh data is loaded
+      setTempScores({});
+      setHasUnsavedChanges(false);
+      toast({ description: "All scores saved successfully!" });
       
     } catch (error) {
       toast({ 
@@ -305,7 +303,8 @@ export function TeacherGradesInterface({
       return tempScores[tempKey];
     }
     const assessment = getStudentAssessment(studentId, subjectId);
-    return assessment?.[field]?.toString() || "";
+    const value = assessment?.[field];
+    return value !== undefined && value !== null ? value.toString() : "";
   };
 
   const handleKeyPress = (e: React.KeyboardEvent, studentId: string, subjectId: string, field: 'firstCA' | 'secondCA' | 'exam') => {
