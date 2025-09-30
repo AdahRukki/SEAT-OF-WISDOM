@@ -58,11 +58,20 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      const response = await fetch(`/api/student/assessments?${params}`);
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`/api/student/assessments?${params}`, {
+        headers,
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch assessments');
       return response.json();
     },
-    enabled: !!profile
+    enabled: !!profile && !!selectedTerm && !!selectedSession
   });
 
   // Student financial data
@@ -73,11 +82,20 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      const response = await fetch(`/api/student/fees?${params}`);
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`/api/student/fees?${params}`, {
+        headers,
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch student fees');
       return response.json();
     },
-    enabled: !!profile
+    enabled: !!profile && !!selectedTerm && !!selectedSession
   });
 
   const { data: paymentHistory = [] } = useQuery<any[]>({ 
@@ -87,11 +105,20 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      const response = await fetch(`/api/student/payments?${params}`);
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`/api/student/payments?${params}`, {
+        headers,
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch payment history');
       return response.json();
     },
-    enabled: !!profile
+    enabled: !!profile && !!selectedTerm && !!selectedSession
   });
 
   const calculateGrade = (total: number) => {
@@ -577,8 +604,8 @@ export default function StudentDashboard() {
                   <div className="flex-1">
                     <label className="text-sm font-medium mb-2 block">Academic Session</label>
                     <Select value={selectedSession} onValueChange={setSelectedSession}>
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger data-testid="select-session">
+                        <SelectValue placeholder="Select session" />
                       </SelectTrigger>
                       <SelectContent>
                         {academicSessions.map((session) => (
@@ -592,8 +619,8 @@ export default function StudentDashboard() {
                   <div className="flex-1">
                     <label className="text-sm font-medium mb-2 block">Term</label>
                     <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                      <SelectTrigger>
-                        <SelectValue />
+                      <SelectTrigger data-testid="select-term">
+                        <SelectValue placeholder="Select term" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="First Term">First Term</SelectItem>
