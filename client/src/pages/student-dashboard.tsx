@@ -29,6 +29,7 @@ export default function StudentDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedTerm, setSelectedTerm] = useState("");
+  const [selectedSession, setSelectedSession] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -68,12 +69,12 @@ export default function StudentDashboard() {
   });
 
   const { data: assessments = [] } = useQuery<(Assessment & { subject: Subject })[]>({ 
-    queryKey: ['/api/student/assessments', selectedTerm, selectedClass, academicInfo?.currentSession],
+    queryKey: ['/api/student/assessments', selectedTerm, selectedClass, selectedSession],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedClass) params.append('classId', selectedClass);
-      if (academicInfo?.currentSession) params.append('session', academicInfo.currentSession);
+      if (selectedSession) params.append('session', selectedSession);
       
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
@@ -88,17 +89,17 @@ export default function StudentDashboard() {
       if (!response.ok) throw new Error('Failed to fetch assessments');
       return response.json();
     },
-    enabled: !!profile && !!selectedTerm && !!selectedClass && !!academicInfo?.currentSession
+    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
 
   // Student financial data
   const { data: studentFees = [] } = useQuery<any[]>({ 
-    queryKey: ['/api/student/fees', selectedTerm, selectedClass, academicInfo?.currentSession],
+    queryKey: ['/api/student/fees', selectedTerm, selectedClass, selectedSession],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedClass) params.append('classId', selectedClass);
-      if (academicInfo?.currentSession) params.append('session', academicInfo.currentSession);
+      if (selectedSession) params.append('session', selectedSession);
       
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
@@ -113,16 +114,16 @@ export default function StudentDashboard() {
       if (!response.ok) throw new Error('Failed to fetch student fees');
       return response.json();
     },
-    enabled: !!profile && !!selectedTerm && !!selectedClass && !!academicInfo?.currentSession
+    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
 
   const { data: paymentHistory = [] } = useQuery<any[]>({ 
-    queryKey: ['/api/student/payments', selectedTerm, selectedClass, academicInfo?.currentSession],
+    queryKey: ['/api/student/payments', selectedTerm, selectedClass, selectedSession],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedClass) params.append('classId', selectedClass);
-      if (academicInfo?.currentSession) params.append('session', academicInfo.currentSession);
+      if (selectedSession) params.append('session', selectedSession);
       
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
@@ -137,7 +138,7 @@ export default function StudentDashboard() {
       if (!response.ok) throw new Error('Failed to fetch payment history');
       return response.json();
     },
-    enabled: !!profile && !!selectedTerm && !!selectedClass && !!academicInfo?.currentSession
+    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
 
   const calculateGrade = (total: number) => {
@@ -194,6 +195,9 @@ export default function StudentDashboard() {
     if (academicInfo?.currentTerm) {
       setSelectedTerm(academicInfo.currentTerm);
     }
+    if (academicInfo?.currentSession) {
+      setSelectedSession(academicInfo.currentSession);
+    }
   }, [academicInfo]);
 
   // Password change form
@@ -239,6 +243,9 @@ export default function StudentDashboard() {
 
   const handlePrintDetailedReport = () => {
     if (!profile) return;
+    
+    // Get the selected class details
+    const selectedClassObj = enrolledClasses.find(c => c.id === selectedClass);
     
     // Calculate totals
     const totalMarks = assessments.reduce((sum, assessment) => {
@@ -382,11 +389,11 @@ export default function StudentDashboard() {
               </div>
               <div class="info-item">
                 <span class="info-label">Class:</span>
-                <span class="info-value">${profile.class?.name}</span>
+                <span class="info-value">${selectedClassObj?.name || profile.class?.name || ''}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Session:</span>
-                <span class="info-value">${academicInfo?.currentSession || ''}</span>
+                <span class="info-value">${selectedSession || ''}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Term:</span>
@@ -635,8 +642,8 @@ export default function StudentDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-4">
-                  <div className="flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
                     <label className="text-sm font-medium mb-2 block">Class</label>
                     <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
                       <SelectTrigger data-testid="select-class">
@@ -651,7 +658,20 @@ export default function StudentDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex-1">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Session</label>
+                    <Select value={selectedSession} onValueChange={setSelectedSession}>
+                      <SelectTrigger data-testid="select-session">
+                        <SelectValue placeholder="Select session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2024/2025">2024/2025</SelectItem>
+                        <SelectItem value="2025/2026">2025/2026</SelectItem>
+                        <SelectItem value="2026/2027">2026/2027</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
                     <label className="text-sm font-medium mb-2 block">Term</label>
                     <Select value={selectedTerm} onValueChange={setSelectedTerm}>
                       <SelectTrigger data-testid="select-term">
@@ -672,7 +692,7 @@ export default function StudentDashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle>My Report Card - {selectedTerm}, {academicInfo?.currentSession}</CardTitle>
+                  <CardTitle>My Report Card - {selectedTerm}, {selectedSession}</CardTitle>
                   <CardDescription>
                     Your comprehensive academic report with detailed scores and grades
                   </CardDescription>
@@ -720,7 +740,7 @@ export default function StudentDashboard() {
                       assessments={assessments}
                       user={user}
                       selectedTerm={selectedTerm}
-                      selectedSession={academicInfo?.currentSession || ''}
+                      selectedSession={selectedSession || ''}
                       calculateAge={calculateAge}
                     />
                   </div>
@@ -748,7 +768,7 @@ export default function StudentDashboard() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">Session</p>
-                      <p className="font-semibold text-gray-900 dark:text-white">{academicInfo?.currentSession}</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{selectedSession}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">Age</p>
@@ -916,16 +936,16 @@ export default function StudentDashboard() {
             {/* Current Term Fees */}
             <Card>
               <CardHeader>
-                <CardTitle>My Fees - {selectedTerm}, {academicInfo?.currentSession}</CardTitle>
+                <CardTitle>My Fees - {selectedTerm}, {selectedSession}</CardTitle>
                 <CardDescription>
-                  View your assigned fees and payment status for the current term
+                  View your assigned fees and payment status for the selected term
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="flex gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
-                      <SelectTrigger className="w-48">
+                      <SelectTrigger>
                         <SelectValue placeholder={enrolledClasses.length > 0 ? "Select class" : "Loading..."} />
                       </SelectTrigger>
                       <SelectContent>
@@ -936,8 +956,18 @@ export default function StudentDashboard() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Select value={selectedSession} onValueChange={setSelectedSession}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2024/2025">2024/2025</SelectItem>
+                        <SelectItem value="2025/2026">2025/2026</SelectItem>
+                        <SelectItem value="2026/2027">2026/2027</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                      <SelectTrigger className="w-48">
+                      <SelectTrigger>
                         <SelectValue placeholder="Select term" />
                       </SelectTrigger>
                       <SelectContent>
