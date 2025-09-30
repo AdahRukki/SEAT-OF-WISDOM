@@ -1816,6 +1816,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get academic sessions for students (read-only)
+  app.get('/api/student/academic-sessions', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      
+      // Only students can access this endpoint
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+      
+      const sessions = await storage.getAcademicSessions();
+      res.json(sessions);
+    } catch (error) {
+      console.error("Get academic sessions error:", error);
+      res.status(500).json({ error: "Failed to fetch academic sessions" });
+    }
+  });
+
   // Financial Summary
   app.get('/api/admin/financial-summary', authenticate, requireAdmin, async (req, res) => {
     try {

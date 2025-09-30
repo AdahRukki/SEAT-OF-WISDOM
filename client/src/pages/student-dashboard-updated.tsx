@@ -47,6 +47,10 @@ export default function StudentDashboard() {
     queryKey: ['/api/current-academic-info'],
   });
 
+  const { data: academicSessions = [] } = useQuery<any[]>({
+    queryKey: ['/api/student/academic-sessions'],
+  });
+
   const { data: assessments = [] } = useQuery<(Assessment & { subject: Subject })[]>({ 
     queryKey: ['/api/student/assessments', selectedTerm, selectedSession],
     queryFn: async () => {
@@ -577,9 +581,11 @@ export default function StudentDashboard() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="2024/2025">2024/2025</SelectItem>
-                        <SelectItem value="2023/2024">2023/2024</SelectItem>
-                        <SelectItem value="2022/2023">2022/2023</SelectItem>
+                        {academicSessions.map((session) => (
+                          <SelectItem key={session.id} value={session.session}>
+                            {session.session}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
