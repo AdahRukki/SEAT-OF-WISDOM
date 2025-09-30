@@ -107,6 +107,7 @@ export interface IStorage {
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
   getStudentAssessments(studentId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
   getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
+  getStudentEnrolledClasses(studentId: string): Promise<Class[]>;
   
   // Non-academic rating operations
   createOrUpdateNonAcademicRating(ratingData: InsertNonAcademicRating): Promise<NonAcademicRating>;
@@ -681,6 +682,45 @@ export class DatabaseStorage implements IStorage {
       ...assessment,
       subject: subject!
     }));
+  }
+
+  async getStudentEnrolledClasses(studentId: string): Promise<Class[]> {
+    // Get student's current class
+    const student = await db
+      .select()
+      .from(students)
+      .where(eq(students.id, studentId))
+      .limit(1);
+
+    const currentClassId = student[0]?.classId;
+    
+    // Get distinct class IDs from student's assessments history (filter out nulls)
+    const assessmentClasses = await db
+      .selectDistinct({ classId: assessments.classId })
+      .from(assessments)
+      .where(eq(assessments.studentId, studentId));
+
+    // Filter out null class IDs and combine with current class
+    const validClassIds = assessmentClasses
+      .map(c => c.classId)
+      .filter((id): id is string => id !== null);
+    
+    // Add current class if not already in the list
+    if (currentClassId && !validClassIds.includes(currentClassId)) {
+      validClassIds.push(currentClassId);
+    }
+
+    if (validClassIds.length === 0) {
+      return [];
+    }
+
+    // Fetch class details using inArray for safe parameter binding
+    const classDetails = await db
+      .select()
+      .from(classes)
+      .where(inArray(classes.id, validClassIds));
+
+    return classDetails;
   }
 
   async createReportCardTemplate(templateData: InsertReportCardTemplate): Promise<ReportCardTemplate> {

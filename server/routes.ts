@@ -1834,6 +1834,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all classes student has been enrolled in (current + historical)
+  app.get('/api/student/classes', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      
+      // Only students can access this endpoint
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const student = await storage.getStudentByUserId(user.id);
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+      
+      const classes = await storage.getStudentEnrolledClasses(student.id);
+      res.json(classes);
+    } catch (error) {
+      console.error("Get student classes error:", error);
+      res.status(500).json({ error: "Failed to fetch student classes" });
+    }
+  });
+
   // Financial Summary
   app.get('/api/admin/financial-summary', authenticate, requireAdmin, async (req, res) => {
     try {
