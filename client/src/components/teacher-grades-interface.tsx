@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,16 @@ export function TeacherGradesInterface({
   // Term and Session state - initialize with current values from props
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm);
   const [selectedSession, setSelectedSession] = useState<string>(currentSession);
+
+  // Sync with props when they change (e.g., when global settings are updated)
+  useEffect(() => {
+    if (currentTerm) {
+      setSelectedTerm(currentTerm);
+    }
+    if (currentSession) {
+      setSelectedSession(currentSession);
+    }
+  }, [currentTerm, currentSession]);
 
   // Form state for non-academic ratings
   const [nonAcademicScores, setNonAcademicScores] = useState({

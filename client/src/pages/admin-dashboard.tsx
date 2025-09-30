@@ -328,6 +328,16 @@ export default function AdminDashboard() {
     }
   }, [academicInfo]);
 
+  // Sync scores term and session with actual academic calendar
+  useEffect(() => {
+    if (academicInfo?.currentTerm) {
+      setScoresTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession) {
+      setScoresSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
+
   // Check Firebase data on mount
   useEffect(() => {
     checkFirebaseData();
@@ -336,8 +346,8 @@ export default function AdminDashboard() {
   // Scores management states
   const [scoresClassId, setScoresClassId] = useState("");
   const [scoresSubjectId, setScoresSubjectId] = useState("");
-  const [scoresTerm, setScoresTerm] = useState("First Term");
-  const [scoresSession, setScoresSession] = useState("2024/2025");
+  const [scoresTerm, setScoresTerm] = useState("");
+  const [scoresSession, setScoresSession] = useState("");
   const [scoreInputs, setScoreInputs] = useState<{[key: string]: {firstCA: string, secondCA: string, exam: string}}>({});
   
   // Class-based student viewing
@@ -1806,14 +1816,12 @@ export default function AdminDashboard() {
       return;
     }
 
-    const [term, session] = scoresTermSession.split('-');
-    
     const formData = new FormData();
     formData.append('excelFile', file);
     formData.append('classId', scoresClassId);
     formData.append('subjectId', scoresSubjectId);
-    formData.append('term', term);
-    formData.append('session', session);
+    formData.append('term', scoresTerm);
+    formData.append('session', scoresSession);
 
     try {
       const response = await fetch('/api/assessments/upload', {
@@ -3049,19 +3057,30 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <div>
-                    <Label>Term & Session</Label>
-                    <Select value={`${scoresTerm}-${scoresSession}`} onValueChange={(value) => {
-                      const [term, session] = value.split('-');
-                      setScoresTerm(term.replace('_', ' '));
-                      setScoresSession(session);
-                    }}>
-                      <SelectTrigger>
+                    <Label>Select Term</Label>
+                    <Select value={scoresTerm} onValueChange={setScoresTerm}>
+                      <SelectTrigger data-testid="select-scores-term">
                         <SelectValue placeholder="Select term" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="First Term-2024/2025">First Term 2024/2025</SelectItem>
-                        <SelectItem value="Second Term-2024/2025">Second Term 2024/2025</SelectItem>
-                        <SelectItem value="Third Term-2024/2025">Third Term 2024/2025</SelectItem>
+                        <SelectItem value="First Term">First Term</SelectItem>
+                        <SelectItem value="Second Term">Second Term</SelectItem>
+                        <SelectItem value="Third Term">Third Term</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Select Session</Label>
+                    <Select value={scoresSession} onValueChange={setScoresSession}>
+                      <SelectTrigger data-testid="select-scores-session">
+                        <SelectValue placeholder="Select session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {academicSessions.map((session) => (
+                          <SelectItem key={session.id} value={session.sessionYear}>
+                            {session.sessionYear}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
