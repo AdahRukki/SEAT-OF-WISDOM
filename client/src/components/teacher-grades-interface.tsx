@@ -56,6 +56,10 @@ export function TeacherGradesInterface({
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<StudentWithDetails | null>(null);
   const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
+  
+  // Term and Session state - initialize with current values from props
+  const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm);
+  const [selectedSession, setSelectedSession] = useState<string>(currentSession);
 
   // Form state for non-academic ratings
   const [nonAcademicScores, setNonAcademicScores] = useState({
