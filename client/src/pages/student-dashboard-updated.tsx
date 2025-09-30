@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
@@ -28,8 +28,8 @@ export default function StudentDashboard() {
   const { logoUrl: currentLogoUrl } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedTerm, setSelectedTerm] = useState("First Term");
-  const [selectedSession, setSelectedSession] = useState("2024/2025");
+  const [selectedTerm, setSelectedTerm] = useState("");
+  const [selectedSession, setSelectedSession] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -38,6 +38,13 @@ export default function StudentDashboard() {
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
     queryKey: ['/api/student/profile'] 
+  });
+
+  const { data: academicInfo } = useQuery<{
+    currentSession: string | null;
+    currentTerm: string | null;
+  }>({
+    queryKey: ['/api/current-academic-info'],
   });
 
   const { data: assessments = [] } = useQuery<(Assessment & { subject: Subject })[]>({ 
@@ -112,6 +119,16 @@ export default function StudentDashboard() {
     }
     return calculatedAge;
   };
+
+  // Sync with current academic calendar from admin settings
+  useEffect(() => {
+    if (academicInfo?.currentTerm) {
+      setSelectedTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession) {
+      setSelectedSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
 
   // Password change form
   const passwordForm = useForm<ChangePasswordForm>({
