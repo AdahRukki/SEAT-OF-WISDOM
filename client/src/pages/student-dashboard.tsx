@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle } from "lucide-react";
 // Logo is now loaded dynamically via useLogo hook
 import { apiRequest } from "@/lib/queryClient";
-import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
+import type { StudentWithDetails, Assessment, Subject, Class } from "@shared/schema";
 import { changePasswordSchema, calculateGrade } from "@shared/schema";
 import { InlineReportCard } from "@/components/inline-report-card";
 import type { z } from "zod";
@@ -45,6 +45,26 @@ export default function StudentDashboard() {
     currentTerm: string | null;
   }>({
     queryKey: ['/api/current-academic-info'],
+  });
+
+  // Fetch all classes student has been enrolled in (current + historical)
+  const { data: enrolledClasses = [] } = useQuery<Class[]>({
+    queryKey: ['/api/student/classes'],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch('/api/student/classes', {
+        headers,
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch student classes');
+      return response.json();
+    },
+    enabled: !!profile
   });
 
   const { data: assessments = [] } = useQuery<(Assessment & { subject: Subject })[]>({ 
@@ -154,12 +174,21 @@ export default function StudentDashboard() {
     return calculatedAge;
   };
 
-  // Sync with current academic calendar and set class from profile
+  // Auto-select class when enrolled classes are loaded
   useEffect(() => {
-    if (profile?.class?.id) {
-      setSelectedClass(profile.class.id);
+    if (enrolledClasses.length > 0 && !selectedClass) {
+      // Prefer current class if it exists in enrolled classes
+      if (profile?.class?.id) {
+        const currentClass = enrolledClasses.find(c => c.id === profile.class?.id);
+        if (currentClass) {
+          setSelectedClass(currentClass.id);
+          return;
+        }
+      }
+      // Default to first enrolled class
+      setSelectedClass(enrolledClasses[0].id);
     }
-  }, [profile]);
+  }, [enrolledClasses, profile?.class?.id, selectedClass]);
   
   useEffect(() => {
     if (academicInfo?.currentTerm) {
@@ -609,16 +638,16 @@ export default function StudentDashboard() {
                 <div className="flex gap-4">
                   <div className="flex-1">
                     <label className="text-sm font-medium mb-2 block">Class</label>
-                    <Select value={selectedClass} onValueChange={setSelectedClass} disabled={!profile?.class}>
+                    <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
                       <SelectTrigger data-testid="select-class">
-                        <SelectValue placeholder={profile?.class ? profile.class.name : "Loading..."} />
+                        <SelectValue placeholder={enrolledClasses.length > 0 ? "Select class" : "Loading..."} />
                       </SelectTrigger>
                       <SelectContent>
-                        {profile?.class && (
-                          <SelectItem value={profile.class.id}>
-                            {profile.class.name}
+                        {enrolledClasses.map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
                           </SelectItem>
-                        )}
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -895,16 +924,16 @@ export default function StudentDashboard() {
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex gap-4">
-                    <Select value={selectedClass} onValueChange={setSelectedClass} disabled={!profile?.class}>
+                    <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
                       <SelectTrigger className="w-48">
-                        <SelectValue placeholder={profile?.class?.name || "Loading..."} />
+                        <SelectValue placeholder={enrolledClasses.length > 0 ? "Select class" : "Loading..."} />
                       </SelectTrigger>
                       <SelectContent>
-                        {profile?.class && (
-                          <SelectItem value={profile.class.id}>
-                            {profile.class.name}
+                        {enrolledClasses.map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
                           </SelectItem>
-                        )}
+                        ))}
                       </SelectContent>
                     </Select>
                     <Select value={selectedTerm} onValueChange={setSelectedTerm}>
