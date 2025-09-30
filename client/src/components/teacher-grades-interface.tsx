@@ -76,6 +76,11 @@ export function TeacherGradesInterface({
     enabled: !!userSchoolId
   });
 
+  // Fetch available academic sessions
+  const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string; isActive: boolean }[]>({
+    queryKey: ['/api/admin/academic-sessions'],
+  });
+
 
   const { data: classStudents = [], isLoading: studentsLoading } = useQuery<StudentWithDetails[]>({
     queryKey: [`/api/admin/students/by-class/${selectedClassId}`],
