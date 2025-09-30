@@ -186,7 +186,37 @@ export function TeacherGradesInterface({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div>
+              <Label htmlFor="term-select">Select Term</Label>
+              <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+                <SelectTrigger data-testid="select-term">
+                  <SelectValue placeholder="Choose a term" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="First Term">First Term</SelectItem>
+                  <SelectItem value="Second Term">Second Term</SelectItem>
+                  <SelectItem value="Third Term">Third Term</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="session-select">Select Session</Label>
+              <Select value={selectedSession} onValueChange={setSelectedSession}>
+                <SelectTrigger data-testid="select-session">
+                  <SelectValue placeholder="Choose a session" />
+                </SelectTrigger>
+                <SelectContent>
+                  {academicSessions.map((session) => (
+                    <SelectItem key={session.id} value={session.sessionYear}>
+                      {session.sessionYear}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
             <div>
               <Label htmlFor="class-select">Select Class</Label>
               <Select value={selectedClassId} onValueChange={setSelectedClassId}>
@@ -201,10 +231,6 @@ export function TeacherGradesInterface({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <div>Term: <Badge variant="outline">{currentTerm}</Badge></div>
-              <div>Session: <Badge variant="outline">{currentSession}</Badge></div>
             </div>
           </div>
         </CardContent>
