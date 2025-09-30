@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
@@ -17,7 +17,8 @@ import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeO
 // Logo is now loaded dynamically via useLogo hook
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject } from "@shared/schema";
-import { changePasswordSchema } from "@shared/schema";
+import { changePasswordSchema, calculateGrade } from "@shared/schema";
+import { InlineReportCard } from "@/components/inline-report-card";
 import type { z } from "zod";
 
 type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
@@ -27,15 +28,27 @@ export default function StudentDashboard() {
   const { logoUrl: currentLogoUrl } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedTerm, setSelectedTerm] = useState("First Term");
-  const [selectedSession, setSelectedSession] = useState("2024/2025");
+  const [selectedTerm, setSelectedTerm] = useState("");
+  const [selectedSession, setSelectedSession] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showInlineReportCard, setShowInlineReportCard] = useState(false);
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
     queryKey: ['/api/student/profile'] 
+  });
+
+  const { data: academicInfo } = useQuery<{
+    currentSession: string | null;
+    currentTerm: string | null;
+  }>({
+    queryKey: ['/api/current-academic-info'],
+  });
+
+  const { data: academicSessions = [] } = useQuery<any[]>({
+    queryKey: ['/api/student/academic-sessions'],
   });
 
   const { data: assessments = [] } = useQuery<(Assessment & { subject: Subject })[]>({ 
@@ -45,7 +58,9 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      return apiRequest(`/api/student/assessments?${params}`);
+      const response = await fetch(`/api/student/assessments?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch assessments');
+      return response.json();
     },
     enabled: !!profile
   });
@@ -58,7 +73,9 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      return apiRequest(`/api/student/fees?${params}`);
+      const response = await fetch(`/api/student/fees?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch student fees');
+      return response.json();
     },
     enabled: !!profile
   });
@@ -70,7 +87,9 @@ export default function StudentDashboard() {
       if (selectedTerm) params.append('term', selectedTerm);
       if (selectedSession) params.append('session', selectedSession);
       
-      return apiRequest(`/api/student/payments?${params}`);
+      const response = await fetch(`/api/student/payments?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch payment history');
+      return response.json();
     },
     enabled: !!profile
   });
@@ -93,35 +112,27 @@ export default function StudentDashboard() {
   const overallGrade = calculateGrade(overallAverage);
 
   // Helper function to calculate age from date of birth
-  const calculateAge = (dateOfBirth: string | Date | null) => {
+  const calculateAge = (dateOfBirth: string | null) => {
     if (!dateOfBirth) return 'N/A';
-    
     const birthDate = new Date(dateOfBirth);
     const today = new Date();
-    
-    // Check if the date is valid
-    if (isNaN(birthDate.getTime())) {
-      return 'N/A';
-    }
-    
-    // Check if the birth date is in the future
-    if (birthDate > today) {
-      return 'N/A';
-    }
-    
     let calculatedAge = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
       calculatedAge--;
     }
-    
-    // Ensure age is reasonable (between 0 and 150)
-    if (calculatedAge < 0 || calculatedAge > 150) {
-      return 'N/A';
-    }
-    
     return calculatedAge;
   };
+
+  // Sync with current academic calendar from admin settings
+  useEffect(() => {
+    if (academicInfo?.currentTerm) {
+      setSelectedTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession) {
+      setSelectedSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
 
   // Password change form
   const passwordForm = useForm<ChangePasswordForm>({
@@ -293,11 +304,8 @@ export default function StudentDashboard() {
         <body>
           <div class="report-card">
             <div class="header">
-              <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 10px;">
-                <img src="${currentLogoUrl || '/assets/academy-logo.png'}" alt="School Logo" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid white;" />
-                <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-              </div>
-              <div class="school-motto">"THE FEAR OF GOD IS THE BEGINNING OF WISDOM"</div>
+              <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+              <div class="school-motto">"Nurturing Excellence in Learning"</div>
               <div class="report-title">STUDENT REPORT CARD</div>
             </div>
             
@@ -308,11 +316,11 @@ export default function StudentDashboard() {
               </div>
               <div class="info-item">
                 <span class="info-label">ID:</span>
-                <span class="info-value">${profile?.studentId}</span>
+                <span class="info-value">${profile.studentId}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Class:</span>
-                <span class="info-value">${profile?.class?.name}</span>
+                <span class="info-value">${profile.class?.name}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Session:</span>
@@ -324,11 +332,7 @@ export default function StudentDashboard() {
               </div>
               <div class="info-item">
                 <span class="info-label">Age:</span>
-                <span class="info-value">${calculateAge(profile?.dateOfBirth)} years</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Next Term Begins:</span>
-                <span class="info-value">January 8th, 2025</span>
+                <span class="info-value">${calculateAge(profile.dateOfBirth)} years</span>
               </div>
             </div>
 
@@ -342,28 +346,17 @@ export default function StudentDashboard() {
                   <th>TOTAL<br>(100)</th>
                   <th>GRADE</th>
                   <th>REMARK</th>
-                  <th>CLASS<br>AVERAGE</th>
-                  <th>SUBJECT<br>POSITION</th>
                 </tr>
               </thead>
               <tbody>
-                ${assessments.map((assessment, index) => {
+                ${assessments.map((assessment) => {
                   const firstCA = Number(assessment.firstCA || 0);
                   const secondCA = Number(assessment.secondCA || 0);
                   const exam = Number(assessment.exam || 0);
                   const total = firstCA + secondCA + exam;
                   
-                  let grade = 'F';
-                  let remark = 'FAIL';
-                  
-                  if (total >= 75) { grade = 'A'; remark = 'EXCELLENT'; }
-                  else if (total >= 50) { grade = 'C'; remark = 'CREDIT'; }
-                  else if (total >= 25) { grade = 'P'; remark = 'PASS'; }
-                  else { grade = 'F'; remark = 'FAIL'; }
-                  
-                  // Mock class average and position for demonstration
-                  const classAverage = Math.round(total * (0.85 + Math.random() * 0.3));
-                  const position = index + 1;
+                  // Use the correct WAEC grading standards
+                  const { grade, remark } = calculateGrade(total);
                   
                   return `
                     <tr>
@@ -374,39 +367,11 @@ export default function StudentDashboard() {
                       <td><strong>${total}</strong></td>
                       <td class="grade">${grade}</td>
                       <td>${remark}</td>
-                      <td>${classAverage}</td>
-                      <td>${position}</td>
                     </tr>
                   `;
                 }).join('')}
               </tbody>
             </table>
-
-            <div style="padding: 20px; background: #f8fafc; border-top: 2px solid #e5e7eb;">
-              <div style="text-align: center; margin-bottom: 15px;">
-                <h3 style="color: #1e40af; font-size: 16px; font-weight: bold; margin-bottom: 10px;">KEY TO GRADING</h3>
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 500px; margin: 0 auto;">
-                <div style="background: white; padding: 10px; border-radius: 8px; border: 2px solid #1e40af;">
-                  <div style="font-weight: bold; text-align: center; color: #1e40af; margin-bottom: 8px;">GRADE SCALE</div>
-                  <div style="font-size: 12px; line-height: 1.4;">
-                    <div><strong>A:</strong> 75-100</div>
-                    <div><strong>C:</strong> 50-74</div>
-                    <div><strong>P:</strong> 25-49</div>
-                    <div><strong>F:</strong> 0-24</div>
-                  </div>
-                </div>
-                <div style="background: white; padding: 10px; border-radius: 8px; border: 2px solid #1e40af;">
-                  <div style="font-weight: bold; text-align: center; color: #1e40af; margin-bottom: 8px;">REMARKS</div>
-                  <div style="font-size: 12px; line-height: 1.4;">
-                    <div><strong>A:</strong> EXCELLENT</div>
-                    <div><strong>C:</strong> CREDIT</div>
-                    <div><strong>P:</strong> PASS</div>
-                    <div><strong>F:</strong> FAIL</div>
-                  </div>
-                </div>
-              </div>
-            </div>
 
             <div class="stats-section">
               <div class="stats-grid">
@@ -417,10 +382,6 @@ export default function StudentDashboard() {
                 <div class="stat-card">
                   <div class="stat-label">AVERAGE</div>
                   <div class="stat-value">${averagePercentage}%</div>
-                </div>
-                <div class="stat-card">
-                  <div class="stat-label">SUBJECTS</div>
-                  <div class="stat-value">${assessments.length}</div>
                 </div>
                 <div class="stat-card">
                   <div class="stat-label">RESULT</div>
@@ -451,7 +412,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
               <div style="margin-top: 15px; font-size: 11px; opacity: 0.8;">
-                Generated on ${new Date().toLocaleDateString()} | Student ID: ${profile?.studentId}
+                Generated on ${new Date().toLocaleDateString()} | Student Report
               </div>
             </div>
           </div>
@@ -602,6 +563,252 @@ export default function StudentDashboard() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="report" className="space-y-6">
+            {/* Term and Session Selection for Report Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Report Card Settings</CardTitle>
+                <CardDescription>
+                  Select the term and session to view your detailed report card
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium mb-2 block">Academic Session</label>
+                    <Select value={selectedSession} onValueChange={setSelectedSession}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {academicSessions.map((session) => (
+                          <SelectItem key={session.id} value={session.session}>
+                            {session.session}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium mb-2 block">Term</label>
+                    <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="First Term">First Term</SelectItem>
+                        <SelectItem value="Second Term">Second Term</SelectItem>
+                        <SelectItem value="Third Term">Third Term</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Report Card Display */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>My Report Card - {selectedTerm} {selectedSession}</CardTitle>
+                  <CardDescription>
+                    Your comprehensive academic report with detailed scores and grades
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => setShowInlineReportCard(!showInlineReportCard)} 
+                    variant="outline"
+                    className="no-print"
+                    data-testid="button-view-report"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
+                  </Button>
+                  <Button onClick={handlePrintDetailedReport} className="no-print" data-testid="button-print-report">
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Report Card
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2 mb-4">
+                  <Button
+                    onClick={() => setShowInlineReportCard(!showInlineReportCard)}
+                    variant="outline"
+                    data-testid="button-view-report-content"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
+                  </Button>
+                  <Button
+                    onClick={handlePrintDetailedReport}
+                    data-testid="button-print-report-content"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Detailed Report Card
+                  </Button>
+                </div>
+                
+                {/* Inline Report Card Viewer */}
+                {showInlineReportCard && profile && (
+                  <div className="mb-6" data-testid="inline-report-card">
+                    <InlineReportCard
+                      profile={profile}
+                      assessments={assessments}
+                      user={user}
+                      selectedTerm={selectedTerm}
+                      selectedSession={selectedSession}
+                      calculateAge={calculateAge}
+                    />
+                  </div>
+                )}
+                
+                {/* Preview of the report card data */}
+                <div className="border rounded-lg p-6 space-y-6">
+                  {/* Student Info Section */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Student Name</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{user?.firstName} {user?.lastName}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Student ID</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{profile?.studentId}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Class</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{profile?.class?.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Term</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{selectedTerm}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Session</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{selectedSession}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Age</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {calculateAge(profile?.dateOfBirth || null)} years
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Subjects Table */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-blue-600 text-white">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-bold">SUBJECT</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold">1ST CA<br/>(20)</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold">2ND CA<br/>(20)</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold">EXAM<br/>(60)</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold">TOTAL<br/>(100)</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold">GRADE</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold">REMARK</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {assessments.map((assessment) => {
+                          const firstCA = Number(assessment.firstCA || 0);
+                          const secondCA = Number(assessment.secondCA || 0);
+                          const exam = Number(assessment.exam || 0);
+                          const total = firstCA + secondCA + exam;
+                          
+                          let grade = 'F';
+                          let remark = 'Fail';
+                          let remarkColor = 'text-red-600';
+                          
+                          if (total >= 90) { grade = 'A+'; remark = 'Excellent'; remarkColor = 'text-green-600'; }
+                          else if (total >= 80) { grade = 'A'; remark = 'Very Good'; remarkColor = 'text-green-600'; }
+                          else if (total >= 70) { grade = 'B'; remark = 'Good'; remarkColor = 'text-blue-600'; }
+                          else if (total >= 60) { grade = 'C'; remark = 'Credit'; remarkColor = 'text-yellow-600'; }
+                          else if (total >= 50) { grade = 'D'; remark = 'Pass'; remarkColor = 'text-orange-600'; }
+                          else if (total >= 40) { grade = 'E'; remark = 'Poor'; remarkColor = 'text-red-500'; }
+                          
+                          return (
+                            <tr key={assessment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                {assessment.subject.name}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
+                                {firstCA}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
+                                {secondCA}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
+                                {exam}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center font-bold text-gray-900 dark:text-white">
+                                {total}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-center">
+                                <Badge className="bg-blue-600 text-white font-bold">
+                                  {grade}
+                                </Badge>
+                              </td>
+                              <td className={`px-4 py-3 text-sm text-center font-medium ${remarkColor}`}>
+                                {remark}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Summary Statistics */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">TOTAL SCORE</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {assessments.reduce((sum, assessment) => {
+                          return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
+                        }, 0)}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">AVERAGE</p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {assessments.length ? (
+                          assessments.reduce((sum, assessment) => {
+                            return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
+                          }, 0) / (assessments.length * 100) * 100
+                        ).toFixed(2) : '0.00'}%
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">SUBJECTS</p>
+                      <p className="text-2xl font-bold text-blue-600">{assessments.length}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">RESULT</p>
+                      <Badge className={`text-lg font-bold ${
+                        assessments.length && (
+                          assessments.reduce((sum, assessment) => {
+                            return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
+                          }, 0) / (assessments.length * 100) * 100
+                        ) >= 40 ? 'bg-green-600' : 'bg-red-600'
+                      } text-white`}>
+                        {
+                          assessments.length && (
+                            assessments.reduce((sum, assessment) => {
+                              return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
+                            }, 0) / (assessments.length * 100) * 100
+                          ) >= 40 ? 'PASS' : 'FAIL'
+                        }
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Finance Tab - keeping existing content */}
           <TabsContent value="finance" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               <Card>
@@ -731,337 +938,9 @@ export default function StudentDashboard() {
                 </div>
               </CardContent>
             </Card>
-
-            {/* Payment History */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Payment History</CardTitle>
-                  <CardDescription>
-                    View all your fee payments and receipts
-                  </CardDescription>
-                </div>
-                <Button variant="outline">
-                  <Receipt className="h-4 w-4 mr-2" />
-                  Print History
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Method</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Reference</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Receipt</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {paymentHistory.length === 0 ? (
-                        <tr>
-                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={6}>
-                            No payment history available yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        paymentHistory.map((payment: any) => {
-                          const studentFee = studentFees.find((fee: any) => fee.id === payment.studentFeeId);
-                          return (
-                            <tr key={payment.id}>
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                {new Date(payment.paymentDate).toLocaleDateString()}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                {studentFee?.feeType?.name || 'Unknown Fee'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                ₦{Number(payment.amount).toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                {payment.paymentMethod?.charAt(0).toUpperCase() + payment.paymentMethod?.slice(1) || 'Cash'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                {payment.reference || 'N/A'}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <Button variant="outline" size="sm">
-                                  <Receipt className="h-3 w-3 mr-1" />
-                                  Receipt
-                                </Button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Payment Instructions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Payment Information</CardTitle>
-                <CardDescription>
-                  How to make fee payments
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Payment Methods Accepted</h4>
-                  <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                    <li>• Cash payments at the school office</li>
-                    <li>• Bank transfers to school account</li>
-                    <li>• Online payment portal (coming soon)</li>
-                  </ul>
-                </div>
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                  <h4 className="font-medium text-yellow-900 dark:text-yellow-100 mb-2">Important Notes</h4>
-                  <ul className="text-sm text-yellow-800 dark:text-yellow-200 space-y-1">
-                    <li>• Always obtain a receipt for your payments</li>
-                    <li>• Keep payment receipts for your records</li>
-                    <li>• Contact the school office for payment assistance</li>
-                  </ul>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
-          <TabsContent value="report" className="space-y-6">
-            {/* Term and Session Selection for Report Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Report Card Settings</CardTitle>
-                <CardDescription>
-                  Select the term and session to view your report card
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="text-sm font-medium mb-2 block">Academic Session</label>
-                    <Select value={selectedSession} onValueChange={setSelectedSession}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2024/2025">2024/2025</SelectItem>
-                        <SelectItem value="2023/2024">2023/2024</SelectItem>
-                        <SelectItem value="2022/2023">2022/2023</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-sm font-medium mb-2 block">Term</label>
-                    <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="First Term">First Term</SelectItem>
-                        <SelectItem value="Second Term">Second Term</SelectItem>
-                        <SelectItem value="Third Term">Third Term</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Academic Report</CardTitle>
-                <CardDescription>View and print your academic performance reports</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* School Header for Print */}
-                  <div className="hidden print-only">
-                    <div className="text-center mb-6">
-                      <div className="flex items-center justify-center space-x-4 mb-4">
-                        <img 
-                          src={currentLogoUrl} 
-                          alt="Seat of Wisdom Academy Logo" 
-                          className="h-16 w-16 object-contain rounded-md bg-white p-2" 
-                        />
-                        <div>
-                          <h1 className="text-2xl font-bold">SEAT OF WISDOM ACADEMY</h1>
-                          <p className="text-lg font-semibold">STUDENT REPORT CARD</p>
-                        </div>
-                      </div>
-                      <div className="border-t border-b border-gray-300 py-2 mb-4">
-                        <p className="text-lg font-semibold">Academic Session: {selectedSession}</p>
-                        <p className="text-lg font-semibold">Term: {selectedTerm}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Student Info */}
-                  <div className="student-info grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <div>
-                      <p className="text-sm text-gray-500">Student Name</p>
-                      <p className="font-semibold">{user?.firstName} {user?.lastName}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Student ID</p>
-                      <p className="font-semibold">{profile?.studentId}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Class</p>
-                      <p className="font-semibold">{profile?.class?.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Term</p>
-                      <p className="font-semibold">{selectedTerm}, {selectedSession}</p>
-                    </div>
-                  </div>
-
-                  {/* Grades Table */}
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 dark:bg-gray-800">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Subject</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">1st CA</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">2nd CA</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Exam</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Total</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Grade</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {assessments.map((assessment) => {
-                          const total = Number(assessment.total);
-                          const { grade } = calculateGrade(total);
-                          return (
-                            <tr key={assessment.id}>
-                              <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                                {assessment.subject.name}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
-                                {assessment.firstCA || '0'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
-                                {assessment.secondCA || '0'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
-                                {assessment.exam || '0'}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900 dark:text-white">
-                                {total}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-center">
-                                <span className={`grade-badge inline-block px-2 py-1 rounded text-xs font-medium ${calculateGrade(total).color} text-white`}>
-                                  {grade}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Summary */}
-                  <div className="summary grid grid-cols-3 gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <div className="text-center">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Overall Average</p>
-                      <p className="text-2xl font-bold text-blue-600">{overallAverage}%</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Overall Grade</p>
-                      <Badge className={`${overallGrade.color} text-white text-lg`}>
-                        {overallGrade.grade}
-                      </Badge>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Total Subjects</p>
-                      <p className="text-2xl font-bold text-blue-600">{assessments.length}</p>
-                    </div>
-                  </div>
-                
-                  <Button 
-                    onClick={handlePrintDetailedReport}
-                    className="w-full" 
-                    size="lg"
-                  >
-                    <Printer className="h-4 w-4 mr-2" />
-                    Print Detailed Report Card
-                  </Button>
-
-                  {/* Report Summary */}
-                  {assessments.length > 0 && (
-                    <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border">
-                      <h3 className="font-semibold mb-3">Report Summary</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                        <div>
-                          <div className="text-2xl font-bold text-blue-600">
-                            {assessments.reduce((sum, assessment) => {
-                              return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
-                            }, 0)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">Total Score</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-green-600">
-                            {assessments.length ? (
-                              (assessments.reduce((sum, assessment) => {
-                                return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
-                              }, 0) / (assessments.length * 100) * 100).toFixed(1)
-                            ) : '0.0'}%
-                          </div>
-                          <div className="text-xs text-muted-foreground">Average</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-purple-600">{assessments.length}</div>
-                          <div className="text-xs text-muted-foreground">Subjects</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-orange-600">
-                            {assessments.length ? (
-                              (assessments.reduce((sum, assessment) => {
-                                return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
-                              }, 0) / (assessments.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'
-                            ) : 'N/A'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">Result</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Subject Breakdown */}
-                  {assessments.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="font-medium mb-3">Subject Performance</h4>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {assessments.map((assessment) => {
-                          const total = Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0);
-                          const { grade, color } = calculateGrade(total);
-                          return (
-                            <div key={assessment.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                              <span className="text-sm font-medium">{assessment.subject.name}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm">{total}/100</span>
-                                <Badge className={`${color} text-white text-xs`}>
-                                  {grade}
-                                </Badge>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
+          {/* Profile Tab - keeping existing content with password form */}
           <TabsContent value="profile" className="space-y-6">
             <Card>
               <CardHeader>
@@ -1082,6 +961,10 @@ export default function StudentDashboard() {
                     <div>
                       <label className="text-sm font-medium text-gray-500">Student ID</label>
                       <p className="text-lg font-semibold">{profile?.studentId}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Age</label>
+                      <p className="text-lg font-semibold">{calculateAge(profile?.dateOfBirth || null)} years</p>
                     </div>
                   </div>
                   <div className="space-y-4">
@@ -1215,24 +1098,12 @@ export default function StudentDashboard() {
                       )}
                     />
 
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
-                        Password Security Tips:
-                      </h4>
-                      <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                        <li>• Use at least 6 characters</li>
-                        <li>• Include a mix of letters, numbers, and symbols</li>
-                        <li>• Don't use personal information</li>
-                        <li>• Use a unique password for this account</li>
-                      </ul>
-                    </div>
-
                     <Button 
                       type="submit" 
-                      disabled={changePasswordMutation.isPending}
                       className="w-full"
+                      disabled={changePasswordMutation.isPending}
                     >
-                      {changePasswordMutation.isPending ? "Updating..." : "Update Password"}
+                      {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
                     </Button>
                   </form>
                 </Form>
