@@ -1186,7 +1186,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Student access required" });
       }
 
-      const { term = "First Term", session = "2024/2025" } = req.query;
+      const { term = "First Term", session = "2024/2025", classId } = req.query;
       const student = await storage.getStudentByUserId(user.id);
       
       if (!student) {
@@ -1196,7 +1196,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const assessments = await storage.getStudentAssessments(
         student.id, 
         term as string, 
-        session as string
+        session as string,
+        classId as string | undefined
       );
       
       res.json(assessments);
@@ -1703,8 +1704,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const term = req.query.term as string;
       const session = req.query.session as string;
+      const classId = req.query.classId as string;
       
-      const studentFees = await storage.getStudentFees(student.id, term, session);
+      const studentFees = await storage.getStudentFees(student.id, term, session, classId);
       res.json(studentFees);
     } catch (error) {
       console.error("Get student fees error:", error);
@@ -1807,8 +1809,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const term = req.query.term as string;
       const session = req.query.session as string;
+      const classId = req.query.classId as string;
       
-      const payments = await storage.getPayments(student.id, undefined, undefined, term, session);
+      const payments = await storage.getPayments(student.id, undefined, undefined, term, session, classId);
       res.json(payments);
     } catch (error) {
       console.error("Get student payments error:", error);

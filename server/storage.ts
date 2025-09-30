@@ -105,7 +105,7 @@ export interface IStorage {
   
   // Assessment operations
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
-  getStudentAssessments(studentId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
+  getStudentAssessments(studentId: string, term: string, session: string, classId?: string): Promise<(Assessment & { subject: Subject })[]>;
   getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
   getStudentEnrolledClasses(studentId: string): Promise<Class[]>;
   
@@ -131,12 +131,12 @@ export interface IStorage {
   
   assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee>;
   assignFeeToClass(classId: string, feeTypeId: string, term: string, session: string, dueDate: string, notes?: string): Promise<StudentFee[]>;
-  getStudentFees(studentId: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]>;
+  getStudentFees(studentId: string, term?: string, session?: string, classId?: string): Promise<StudentFeeWithDetails[]>;
   getAllStudentFees(schoolId?: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]>;
   updateStudentFeeStatus(id: string, status: string): Promise<StudentFee>;
   
   recordPayment(paymentData: InsertPayment): Promise<Payment>;
-  getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string): Promise<PaymentWithDetails[]>;
+  getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string, classId?: string): Promise<PaymentWithDetails[]>;
   getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
   
   getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
@@ -665,18 +665,22 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getStudentAssessments(studentId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]> {
+  async getStudentAssessments(studentId: string, term: string, session: string, classId?: string): Promise<(Assessment & { subject: Subject })[]> {
+    const conditions = [
+      eq(assessments.studentId, studentId),
+      eq(assessments.term, term),
+      eq(assessments.session, session)
+    ];
+
+    if (classId) {
+      conditions.push(eq(assessments.classId, classId));
+    }
+
     const assessmentData = await db
       .select()
       .from(assessments)
       .leftJoin(subjects, eq(assessments.subjectId, subjects.id))
-      .where(
-        and(
-          eq(assessments.studentId, studentId),
-          eq(assessments.term, term),
-          eq(assessments.session, session)
-        )
-      );
+      .where(and(...conditions));
 
     return assessmentData.map(({ assessments: assessment, subjects: subject }) => ({
       ...assessment,
@@ -894,10 +898,11 @@ export class DatabaseStorage implements IStorage {
     return results.filter(result => result !== null).flat();
   }
 
-  async getStudentFees(studentId: string, term?: string, session?: string): Promise<StudentFeeWithDetails[]> {
+  async getStudentFees(studentId: string, term?: string, session?: string, classId?: string): Promise<StudentFeeWithDetails[]> {
     const conditions = [eq(studentFees.studentId, studentId)];
     if (term) conditions.push(eq(studentFees.term, term));
     if (session) conditions.push(eq(studentFees.session, session));
+    // Note: classId not used for fees filtering as fees follow the student regardless of class
 
     const results = await db
       .select()
@@ -992,13 +997,14 @@ export class DatabaseStorage implements IStorage {
     return paymentsResult.reduce((total, payment) => total + Number(payment.amount), 0);
   }
 
-  async getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string): Promise<PaymentWithDetails[]> {
+  async getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string, classId?: string): Promise<PaymentWithDetails[]> {
     const conditions = [];
     if (studentId) conditions.push(eq(payments.studentId, studentId));
     if (studentFeeId) conditions.push(eq(payments.studentFeeId, studentFeeId));
     if (term) conditions.push(eq(studentFees.term, term));
     if (session) conditions.push(eq(studentFees.session, session));
     if (schoolId) conditions.push(eq(feeTypes.schoolId, schoolId));
+    // Note: classId not used for payments filtering as payments follow the student regardless of class
 
     let query = db
       .select()
