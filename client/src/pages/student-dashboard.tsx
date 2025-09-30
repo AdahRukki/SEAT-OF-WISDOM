@@ -121,11 +121,15 @@ export default function StudentDashboard() {
   });
 
   const calculateGrade = (total: number) => {
-    if (total >= 80) return { grade: 'A', color: 'bg-green-500' };
-    if (total >= 60) return { grade: 'B', color: 'bg-blue-500' };
-    if (total >= 50) return { grade: 'C', color: 'bg-yellow-500' };
-    if (total >= 40) return { grade: 'D', color: 'bg-orange-500' };
-    return { grade: 'F', color: 'bg-red-500' };
+    if (total >= 75) return { grade: 'A1', color: 'bg-green-600', remark: 'Excellent' };
+    if (total >= 70) return { grade: 'B2', color: 'bg-green-500', remark: 'Very Good' };
+    if (total >= 65) return { grade: 'B3', color: 'bg-blue-600', remark: 'Good' };
+    if (total >= 60) return { grade: 'C4', color: 'bg-blue-500', remark: 'Credit' };
+    if (total >= 55) return { grade: 'C5', color: 'bg-blue-400', remark: 'Credit' };
+    if (total >= 50) return { grade: 'C6', color: 'bg-yellow-600', remark: 'Credit' };
+    if (total >= 45) return { grade: 'D7', color: 'bg-yellow-500', remark: 'Pass' };
+    if (total >= 40) return { grade: 'E8', color: 'bg-orange-500', remark: 'Pass' };
+    return { grade: 'F9', color: 'bg-red-500', remark: 'Fail' };
   };
 
   const calculateOverallAverage = () => {
@@ -138,9 +142,9 @@ export default function StudentDashboard() {
   const overallGrade = calculateGrade(overallAverage);
 
   // Helper function to calculate age from date of birth
-  const calculateAge = (dateOfBirth: string | null) => {
+  const calculateAge = (dateOfBirth: string | Date | null): number | string => {
     if (!dateOfBirth) return 'N/A';
-    const birthDate = new Date(dateOfBirth);
+    const birthDate = typeof dateOfBirth === 'string' ? new Date(dateOfBirth) : dateOfBirth;
     const today = new Date();
     let calculatedAge = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();

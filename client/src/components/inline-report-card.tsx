@@ -6,7 +6,7 @@ interface InlineReportCardProps {
   user: any;
   selectedTerm: string;
   selectedSession: string;
-  calculateAge: (dateOfBirth: string | null) => number;
+  calculateAge: (dateOfBirth: string | Date | null) => number | string;
 }
 
 export function InlineReportCard({ 
