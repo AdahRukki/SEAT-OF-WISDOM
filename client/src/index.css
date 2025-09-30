@@ -88,6 +88,23 @@
     overflow-x: hidden !important;
   }
   
+  /* Fix calendar header visibility in scrollable popovers */
+  [data-radix-popover-content] .rdp-caption {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: var(--popover) !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+  
+  /* Ensure calendar navigation buttons stay visible */
+  [data-radix-popover-content] .rdp-nav {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 11 !important;
+  }
+  
   /* Fix navigation menu scrolling */
   [data-radix-navigation-menu-content] {
     overflow-y: auto !important;
