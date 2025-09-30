@@ -89,8 +89,8 @@ export function TeacherGradesInterface({
 
 
   const { data: nonAcademicRatings = [], isLoading: ratingsLoading } = useQuery<NonAcademicRating[]>({
-    queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${currentTerm}/${currentSession}`],
-    enabled: !!selectedClassId
+    queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${selectedTerm}/${selectedSession}`],
+    enabled: !!selectedClassId && !!selectedTerm && !!selectedSession
   });
 
   // Mutations
@@ -106,7 +106,7 @@ export function TeacherGradesInterface({
       toast({ description: "Non-academic ratings saved successfully!" });
       // Invalidate the specific ratings query
       queryClient.invalidateQueries({ 
-        queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${currentTerm}/${currentSession}`] 
+        queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${selectedTerm}/${selectedSession}`] 
       });
       // Also invalidate all non-academic ratings queries to ensure refresh
       queryClient.invalidateQueries({ 
@@ -140,8 +140,8 @@ export function TeacherGradesInterface({
     saveNonAcademicRatingMutation.mutate({
       studentId: selectedStudent.id,
       classId: selectedClassId,
-      term: currentTerm,
-      session: currentSession,
+      term: selectedTerm,
+      session: selectedSession,
       ...nonAcademicScores
     });
   };
