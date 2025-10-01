@@ -240,23 +240,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { email, password } = loginSchema.parse(req.body);
       
-      console.log('[LOGIN] Attempting login for:', email);
-      console.log('[LOGIN] Password length:', password?.length);
-      
       let user = null;
       
       // Check if it's a student ID format (SOWA/####)
       if (email.includes('/')) {
-        console.log('[LOGIN] Using student ID authentication');
         user = await storage.authenticateUserByStudentId(email, password);
       } else {
         // It's an email - convert to lowercase for case-insensitive lookup
         const normalizedEmail = email.toLowerCase();
-        console.log('[LOGIN] Using email authentication, normalized:', normalizedEmail);
         user = await storage.authenticateUser(normalizedEmail, password);
       }
-      
-      console.log('[LOGIN] Authentication result:', user ? 'SUCCESS' : 'FAILED');
       
       if (!user) {
         return res.status(401).json({ error: "Invalid credentials" });

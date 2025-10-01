@@ -201,15 +201,9 @@ export class DatabaseStorage implements IStorage {
   async authenticateUser(email: string, password: string): Promise<User | null> {
     // Case-insensitive email lookup using SQL lower() function
     const [user] = await db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
-    console.log('[AUTH] User lookup for email:', email, 'Found:', user ? 'YES' : 'NO');
-    if (!user || !user.isActive) {
-      console.log('[AUTH] User not found or inactive. User exists:', !!user, 'Active:', user?.isActive);
-      return null;
-    }
+    if (!user || !user.isActive) return null;
     
-    console.log('[AUTH] Comparing passwords...');
     const isValidPassword = await bcrypt.compare(password, user.password);
-    console.log('[AUTH] Password valid:', isValidPassword);
     return isValidPassword ? user : null;
   }
 
