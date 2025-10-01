@@ -141,6 +141,31 @@ export default function StudentDashboard() {
     enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
 
+  // Fetch behavioral ratings
+  const { data: behavioralRating = null } = useQuery<any>({ 
+    queryKey: ['/api/student/behavioral-ratings', selectedTerm, selectedClass, selectedSession],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedTerm) params.append('term', selectedTerm);
+      if (selectedClass) params.append('classId', selectedClass);
+      if (selectedSession) params.append('session', selectedSession);
+      
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`/api/student/behavioral-ratings?${params}`, {
+        headers,
+        credentials: 'include'
+      });
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
+  });
+
   const calculateGrade = (total: number) => {
     if (total >= 75) return { grade: 'A1', color: 'bg-green-600', remark: 'Excellent' };
     if (total >= 70) return { grade: 'B2', color: 'bg-green-500', remark: 'Very Good' };
@@ -752,6 +777,7 @@ export default function StudentDashboard() {
                           selectedTerm={selectedTerm}
                           selectedSession={selectedSession || ''}
                           calculateAge={calculateAge}
+                          behavioralRating={behavioralRating}
                         />
                       </div>
                     )}

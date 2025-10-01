@@ -1207,6 +1207,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get student behavioral ratings
+  app.get('/api/student/behavioral-ratings', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const { term = "First Term", session = "2024/2025", classId } = req.query;
+      const student = await storage.getStudentByUserId(user.id);
+      
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+
+      const useClassId = classId as string || student.classId;
+      const ratings = await storage.getNonAcademicRatingByStudent(
+        student.id, 
+        useClassId,
+        term as string, 
+        session as string
+      );
+      
+      res.json(ratings);
+    } catch (error) {
+      console.error("Get student behavioral ratings error:", error);
+      res.status(500).json({ error: "Failed to fetch behavioral ratings" });
+    }
+  });
+
   // Get students by class (for teacher interface)
   app.get('/api/admin/students/by-class/:classId', authenticate, requireAdmin, async (req, res) => {
     try {

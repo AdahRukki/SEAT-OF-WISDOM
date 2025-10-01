@@ -1,4 +1,4 @@
-import { calculateGrade } from "@shared/schema";
+import { calculateGrade, getRatingText } from "@shared/schema";
 
 interface InlineReportCardProps {
   profile: any;
@@ -7,6 +7,7 @@ interface InlineReportCardProps {
   selectedTerm: string;
   selectedSession: string;
   calculateAge: (dateOfBirth: string | Date | null) => number | string;
+  behavioralRating?: any;
 }
 
 export function InlineReportCard({ 
@@ -15,7 +16,8 @@ export function InlineReportCard({
   user, 
   selectedTerm, 
   selectedSession, 
-  calculateAge 
+  calculateAge,
+  behavioralRating 
 }: InlineReportCardProps) {
   if (!profile) return null;
 
@@ -151,6 +153,41 @@ export function InlineReportCard({
           </span></div>
         </div>
       </div>
+
+      {/* Behavioral Ratings Section */}
+      {behavioralRating && (
+        <div className="p-6 bg-gray-50 border-t-2 border-gray-300">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">BEHAVIORAL ASSESSMENT</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Attendance</div>
+              <div className="text-lg font-bold text-blue-800">{getRatingText(behavioralRating.attendancePunctuality || 3)}</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Conduct</div>
+              <div className="text-lg font-bold text-blue-800">{getRatingText(behavioralRating.conduct || 3)}</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Attitude</div>
+              <div className="text-lg font-bold text-blue-800">{getRatingText(behavioralRating.attitude || 3)}</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Cooperation</div>
+              <div className="text-lg font-bold text-blue-800">{getRatingText(behavioralRating.cooperation || 3)}</div>
+            </div>
+            <div className="bg-white p-3 rounded-lg border border-gray-200 text-center">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Neatness</div>
+              <div className="text-lg font-bold text-blue-800">{getRatingText(behavioralRating.neatness || 3)}</div>
+            </div>
+          </div>
+          {behavioralRating.comments && (
+            <div className="mt-4 bg-white p-4 rounded-lg border border-gray-200">
+              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Teacher's Comments</div>
+              <p className="text-sm text-gray-700">{behavioralRating.comments}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Footer */}
       <div className="bg-blue-800 text-white p-5 text-center">
