@@ -690,60 +690,72 @@ export default function StudentDashboard() {
 
             {/* Report Card Display */}
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>My Report Card - {selectedTerm}, {selectedSession}</CardTitle>
-                  <CardDescription>
-                    Your comprehensive academic report with detailed scores and grades
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={() => setShowInlineReportCard(!showInlineReportCard)} 
-                    variant="outline"
-                    className="no-print"
-                    data-testid="button-view-report"
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
-                  </Button>
-                  <Button onClick={handlePrintDetailedReport} className="no-print" data-testid="button-print-report">
-                    <Printer className="h-4 w-4 mr-2" />
-                    Print Report Card
-                  </Button>
-                </div>
+              <CardHeader>
+                <CardTitle>My Report Card - {selectedTerm}, {selectedSession}</CardTitle>
+                <CardDescription>
+                  Your comprehensive academic report with detailed scores and grades
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-2 mb-4">
-                  <Button
-                    onClick={() => setShowInlineReportCard(!showInlineReportCard)}
-                    variant="outline"
-                    data-testid="button-view-report-content"
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
-                  </Button>
-                  <Button
-                    onClick={handlePrintDetailedReport}
-                    data-testid="button-print-report-content"
-                  >
-                    <Printer className="h-4 w-4 mr-2" />
-                    Print Detailed Report Card
-                  </Button>
-                </div>
-                
-                {/* Inline Report Card Viewer */}
-                {showInlineReportCard && profile && (
-                  <div className="mb-6" data-testid="inline-report-card">
-                    <InlineReportCard
-                      profile={profile}
-                      assessments={assessments}
-                      user={user}
-                      selectedTerm={selectedTerm}
-                      selectedSession={selectedSession || ''}
-                      calculateAge={calculateAge}
-                    />
+                {assessments.length === 0 ? (
+                  <div className="text-center py-12 px-4">
+                    <div className="mb-4">
+                      <svg
+                        className="mx-auto h-16 w-16 text-gray-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      Report Card Not Available
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                      Your report card for {selectedTerm}, {selectedSession} has not been generated yet. 
+                      Please check back later or contact your school administrator.
+                    </p>
                   </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2 mb-4">
+                      <Button
+                        onClick={() => setShowInlineReportCard(!showInlineReportCard)}
+                        variant="outline"
+                        data-testid="button-view-report-content"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
+                      </Button>
+                      <Button
+                        onClick={handlePrintDetailedReport}
+                        data-testid="button-print-report-content"
+                      >
+                        <Printer className="h-4 w-4 mr-2" />
+                        Print Detailed Report Card
+                      </Button>
+                    </div>
+                    
+                    {/* Inline Report Card Viewer */}
+                    {showInlineReportCard && profile && (
+                      <div className="mb-6" data-testid="inline-report-card">
+                        <InlineReportCard
+                          profile={profile}
+                          assessments={assessments}
+                          user={user}
+                          selectedTerm={selectedTerm}
+                          selectedSession={selectedSession || ''}
+                          calculateAge={calculateAge}
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
