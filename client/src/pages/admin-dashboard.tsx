@@ -6039,9 +6039,11 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Select session" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="2024/2025">2024/2025</SelectItem>
-                    <SelectItem value="2025/2026">2025/2026</SelectItem>
-                    <SelectItem value="2026/2027">2026/2027</SelectItem>
+                    {academicSessions.map((session) => (
+                      <SelectItem key={session.id} value={session.sessionYear}>
+                        {session.sessionYear}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
