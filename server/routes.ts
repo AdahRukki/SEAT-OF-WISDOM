@@ -1207,41 +1207,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/student/generated-report', authenticate, async (req, res) => {
-    try {
-      const user = (req as any).user;
-      if (user.role !== 'student') {
-        return res.status(403).json({ error: "Student access required" });
-      }
-
-      const { term, session, classId } = req.query;
-      const student = await storage.getStudentByUserId(user.id);
-      
-      if (!student) {
-        return res.status(404).json({ error: "Student profile not found" });
-      }
-
-      if (!term || !session || !classId) {
-        return res.status(400).json({ error: "Term, session, and classId are required" });
-      }
-
-      // Get all generated reports for this student
-      const allReports = await storage.getGeneratedReportCardsByStudent(student.id);
-      
-      // Filter for the specific term, session, and class
-      const matchingReport = allReports.find(report => 
-        report.term === term && 
-        report.session === session && 
-        report.classId === classId
-      );
-      
-      res.json(matchingReport || null);
-    } catch (error) {
-      console.error("Get student generated report error:", error);
-      res.status(500).json({ error: "Failed to fetch generated report" });
-    }
-  });
-
   // Get students by class (for teacher interface)
   app.get('/api/admin/students/by-class/:classId', authenticate, requireAdmin, async (req, res) => {
     try {
