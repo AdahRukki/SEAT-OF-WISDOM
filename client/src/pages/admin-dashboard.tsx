@@ -318,6 +318,11 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/academic-sessions'],
   });
 
+  // Fetch academic terms
+  const { data: academicTerms = [] } = useQuery<{ id: string; termName: string; sessionId: string; isActive: boolean }[]>({
+    queryKey: ['/api/admin/academic-terms'],
+  });
+
   // Sync Settings form with actual academic calendar
   useEffect(() => {
     if (academicInfo?.currentTerm) {
@@ -6019,31 +6024,28 @@ export default function AdminDashboard() {
             
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Term</Label>
-                <Select value={reportTerm} onValueChange={setReportTerm}>
+                <Label>Term and Session</Label>
+                <Select 
+                  value={`${reportTerm}|${reportSession}`} 
+                  onValueChange={(value) => {
+                    const [term, session] = value.split('|');
+                    setReportTerm(term);
+                    setReportSession(session);
+                  }}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select term" />
+                    <SelectValue placeholder="Select term and session" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="First Term">First Term</SelectItem>
-                    <SelectItem value="Second Term">Second Term</SelectItem>
-                    <SelectItem value="Third Term">Third Term</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Academic Session</Label>
-                <Select value={reportSession} onValueChange={setReportSession}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {academicSessions.map((session) => (
-                      <SelectItem key={session.id} value={session.sessionYear}>
-                        {session.sessionYear}
-                      </SelectItem>
-                    ))}
+                    {academicTerms.map((term) => {
+                      const session = academicSessions.find(s => s.id === term.sessionId);
+                      if (!session) return null;
+                      return (
+                        <SelectItem key={term.id} value={`${term.termName}|${session.sessionYear}`}>
+                          {term.termName}, {session.sessionYear}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
