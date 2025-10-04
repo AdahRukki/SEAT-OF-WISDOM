@@ -776,11 +776,14 @@ export function ReportCardManagement({
         ),
       );
 
-      const [assessmentArrays, attendance] = await Promise.all([
+      const [assessmentArrays, attendance, behavioralRatings] = await Promise.all([
         Promise.all(assessmentPromises),
         apiRequest(
           `/api/admin/attendance/class/${report.classId}?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`,
         ),
+        apiRequest(
+          `/api/admin/non-academic-ratings/${report.classId}/${encodeURIComponent(report.term)}/${encodeURIComponent(report.session)}`,
+        ).catch(() => []) // Return empty array if no ratings found
       ]);
 
       // Flatten assessments and filter for this student
@@ -810,6 +813,22 @@ export function ReportCardManagement({
             (studentAttendance.presentDays / studentAttendance.totalDays) * 100,
           )
         : 0;
+
+      // Get behavioral rating for this student
+      const studentBehavioralRating = behavioralRatings.find(
+        (rating: any) => rating.studentId === student.id
+      );
+
+      // Helper function to convert numeric rating to text
+      const getRatingText = (rating: number | null | undefined): string => {
+        if (!rating) return 'Not Rated';
+        if (rating === 5) return 'Excellent';
+        if (rating === 4) return 'Very Good';
+        if (rating === 3) return 'Good';
+        if (rating === 2) return 'Fair';
+        if (rating === 1) return 'Poor';
+        return 'Not Rated';
+      };
 
       // Generate the detailed report card
       const reportWindow = window.open("", "_blank");
@@ -960,6 +979,40 @@ export function ReportCardManagement({
                 border-top: 2px solid #374151;
                 padding-top: 10px;
                 font-size: 12px;
+              }
+              .behavioral-section {
+                padding: 25px;
+                background: linear-gradient(135deg, #fef3f2 0%, #fee2e2 100%);
+                border-top: 3px solid #ef4444;
+                margin-top: 0;
+              }
+              .behavioral-section h3 {
+                text-align: center;
+                color: #991b1b;
+                margin-bottom: 20px;
+                font-size: 16px;
+              }
+              .behavioral-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+              }
+              .behavioral-item {
+                background: white;
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid #fecaca;
+              }
+              .behavioral-label {
+                font-size: 11px;
+                color: #7f1d1d;
+                font-weight: bold;
+                margin-bottom: 5px;
+              }
+              .behavioral-value {
+                font-size: 14px;
+                font-weight: bold;
+                color: #dc2626;
               }
               @media print {
                 body { background: white !important; margin: 0 !important; }
@@ -1128,6 +1181,34 @@ export function ReportCardManagement({
                   <div>Result Status: <strong>${(totalMarks / (subjects.length * 100)) * 100 >= 40 ? "PASS" : "FAIL"}</strong></div>
                 </div>
               </div>
+
+              ${studentBehavioralRating ? `
+              <div class="behavioral-section">
+                <h3>📋 BEHAVIORAL ASSESSMENT</h3>
+                <div class="behavioral-grid">
+                  <div class="behavioral-item">
+                    <div class="behavioral-label">Attendance & Punctuality</div>
+                    <div class="behavioral-value">${getRatingText(studentBehavioralRating.attendancePunctuality)}</div>
+                  </div>
+                  <div class="behavioral-item">
+                    <div class="behavioral-label">Neatness & Organization</div>
+                    <div class="behavioral-value">${getRatingText(studentBehavioralRating.neatnessOrganization)}</div>
+                  </div>
+                  <div class="behavioral-item">
+                    <div class="behavioral-label">Respect & Politeness</div>
+                    <div class="behavioral-value">${getRatingText(studentBehavioralRating.respectPoliteness)}</div>
+                  </div>
+                  <div class="behavioral-item">
+                    <div class="behavioral-label">Participation & Teamwork</div>
+                    <div class="behavioral-value">${getRatingText(studentBehavioralRating.participationTeamwork)}</div>
+                  </div>
+                  <div class="behavioral-item">
+                    <div class="behavioral-label">Responsibility</div>
+                    <div class="behavioral-value">${getRatingText(studentBehavioralRating.responsibility)}</div>
+                  </div>
+                </div>
+              </div>
+              ` : ''}
 
               <div class="footer">
                 <div style="margin-bottom: 15px;">
