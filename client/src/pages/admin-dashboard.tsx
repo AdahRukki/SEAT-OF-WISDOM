@@ -379,8 +379,8 @@ export default function AdminDashboard() {
   
   // Universal settings management
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [globalTerm, setGlobalTerm] = useState("First Term");
-  const [globalSession, setGlobalSession] = useState("2024/2025");
+  const [globalTerm, setGlobalTerm] = useState("");
+  const [globalSession, setGlobalSession] = useState("");
   
 
   
