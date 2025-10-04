@@ -343,6 +343,16 @@ export default function AdminDashboard() {
     }
   }, [academicInfo]);
 
+  // Initialize report term/session on first load only (allow manual selection for historical reports)
+  useEffect(() => {
+    if (academicInfo?.currentTerm && !reportTerm) {
+      setReportTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession && !reportSession) {
+      setReportSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
+
   // Check Firebase data on mount
   useEffect(() => {
     checkFirebaseData();

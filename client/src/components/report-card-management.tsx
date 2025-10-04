@@ -139,12 +139,12 @@ export function ReportCardManagement({
     queryKey: ['/api/admin/academic-terms'],
   });
 
-  // Sync local state with academic info from database (single source of truth)
+  // Initialize with current term/session on first load only
   useEffect(() => {
-    if (academicInfo?.currentTerm) {
+    if (academicInfo?.currentTerm && !selectedTerm) {
       setSelectedTerm(academicInfo.currentTerm);
     }
-    if (academicInfo?.currentSession) {
+    if (academicInfo?.currentSession && !selectedSession) {
       setSelectedSession(academicInfo.currentSession);
     }
   }, [academicInfo]);
