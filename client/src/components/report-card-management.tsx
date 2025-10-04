@@ -61,6 +61,7 @@ import {
   CalendarDays,
   BookOpen,
 } from "lucide-react";
+import { calculateGrade } from "@shared/schema";
 
 interface ReportCardManagementProps {
   classes: any[];
@@ -1116,28 +1117,7 @@ export function ReportCardManagement({
                       const exam = assessment?.exam || 0;
                       const total = firstCA + secondCA + exam;
 
-                      let grade = "F";
-                      let remark = "Fail";
-
-                      if (total >= 90) {
-                        grade = "A+";
-                        remark = "Excellent";
-                      } else if (total >= 80) {
-                        grade = "A";
-                        remark = "Very Good";
-                      } else if (total >= 70) {
-                        grade = "B";
-                        remark = "Good";
-                      } else if (total >= 60) {
-                        grade = "C";
-                        remark = "Credit";
-                      } else if (total >= 50) {
-                        grade = "D";
-                        remark = "Pass";
-                      } else if (total >= 40) {
-                        grade = "E";
-                        remark = "Poor";
-                      }
+                      const { grade, remark } = calculateGrade(total);
 
                       return `
                       <tr>
