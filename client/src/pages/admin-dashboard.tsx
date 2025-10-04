@@ -3075,10 +3075,10 @@ export default function AdminDashboard() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Select Session</Label>
+                    <Label>Select Academic Session</Label>
                     <Select value={scoresSession} onValueChange={setScoresSession}>
-                      <SelectTrigger data-testid="select-scores-session">
-                        <SelectValue placeholder="Select session" />
+                      <SelectTrigger data-testid="select-academic-session">
+                        <SelectValue placeholder="Choose an academic session" />
                       </SelectTrigger>
                       <SelectContent>
                         {academicSessions.map((session) => (

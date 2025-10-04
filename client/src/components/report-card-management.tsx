@@ -2,24 +2,24 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { 
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -47,10 +47,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { 
-  FileText, 
-  AlertTriangle, 
-  CheckCircle, 
+import {
+  FileText,
+  AlertTriangle,
+  CheckCircle,
   Trash2,
   Eye,
   Download,
@@ -59,7 +59,7 @@ import {
   ArrowRight,
   RefreshCw,
   CalendarDays,
-  BookOpen
+  BookOpen,
 } from "lucide-react";
 
 interface ReportCardManagementProps {
@@ -88,21 +88,30 @@ interface GeneratedReportCard {
   generatedBy: string;
 }
 
-export function ReportCardManagement({ classes, user }: ReportCardManagementProps) {
+export function ReportCardManagement({
+  classes,
+  user,
+}: ReportCardManagementProps) {
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("");
   const [selectedSession, setSelectedSession] = useState("");
-  const [validationResults, setValidationResults] = useState<Record<string, ValidationResult>>({});
+  const [validationResults, setValidationResults] = useState<
+    Record<string, ValidationResult>
+  >({});
   const [isValidating, setIsValidating] = useState(false);
   const [batchResumptionDate, setBatchResumptionDate] = useState("");
   const [isBatchGenerating, setIsBatchGenerating] = useState(false);
-  const [generatingReports, setGeneratingReports] = useState<Set<string>>(new Set());
+  const [generatingReports, setGeneratingReports] = useState<Set<string>>(
+    new Set(),
+  );
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Fetch generated report cards
-  const { data: generatedReports = [], isLoading: isLoadingReports } = useQuery<GeneratedReportCard[]>({
+  const { data: generatedReports = [], isLoading: isLoadingReports } = useQuery<
+    GeneratedReportCard[]
+  >({
     queryKey: ["/api/admin/generated-reports"],
   });
 
@@ -113,21 +122,41 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
   });
 
   // Use same academic info query as Settings for synchronization
-  const { data: academicInfo } = useQuery({
-    queryKey: ['/api/current-academic-info'],
+  const { data: academicInfo } = useQuery<{
+    currentSession: string | null;
+    currentTerm: string | null;
+  }>({
+    queryKey: ["/api/current-academic-info"],
+  });
+
+  // Fetch academic sessions
+  const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string; isActive: boolean }[]>({
+    queryKey: ['/api/admin/academic-sessions'],
+  });
+
+  // Fetch academic terms
+  const { data: academicTerms = [] } = useQuery<{ id: string; termName: string; sessionId: string; isActive: boolean }[]>({
+    queryKey: ['/api/admin/academic-terms'],
   });
 
   // Sync local state with academic info from database (single source of truth)
   useEffect(() => {
-    if (academicInfo) {
+    if (academicInfo?.currentTerm) {
       setSelectedTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession) {
       setSelectedSession(academicInfo.currentSession);
     }
   }, [academicInfo]);
 
   // Validation mutation
   const validateMutation = useMutation({
-    mutationFn: async (data: { studentId: string; classId: string; term: string; session: string }) => {
+    mutationFn: async (data: {
+      studentId: string;
+      classId: string;
+      term: string;
+      session: string;
+    }) => {
       return await apiRequest("/api/admin/validate-report-data", {
         method: "POST",
         body: data,
@@ -136,14 +165,17 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     onSuccess: (result, variables) => {
       // Map server response to frontend ValidationResult format
       const validationResult: ValidationResult = {
-        hasAllScores: result.status === "complete" || (result.status === "partial" && (!result.missingSubjects || result.missingSubjects.length === 0)),
+        hasAllScores:
+          result.status === "complete" ||
+          (result.status === "partial" &&
+            (!result.missingSubjects || result.missingSubjects.length === 0)),
         hasAttendance: result.hasAttendance,
-        missingSubjects: result.missingSubjects || []
+        missingSubjects: result.missingSubjects || [],
       };
-      
-      setValidationResults(prev => ({
+
+      setValidationResults((prev) => ({
         ...prev,
-        [variables.studentId]: validationResult
+        [variables.studentId]: validationResult,
       }));
     },
     onError: (error) => {
@@ -163,7 +195,9 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/generated-reports"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/generated-reports"],
+      });
       toast({
         title: "Success",
         description: "Report card deleted successfully",
@@ -187,7 +221,9 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/generated-reports"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/generated-reports"],
+      });
       toast({
         title: "Success",
         description: "Report card record created successfully",
@@ -233,7 +269,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           session: selectedSession,
         });
       }
-      
+
       toast({
         title: "Validation Complete",
         description: `Validated ${students.length} students. Check the results below.`,
@@ -256,11 +292,14 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       totalStudents: number;
       validatedStudents: number;
       issues: string[];
-    }
+    };
   }>({});
   const [isAllStudentsValidated, setIsAllStudentsValidated] = useState(false);
-  const [showResumptionDateDialog, setShowResumptionDateDialog] = useState(false);
-  const [resumptionDate, setResumptionDate] = useState<Date | undefined>(undefined);
+  const [showResumptionDateDialog, setShowResumptionDateDialog] =
+    useState(false);
+  const [resumptionDate, setResumptionDate] = useState<Date | undefined>(
+    undefined,
+  );
   const [isGeneratingReports, setIsGeneratingReports] = useState(false);
 
   // Validation for entire school - only validates, shows class issues
@@ -274,12 +313,14 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       // Use shared academic info instead of direct API call
       if (!academicInfo?.currentTerm || !academicInfo?.currentSession) {
         try {
-          await apiRequest('/api/admin/initialize-academic-calendar', {
-            method: 'POST'
+          await apiRequest("/api/admin/initialize-academic-calendar", {
+            method: "POST",
           });
           // Refresh the academic info query after initialization
-          queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
-          
+          queryClient.invalidateQueries({
+            queryKey: ["/api/current-academic-info"],
+          });
+
           toast({
             title: "Academic Calendar Initialized",
             description: "Academic calendar has been initialized successfully.",
@@ -287,7 +328,8 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         } catch (error) {
           toast({
             title: "Initialization Failed",
-            description: "Failed to initialize academic calendar. Please contact administrator.",
+            description:
+              "Failed to initialize academic calendar. Please contact administrator.",
             variant: "destructive",
           });
           return;
@@ -303,7 +345,9 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
 
       // Validate all students by class
       for (const classItem of classes) {
-        const classStudents = await apiRequest(`/api/admin/students/class/${classItem.id}`);
+        const classStudents = await apiRequest(
+          `/api/admin/students/class/${classItem.id}`,
+        );
         const classTotal = classStudents.length;
         let classValidated = 0;
         const classIssues: string[] = [];
@@ -319,16 +363,20 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
               term: currentTerm,
               session: currentSession,
             });
-            
-            if (validationResult.status === 'complete') {
+
+            if (validationResult.status === "complete") {
               classValidated++;
               validatedStudentsAcrossSchool++;
             } else {
-              classIssues.push(`${student.user.firstName} ${student.user.lastName}: ${validationResult.message}`);
+              classIssues.push(
+                `${student.user.firstName} ${student.user.lastName}: ${validationResult.message}`,
+              );
             }
           } catch (error) {
             console.error(`Failed to validate student ${student.id}:`, error);
-            classIssues.push(`${student.user.firstName} ${student.user.lastName}: Validation failed`);
+            classIssues.push(
+              `${student.user.firstName} ${student.user.lastName}: Validation failed`,
+            );
           }
         }
 
@@ -337,12 +385,12 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           className: classItem.name,
           totalStudents: classTotal,
           validatedStudents: classValidated,
-          issues: classIssues
+          issues: classIssues,
         };
       }
 
       setSchoolValidationResults(classResults);
-      
+
       if (totalStudentsAcrossSchool === 0) {
         toast({
           title: "No Students Found",
@@ -352,20 +400,24 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         return;
       }
 
-      const successRate = (validatedStudentsAcrossSchool / totalStudentsAcrossSchool) * 100;
-      const allValidated = validatedStudentsAcrossSchool === totalStudentsAcrossSchool;
+      const successRate =
+        (validatedStudentsAcrossSchool / totalStudentsAcrossSchool) * 100;
+      const allValidated =
+        validatedStudentsAcrossSchool === totalStudentsAcrossSchool;
       setIsAllStudentsValidated(allValidated);
-      
+
       toast({
-        title: allValidated ? "All Students Validated Successfully" : "Validation Complete - Issues Found",
+        title: allValidated
+          ? "All Students Validated Successfully"
+          : "Validation Complete - Issues Found",
         description: `${validatedStudentsAcrossSchool}/${totalStudentsAcrossSchool} students validated (${successRate.toFixed(1)}%). Check class details below.`,
         variant: allValidated ? "default" : "destructive",
       });
-
     } catch (error) {
       toast({
         title: "Validation Error",
-        description: "Failed to complete school-wide validation. Please try again.",
+        description:
+          "Failed to complete school-wide validation. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -379,7 +431,8 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     if (!isAllStudentsValidated) {
       toast({
         title: "Validation Required",
-        description: "All students must be validated before generating reports.",
+        description:
+          "All students must be validated before generating reports.",
         variant: "destructive",
       });
       return;
@@ -429,8 +482,10 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         const classResult = schoolValidationResults[classId];
         if (classResult.validatedStudents > 0) {
           // Get students for this class
-          const classStudents = await apiRequest(`/api/admin/students/class/${classId}`);
-          
+          const classStudents = await apiRequest(
+            `/api/admin/students/class/${classId}`,
+          );
+
           for (const student of classStudents) {
             // Only generate for validated students
             if (validatedStudentIds.has(student.id)) {
@@ -448,10 +503,13 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                   attendancePercentage: "0", // Would be calculated from attendance data
                   resumptionDate: resumptionDateStr, // Include resumption date
                 });
-                
+
                 generatedReports++;
               } catch (error) {
-                console.error(`Failed to generate report for student ${student.id}:`, error);
+                console.error(
+                  `Failed to generate report for student ${student.id}:`,
+                  error,
+                );
                 throw error; // Stop process if report generation fails
               }
             }
@@ -462,12 +520,14 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       const allReportsGenerated = generatedReports === totalReports;
 
       if (!allReportsGenerated) {
-        throw new Error(`Only ${generatedReports}/${totalReports} reports generated successfully`);
+        throw new Error(
+          `Only ${generatedReports}/${totalReports} reports generated successfully`,
+        );
       }
 
       toast({
         title: "All Reports Generated Successfully",
-        description: `Generated ${generatedReports} reports. ${isThirdTerm ? 'Promoting students...' : 'Advancing term...'}`,
+        description: `Generated ${generatedReports} reports. ${isThirdTerm ? "Promoting students..." : "Advancing term..."}`,
       });
 
       // Sequential execution: Promote first (if third term), then advance term
@@ -476,28 +536,33 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           await promoteStudentsToNextClass();
           toast({
             title: "Students Promoted",
-            description: "All students have been promoted to their next classes.",
+            description:
+              "All students have been promoted to their next classes.",
           });
         }
 
         // Only advance term if promotion succeeded (or not needed)
         await advanceAcademicTerm.mutateAsync();
-        
       } catch (promotionOrAdvanceError) {
-        console.error("Failed during promotion or term advancement:", promotionOrAdvanceError);
+        console.error(
+          "Failed during promotion or term advancement:",
+          promotionOrAdvanceError,
+        );
         toast({
           title: "Process Failed",
-          description: isThirdTerm ? "Student promotion failed. Term not advanced." : "Term advancement failed.",
+          description: isThirdTerm
+            ? "Student promotion failed. Term not advanced."
+            : "Term advancement failed.",
           variant: "destructive",
         });
         throw promotionOrAdvanceError;
       }
-
     } catch (error) {
       console.error("Report generation process failed:", error);
       toast({
         title: "Process Failed",
-        description: "Failed to complete report generation and term advancement.",
+        description:
+          "Failed to complete report generation and term advancement.",
         variant: "destructive",
       });
     } finally {
@@ -508,63 +573,70 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
   // Student promotion logic for third term
   const promoteStudentsToNextClass = async () => {
     console.log("Starting student promotion process...");
-    
+
     try {
       let totalPromoted = 0;
       let totalGraduated = 0;
-      
+
       // Process each class with validated students
       for (const classId in schoolValidationResults) {
         const classResult = schoolValidationResults[classId];
         if (classResult.validatedStudents > 0) {
           // Get students for this class
-          const classStudents = await apiRequest(`/api/admin/students/class/${classId}`);
-          
+          const classStudents = await apiRequest(
+            `/api/admin/students/class/${classId}`,
+          );
+
           // Determine next class for this class
           const nextClassId = getNextClass(classId);
-          
-          if (nextClassId === 'GRADUATE') {
+
+          if (nextClassId === "GRADUATE") {
             // Students graduate (SS3 → Graduate)
             const studentIds = classStudents.map((s: any) => s.id);
             if (studentIds.length > 0) {
-              await apiRequest('/api/admin/promote-students', {
-                method: 'POST',
-                body: { 
+              await apiRequest("/api/admin/promote-students", {
+                method: "POST",
+                body: {
                   currentClassId: classId,
-                  nextClassId: 'graduated',
-                  studentIds 
-                }
+                  nextClassId: "graduated",
+                  studentIds,
+                },
               });
               totalGraduated += studentIds.length;
-              console.log(`Graduated ${studentIds.length} students from ${classId}`);
+              console.log(
+                `Graduated ${studentIds.length} students from ${classId}`,
+              );
             }
           } else if (nextClassId) {
             // Promote to next class
             const studentIds = classStudents.map((s: any) => s.id);
             if (studentIds.length > 0) {
-              await apiRequest('/api/admin/promote-students', {
-                method: 'POST',
-                body: { 
+              await apiRequest("/api/admin/promote-students", {
+                method: "POST",
+                body: {
                   currentClassId: classId,
                   nextClassId: nextClassId,
-                  studentIds
-                }
+                  studentIds,
+                },
               });
               totalPromoted += studentIds.length;
-              console.log(`Promoted ${studentIds.length} students from ${classId} to ${nextClassId}`);
+              console.log(
+                `Promoted ${studentIds.length} students from ${classId} to ${nextClassId}`,
+              );
             }
           }
         }
       }
-      
+
       if (totalPromoted > 0 || totalGraduated > 0) {
         const message = [];
-        if (totalPromoted > 0) message.push(`${totalPromoted} students promoted`);
-        if (totalGraduated > 0) message.push(`${totalGraduated} students graduated`);
-        
-        console.log(`Promotion complete: ${message.join(', ')}`);
+        if (totalPromoted > 0)
+          message.push(`${totalPromoted} students promoted`);
+        if (totalGraduated > 0)
+          message.push(`${totalGraduated} students graduated`);
+
+        console.log(`Promotion complete: ${message.join(", ")}`);
       }
-      
     } catch (error) {
       console.error("Error promoting students:", error);
       throw new Error("Failed to promote students to next classes");
@@ -576,53 +648,53 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     // Extract school number and class info from ID (e.g., "SCH1-JSS1")
     const match = currentClassId.match(/^(SCH\d+)-([A-Z]+)(\d+)$/);
     if (!match) return null;
-    
+
     const [, schoolPrefix, classType, classNumber] = match;
     const currentNumber = parseInt(classNumber);
-    
-    if (classType === 'JSS') {
+
+    if (classType === "JSS") {
       if (currentNumber === 1) return `${schoolPrefix}-JSS2`;
       if (currentNumber === 2) return `${schoolPrefix}-JSS3`;
       if (currentNumber === 3) return `${schoolPrefix}-SS1`;
-    } else if (classType === 'SS') {
+    } else if (classType === "SS") {
       if (currentNumber === 1) return `${schoolPrefix}-SS2`;
       if (currentNumber === 2) return `${schoolPrefix}-SS3`;
-      if (currentNumber === 3) return 'GRADUATE'; // SS3 graduates
-    } else if (classType === 'PRI') {
+      if (currentNumber === 3) return "GRADUATE"; // SS3 graduates
+    } else if (classType === "PRI") {
       // Primary school progression
       if (currentNumber < 6) return `${schoolPrefix}-PRI${currentNumber + 1}`;
       if (currentNumber === 6) return `${schoolPrefix}-JSS1`; // Primary 6 → JSS1
     }
-    
+
     return null; // Unknown class type or final year
   };
 
   // Helper function to get promotion message for report cards
   const getPromotionMessage = (studentClassId: string): string => {
     const nextClass = getNextClass(studentClassId);
-    
-    if (nextClass === 'GRADUATE') {
+
+    if (nextClass === "GRADUATE") {
       return "Congratulations! You have successfully graduated.";
     } else if (nextClass) {
       // Convert class ID to readable name (SCH1-JSS2 → "J.S.S 2")
       const match = nextClass.match(/^SCH\d+-([A-Z]+)(\d+)$/);
       if (match) {
         const [, classType, number] = match;
-        if (classType === 'JSS') return `Promoted to J.S.S ${number}`;
-        if (classType === 'SS') return `Promoted to S.S.S ${number}`;
-        if (classType === 'PRI') return `Promoted to Primary ${number}`;
+        if (classType === "JSS") return `Promoted to J.S.S ${number}`;
+        if (classType === "SS") return `Promoted to S.S.S ${number}`;
+        if (classType === "PRI") return `Promoted to Primary ${number}`;
       }
       return `Promoted to ${nextClass}`;
     }
-    
+
     return "Continue to next session";
   };
 
   // Term progression system
   const advanceAcademicTerm = useMutation({
     mutationFn: async () => {
-      return await apiRequest('/api/admin/advance-term', {
-        method: 'POST'
+      return await apiRequest("/api/admin/advance-term", {
+        method: "POST",
       });
     },
     onSuccess: (response) => {
@@ -631,7 +703,9 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
         description: `School has been advanced to ${response.newTerm} ${response.newSession}`,
       });
       // Refresh current academic info to sync with Settings page
-      queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/current-academic-info"],
+      });
       // Also reset validation results since we're in a new term
       setSchoolValidationResults({});
       setValidationResults({});
@@ -668,47 +742,68 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     return validation && validation.hasAllScores && validation.hasAttendance;
   };
 
-  const handleViewReportCard = async (report: GeneratedReportCard, resumptionDate?: string) => {
+  const handleViewReportCard = async (
+    report: GeneratedReportCard,
+    resumptionDate?: string,
+  ) => {
     try {
       // Fetch the student data first
       const allStudents = await apiRequest("/api/admin/students");
       const student = allStudents.find((s: any) => s.id === report.studentId);
-      
+
       if (!student) {
         throw new Error("Student not found");
       }
 
-
       // Fetch subjects first
-      const subjects = await apiRequest(`/api/admin/classes/${report.classId}/subjects`);
-      
-      // Fetch assessments for each subject for this student
-      const assessmentPromises = subjects.map((subject: any) => 
-        apiRequest(`/api/admin/assessments?classId=${report.classId}&subjectId=${subject.id}&term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`)
+      const subjects = await apiRequest(
+        `/api/admin/classes/${report.classId}/subjects`,
       );
-      
+
+      // Fetch assessments for each subject for this student
+      const assessmentPromises = subjects.map((subject: any) =>
+        apiRequest(
+          `/api/admin/assessments?classId=${report.classId}&subjectId=${subject.id}&term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`,
+        ),
+      );
+
       const [assessmentArrays, attendance] = await Promise.all([
         Promise.all(assessmentPromises),
-        apiRequest(`/api/admin/attendance/class/${report.classId}?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`)
+        apiRequest(
+          `/api/admin/attendance/class/${report.classId}?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`,
+        ),
       ]);
 
       // Flatten assessments and filter for this student
       const allAssessments = assessmentArrays.flat();
-      const assessments = allAssessments.filter((a: any) => a.studentId === report.studentId);
-
+      const assessments = allAssessments.filter(
+        (a: any) => a.studentId === report.studentId,
+      );
 
       // Calculate totals
       const totalMarks = subjects.reduce((sum: number, subject: any) => {
-        const assessment = assessments.find((a: any) => a.studentId === student.id && a.subjectId === subject.id);
-        return sum + ((assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0));
+        const assessment = assessments.find(
+          (a: any) => a.studentId === student.id && a.subjectId === subject.id,
+        );
+        return (
+          sum +
+          ((assessment?.firstCA || 0) +
+            (assessment?.secondCA || 0) +
+            (assessment?.exam || 0))
+        );
       }, 0);
 
-      const studentAttendance = attendance.find((att: any) => att.studentId === student.id);
-      const attendancePercentage = studentAttendance ? 
-        Math.round((studentAttendance.presentDays / studentAttendance.totalDays) * 100) : 0;
+      const studentAttendance = attendance.find(
+        (att: any) => att.studentId === student.id,
+      );
+      const attendancePercentage = studentAttendance
+        ? Math.round(
+            (studentAttendance.presentDays / studentAttendance.totalDays) * 100,
+          )
+        : 0;
 
       // Generate the detailed report card
-      const reportWindow = window.open('', '_blank');
+      const reportWindow = window.open("", "_blank");
       if (!reportWindow) return;
 
       const reportHTML = `
@@ -894,33 +989,43 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                 </div>
                 <div class="info-item">
                   <span class="info-label">Age:</span>
-                  <span class="info-value">${student.dateOfBirth ? (() => {
-                    const birthDate = new Date(student.dateOfBirth);
-                    const today = new Date();
-                    
-                    // Check if the date is valid
-                    if (isNaN(birthDate.getTime())) {
-                      return 'N/A';
-                    }
-                    
-                    // Check if the birth date is in the future
-                    if (birthDate > today) {
-                      return 'N/A';
-                    }
-                    
-                    let calculatedAge = today.getFullYear() - birthDate.getFullYear();
-                    const monthDiff = today.getMonth() - birthDate.getMonth();
-                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-                      calculatedAge--;
-                    }
-                    
-                    // Ensure age is reasonable (between 0 and 150)
-                    if (calculatedAge < 0 || calculatedAge > 150) {
-                      return 'N/A';
-                    }
-                    
-                    return calculatedAge;
-                  })() : 'N/A'} years</span>
+                  <span class="info-value">${
+                    student.dateOfBirth
+                      ? (() => {
+                          const birthDate = new Date(student.dateOfBirth);
+                          const today = new Date();
+
+                          // Check if the date is valid
+                          if (isNaN(birthDate.getTime())) {
+                            return "N/A";
+                          }
+
+                          // Check if the birth date is in the future
+                          if (birthDate > today) {
+                            return "N/A";
+                          }
+
+                          let calculatedAge =
+                            today.getFullYear() - birthDate.getFullYear();
+                          const monthDiff =
+                            today.getMonth() - birthDate.getMonth();
+                          if (
+                            monthDiff < 0 ||
+                            (monthDiff === 0 &&
+                              today.getDate() < birthDate.getDate())
+                          ) {
+                            calculatedAge--;
+                          }
+
+                          // Ensure age is reasonable (between 0 and 150)
+                          if (calculatedAge < 0 || calculatedAge > 150) {
+                            return "N/A";
+                          }
+
+                          return calculatedAge;
+                        })()
+                      : "N/A"
+                  } years</span>
                 </div>
               </div>
 
@@ -937,24 +1042,42 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                   </tr>
                 </thead>
                 <tbody>
-                  ${subjects.map((subject: any) => {
-                    const assessment = assessments.find((a: any) => a.studentId === student.id && a.subjectId === subject.id);
-                    const firstCA = assessment?.firstCA || 0;
-                    const secondCA = assessment?.secondCA || 0;
-                    const exam = assessment?.exam || 0;
-                    const total = firstCA + secondCA + exam;
-                    
-                    let grade = 'F';
-                    let remark = 'Fail';
-                    
-                    if (total >= 90) { grade = 'A+'; remark = 'Excellent'; }
-                    else if (total >= 80) { grade = 'A'; remark = 'Very Good'; }
-                    else if (total >= 70) { grade = 'B'; remark = 'Good'; }
-                    else if (total >= 60) { grade = 'C'; remark = 'Credit'; }
-                    else if (total >= 50) { grade = 'D'; remark = 'Pass'; }
-                    else if (total >= 40) { grade = 'E'; remark = 'Poor'; }
-                    
-                    return `
+                  ${subjects
+                    .map((subject: any) => {
+                      const assessment = assessments.find(
+                        (a: any) =>
+                          a.studentId === student.id &&
+                          a.subjectId === subject.id,
+                      );
+                      const firstCA = assessment?.firstCA || 0;
+                      const secondCA = assessment?.secondCA || 0;
+                      const exam = assessment?.exam || 0;
+                      const total = firstCA + secondCA + exam;
+
+                      let grade = "F";
+                      let remark = "Fail";
+
+                      if (total >= 90) {
+                        grade = "A+";
+                        remark = "Excellent";
+                      } else if (total >= 80) {
+                        grade = "A";
+                        remark = "Very Good";
+                      } else if (total >= 70) {
+                        grade = "B";
+                        remark = "Good";
+                      } else if (total >= 60) {
+                        grade = "C";
+                        remark = "Credit";
+                      } else if (total >= 50) {
+                        grade = "D";
+                        remark = "Pass";
+                      } else if (total >= 40) {
+                        grade = "E";
+                        remark = "Poor";
+                      }
+
+                      return `
                       <tr>
                         <td class="subject-name">${subject.name}</td>
                         <td>${firstCA}</td>
@@ -965,7 +1088,8 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                         <td>${remark}</td>
                       </tr>
                     `;
-                  }).join('')}
+                    })
+                    .join("")}
                 </tbody>
               </table>
 
@@ -977,7 +1101,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                   </div>
                   <div class="stat-card">
                     <div class="stat-label">AVERAGE</div>
-                    <div class="stat-value">${subjects.length ? (totalMarks / (subjects.length * 100) * 100).toFixed(2) : '0.00'}%</div>
+                    <div class="stat-value">${subjects.length ? ((totalMarks / (subjects.length * 100)) * 100).toFixed(2) : "0.00"}%</div>
                   </div>
                   <div class="stat-card">
                     <div class="stat-label">ATTENDANCE</div>
@@ -985,14 +1109,14 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                   </div>
                   <div class="stat-card">
                     <div class="stat-label">RESULT</div>
-                    <div class="stat-value">${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</div>
+                    <div class="stat-value">${(totalMarks / (subjects.length * 100)) * 100 >= 40 ? "PASS" : "FAIL"}</div>
                   </div>
                 </div>
                 
                 <div style="text-align: center; margin-top: 20px;">
                   <div>No of Subjects: <strong>${subjects.length}</strong></div>
                   <div>Total Obtainable: <strong>${subjects.length * 100}</strong></div>
-                  <div>Result Status: <strong>${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</strong></div>
+                  <div>Result Status: <strong>${(totalMarks / (subjects.length * 100)) * 100 >= 40 ? "PASS" : "FAIL"}</strong></div>
                 </div>
               </div>
 
@@ -1011,19 +1135,27 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                     <div>Parent/Guardian</div>
                   </div>
                 </div>
-                ${resumptionDate ? `
+                ${
+                  resumptionDate
+                    ? `
                 <div class="resumption-section">
                   <h4>📅 NEXT TERM RESUMPTION</h4>
-                  <p>${new Date(resumptionDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <p>${new Date(resumptionDate).toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
                 </div>
-                ` : ''}
+                `
+                    : ""
+                }
                 
-                ${academicInfo?.currentTerm === 'Third Term' ? `
+                ${
+                  academicInfo?.currentTerm === "Third Term"
+                    ? `
                 <div class="promotion-section">
                   <h4>🎓 ACADEMIC PROGRESSION</h4>
                   <p class="promotion-message">${getPromotionMessage(student.classId)}</p>
                 </div>
-                ` : ''}
+                `
+                    : ""
+                }
                 
                 <div style="margin-top: 15px; font-size: 11px; opacity: 0.8; text-align: center;">
                   Generated on ${new Date().toLocaleDateString()} | Report ID: ${report.id}
@@ -1038,7 +1170,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       reportWindow.document.close();
       reportWindow.print();
     } catch (error) {
-      console.error('Error loading report card data:', error);
+      console.error("Error loading report card data:", error);
       toast({
         title: "Error",
         description: "Failed to load report card data. Please try again.",
@@ -1054,7 +1186,8 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
     if (!validation || !canGenerateReport(student.id)) {
       toast({
         title: "Cannot Generate Report",
-        description: "Student data is incomplete. Please ensure all scores and attendance are recorded.",
+        description:
+          "Student data is incomplete. Please ensure all scores and attendance are recorded.",
         variant: "destructive",
       });
       return;
@@ -1067,7 +1200,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       term: selectedTerm,
       session: selectedSession,
       studentName: `${student.user.firstName} ${student.user.lastName}`,
-      className: classes.find(c => c.id === selectedClass)?.name || "",
+      className: classes.find((c) => c.id === selectedClass)?.name || "",
       totalScore: "0", // This would be calculated from actual scores
       averageScore: "0", // This would be calculated from actual scores
       attendancePercentage: "0", // This would be calculated from attendance data
@@ -1099,42 +1232,49 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
             term: selectedTerm,
             session: selectedSession,
             studentName: `${student.user.firstName} ${student.user.lastName}`,
-            className: classes.find(c => c.id === selectedClass)?.name || "",
+            className: classes.find((c) => c.id === selectedClass)?.name || "",
             totalScore: "0", // This would be calculated from actual scores
             averageScore: "0", // This would be calculated from actual scores
             attendancePercentage: "0", // This would be calculated from attendance data
           });
-          
+
           // Generate and print individual report card
-          await handleViewReportCard({
-            id: student.id,
-            studentId: student.id,
-            classId: selectedClass,
-            term: selectedTerm,
-            session: selectedSession,
-            studentName: `${student.user.firstName} ${student.user.lastName}`,
-            className: classes.find(c => c.id === selectedClass)?.name || "",
-            totalScore: "0",
-            averageScore: "0", 
-            attendancePercentage: "0",
-            generatedAt: new Date().toISOString(),
-            generatedBy: user?.firstName + " " + user?.lastName || "Admin"
-          }, batchResumptionDate);
-          
+          await handleViewReportCard(
+            {
+              id: student.id,
+              studentId: student.id,
+              classId: selectedClass,
+              term: selectedTerm,
+              session: selectedSession,
+              studentName: `${student.user.firstName} ${student.user.lastName}`,
+              className:
+                classes.find((c) => c.id === selectedClass)?.name || "",
+              totalScore: "0",
+              averageScore: "0",
+              attendancePercentage: "0",
+              generatedAt: new Date().toISOString(),
+              generatedBy: user?.firstName + " " + user?.lastName || "Admin",
+            },
+            batchResumptionDate,
+          );
+
           successCount++;
         } catch (error) {
-          console.error(`Failed to generate report for ${student.user.firstName} ${student.user.lastName}:`, error);
+          console.error(
+            `Failed to generate report for ${student.user.firstName} ${student.user.lastName}:`,
+            error,
+          );
           failureCount++;
         }
       }
 
       toast({
         title: "Batch Generation Complete",
-        description: `Successfully generated ${successCount} reports${failureCount > 0 ? `, ${failureCount} failed` : ''}`,
+        description: `Successfully generated ${successCount} reports${failureCount > 0 ? `, ${failureCount} failed` : ""}`,
         variant: successCount > 0 ? "default" : "destructive",
       });
     } catch (error) {
-      console.error('Batch generation error:', error);
+      console.error("Batch generation error:", error);
       toast({
         title: "Batch Generation Failed",
         description: "An error occurred during batch generation",
@@ -1159,7 +1299,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
               <Label>Select Class</Label>
               <Select value={selectedClass} onValueChange={setSelectedClass}>
@@ -1176,45 +1316,50 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
               </Select>
             </div>
             <div>
-              <Label>Term</Label>
-              <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select term" />
+              <Label>Term and Session</Label>
+              <Select 
+                value={`${selectedTerm}|${selectedSession}`} 
+                onValueChange={(value) => {
+                  const [term, session] = value.split('|');
+                  setSelectedTerm(term);
+                  setSelectedSession(session);
+                }}
+              >
+                <SelectTrigger data-testid="select-reports-session">
+                  <SelectValue placeholder="Select term and session" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="First Term">First Term</SelectItem>
-                  <SelectItem value="Second Term">Second Term</SelectItem>
-                  <SelectItem value="Third Term">Third Term</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Session</Label>
-              <Select value={selectedSession} onValueChange={setSelectedSession}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select session" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2024/2025">2024/2025</SelectItem>
-                  <SelectItem value="2023/2024">2023/2024</SelectItem>
-                  <SelectItem value="2022/2023">2022/2023</SelectItem>
+                  {academicTerms.map((term) => {
+                    const session = academicSessions.find(s => s.id === term.sessionId);
+                    if (!session) return null;
+                    return (
+                      <SelectItem key={term.id} value={`${term.termName}|${session.sessionYear}`}>
+                        {term.termName}, {session.sessionYear}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
           <div className="flex gap-4 flex-wrap">
-            <Button 
+            <Button
               onClick={handleValidateAll}
-              disabled={!selectedClass || !selectedTerm || !selectedSession || isValidating}
+              disabled={
+                !selectedClass ||
+                !selectedTerm ||
+                !selectedSession ||
+                isValidating
+              }
               className="flex items-center gap-2"
             >
               <CheckCircle className="w-4 h-4" />
               {isValidating ? "Validating..." : "Validate All Students"}
             </Button>
-            
+
             {/* New Workflow: Validate First, Then Generate Reports */}
-            <Button 
+            <Button
               onClick={handleValidateEntireSchool}
               disabled={isValidating}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
@@ -1224,23 +1369,29 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
               {isValidating ? "Validating..." : "Validate Entire School"}
             </Button>
 
-            <Button 
+            <Button
               onClick={() => setShowResumptionDateDialog(true)}
               disabled={!isAllStudentsValidated || isGeneratingReports}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-400"
               data-testid="button-generate-all-reports"
             >
               <BookOpen className="w-4 h-4" />
-              {isGeneratingReports ? "Generating Reports..." : "Generate All Report Cards for Whole School"}
+              {isGeneratingReports
+                ? "Generating Reports..."
+                : "Generate All Report Cards for Whole School"}
             </Button>
 
             {/* Date Selection Dialog */}
-            <Dialog open={showResumptionDateDialog} onOpenChange={setShowResumptionDateDialog}>
+            <Dialog
+              open={showResumptionDateDialog}
+              onOpenChange={setShowResumptionDateDialog}
+            >
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Select Next Term Resumption Date</DialogTitle>
                   <DialogDescription>
-                    Choose the date when the next term will resume. This will be included in the report cards.
+                    Choose the date when the next term will resume. This will be
+                    included in the report cards.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 py-4">
@@ -1253,7 +1404,9 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                         }`}
                       >
                         <CalendarDays className="mr-2 h-4 w-4" />
-                        {resumptionDate ? format(resumptionDate, "PPP") : "Pick a date"}
+                        {resumptionDate
+                          ? format(resumptionDate, "PPP")
+                          : "Pick a date"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
@@ -1283,7 +1436,7 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            
+
             {/* Legacy batch generation removed - now handled by new workflow */}
           </div>
         </CardContent>
@@ -1300,68 +1453,77 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {Object.entries(schoolValidationResults).map(([classId, result]) => (
-                <div key={classId} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-lg">{result.className}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {result.validatedStudents}/{result.totalStudents} students validated
-                      </p>
-                    </div>
-                    <Badge
-                      className={
-                        result.validatedStudents === result.totalStudents
-                          ? "bg-green-500 text-white"
-                          : result.validatedStudents > 0
-                          ? "bg-yellow-500 text-white"
-                          : "bg-red-500 text-white"
-                      }
-                    >
-                      {result.validatedStudents === result.totalStudents
-                        ? "Complete"
-                        : result.validatedStudents > 0
-                        ? "Partial"
-                        : "Incomplete"}
-                    </Badge>
-                  </div>
-                  
-                  {result.issues.length > 0 && (
-                    <div className="mt-3">
-                      <h4 className="font-medium text-red-700 mb-2 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4" />
-                        Issues Found:
-                      </h4>
-                      <div className="space-y-1 text-sm">
-                        {result.issues.slice(0, 5).map((issue, index) => (
-                          <p key={index} className="text-red-600 pl-6">
-                            • {issue}
-                          </p>
-                        ))}
-                        {result.issues.length > 5 && (
-                          <p className="text-muted-foreground pl-6">
-                            ... and {result.issues.length - 5} more issues
-                          </p>
-                        )}
+              {Object.entries(schoolValidationResults).map(
+                ([classId, result]) => (
+                  <div key={classId} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="font-semibold text-lg">
+                          {result.className}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {result.validatedStudents}/{result.totalStudents}{" "}
+                          students validated
+                        </p>
                       </div>
+                      <Badge
+                        className={
+                          result.validatedStudents === result.totalStudents
+                            ? "bg-green-500 text-white"
+                            : result.validatedStudents > 0
+                              ? "bg-yellow-500 text-white"
+                              : "bg-red-500 text-white"
+                        }
+                      >
+                        {result.validatedStudents === result.totalStudents
+                          ? "Complete"
+                          : result.validatedStudents > 0
+                            ? "Partial"
+                            : "Incomplete"}
+                      </Badge>
                     </div>
-                  )}
-                  
-                  {result.validatedStudents === result.totalStudents && (
-                    <div className="mt-3 flex items-center gap-2 text-green-600">
-                      <CheckCircle className="w-4 h-4" />
-                      <span className="text-sm">All students ready for report generation</span>
-                    </div>
-                  )}
-                </div>
-              ))}
+
+                    {result.issues.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="font-medium text-red-700 mb-2 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4" />
+                          Issues Found:
+                        </h4>
+                        <div className="space-y-1 text-sm">
+                          {result.issues.slice(0, 5).map((issue, index) => (
+                            <p key={index} className="text-red-600 pl-6">
+                              • {issue}
+                            </p>
+                          ))}
+                          {result.issues.length > 5 && (
+                            <p className="text-muted-foreground pl-6">
+                              ... and {result.issues.length - 5} more issues
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {result.validatedStudents === result.totalStudents && (
+                      <div className="mt-3 flex items-center gap-2 text-green-600">
+                        <CheckCircle className="w-4 h-4" />
+                        <span className="text-sm">
+                          All students ready for report generation
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ),
+              )}
             </div>
-            
+
             {isAllStudentsValidated && (
               <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                 <div className="flex items-center gap-2 text-green-700">
                   <CheckCircle className="w-5 h-5" />
-                  <span className="font-medium">All students validated successfully!</span>
+                  <span className="font-medium">
+                    All students validated successfully!
+                  </span>
                 </div>
                 <p className="text-sm text-green-600 mt-1">
                   You can now generate report cards for the entire school.
@@ -1373,84 +1535,107 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
       )}
 
       {/* Student Validation Results */}
-      {selectedClass && selectedTerm && selectedSession && Object.keys(validationResults).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Student Data Status</CardTitle>
-            <CardDescription>
-              Check which students have complete data for report generation
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {students.map((student: any) => {
-                const status = getValidationStatus(student.id);
-                const validation = validationResults[student.id];
-                
-                return (
-                  <div key={student.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <p className="font-medium">{student.user.firstName} {student.user.lastName}</p>
-                        <p className="text-sm text-muted-foreground">{student.studentId}</p>
-                      </div>
-                      {status && (
-                        <Badge className={`${status.color} text-white`}>
-                          {status.text}
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      {validation && (
-                        <div className="text-sm text-muted-foreground">
-                          {!validation.hasAllScores && validation.missingSubjects.length > 0 && (
-                            <p className="flex items-center gap-1 text-red-600">
-                              <AlertTriangle className="w-4 h-4" />
-                              Missing subjects: {validation.missingSubjects.join(", ")}
-                            </p>
-                          )}
-                          {!validation.hasAllScores && validation.missingSubjects.length === 0 && (
-                            <p className="flex items-center gap-1 text-red-600">
-                              <AlertTriangle className="w-4 h-4" />
-                              Missing assessment scores
-                            </p>
-                          )}
-                          {!validation.hasAttendance && (
-                            <p className="flex items-center gap-1 text-red-600">
-                              <AlertTriangle className="w-4 h-4" />
-                              No attendance data
-                            </p>
-                          )}
-                          {validation.hasAllScores && validation.hasAttendance && (
-                            <p className="flex items-center gap-1 text-green-600">
-                              <CheckCircle className="w-4 h-4" />
-                              All data complete
-                            </p>
-                          )}
+      {selectedClass &&
+        selectedTerm &&
+        selectedSession &&
+        Object.keys(validationResults).length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Student Data Status</CardTitle>
+              <CardDescription>
+                Check which students have complete data for report generation
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {students.map((student: any) => {
+                  const status = getValidationStatus(student.id);
+                  const validation = validationResults[student.id];
+
+                  return (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <p className="font-medium">
+                            {student.user.firstName} {student.user.lastName}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {student.studentId}
+                          </p>
                         </div>
-                      )}
-                      
-                      <Button
-                        size="sm"
-                        disabled={!canGenerateReport(student.id) || generatingReports.has(student.id)}
-                        onClick={() => handleGenerateReportCard(student)}
-                        className="flex items-center gap-1"
-                      >
-                        {generatingReports.has(student.id) ? (
-                          <><RefreshCw className="w-4 h-4 animate-spin" />Generating...</>
-                        ) : (
-                          <><Download className="w-4 h-4" />Generate</>
+                        {status && (
+                          <Badge className={`${status.color} text-white`}>
+                            {status.text}
+                          </Badge>
                         )}
-                      </Button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {validation && (
+                          <div className="text-sm text-muted-foreground">
+                            {!validation.hasAllScores &&
+                              validation.missingSubjects.length > 0 && (
+                                <p className="flex items-center gap-1 text-red-600">
+                                  <AlertTriangle className="w-4 h-4" />
+                                  Missing subjects:{" "}
+                                  {validation.missingSubjects.join(", ")}
+                                </p>
+                              )}
+                            {!validation.hasAllScores &&
+                              validation.missingSubjects.length === 0 && (
+                                <p className="flex items-center gap-1 text-red-600">
+                                  <AlertTriangle className="w-4 h-4" />
+                                  Missing assessment scores
+                                </p>
+                              )}
+                            {!validation.hasAttendance && (
+                              <p className="flex items-center gap-1 text-red-600">
+                                <AlertTriangle className="w-4 h-4" />
+                                No attendance data
+                              </p>
+                            )}
+                            {validation.hasAllScores &&
+                              validation.hasAttendance && (
+                                <p className="flex items-center gap-1 text-green-600">
+                                  <CheckCircle className="w-4 h-4" />
+                                  All data complete
+                                </p>
+                              )}
+                          </div>
+                        )}
+
+                        <Button
+                          size="sm"
+                          disabled={
+                            !canGenerateReport(student.id) ||
+                            generatingReports.has(student.id)
+                          }
+                          onClick={() => handleGenerateReportCard(student)}
+                          className="flex items-center gap-1"
+                        >
+                          {generatingReports.has(student.id) ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-4 h-4" />
+                              Generate
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       {/* Generated Reports List */}
       <Card>
@@ -1467,11 +1652,16 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
           {isLoadingReports ? (
             <p>Loading generated reports...</p>
           ) : generatedReports.length === 0 ? (
-            <p className="text-muted-foreground">No report cards have been generated yet.</p>
+            <p className="text-muted-foreground">
+              No report cards have been generated yet.
+            </p>
           ) : (
             <div className="space-y-4">
               {generatedReports.map((report: GeneratedReportCard) => (
-                <div key={report.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div
+                  key={report.id}
+                  className="flex items-center justify-between p-4 border rounded-lg"
+                >
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
                       <School className="w-4 h-4 text-muted-foreground" />
@@ -1487,10 +1677,10 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                       {new Date(report.generatedAt).toLocaleDateString()}
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => handleViewReportCard(report)}
                       className="flex items-center gap-1"
@@ -1506,15 +1696,18 @@ export function ReportCardManagement({ classes, user }: ReportCardManagementProp
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Report Card</AlertDialogTitle>
+                          <AlertDialogTitle>
+                            Delete Report Card
+                          </AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to delete this report card record for {report.studentName}? 
-                            This action cannot be undone.
+                            Are you sure you want to delete this report card
+                            record for {report.studentName}? This action cannot
+                            be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction 
+                          <AlertDialogAction
                             onClick={() => deleteMutation.mutate(report.id)}
                             className="bg-red-600 hover:bg-red-700"
                           >
