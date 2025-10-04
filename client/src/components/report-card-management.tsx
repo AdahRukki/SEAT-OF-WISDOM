@@ -336,8 +336,17 @@ export function ReportCardManagement({
         }
       }
 
-      const currentTerm = academicInfo?.currentTerm || selectedTerm;
-      const currentSession = academicInfo?.currentSession || selectedSession;
+      const currentTerm = selectedTerm || academicInfo?.currentTerm;
+      const currentSession = selectedSession || academicInfo?.currentSession;
+
+      if (!currentTerm || !currentSession) {
+        toast({
+          title: "Missing Term/Session",
+          description: "Please select a term and session to validate.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       let totalStudentsAcrossSchool = 0;
       let validatedStudentsAcrossSchool = 0;
@@ -451,9 +460,9 @@ export function ReportCardManagement({
     setShowResumptionDateDialog(false);
 
     try {
-      // Use shared academic info instead of direct API call
-      const currentTerm = academicInfo?.currentTerm || selectedTerm;
-      const currentSession = academicInfo?.currentSession || selectedSession;
+      // Use selected term/session from dropdown (prioritize user selection)
+      const currentTerm = selectedTerm || academicInfo?.currentTerm;
+      const currentSession = selectedSession || academicInfo?.currentSession;
       const isThirdTerm = currentTerm === "Third Term";
       const resumptionDateStr = format(resumptionDate, "PPP");
 
