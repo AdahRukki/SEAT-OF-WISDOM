@@ -850,103 +850,162 @@ export function ReportCardManagement({
             <title>Report Card - ${student.user.firstName} ${student.user.lastName}</title>
             <style>
               * { margin: 0; padding: 0; box-sizing: border-box; }
-              @page { size: A4; margin: 10mm; }
+              @page { size: A4 portrait; margin: 10mm; }
               body { 
-                font-family: Arial, sans-serif; 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
                 margin: 0; 
                 padding: 0; 
-                line-height: 1.1; 
-                color: #000;
-                background: white;
+                line-height: 1.2; 
+                color: #1a1a1a;
+                background: #f5f5f5;
               }
               .report-card {
                 max-width: 100%;
                 width: 100%;
                 margin: 0 auto;
                 background: white;
-                border: 3px solid #000;
-                padding: 6px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                border-radius: 8px;
+                overflow: hidden;
               }
               .header {
-                border: 2px solid #000;
-                padding: 8px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 12px;
                 text-align: center;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 10px;
+                gap: 12px;
                 margin-bottom: 8px;
+                color: white;
               }
-              .header-logo { width: 50px; height: 50px; }
+              .header-logo { 
+                width: 55px; 
+                height: 55px; 
+                border-radius: 50%;
+                border: 3px solid white;
+                background: white;
+                padding: 4px;
+              }
               .header-text { flex: 1; }
-              .school-name { font-size: 22px; font-weight: bold; margin-bottom: 2px; }
-              .school-motto { font-size: 10px; margin-bottom: 2px; }
-              .report-title { font-size: 12px; margin-top: 4px; font-weight: bold; }
+              .school-name { 
+                font-size: 20px; 
+                font-weight: 800; 
+                margin-bottom: 3px;
+                letter-spacing: 0.5px;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+              }
+              .school-motto { 
+                font-size: 9px; 
+                margin-bottom: 3px;
+                opacity: 0.95;
+                font-weight: 500;
+              }
+              .report-title { 
+                font-size: 11px; 
+                margin-top: 4px; 
+                font-weight: 700;
+                background: rgba(255,255,255,0.2);
+                padding: 3px 8px;
+                border-radius: 12px;
+                display: inline-block;
+              }
               .student-info {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
                 gap: 6px;
-                padding: 6px;
-                border: 2px solid #000;
-                margin-bottom: 6px;
-                font-size: 10px;
+                padding: 10px;
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                margin: 0 8px 8px 8px;
+                font-size: 9px;
+                border-radius: 6px;
+                color: white;
               }
-              .info-item { display: flex; }
-              .info-label { font-weight: bold; min-width: 50px; }
-              .info-value { }
+              .info-item { display: flex; gap: 4px; }
+              .info-label { font-weight: 700; min-width: 45px; }
+              .info-value { font-weight: 500; }
               .subjects-table {
-                width: 100%;
+                width: calc(100% - 16px);
+                margin: 0 8px 8px 8px;
                 border-collapse: collapse;
-                margin-bottom: 6px;
-                border: 2px solid #000;
+                border-radius: 6px;
+                overflow: hidden;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
               }
               .subjects-table th {
-                background: #000;
+                background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
                 color: white;
-                padding: 4px 3px;
+                padding: 5px 3px;
                 text-align: center;
-                font-size: 9px;
-                font-weight: bold;
-                border: 1px solid #000;
+                font-size: 8px;
+                font-weight: 700;
+                border: none;
               }
               .subjects-table td {
-                padding: 3px 4px;
+                padding: 4px;
                 text-align: center;
-                border: 1px solid #000;
-                font-size: 9px;
+                border: none;
+                border-bottom: 1px solid #e0e0e0;
+                font-size: 8px;
               }
-              .subjects-table tr:nth-child(even) { background: #f0f0f0; }
-              .subject-name { text-align: left !important; font-weight: 500; text-transform: uppercase; }
-              .grade { font-weight: bold; }
+              .subjects-table tr:nth-child(even) { background: #f8f9fa; }
+              .subjects-table tr:nth-child(odd) { background: white; }
+              .subjects-table tr:hover { background: #e8f5e9; }
+              .subject-name { 
+                text-align: left !important; 
+                font-weight: 600; 
+                text-transform: uppercase;
+                color: #2c3e50;
+              }
+              .grade { 
+                font-weight: 800; 
+                color: #667eea;
+              }
               .stats-section {
-                padding: 6px;
-                border: 2px solid #000;
-                margin-bottom: 6px;
+                padding: 8px;
+                margin: 0 8px 8px 8px;
+                background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+                border-radius: 6px;
               }
               .stats-grid {
                 display: grid;
                 grid-template-columns: repeat(4, 1fr);
                 gap: 6px;
-                margin-bottom: 4px;
               }
               .stat-card {
                 background: white;
-                padding: 4px;
-                text-align: center;
-                border: 1px solid #000;
-              }
-              .stat-label { font-size: 8px; font-weight: bold; }
-              .stat-value { font-size: 11px; font-weight: bold; margin-top: 2px; }
-              .behavioral-section {
                 padding: 6px;
-                border: 2px solid #000;
-                margin-bottom: 6px;
+                text-align: center;
+                border-radius: 6px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              }
+              .stat-label { 
+                font-size: 7px; 
+                font-weight: 700; 
+                color: #666;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+              }
+              .stat-value { 
+                font-size: 11px; 
+                font-weight: 800; 
+                margin-top: 3px;
+                color: #2c3e50;
+              }
+              .behavioral-section {
+                padding: 8px;
+                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                margin: 0 8px 8px 8px;
+                border-radius: 6px;
               }
               .behavioral-section h3 {
                 text-align: center;
-                margin-bottom: 4px;
+                margin-bottom: 6px;
                 font-size: 10px;
-                font-weight: bold;
+                font-weight: 800;
+                color: #2c3e50;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
               }
               .behavioral-grid {
                 display: grid;
@@ -955,56 +1014,80 @@ export function ReportCardManagement({
               }
               .behavioral-item {
                 background: white;
-                padding: 4px;
-                border: 1px solid #000;
+                padding: 5px 3px;
+                border-radius: 4px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                text-align: center;
               }
               .behavioral-label {
                 font-size: 7px;
-                font-weight: bold;
-                margin-bottom: 2px;
+                font-weight: 700;
+                margin-bottom: 3px;
+                color: #666;
               }
               .behavioral-value {
-                font-size: 9px;
-                font-weight: bold;
+                font-size: 8px;
+                font-weight: 800;
+                color: #11998e;
               }
               .grade-key {
-                padding: 6px;
-                border: 2px solid #000;
-                margin-bottom: 6px;
-                font-size: 8px;
+                padding: 8px;
+                background: linear-gradient(135deg, #fff5f5 0%, #ffe4e6 100%);
+                margin: 0 8px 8px 8px;
+                font-size: 7px;
+                border-radius: 6px;
+                border: 2px solid #fca5a5;
               }
               .grade-key-title {
-                font-weight: bold;
-                margin-bottom: 3px;
+                font-weight: 800;
+                margin-bottom: 5px;
                 font-size: 9px;
+                color: #dc2626;
+                text-align: center;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
               }
               .grade-key-grid {
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
                 gap: 3px;
+                color: #7f1d1d;
+                font-weight: 600;
               }
               .footer {
-                padding: 6px;
+                padding: 10px;
                 text-align: center;
-                border: 2px solid #000;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
                 font-size: 8px;
               }
               .signature-section {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
                 gap: 20px;
-                margin-top: 8px;
+                margin-bottom: 6px;
               }
               .signature {
                 text-align: center;
-                border-top: 2px solid #000;
-                padding-top: 4px;
+                border-top: 2px solid rgba(255,255,255,0.5);
+                padding-top: 5px;
                 font-size: 9px;
+                font-weight: 600;
               }
               @media print {
+                * {
+                  print-color-adjust: exact !important;
+                  -webkit-print-color-adjust: exact !important;
+                  color-adjust: exact !important;
+                }
                 body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                .report-card { margin: 0 !important; border: 3px solid #000 !important; page-break-after: avoid; }
-                @page { size: A4; margin: 10mm; }
+                .report-card { 
+                  margin: 0 !important; 
+                  box-shadow: none !important;
+                  page-break-after: avoid;
+                  border-radius: 0 !important;
+                }
+                @page { size: A4 portrait; margin: 10mm; }
               }
             </style>
           </head>
