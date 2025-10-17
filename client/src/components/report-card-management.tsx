@@ -856,20 +856,21 @@ export function ReportCardManagement({
                 margin: 0; 
                 padding: 0; 
                 line-height: 1.2; 
-                color: #1a1a1a;
-                background: #f5f5f5;
+                color: #1e3a8a;
+                background: #eff6ff;
               }
-              .report-card {
-                max-width: 100%;
-                width: 100%;
-                margin: 0 auto;
-                background: white;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                border-radius: 8px;
-                overflow: hidden;
-              }
+             .report-card {
+  width: 90%;
+  max-width: 750px;
+  margin: 20px auto;
+  background: #f8faff;
+  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.15);
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 15px;
+}
               .header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
                 padding: 12px;
                 text-align: center;
                 display: flex;
@@ -915,7 +916,7 @@ export function ReportCardManagement({
                 grid-template-columns: 1fr 1fr;
                 gap: 6px;
                 padding: 10px;
-                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
                 margin: 0 8px 8px 8px;
                 font-size: 9px;
                 border-radius: 6px;
@@ -933,7 +934,7 @@ export function ReportCardManagement({
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
               }
               .subjects-table th {
-                background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
                 color: white;
                 padding: 5px 3px;
                 text-align: center;
@@ -945,26 +946,26 @@ export function ReportCardManagement({
                 padding: 4px;
                 text-align: center;
                 border: none;
-                border-bottom: 1px solid #e0e0e0;
+                border-bottom: 1px solid #bfdbfe;
                 font-size: 8px;
               }
-              .subjects-table tr:nth-child(even) { background: #f8f9fa; }
-              .subjects-table tr:nth-child(odd) { background: white; }
-              .subjects-table tr:hover { background: #e8f5e9; }
+              .subjects-table tr:nth-child(even) { background: #eff6ff; }
+              .subjects-table tr:nth-child(odd) { background: #f8faff; }
+              .subjects-table tr:hover { background: #dbeafe; }
               .subject-name { 
                 text-align: left !important; 
                 font-weight: 600; 
                 text-transform: uppercase;
-                color: #2c3e50;
+                color: #1e40af;
               }
               .grade { 
                 font-weight: 800; 
-                color: #667eea;
+                color: #2563eb;
               }
               .stats-section {
                 padding: 8px;
                 margin: 0 8px 8px 8px;
-                background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+                background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
                 border-radius: 6px;
               }
               .stats-grid {
@@ -973,16 +974,16 @@ export function ReportCardManagement({
                 gap: 6px;
               }
               .stat-card {
-                background: white;
+                background: #f8faff;
                 padding: 6px;
                 text-align: center;
                 border-radius: 6px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
               }
               .stat-label { 
                 font-size: 7px; 
                 font-weight: 700; 
-                color: #666;
+                color: #60a5fa;
                 text-transform: uppercase;
                 letter-spacing: 0.3px;
               }
@@ -990,11 +991,11 @@ export function ReportCardManagement({
                 font-size: 11px; 
                 font-weight: 800; 
                 margin-top: 3px;
-                color: #2c3e50;
+                color: #1e40af;
               }
               .behavioral-section {
                 padding: 8px;
-                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
                 margin: 0 8px 8px 8px;
                 border-radius: 6px;
               }
@@ -1003,7 +1004,7 @@ export function ReportCardManagement({
                 margin-bottom: 6px;
                 font-size: 10px;
                 font-weight: 800;
-                color: #2c3e50;
+                color: #1e40af;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
               }
@@ -1013,36 +1014,36 @@ export function ReportCardManagement({
                 gap: 4px;
               }
               .behavioral-item {
-                background: white;
+                background: #f8faff;
                 padding: 5px 3px;
                 border-radius: 4px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
                 text-align: center;
               }
               .behavioral-label {
                 font-size: 7px;
                 font-weight: 700;
                 margin-bottom: 3px;
-                color: #666;
+                color: #60a5fa;
               }
               .behavioral-value {
                 font-size: 8px;
                 font-weight: 800;
-                color: #11998e;
+                color: #2563eb;
               }
               .grade-key {
                 padding: 8px;
-                background: linear-gradient(135deg, #fff5f5 0%, #ffe4e6 100%);
+                background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
                 margin: 0 8px 8px 8px;
                 font-size: 7px;
                 border-radius: 6px;
-                border: 2px solid #fca5a5;
+                border: 2px solid #93c5fd;
               }
               .grade-key-title {
                 font-weight: 800;
                 margin-bottom: 5px;
                 font-size: 9px;
-                color: #dc2626;
+                color: #1e40af;
                 text-align: center;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
@@ -1051,15 +1052,41 @@ export function ReportCardManagement({
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
                 gap: 3px;
-                color: #7f1d1d;
+                color: #1e3a8a;
                 font-weight: 600;
               }
               .footer {
                 padding: 10px;
                 text-align: center;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
                 color: white;
                 font-size: 8px;
+              }
+              .print-button {
+                display: block;
+                width: 200px;
+                margin: 15px auto;
+                padding: 12px 24px;
+                background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 700;
+                cursor: pointer;
+                box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+                transition: all 0.3s ease;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .print-button:hover {
+                background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+                box-shadow: 0 6px 8px rgba(37, 99, 235, 0.4);
+                transform: translateY(-2px);
+              }
+              .print-button:active {
+                transform: translateY(0px);
+                box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
               }
               .signature-section {
                 display: grid;
@@ -1086,6 +1113,12 @@ export function ReportCardManagement({
                   box-shadow: none !important;
                   page-break-after: avoid;
                   border-radius: 0 !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  padding: 0 !important;
+                }
+                .print-button {
+                  display: none !important;
                 }
                 @page { size: A4 portrait; margin: 10mm; }
               }
@@ -1274,6 +1307,10 @@ export function ReportCardManagement({
                   Generated: ${new Date().toLocaleDateString()} ${resumptionDate ? `| Next Term: ${new Date(resumptionDate).toLocaleDateString("en-GB")}` : ''}
                 </div>
               </div>
+              
+              <button class="print-button" onclick="window.print()">
+                🖨️ Print Report Card
+              </button>
             </div>
           </body>
         </html>
