@@ -815,10 +815,18 @@ export function ReportCardManagement({
           )
         : 0;
 
-      // Get behavioral rating for this student
-      const studentBehavioralRating = behavioralRatings.find(
+      // Get behavioral rating for this student, or use default rating of 3 (Good)
+      const existingRating = behavioralRatings.find(
         (rating: any) => rating.studentId === student.id
       );
+      
+      const studentBehavioralRating = existingRating || {
+        attendancePunctuality: 3,
+        neatnessOrganization: 3,
+        respectPoliteness: 3,
+        participationTeamwork: 3,
+        responsibility: 3
+      };
 
       // Helper function to convert numeric rating to text
       const getRatingText = (rating: number | null | undefined): string => {
