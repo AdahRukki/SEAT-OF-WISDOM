@@ -850,194 +850,174 @@ export function ReportCardManagement({
             <title>Report Card - ${student.user.firstName} ${student.user.lastName}</title>
             <style>
               * { margin: 0; padding: 0; box-sizing: border-box; }
+              @page { size: A4; margin: 10mm; }
               body { 
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                margin: 10px; 
-                line-height: 1.2; 
-                color: #333;
-                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-                min-height: 100vh;
+                font-family: Arial, sans-serif; 
+                margin: 0; 
+                padding: 0; 
+                line-height: 1.1; 
+                color: #000;
+                background: white;
               }
               .report-card {
-                max-width: 800px;
-                margin: 20px auto;
+                max-width: 100%;
+                width: 100%;
+                margin: 0 auto;
                 background: white;
-                border-radius: 15px;
-                overflow: hidden;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                border: 3px solid #2563eb;
+                border: 3px solid #000;
+                padding: 6px;
               }
               .header {
-                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-                color: white;
-                padding: 25px;
+                border: 2px solid #000;
+                padding: 8px;
                 text-align: center;
-                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                margin-bottom: 8px;
               }
-              .school-name { font-size: 28px; font-weight: bold; margin-bottom: 5px; }
-              .school-motto { font-size: 14px; opacity: 0.9; font-style: italic; }
-              .report-title { font-size: 20px; margin-top: 15px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; }
+              .header-logo { width: 50px; height: 50px; }
+              .header-text { flex: 1; }
+              .school-name { font-size: 22px; font-weight: bold; margin-bottom: 2px; }
+              .school-motto { font-size: 10px; margin-bottom: 2px; }
+              .report-title { font-size: 12px; margin-top: 4px; font-weight: bold; }
               .student-info {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 20px;
-                padding: 25px;
-                background: #f8fafc;
-                border-bottom: 2px solid #e5e7eb;
+                gap: 6px;
+                padding: 6px;
+                border: 2px solid #000;
+                margin-bottom: 6px;
+                font-size: 10px;
               }
-              .info-item { display: flex; align-items: center; }
-              .info-label { font-weight: bold; color: #374151; min-width: 80px; }
-              .info-value { color: #1f2937; }
+              .info-item { display: flex; }
+              .info-label { font-weight: bold; min-width: 50px; }
+              .info-value { }
               .subjects-table {
                 width: 100%;
                 border-collapse: collapse;
-                margin: 0;
+                margin-bottom: 6px;
+                border: 2px solid #000;
               }
               .subjects-table th {
-                background: #1e40af;
+                background: #000;
                 color: white;
-                padding: 12px 8px;
+                padding: 4px 3px;
                 text-align: center;
-                font-size: 12px;
+                font-size: 9px;
                 font-weight: bold;
+                border: 1px solid #000;
               }
               .subjects-table td {
-                padding: 10px 8px;
+                padding: 3px 4px;
                 text-align: center;
-                border-bottom: 1px solid #e5e7eb;
-                font-size: 11px;
+                border: 1px solid #000;
+                font-size: 9px;
               }
-              .subjects-table tr:nth-child(even) { background: #f9fafb; }
-              .subject-name { text-align: left !important; font-weight: 500; color: #374151; }
-              .grade { font-weight: bold; color: #1e40af; }
+              .subjects-table tr:nth-child(even) { background: #f0f0f0; }
+              .subject-name { text-align: left !important; font-weight: 500; text-transform: uppercase; }
+              .grade { font-weight: bold; }
               .stats-section {
-                padding: 25px;
-                background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-                border-top: 3px solid #3b82f6;
-                margin-top: 20px;
-              }
-              .resumption-section {
-                background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-                border: 2px solid #f59e0b;
-                border-radius: 10px;
-                padding: 15px;
-                margin: 20px 0;
-                text-align: center;
-              }
-              .resumption-section h4 {
-                color: #92400e;
-                font-size: 14px;
-                font-weight: bold;
-                margin-bottom: 5px;
-              }
-              .resumption-section p {
-                color: #451a03;
-                font-size: 16px;
-                font-weight: bold;
-              }
-              .promotion-section {
-                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-                border: 2px solid #16a34a;
-                border-radius: 10px;
-                padding: 15px;
-                margin: 20px 0;
-                text-align: center;
-              }
-              .promotion-section h4 {
-                color: #15803d;
-                font-size: 14px;
-                font-weight: bold;
-                margin-bottom: 5px;
-              }
-              .promotion-message {
-                color: #14532d;
-                font-size: 16px;
-                font-weight: bold;
-                margin: 0;
+                padding: 6px;
+                border: 2px solid #000;
+                margin-bottom: 6px;
               }
               .stats-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 20px;
-                margin-bottom: 20px;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 6px;
+                margin-bottom: 4px;
               }
               .stat-card {
                 background: white;
-                padding: 15px;
-                border-radius: 10px;
+                padding: 4px;
                 text-align: center;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                border: 2px solid #e5e7eb;
+                border: 1px solid #000;
               }
-              .stat-label { font-size: 12px; color: #6b7280; font-weight: bold; }
-              .stat-value { font-size: 18px; font-weight: bold; color: #1e40af; margin-top: 5px; }
-              .footer {
-                padding: 20px;
-                text-align: center;
-                background: #1e40af;
-                color: white;
-              }
-              .signature-section {
-                display: grid;
-                grid-template-columns: 1fr 1fr 1fr;
-                gap: 30px;
-                margin-top: 20px;
-              }
-              .signature {
-                text-align: center;
-                border-top: 2px solid #374151;
-                padding-top: 10px;
-                font-size: 12px;
-              }
+              .stat-label { font-size: 8px; font-weight: bold; }
+              .stat-value { font-size: 11px; font-weight: bold; margin-top: 2px; }
               .behavioral-section {
-                padding: 25px;
-                background: linear-gradient(135deg, #fef3f2 0%, #fee2e2 100%);
-                border-top: 3px solid #ef4444;
-                margin-top: 0;
+                padding: 6px;
+                border: 2px solid #000;
+                margin-bottom: 6px;
               }
               .behavioral-section h3 {
                 text-align: center;
-                color: #991b1b;
-                margin-bottom: 20px;
-                font-size: 16px;
+                margin-bottom: 4px;
+                font-size: 10px;
+                font-weight: bold;
               }
               .behavioral-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
+                grid-template-columns: repeat(5, 1fr);
+                gap: 4px;
               }
               .behavioral-item {
                 background: white;
-                padding: 12px;
-                border-radius: 8px;
-                border: 1px solid #fecaca;
+                padding: 4px;
+                border: 1px solid #000;
               }
               .behavioral-label {
-                font-size: 11px;
-                color: #7f1d1d;
+                font-size: 7px;
                 font-weight: bold;
-                margin-bottom: 5px;
+                margin-bottom: 2px;
               }
               .behavioral-value {
-                font-size: 14px;
+                font-size: 9px;
                 font-weight: bold;
-                color: #dc2626;
+              }
+              .grade-key {
+                padding: 6px;
+                border: 2px solid #000;
+                margin-bottom: 6px;
+                font-size: 8px;
+              }
+              .grade-key-title {
+                font-weight: bold;
+                margin-bottom: 3px;
+                font-size: 9px;
+              }
+              .grade-key-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 3px;
+              }
+              .footer {
+                padding: 6px;
+                text-align: center;
+                border: 2px solid #000;
+                font-size: 8px;
+              }
+              .signature-section {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-top: 8px;
+              }
+              .signature {
+                text-align: center;
+                border-top: 2px solid #000;
+                padding-top: 4px;
+                font-size: 9px;
               }
               @media print {
-                body { background: white !important; margin: 0 !important; }
-                .report-card { margin: 0 !important; box-shadow: none !important; }
+                body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                .report-card { margin: 0 !important; border: 3px solid #000 !important; page-break-after: avoid; }
+                @page { size: A4; margin: 10mm; }
               }
             </style>
           </head>
           <body>
             <div class="report-card">
               <div class="header">
-                <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-                <div class="school-motto">(WAEC AND NECO GOVERNMENT APPROVED)</div>
-                 <div class="school-motto">GOVERNMENT, WAEC AND NECO APPROVED</div>
-                
-                <div class="report-title"><strong>${report.term} ASSESSMENT REPORT</strong></div>
-                <div class="report-title">${report.session} ACADEMIC SESSION</div>
+                <img src="/assets/academy-logo.png" alt="School Logo" class="header-logo" />
+                <div class="header-text">
+                  <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+                  <div class="school-motto">GOVERNMENT, WAEC AND NECO APPROVED</div>
+                  <div class="report-title">${report.term} ASSESSMENT REPORT - ${report.session} SESSION</div>
+                </div>
+              </div>
               
               <div class="student-info">
                 <div class="info-item">
@@ -1124,7 +1104,7 @@ export function ReportCardManagement({
 
                       return `
                       <tr>
-                        <td class="subject-name">${subject.name}</td>
+                        <td class="subject-name">${subject.name.toUpperCase()}</td>
                         <td>${firstCA}</td>
                         <td>${secondCA}</td>
                         <td>${exam}</td>
@@ -1146,7 +1126,7 @@ export function ReportCardManagement({
                   </div>
                   <div class="stat-card">
                     <div class="stat-label">AVERAGE</div>
-                    <div class="stat-value">${subjects.length ? ((totalMarks / (subjects.length * 100)) * 100).toFixed(2) : "0.00"}%</div>
+                    <div class="stat-value">${subjects.length ? ((totalMarks / (subjects.length * 100)) * 100).toFixed(1) : "0"}%</div>
                   </div>
                   <div class="stat-card">
                     <div class="stat-label">ATTENDANCE</div>
@@ -1157,32 +1137,26 @@ export function ReportCardManagement({
                     <div class="stat-value">${(totalMarks / (subjects.length * 100)) * 100 >= 40 ? "PASS" : "FAIL"}</div>
                   </div>
                 </div>
-                
-                <div style="text-align: center; margin-top: 20px;">
-                  <div>No of Subjects: <strong>${subjects.length}</strong></div>
-                  <div>Total Obtainable: <strong>${subjects.length * 100}</strong></div>
-                  <div>Result Status: <strong>${(totalMarks / (subjects.length * 100)) * 100 >= 40 ? "PASS" : "FAIL"}</strong></div>
-                </div>
               </div>
 
               ${studentBehavioralRating ? `
               <div class="behavioral-section">
-                <h3>📋 BEHAVIORAL ASSESSMENT</h3>
+                <h3>BEHAVIORAL ASSESSMENT</h3>
                 <div class="behavioral-grid">
                   <div class="behavioral-item">
-                    <div class="behavioral-label">Attendance & Punctuality</div>
+                    <div class="behavioral-label">Attendance</div>
                     <div class="behavioral-value">${getRatingText(studentBehavioralRating.attendancePunctuality)}</div>
                   </div>
                   <div class="behavioral-item">
-                    <div class="behavioral-label">Neatness & Organization</div>
+                    <div class="behavioral-label">Neatness</div>
                     <div class="behavioral-value">${getRatingText(studentBehavioralRating.neatnessOrganization)}</div>
                   </div>
                   <div class="behavioral-item">
-                    <div class="behavioral-label">Respect & Politeness</div>
+                    <div class="behavioral-label">Respect</div>
                     <div class="behavioral-value">${getRatingText(studentBehavioralRating.respectPoliteness)}</div>
                   </div>
                   <div class="behavioral-item">
-                    <div class="behavioral-label">Participation & Teamwork</div>
+                    <div class="behavioral-label">Participation</div>
                     <div class="behavioral-value">${getRatingText(studentBehavioralRating.participationTeamwork)}</div>
                   </div>
                   <div class="behavioral-item">
@@ -1193,43 +1167,28 @@ export function ReportCardManagement({
               </div>
               ` : ''}
 
+              <div class="grade-key">
+                <div class="grade-key-title">GRADE INTERPRETATION (WAEC STANDARD)</div>
+                <div class="grade-key-grid">
+                  <div>A1 (75-100): Excellent</div>
+                  <div>B2 (70-74): Very Good</div>
+                  <div>B3 (65-69): Good</div>
+                  <div>C4 (60-64): Credit</div>
+                  <div>C5 (55-59): Credit</div>
+                  <div>C6 (50-54): Credit</div>
+                  <div>D7 (45-49): Pass</div>
+                  <div>E8 (40-44): Pass</div>
+                  <div>F9 (0-39): Fail</div>
+                </div>
+              </div>
+
               <div class="footer">
-                <div style="margin-bottom: 15px;">
-                  <strong>SEAT OF WISDOM ACADEMY MANAGEMENT SYSTEM</strong>
-                </div>
                 <div class="signature-section">
-                  <div class="signature">
-                    <div>Class Teacher</div>
-                  </div>
-                  <div class="signature">
-                    <div>Principal</div>
-                  </div>
-                  
+                  <div class="signature">Class Teacher</div>
+                  <div class="signature">Principal</div>
                 </div>
-                ${
-                  resumptionDate
-                    ? `
-                <div class="resumption-section">
-                  <h4>📅 NEXT TERM RESUMPTION</h4>
-                  <p>${new Date(resumptionDate).toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-                </div>
-                `
-                    : ""
-                }
-                
-                ${
-                  academicInfo?.currentTerm === "Third Term"
-                    ? `
-                <div class="promotion-section">
-                  <h4>🎓 ACADEMIC PROGRESSION</h4>
-                  <p class="promotion-message">${getPromotionMessage(student.classId)}</p>
-                </div>
-                `
-                    : ""
-                }
-                
-                <div style="margin-top: 15px; font-size: 11px; opacity: 0.8; text-align: center;">
-                  Generated on ${new Date().toLocaleDateString()} | Report ID: ${report.id}
+                <div style="margin-top: 6px; font-size: 7px;">
+                  Generated: ${new Date().toLocaleDateString()} ${resumptionDate ? `| Next Term: ${new Date(resumptionDate).toLocaleDateString("en-GB")}` : ''}
                 </div>
               </div>
             </div>
