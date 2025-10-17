@@ -1148,7 +1148,14 @@ export function ReportCardManagement({
                   <span class="info-label">Class:</span>
                   <span class="info-value">${report.className}</span>
                 </div>
-               
+                <div class="info-item">
+                  <span class="info-label">Gender:</span>
+                  <span class="info-value">${student.gender || "N/A"}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Next Term Begin:</span>
+                  <span class="info-value">${resumptionDate ? new Date(resumptionDate).toLocaleDateString("en-GB") : "N/A"}</span>
+                </div>
                 <div class="info-item">
                   <span class="info-label">Age:</span>
                   <span class="info-value">${
