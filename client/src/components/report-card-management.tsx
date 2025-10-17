@@ -1025,9 +1025,11 @@ export function ReportCardManagement({
             <div class="report-card">
               <div class="header">
                 <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-                <div class="school-motto">"Nurturing Excellence in Learning"</div>
-                <div class="report-title">STUDENT REPORT CARD</div>
-              </div>
+                <div class="school-motto">(WAEC AND NECO GOVERNMENT APPROVED)</div>
+                 <div class="school-motto">GOVERNMENT, WAEC AND NECO APPROVED</div>
+                
+                <div class="report-title"><strong>${report.term} ASSESSMENT REPORT</strong></div>
+                <div class="report-title">${report.session} ACADEMIC SESSION</div>
               
               <div class="student-info">
                 <div class="info-item">
@@ -1042,14 +1044,7 @@ export function ReportCardManagement({
                   <span class="info-label">Class:</span>
                   <span class="info-value">${report.className}</span>
                 </div>
-                <div class="info-item">
-                  <span class="info-label">Session:</span>
-                  <span class="info-value">${report.session}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">Term:</span>
-                  <span class="info-value">${report.term}</span>
-                </div>
+               
                 <div class="info-item">
                   <span class="info-label">Age:</span>
                   <span class="info-value">${
@@ -1201,9 +1196,7 @@ export function ReportCardManagement({
                   <div class="signature">
                     <div>Principal</div>
                   </div>
-                  <div class="signature">
-                    <div>Parent/Guardian</div>
-                  </div>
+                  
                 </div>
                 ${
                   resumptionDate
