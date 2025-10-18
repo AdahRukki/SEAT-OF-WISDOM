@@ -1468,9 +1468,15 @@ export function ReportCardManagement({
                   button.textContent = '⏳ Generating PDF...';
                   
                   const element = document.querySelector('.report-card');
-                  const studentName = '${student.user.firstName}_${student.user.lastName}';
-                  const term = '${report.term.replace(/\s+/g, '_')}';
-                  const session = '${report.session.replace(/\//g, '-')}';
+                  
+                  // Sanitize filename by removing invalid filesystem characters
+                  function sanitizeFilename(str) {
+                    return str.replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, '_');
+                  }
+                  
+                  const studentName = sanitizeFilename(${JSON.stringify(student.user.firstName + '_' + student.user.lastName)});
+                  const term = sanitizeFilename(${JSON.stringify(report.term)});
+                  const session = sanitizeFilename(${JSON.stringify(report.session)});
                   const filename = studentName + '_' + term + '_' + session + '_Report.pdf';
                   
                   const opt = {
