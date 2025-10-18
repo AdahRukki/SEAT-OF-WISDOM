@@ -892,6 +892,20 @@ export function ReportCardManagement({
         return { averageRating: Math.round(averageRating * 10) / 10, interpretation };
       };
 
+      // Calculate average percentage
+      const averagePercentage = subjects.length ? ((totalMarks / (subjects.length * 100)) * 100) : 0;
+
+      // Get behavioral interpretation (only if behavioral data exists)
+      const behavioralInterpretation = studentBehavioralRating ? getBehavioralInterpretation(studentBehavioralRating) : null;
+
+      // Get principal's comment based on average
+      const principalComment = getPrincipalComment(averagePercentage);
+
+      // Fetch school data to get principal signature
+      const schools = await apiRequest("/api/admin/schools");
+      const studentSchool = schools.find((s: any) => s.id === student.user.schoolId);
+      const principalSignature = studentSchool?.principalSignature || '';
+
       // Generate the detailed report card
       const reportWindow = window.open("", "_blank");
       if (!reportWindow) return;
@@ -1141,6 +1155,47 @@ export function ReportCardManagement({
                 transform: translateY(0px);
                 box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
               }
+              .principal-comment-section {
+                padding: 10px;
+                margin: 8px;
+                background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+                border-radius: 6px;
+                border-left: 4px solid #2563eb;
+              }
+              .principal-comment-section h3 {
+                text-align: center;
+                margin-bottom: 6px;
+                font-size: 10px;
+                font-weight: 800;
+                color: #1e40af;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }
+              .principal-comment-text {
+                font-size: 8px;
+                line-height: 1.4;
+                color: #1e3a8a;
+                font-style: italic;
+                text-align: justify;
+              }
+              .behavioral-interpretation-section {
+                padding: 8px;
+                margin: 8px 8px 0 8px;
+                background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+                border-radius: 6px;
+                text-align: center;
+              }
+              .behavioral-interpretation-section h4 {
+                font-size: 9px;
+                font-weight: 700;
+                color: #1e40af;
+                margin-bottom: 4px;
+              }
+              .behavioral-interpretation-text {
+                font-size: 10px;
+                font-weight: 800;
+                color: #2563eb;
+              }
               .signature-section {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
@@ -1153,6 +1208,17 @@ export function ReportCardManagement({
                 padding-top: 5px;
                 font-size: 9px;
                 font-weight: 600;
+              }
+              .signature-image {
+                max-height: 40px;
+                max-width: 150px;
+                margin: 0 auto 5px auto;
+                display: block;
+              }
+              .signature-name {
+                font-size: 7px;
+                color: rgba(255,255,255,0.9);
+                margin-top: 2px;
               }
               @media print {
                 * {
@@ -1334,7 +1400,19 @@ export function ReportCardManagement({
                   </div>
                 </div>
               </div>
+              
+              ${behavioralInterpretation ? `
+              <div class="behavioral-interpretation-section">
+                <h4>Rating Scale: 5=Excellent, 4=Very Good, 3=Good, 2=Fair, 1=Poor</h4>
+                <div class="behavioral-interpretation-text">${behavioralInterpretation.interpretation}</div>
+              </div>
               ` : ''}
+              ` : ''}
+
+              <div class="principal-comment-section">
+                <h3>PRINCIPAL'S COMMENT</h3>
+                <p class="principal-comment-text">${principalComment}</p>
+              </div>
 
               <div class="grade-key">
                 <div class="grade-key-title">GRADE INTERPRETATION (WAEC STANDARD)</div>
@@ -1353,8 +1431,14 @@ export function ReportCardManagement({
 
               <div class="footer">
                 <div class="signature-section">
-                  <div class="signature">Class Teacher</div>
-                  <div class="signature">Principal</div>
+                  <div class="signature">
+                    <div style="border-top: 2px solid rgba(255,255,255,0.5); padding-top: 5px; min-height: 30px;"></div>
+                    Class Teacher
+                  </div>
+                  <div class="signature">
+                    ${principalSignature ? `<img src="${principalSignature}" alt="Principal Signature" class="signature-image" />` : '<div style="border-top: 2px solid rgba(255,255,255,0.5); padding-top: 5px; min-height: 30px;"></div>'}
+                    <div class="signature-name">Principal, Seat of Wisdom Academy Asaba</div>
+                  </div>
                 </div>
                 <div style="margin-top: 6px; font-size: 7px;">
                   Generated: ${new Date().toLocaleDateString()} ${resumptionDate ? `| Next Term: ${new Date(resumptionDate).toLocaleDateString("en-GB")}` : ''}
