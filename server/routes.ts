@@ -878,6 +878,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Principal signature upload route
+  app.post('/api/admin/schools/signature', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { schoolId, signatureUrl } = req.body;
+      
+      if (!schoolId || !signatureUrl) {
+        return res.status(400).json({ error: "School ID and signature URL are required" });
+      }
+
+      const updatedSchool = await storage.updateSchoolPrincipalSignature(schoolId, signatureUrl);
+      res.json(updatedSchool);
+    } catch (error) {
+      console.error("Signature upload error:", error);
+      res.status(400).json({ error: "Failed to upload signature" });
+    }
+  });
+
   // Admin routes - Student management
   app.post('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
     try {

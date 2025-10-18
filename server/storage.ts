@@ -85,6 +85,7 @@ export interface IStorage {
   createUser(userData: InsertUser): Promise<User>;
   deleteUser(userId: string): Promise<void>;
   updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School>;
+  updateSchoolPrincipalSignature(schoolId: string, signatureUrl: string): Promise<School>;
   createStudent(studentData: InsertStudent): Promise<Student>;
   updateStudent(studentId: string, updateData: Partial<InsertStudent>): Promise<Student>;
   updateStudentProfileImage(studentId: string, profileImagePath: string): Promise<Student>;
@@ -520,6 +521,15 @@ export class DatabaseStorage implements IStorage {
     const [school] = await db
       .update(schools)
       .set({ logoUrl, updatedAt: new Date() })
+      .where(eq(schools.id, schoolId))
+      .returning();
+    return school;
+  }
+
+  async updateSchoolPrincipalSignature(schoolId: string, signatureUrl: string): Promise<School> {
+    const [school] = await db
+      .update(schools)
+      .set({ principalSignature: signatureUrl, updatedAt: new Date() })
       .where(eq(schools.id, schoolId))
       .returning();
     return school;
