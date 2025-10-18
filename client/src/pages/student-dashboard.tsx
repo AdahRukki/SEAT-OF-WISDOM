@@ -266,7 +266,7 @@ export default function StudentDashboard() {
     changePasswordMutation.mutate(data);
   };
 
-  const handlePrintDetailedReport = () => {
+  const handlePrintDetailedReport = async () => {
     if (!profile) return;
     
     // Get the selected class details
@@ -277,7 +277,74 @@ export default function StudentDashboard() {
       return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
     }, 0);
 
-    const averagePercentage = assessments.length ? (totalMarks / (assessments.length * 100) * 100).toFixed(2) : '0.00';
+    const averagePercentage = assessments.length ? (totalMarks / (assessments.length * 100) * 100) : 0;
+
+    // Helper functions
+    const getPrincipalComment = (avgPercentage: number): string => {
+      if (avgPercentage >= 90) {
+        return "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
+      } else if (avgPercentage >= 80) {
+        return "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
+      } else if (avgPercentage >= 75) {
+        return "Good performance! With a bit more effort and consistency, you can achieve excellence.";
+      } else if (avgPercentage >= 70) {
+        return "Fairly good performance. Continue to work hard and stay focused on your goals.";
+      } else if (avgPercentage >= 65) {
+        return "Average performance. You need to put in more effort to improve your grades.";
+      } else if (avgPercentage >= 60) {
+        return "Below average performance. Please dedicate more time to your studies.";
+      } else if (avgPercentage >= 50) {
+        return "You passed, but there is significant room for improvement. Work harder next term.";
+      } else if (avgPercentage >= 45) {
+        return "Weak performance. You need to be more serious with your studies.";
+      } else if (avgPercentage >= 40) {
+        return "Poor performance. Extra attention and effort are urgently needed.";
+      } else {
+        return "Very poor performance. Immediate action is required to improve your results.";
+      }
+    };
+
+    const getBehavioralInterpretation = (behavioralRating: any): { averageRating: number; interpretation: string } | null => {
+      if (!behavioralRating) return null;
+      
+      const ratings = [
+        behavioralRating.attendancePunctuality || 3,
+        behavioralRating.neatnessOrganization || 3,
+        behavioralRating.respectPoliteness || 3,
+        behavioralRating.participationTeamwork || 3,
+        behavioralRating.responsibility || 3
+      ];
+      
+      const averageRating = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+      
+      let interpretation = '';
+      if (averageRating >= 4.5) {
+        interpretation = 'Excellent Behavior';
+      } else if (averageRating >= 3.5) {
+        interpretation = 'Very Good Behavior';
+      } else if (averageRating >= 2.5) {
+        interpretation = 'Good Behavior';
+      } else if (averageRating >= 1.5) {
+        interpretation = 'Fair Behavior - Needs Improvement';
+      } else {
+        interpretation = 'Poor Behavior - Urgent Attention Required';
+      }
+      
+      return { averageRating: Math.round(averageRating * 10) / 10, interpretation };
+    };
+
+    const getRatingText = (rating: number | null | undefined): string => {
+      if (!rating) return 'Not Rated';
+      if (rating === 5) return 'Excellent';
+      if (rating === 4) return 'Very Good';
+      if (rating === 3) return 'Good';
+      if (rating === 2) return 'Fair';
+      if (rating === 1) return 'Poor';
+      return 'Not Rated';
+    };
+
+    const principalComment = getPrincipalComment(averagePercentage);
+    const behavioralInterpretation = behavioralRating ? getBehavioralInterpretation(behavioralRating) : null;
 
     // Generate the detailed report card
     const reportWindow = window.open('', '_blank');
@@ -290,117 +357,347 @@ export default function StudentDashboard() {
           <title>Report Card - ${user?.firstName} ${user?.lastName}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
+            @page { size: A4 portrait; margin: 10mm; }
             body { 
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-              margin: 10px; 
+              margin: 0; 
+              padding: 0; 
               line-height: 1.2; 
-              color: #333;
-              background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-              min-height: 100vh;
+              color: #1e3a8a;
+              background: #eff6ff;
             }
-            .report-card {
-              max-width: 800px;
-              margin: 20px auto;
-              background: white;
-              border-radius: 15px;
-              overflow: hidden;
-              box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-              border: 3px solid #2563eb;
-            }
+           .report-card {
+width: 90%;
+max-width: 750px;
+margin: 20px auto;
+background: #f8faff;
+box-shadow: 0 4px 6px rgba(37, 99, 235, 0.15);
+border-radius: 8px;
+overflow: hidden;
+padding: 15px;
+}
             .header {
               background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-              color: white;
-              padding: 25px;
+              padding: 12px;
               text-align: center;
-              position: relative;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 12px;
+              margin-bottom: 8px;
+              color: white;
             }
-            .school-name { font-size: 28px; font-weight: bold; margin-bottom: 5px; }
-            .school-motto { font-size: 14px; opacity: 0.9; font-style: italic; }
-            .report-title { font-size: 20px; margin-top: 15px; background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; }
+            .header-logo { 
+              width: 55px; 
+              height: 55px; 
+              border-radius: 50%;
+              border: 3px solid white;
+              background: white;
+              padding: 4px;
+            }
+            .header-text { flex: 1; }
+            .school-name { 
+              font-size: 20px; 
+              font-weight: 800; 
+              margin-bottom: 3px;
+              letter-spacing: 0.5px;
+              text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            }
+            .school-info {
+              font-size: 8px;
+              margin-bottom: 2px;
+              opacity: 0.95;
+              font-weight: 600;
+            }
+            .education-levels {
+              font-size: 7px;
+              margin-bottom: 2px;
+              opacity: 0.9;
+              font-weight: 500;
+            }
+            .school-motto { 
+              font-size: 9px; 
+              margin-bottom: 3px;
+              opacity: 0.95;
+              font-weight: 500;
+            }
+            .report-title { 
+              font-size: 11px; 
+              margin-top: 4px; 
+              font-weight: 700;
+              background: rgba(255,255,255,0.2);
+              padding: 3px 8px;
+              border-radius: 12px;
+              display: inline-block;
+            }
             .student-info {
               display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 20px;
-              padding: 25px;
-              background: #f8fafc;
-              border-bottom: 2px solid #e5e7eb;
+              grid-template-columns: 1fr 1fr 1fr;
+              gap: 6px;
+              padding: 10px;
+              background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+              margin: 0 8px 8px 8px;
+              font-size: 9px;
+              border-radius: 6px;
+              color: white;
             }
-            .info-item { display: flex; align-items: center; }
-            .info-label { font-weight: bold; color: #374151; min-width: 80px; }
-            .info-value { color: #1f2937; }
+            .info-item { display: flex; gap: 4px; }
+            .info-label { font-weight: 700; min-width: 45px; }
+            .info-value { font-weight: 500; }
             .subjects-table {
-              width: 100%;
+              width: calc(100% - 16px);
+              margin: 0 8px 8px 8px;
               border-collapse: collapse;
-              margin: 0;
+              border-radius: 6px;
+              overflow: hidden;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             }
             .subjects-table th {
-              background: #1e40af;
+              background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
               color: white;
-              padding: 12px 8px;
+              padding: 5px 3px;
               text-align: center;
-              font-size: 12px;
-              font-weight: bold;
+              font-size: 8px;
+              font-weight: 700;
+              border: none;
             }
             .subjects-table td {
-              padding: 10px 8px;
+              padding: 4px;
               text-align: center;
-              border-bottom: 1px solid #e5e7eb;
-              font-size: 11px;
+              border: none;
+              border-bottom: 1px solid #bfdbfe;
+              font-size: 8px;
             }
-            .subjects-table tr:nth-child(even) { background: #f9fafb; }
-            .subject-name { text-align: left !important; font-weight: 500; color: #374151; }
-            .grade { font-weight: bold; color: #1e40af; }
+            .subjects-table tr:nth-child(even) { background: #eff6ff; }
+            .subjects-table tr:nth-child(odd) { background: #f8faff; }
+            .subjects-table tr:hover { background: #dbeafe; }
+            .subject-name { 
+              text-align: left !important; 
+              font-weight: 600; 
+              text-transform: uppercase;
+              color: #1e40af;
+            }
+            .grade { 
+              font-weight: 800; 
+              color: #2563eb;
+            }
             .stats-section {
-              padding: 25px;
-              background: #f1f5f9;
-              border-top: 3px solid #3b82f6;
+              padding: 8px;
+              margin: 0 8px 8px 8px;
+              background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+              border-radius: 6px;
             }
             .stats-grid {
               display: grid;
-              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-              gap: 20px;
-              margin-bottom: 20px;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 6px;
             }
             .stat-card {
-              background: white;
-              padding: 15px;
-              border-radius: 10px;
+              background: #f8faff;
+              padding: 6px;
               text-align: center;
-              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-              border: 2px solid #e5e7eb;
+              border-radius: 6px;
+              box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
             }
-            .stat-label { font-size: 12px; color: #6b7280; font-weight: bold; }
-            .stat-value { font-size: 18px; font-weight: bold; color: #1e40af; margin-top: 5px; }
-            .footer {
-              padding: 20px;
+            .stat-label { 
+              font-size: 7px; 
+              font-weight: 700; 
+              color: #60a5fa;
+              text-transform: uppercase;
+              letter-spacing: 0.3px;
+            }
+            .stat-value { 
+              font-size: 11px; 
+              font-weight: 800; 
+              margin-top: 3px;
+              color: #1e40af;
+            }
+            .behavioral-section {
+              padding: 8px;
+              background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%);
+              margin: 0 8px 8px 8px;
+              border-radius: 6px;
+            }
+            .behavioral-section h3 {
               text-align: center;
-              background: #1e40af;
+              margin-bottom: 6px;
+              font-size: 10px;
+              font-weight: 800;
+              color: #1e40af;
+            }
+            .behavioral-grid {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 4px;
+            }
+            .behavioral-item {
+              background: #f8faff;
+              padding: 4px 6px;
+              border-radius: 4px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .behavioral-label {
+              font-size: 8px;
+              font-weight: 600;
+              color: #1e40af;
+            }
+            .behavioral-value {
+              font-size: 8px;
+              font-weight: 700;
+              color: #2563eb;
+            }
+            .behavioral-interpretation-section {
+              padding: 8px;
+              margin: 8px 8px 0 8px;
+              background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+              border-radius: 6px;
+              text-align: center;
+            }
+            .behavioral-interpretation-section h4 {
+              font-size: 9px;
+              font-weight: 700;
+              color: #1e40af;
+              margin-bottom: 4px;
+            }
+            .behavioral-interpretation-text {
+              font-size: 10px;
+              font-weight: 800;
+              color: #2563eb;
+            }
+            .principal-comment-section {
+              padding: 8px;
+              margin: 8px;
+              background: linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%);
+              border-radius: 6px;
+            }
+            .principal-comment-section h3 {
+              text-align: center;
+              margin-bottom: 6px;
+              font-size: 10px;
+              font-weight: 800;
+              color: #1e3a8a;
+            }
+            .principal-comment-text {
+              background: #f8faff;
+              padding: 6px;
+              border-radius: 4px;
+              font-size: 8px;
+              line-height: 1.4;
+              color: #1e3a8a;
+              font-style: italic;
+              text-align: justify;
+            }
+            .grade-key {
+              padding: 8px;
+              margin: 0 8px 8px 8px;
+              background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+              border-radius: 6px;
+            }
+            .grade-key-title {
+              text-align: center;
+              font-weight: 800;
+              margin-bottom: 6px;
+              color: #1e40af;
+              font-size: 9px;
+              letter-spacing: 0.5px;
+            }
+            .grade-key-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 4px;
+              font-size: 7px;
+              color: #1e40af;
+            }
+            .grade-key-grid div {
+              background: #f8faff;
+              padding: 3px;
+              border-radius: 3px;
+              text-align: center;
+              font-weight: 600;
+            }
+            .footer {
+              padding: 8px;
+              background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
               color: white;
+              text-align: center;
+              margin: 0 8px;
+              border-radius: 6px;
             }
             .signature-section {
               display: grid;
-              grid-template-columns: 1fr 1fr 1fr;
-              gap: 30px;
-              margin-top: 20px;
+              grid-template-columns: 1fr 1fr;
+              gap: 20px;
+              margin-bottom: 6px;
             }
             .signature {
               text-align: center;
-              border-top: 2px solid #374151;
-              padding-top: 10px;
-              font-size: 12px;
+              border-top: 2px solid rgba(255,255,255,0.5);
+              padding-top: 5px;
+              font-size: 9px;
+              font-weight: 600;
+            }
+            .signature-image {
+              max-height: 40px;
+              max-width: 150px;
+              margin: 0 auto 5px auto;
+              display: block;
+            }
+            .signature-name {
+              font-size: 7px;
+              color: rgba(255,255,255,0.9);
+              margin-top: 2px;
+            }
+            .print-button {
+              background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              font-size: 14px;
+              font-weight: 600;
+              border-radius: 6px;
+              cursor: pointer;
+              margin: 10px 5px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            .print-button:hover {
+              background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
             }
             @media print {
-              body { background: white !important; margin: 0 !important; }
-              .report-card { margin: 0 !important; box-shadow: none !important; }
+              * {
+                print-color-adjust: exact !important;
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+              }
+              body { background: white !important; margin: 0 !important; padding: 0 !important; }
+              .report-card { 
+                margin: 0 !important; 
+                box-shadow: none !important;
+                page-break-after: avoid;
+                border-radius: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 0 !important;
+              }
+              .print-button {
+                display: none !important;
+              }
+              @page { size: A4 portrait; margin: 10mm; }
             }
           </style>
         </head>
         <body>
           <div class="report-card">
             <div class="header">
-              <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-              <div class="school-motto">"Nurturing Excellence in Learning"</div>
-              <div class="report-title">STUDENT REPORT CARD</div>
+              <img src="/favicon.png" alt="School Logo" class="header-logo" />
+              <div class="header-text">
+                <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+                <div class="school-info">ASABA, DELTA STATE</div>
+                <div class="education-levels">PRE NURSERY, NURSERY, PRIMARY & SECONDARY</div>
+                <div class="school-motto">GOVERNMENT, WAEC AND NECO APPROVED</div>
+                <div class="report-title">${selectedTerm} ASSESSMENT REPORT - ${selectedSession} SESSION</div>
+              </div>
             </div>
             
             <div class="student-info">
@@ -417,16 +714,16 @@ export default function StudentDashboard() {
                 <span class="info-value">${selectedClassObj?.name || profile.class?.name || ''}</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Session:</span>
-                <span class="info-value">${selectedSession || ''}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Term:</span>
-                <span class="info-value">${selectedTerm}</span>
+                <span class="info-label">Gender:</span>
+                <span class="info-value">${profile.gender || 'N/A'}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Age:</span>
                 <span class="info-value">${calculateAge(profile.dateOfBirth)} years</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Next Term:</span>
+                <span class="info-value">TBA</span>
               </div>
             </div>
 
@@ -449,12 +746,11 @@ export default function StudentDashboard() {
                   const exam = Number(assessment.exam || 0);
                   const total = firstCA + secondCA + exam;
                   
-                  // Use the correct WAEC grading standards
                   const { grade, remark } = calculateGrade(total);
                   
                   return `
                     <tr>
-                      <td class="subject-name">${assessment.subject.name}</td>
+                      <td class="subject-name">${assessment.subject.name.toUpperCase()}</td>
                       <td>${firstCA}</td>
                       <td>${secondCA}</td>
                       <td>${exam}</td>
@@ -475,48 +771,108 @@ export default function StudentDashboard() {
                 </div>
                 <div class="stat-card">
                   <div class="stat-label">AVERAGE</div>
-                  <div class="stat-value">${averagePercentage}%</div>
+                  <div class="stat-value">${assessments.length ? ((totalMarks / (assessments.length * 100)) * 100).toFixed(1) : "0"}%</div>
                 </div>
                 <div class="stat-card">
-                  <div class="stat-label">RESULT</div>
-                  <div class="stat-value">${Number(averagePercentage) >= 40 ? 'PASS' : 'FAIL'}</div>
+                  <div class="stat-label">ATTENDANCE</div>
+                  <div class="stat-value">N/A</div>
                 </div>
               </div>
-              
-              <div style="text-align: center; margin-top: 20px;">
-                <div>No of Subjects: <strong>${assessments.length}</strong></div>
-                <div>Total Obtainable: <strong>${assessments.length * 100}</strong></div>
-                <div>Result Status: <strong>${Number(averagePercentage) >= 40 ? 'PASS' : 'FAIL'}</strong></div>
+            </div>
+
+            ${behavioralRating ? `
+            <div class="behavioral-section">
+              <h3>BEHAVIORAL ASSESSMENT</h3>
+              <div class="behavioral-grid">
+                <div class="behavioral-item">
+                  <div class="behavioral-label">Attendance/Punctuality</div>
+                  <div class="behavioral-value">${getRatingText(behavioralRating.attendancePunctuality)}</div>
+                </div>
+                <div class="behavioral-item">
+                  <div class="behavioral-label">Neatness/Organization</div>
+                  <div class="behavioral-value">${getRatingText(behavioralRating.neatnessOrganization)}</div>
+                </div>
+                <div class="behavioral-item">
+                  <div class="behavioral-label">Respect/Politeness</div>
+                  <div class="behavioral-value">${getRatingText(behavioralRating.respectPoliteness)}</div>
+                </div>
+                <div class="behavioral-item">
+                  <div class="behavioral-label">Participation/Teamwork</div>
+                  <div class="behavioral-value">${getRatingText(behavioralRating.participationTeamwork)}</div>
+                </div>
+                <div class="behavioral-item">
+                  <div class="behavioral-label">Responsibility</div>
+                  <div class="behavioral-value">${getRatingText(behavioralRating.responsibility)}</div>
+                </div>
+              </div>
+            </div>
+            
+            ${behavioralInterpretation ? `
+            <div class="behavioral-interpretation-section">
+              <h4>Rating Scale: 5=Excellent, 4=Very Good, 3=Good, 2=Fair, 1=Poor</h4>
+              <div class="behavioral-interpretation-text">${behavioralInterpretation.interpretation}</div>
+            </div>
+            ` : ''}
+            ` : ''}
+
+            <div class="principal-comment-section">
+              <h3>PRINCIPAL'S COMMENT</h3>
+              <p class="principal-comment-text">${principalComment}</p>
+            </div>
+
+            <div class="grade-key">
+              <div class="grade-key-title">GRADE INTERPRETATION (WAEC STANDARD)</div>
+              <div class="grade-key-grid">
+                <div>A1 (75-100): Excellent</div>
+                <div>B2 (70-74): Very Good</div>
+                <div>B3 (65-69): Good</div>
+                <div>C4 (60-64): Credit</div>
+                <div>C5 (55-59): Credit</div>
+                <div>C6 (50-54): Credit</div>
+                <div>D7 (45-49): Pass</div>
+                <div>E8 (40-44): Pass</div>
+                <div>F9 (0-39): Fail</div>
               </div>
             </div>
 
             <div class="footer">
-              <div style="margin-bottom: 15px;">
-                <strong>SEAT OF WISDOM ACADEMY MANAGEMENT SYSTEM</strong>
-              </div>
               <div class="signature-section">
                 <div class="signature">
-                  <div>Class Teacher</div>
+                  <div style="border-top: 2px solid rgba(255,255,255,0.5); padding-top: 5px; min-height: 30px;"></div>
+                  Class Teacher
                 </div>
                 <div class="signature">
-                  <div>Principal</div>
-                </div>
-                <div class="signature">
-                  <div>Parent/Guardian</div>
+                  <img src="/principal-signature.png" alt="Principal Signature" class="signature-image" />
+                  <div class="signature-name">Principal, Seat of Wisdom Academy Asaba</div>
                 </div>
               </div>
-              <div style="margin-top: 15px; font-size: 11px; opacity: 0.8;">
-                Generated on ${new Date().toLocaleDateString()} | Student Report
+              <div style="margin-top: 6px; font-size: 7px;">
+                Generated: ${new Date().toLocaleDateString()}
               </div>
             </div>
+            
+            <div style="text-align: center; margin-top: 10px;">
+              <button class="print-button" onclick="window.print()">
+                🖨️ Print Report Card
+              </button>
+              <button class="print-button" onclick="window.print()">
+                ⬇️ Download Report Card
+              </button>
+            </div>
+
           </div>
+          
+          <script>
+            function downloadReport() {
+              window.print();
+            }
+          </script>
         </body>
       </html>
     `;
 
     reportWindow.document.write(reportHTML);
     reportWindow.document.close();
-    reportWindow.print();
   };
 
   return (
