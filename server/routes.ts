@@ -1441,7 +1441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Download Excel template for bulk score upload
+  // Download Excel template for bulk score upload (legacy - kept for backwards compatibility)
   app.get('/api/assessments/template/:classId', authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
@@ -1492,6 +1492,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     } catch (error) {
       console.error("Template download error:", error);
+      res.status(500).json({ error: "Failed to generate template" });
+    }
+  });
+
+  // Download single subject Excel template with class-subject naming
+  app.get('/api/assessments/template-single/:classId/:subjectId', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { classId, subjectId } = req.params;
+      
+      // Get class info for filename
+      const classInfo = await storage.getClassById(classId);
+      
+      // Get subject info from all subjects
+      const allSubjects = await storage.getAllSubjects();
+      const subjectInfo = allSubjects.find(s => s.id === subjectId);
+      
+      if (!classInfo || !subjectInfo) {
+        return res.status(404).json({ error: "Class or subject not found" });
+      }
+      
+      // Get students from the class
+      const studentsInClass = await storage.getStudentsByClass(classId);
+      
+      // Create Excel template with student IDs
+      const templateData = studentsInClass.map(student => ({
+        'Student ID': student.studentId,
+        'Student Name': `${student.user.firstName} ${student.user.lastName}`,
+        'First CA': '',
+        'Second CA': '',
+        'Exam': ''
+      }));
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      
+      // Set column widths
+      ws['!cols'] = [
+        { width: 15 }, // Student ID
+        { width: 25 }, // Student Name
+        { width: 12 }, // First CA
+        { width: 12 }, // Second CA
+        { width: 12 }  // Exam
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, subjectInfo.name);
+
+      // Generate buffer
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      // Create filename: Subject-Class.xlsx (e.g., Mathematics-JSS1.xlsx)
+      const filename = `${subjectInfo.name.replace(/\s+/g, '-')}-${classInfo.name.replace(/\s+/g, '-')}.xlsx`;
+
+      // Set headers for download
+      res.set({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': buffer.length
+      });
+
+      res.send(buffer);
+
+    } catch (error) {
+      console.error("Single subject template download error:", error);
+      res.status(500).json({ error: "Failed to generate template" });
+    }
+  });
+
+  // Download multi-subject Excel template with separate tabs for each subject
+  app.get('/api/assessments/template-multi/:classId', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { classId } = req.params;
+      
+      // Get class info for filename
+      const classInfo = await storage.getClassById(classId);
+      
+      if (!classInfo) {
+        return res.status(404).json({ error: "Class not found" });
+      }
+      
+      // Get students from the class
+      const studentsInClass = await storage.getStudentsByClass(classId);
+      
+      // Get subjects assigned to this class
+      const subjects = await storage.getClassSubjects(classId);
+      
+      if (subjects.length === 0) {
+        return res.status(404).json({ error: "No subjects assigned to this class" });
+      }
+      
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Add a sheet for each subject
+      for (const subject of subjects) {
+        const templateData = studentsInClass.map(student => ({
+          'Student ID': student.studentId,
+          'Student Name': `${student.user.firstName} ${student.user.lastName}`,
+          'First CA': '',
+          'Second CA': '',
+          'Exam': ''
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(templateData);
+        
+        // Set column widths
+        ws['!cols'] = [
+          { width: 15 }, // Student ID
+          { width: 25 }, // Student Name
+          { width: 12 }, // First CA
+          { width: 12 }, // Second CA
+          { width: 12 }  // Exam
+        ];
+
+        // Truncate sheet name if too long (Excel limit is 31 characters)
+        const sheetName = subject.name.length > 31 ? subject.name.substring(0, 31) : subject.name;
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
+
+      // Generate buffer
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      // Create filename: Class-All-Subjects.xlsx (e.g., JSS1-All-Subjects.xlsx)
+      const filename = `${classInfo.name.replace(/\s+/g, '-')}-All-Subjects.xlsx`;
+
+      // Set headers for download
+      res.set({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': buffer.length
+      });
+
+      res.send(buffer);
+
+    } catch (error) {
+      console.error("Multi-subject template download error:", error);
       res.status(500).json({ error: "Failed to generate template" });
     }
   });

@@ -1995,7 +1995,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Handle download template
+  // Handle download template (legacy - kept for backwards compatibility)
   const handleDownloadTemplate = async () => {
     if (!scoresClassId) {
       toast({
@@ -2036,6 +2036,124 @@ export default function AdminDashboard() {
 
     } catch (error) {
       console.error("Template download error:", error);
+      toast({
+        title: "Download Error",
+        description: "Failed to download template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Handle download single subject template
+  const handleDownloadSingleSubjectTemplate = async () => {
+    if (!scoresClassId || !scoresSubjectId) {
+      toast({
+        title: "Error",
+        description: "Please select both class and subject",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/assessments/template-single/${scoresClassId}/${scoresSubjectId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download template');
+      }
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'template.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Template Downloaded",
+        description: `Downloaded ${filename}`,
+      });
+
+    } catch (error) {
+      console.error("Single subject template download error:", error);
+      toast({
+        title: "Download Error",
+        description: "Failed to download template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Handle download multi-subject template
+  const handleDownloadMultiSubjectTemplate = async () => {
+    if (!scoresClassId) {
+      toast({
+        title: "Error",
+        description: "Please select a class first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/assessments/template-multi/${scoresClassId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download template');
+      }
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'template.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Create blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Template Downloaded",
+        description: `Downloaded ${filename} with all subjects in separate tabs`,
+      });
+
+    } catch (error) {
+      console.error("Multi-subject template download error:", error);
       toast({
         title: "Download Error",
         description: "Failed to download template",
@@ -3252,23 +3370,48 @@ export default function AdminDashboard() {
                         </TooltipContent>
                       </Tooltip>
                       
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={handleDownloadTemplate}
-                            disabled={!scoresClassId}
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
+                      <DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                disabled={!scoresClassId}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Template
+                              </Button>
+                            </DropdownMenuTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Download Excel template options</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={handleDownloadSingleSubjectTemplate}
+                            disabled={!scoresClassId || !scoresSubjectId}
                           >
-                            <Download className="h-4 w-4 mr-1" />
-                            Template
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Download Excel template with student IDs</p>
-                        </TooltipContent>
-                      </Tooltip>
+                            <Download className="h-4 w-4 mr-2" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">Single Subject</span>
+                              <span className="text-xs text-muted-foreground">Subject-Class.xlsx</span>
+                            </div>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={handleDownloadMultiSubjectTemplate}
+                            disabled={!scoresClassId}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">All Subjects</span>
+                              <span className="text-xs text-muted-foreground">Class-All-Subjects.xlsx (tabs)</span>
+                            </div>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </div>
