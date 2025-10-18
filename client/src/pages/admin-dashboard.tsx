@@ -1744,14 +1744,37 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleSignatureUpload = () => {
-    if (signatureFile && signaturePreview && selectedSchoolForSignature) {
-      // For now, we'll simulate the upload by using the preview URL
-      // In a real implementation, you'd upload to a file storage service first
-      uploadSignatureMutation.mutate({ 
-        schoolId: selectedSchoolForSignature, 
-        signatureUrl: signaturePreview 
-      });
+  const handleSignatureUpload = async () => {
+    if (signatureFile && selectedSchoolForSignature) {
+      try {
+        // Get upload URL from Object Storage
+        const { uploadURL } = await apiRequest("/api/objects/upload");
+        
+        // Upload file to Object Storage
+        await fetch(uploadURL, {
+          method: "PUT",
+          body: signatureFile,
+          headers: {
+            "Content-Type": signatureFile.type,
+          },
+        });
+        
+        // Extract the object path from the upload URL
+        const objectPath = new URL(uploadURL).pathname;
+        
+        // Update school with signature URL
+        uploadSignatureMutation.mutate({ 
+          schoolId: selectedSchoolForSignature, 
+          signatureUrl: objectPath 
+        });
+      } catch (error) {
+        console.error("Error uploading signature:", error);
+        toast({
+          title: "Upload Failed",
+          description: "Failed to upload signature. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
