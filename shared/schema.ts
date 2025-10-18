@@ -54,6 +54,7 @@ export const schools = pgTable("schools", {
   phone: varchar("phone", { length: 20 }),
   email: varchar("email", { length: 255 }),
   logoUrl: varchar("logo_url", { length: 500 }),
+  principalSignature: text("principal_signature"), // URL to principal's signature image
   sortOrder: integer("sort_order").default(1), // Ensures consistent ordering
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
