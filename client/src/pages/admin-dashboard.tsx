@@ -4352,59 +4352,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Principal Signature Management Section */}
-                <div className="border-t pt-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-medium">Principal's Signature</h3>
-                      <p className="text-sm text-gray-500">Upload and manage principal signatures for each school branch</p>
-                    </div>
-                    <Button
-                      onClick={() => setIsSignatureUploadDialogOpen(true)}
-                      className="bg-blue-600 hover:bg-blue-700"
-                      data-testid="button-upload-signature"
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Upload Signature
-                    </Button>
-                  </div>
-                  
-                  {/* Current Signatures Preview */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {schools?.map((school) => (
-                      <div key={school.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-sm">{school.name}</h4>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedSchoolForSignature(school.id);
-                              setIsSignatureUploadDialogOpen(true);
-                            }}
-                            data-testid={`button-edit-signature-${school.id}`}
-                          >
-                            <Edit className="w-3 h-3 mr-1" />
-                            {school.principalSignature ? 'Change' : 'Upload'}
-                          </Button>
-                        </div>
-                        {school.principalSignature ? (
-                          <div className="border border-gray-200 dark:border-gray-700 rounded p-2 bg-white">
-                            <img 
-                              src={school.principalSignature} 
-                              alt={`${school.name} Principal Signature`} 
-                              className="max-h-16 mx-auto object-contain" 
-                            />
-                          </div>
-                        ) : (
-                          <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded p-4 text-center">
-                            <p className="text-sm text-gray-500">No signature uploaded</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                
 
                 {/* School Management Section */}
                 <div className="border-t pt-6">

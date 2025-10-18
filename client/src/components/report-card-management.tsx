@@ -1435,7 +1435,7 @@ export function ReportCardManagement({
                     Class Teacher
                   </div>
                   <div class="signature">
-                    ${principalSignature ? `<img src="${principalSignature}" alt="Principal Signature" class="signature-image" />` : '<div style="border-top: 2px solid rgba(255,255,255,0.5); padding-top: 5px; min-height: 30px;"></div>'}
+                    <img src="/attached_assets/targeted_element_1759270721981.png" alt="Principal Signature" class="signature-image" />
                     <div class="signature-name">Principal, Seat of Wisdom Academy Asaba</div>
                   </div>
                 </div>
