@@ -980,7 +980,7 @@ export function ReportCardManagement({
               }
               .student-info {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: 1fr 1fr 1fr;
                 gap: 6px;
                 padding: 10px;
                 background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
@@ -1269,7 +1269,10 @@ export function ReportCardManagement({
                   <span class="info-label">Class:</span>
                   <span class="info-value">${report.className}</span>
                 </div>
-               
+                <div class="info-item">
+                  <span class="info-label">Gender:</span>
+                  <span class="info-value">${student.gender || 'N/A'}</span>
+                </div>
                 <div class="info-item">
                   <span class="info-label">Age:</span>
                   <span class="info-value">${
@@ -1309,6 +1312,10 @@ export function ReportCardManagement({
                         })()
                       : "N/A"
                   } years</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Next Term:</span>
+                  <span class="info-value">${resumptionDate ? new Date(resumptionDate).toLocaleDateString("en-GB") : 'TBA'}</span>
                 </div>
               </div>
 
@@ -1435,12 +1442,12 @@ export function ReportCardManagement({
                     Class Teacher
                   </div>
                   <div class="signature">
-                    <img src="/attached_assets/SIGNATURE.PNG" alt="Principal Signature" class="signature-image" />
+                    <img src="/principal-signature.png" alt="Principal Signature" class="signature-image" />
                     <div class="signature-name">Principal, Seat of Wisdom Academy Asaba</div>
                   </div>
                 </div>
                 <div style="margin-top: 6px; font-size: 7px;">
-                  Generated: ${new Date().toLocaleDateString()} ${resumptionDate ? `| Next Term: ${new Date(resumptionDate).toLocaleDateString("en-GB")}` : ''}
+                  Generated: ${new Date().toLocaleDateString()}
                 </div>
               </div>
               
@@ -1448,10 +1455,16 @@ export function ReportCardManagement({
                 <button class="print-button" onclick="window.print()">
                   🖨️ Print Report Card
                 </button>
-                <button class="print-button" onclick="/* Add your download logic here */ alert('Download logic here');">
+                <button class="print-button" onclick="downloadReport()">
                   ⬇️ Download Report Card
                 </button>
               </div>
+              
+              <script>
+                function downloadReport() {
+                  window.print();
+                }
+              </script>
 
             </div>
           </body>
