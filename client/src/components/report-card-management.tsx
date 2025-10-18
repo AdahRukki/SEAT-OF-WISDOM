@@ -1455,46 +1455,14 @@ export function ReportCardManagement({
                 <button class="print-button" onclick="window.print()">
                   🖨️ Print Report Card
                 </button>
-                <button class="print-button" id="download-btn" onclick="downloadReport()">
+                <button class="print-button" onclick="downloadReport()">
                   ⬇️ Download Report Card
                 </button>
               </div>
               
-              <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
               <script>
                 function downloadReport() {
-                  const button = document.getElementById('download-btn');
-                  button.disabled = true;
-                  button.textContent = '⏳ Generating PDF...';
-                  
-                  const element = document.querySelector('.report-card');
-                  
-                  // Sanitize filename by removing invalid filesystem characters
-                  function sanitizeFilename(str) {
-                    return str.replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, '_');
-                  }
-                  
-                  const studentName = sanitizeFilename(${JSON.stringify(student.user.firstName + '_' + student.user.lastName)});
-                  const term = sanitizeFilename(${JSON.stringify(report.term)});
-                  const session = sanitizeFilename(${JSON.stringify(report.session)});
-                  const filename = studentName + '_' + term + '_' + session + '_Report.pdf';
-                  
-                  const opt = {
-                    margin: 10,
-                    filename: filename,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, logging: false },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                  };
-                  
-                  html2pdf().set(opt).from(element).save().then(() => {
-                    button.disabled = false;
-                    button.textContent = '⬇️ Download Report Card';
-                  }).catch((err) => {
-                    console.error('PDF generation error:', err);
-                    button.disabled = false;
-                    button.textContent = '❌ Error - Try Again';
-                  });
+                  window.print();
                 }
               </script>
 
