@@ -1435,7 +1435,7 @@ export function ReportCardManagement({
                     Class Teacher
                   </div>
                   <div class="signature">
-                    <img src="/attached_assets/targeted_element_1759270721981.png" alt="Principal Signature" class="signature-image" />
+                    <img src="/attached_assets/SIGNATURE.PNG" alt="Principal Signature" class="signature-image" />
                     <div class="signature-name">Principal, Seat of Wisdom Academy Asaba</div>
                   </div>
                 </div>
