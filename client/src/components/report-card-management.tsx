@@ -839,6 +839,59 @@ export function ReportCardManagement({
         return 'Not Rated';
       };
 
+      // Helper function to get principal's comment based on average percentage
+      const getPrincipalComment = (averagePercentage: number): string => {
+        if (averagePercentage >= 90) {
+          return "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
+        } else if (averagePercentage >= 80) {
+          return "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
+        } else if (averagePercentage >= 75) {
+          return "Good work! You show clear understanding of your subjects. With a bit more effort, you can reach the top.";
+        } else if (averagePercentage >= 70) {
+          return "A fairly good performance. You are doing well, but there is still room for improvement. Aim higher next term.";
+        } else if (averagePercentage >= 65) {
+          return "You have tried, but you can do much better. Put in more effort and stay focused on your studies.";
+        } else if (averagePercentage >= 60) {
+          return "A fair attempt, but there is a need for greater dedication. Work harder to improve your overall performance.";
+        } else if (averagePercentage >= 50) {
+          return "You passed, but this performance is not satisfactory. More seriousness and consistent study habits are required.";
+        } else if (averagePercentage >= 45) {
+          return "You barely passed. Try to be more attentive in class and spend more time revising your work.";
+        } else if (averagePercentage >= 40) {
+          return "A poor result. You need to put in significant effort and seek help from teachers to strengthen weak areas.";
+        } else {
+          return "Very poor performance. You must work very hard and take your studies seriously. Consistent supervision is advised.";
+        }
+      };
+
+      // Helper function to get behavioral interpretation
+      const getBehavioralInterpretation = (behavioralRating: any): { averageRating: number; interpretation: string } => {
+        const ratings = [
+          behavioralRating.attendancePunctuality || 3,
+          behavioralRating.neatnessOrganization || 3,
+          behavioralRating.respectPoliteness || 3,
+          behavioralRating.participationTeamwork || 3,
+          behavioralRating.responsibility || 3
+        ];
+        
+        const averageRating = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
+        
+        let interpretation = '';
+        if (averageRating >= 4.5) {
+          interpretation = 'Excellent Behavior';
+        } else if (averageRating >= 3.5) {
+          interpretation = 'Very Good Behavior';
+        } else if (averageRating >= 2.5) {
+          interpretation = 'Good Behavior';
+        } else if (averageRating >= 1.5) {
+          interpretation = 'Fair Behavior - Needs Improvement';
+        } else {
+          interpretation = 'Poor Behavior - Urgent Attention Required';
+        }
+        
+        return { averageRating: Math.round(averageRating * 10) / 10, interpretation };
+      };
+
       // Generate the detailed report card
       const reportWindow = window.open("", "_blank");
       if (!reportWindow) return;
