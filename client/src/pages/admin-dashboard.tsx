@@ -195,6 +195,12 @@ export default function AdminDashboard() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string>("");
 
+  // Principal signature upload states
+  const [isSignatureUploadDialogOpen, setIsSignatureUploadDialogOpen] = useState(false);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signaturePreview, setSignaturePreview] = useState<string>("");
+  const [selectedSchoolForSignature, setSelectedSchoolForSignature] = useState<string>("");
+
   // Export dialog states
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [selectedExportClass, setSelectedExportClass] = useState("");
@@ -955,6 +961,28 @@ export default function AdminDashboard() {
     }
   });
 
+  // Principal signature upload mutation
+  const uploadSignatureMutation = useMutation({
+    mutationFn: async ({ schoolId, signatureUrl }: { schoolId: string; signatureUrl: string }) => {
+      return apiRequest('/api/admin/schools/signature', {
+        method: 'POST',
+        body: { schoolId, signatureUrl }
+      });
+    },
+    onSuccess: (data) => {
+      toast({ title: "Success", description: "Principal signature updated successfully" });
+      setIsSignatureUploadDialogOpen(false);
+      setSignatureFile(null);
+      setSignaturePreview("");
+      setSelectedSchoolForSignature("");
+      // Refresh the schools data to show the new signature immediately
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/schools'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to upload signature", variant: "destructive" });
+    }
+  });
+
   // Remove subject from class mutation
   const removeSubjectMutation = useMutation({
     mutationFn: async ({ classId, subjectId }: { classId: string; subjectId: string }) => {
@@ -1700,6 +1728,38 @@ export default function AdminDashboard() {
     setIsLogoUploadDialogOpen(false);
     setLogoFile(null);
     setLogoPreview("");
+  };
+
+  // Principal signature upload functions
+  const handleSignatureFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSignatureFile(file);
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setSignaturePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSignatureUpload = () => {
+    if (signatureFile && signaturePreview && selectedSchoolForSignature) {
+      // For now, we'll simulate the upload by using the preview URL
+      // In a real implementation, you'd upload to a file storage service first
+      uploadSignatureMutation.mutate({ 
+        schoolId: selectedSchoolForSignature, 
+        signatureUrl: signaturePreview 
+      });
+    }
+  };
+
+  const handleSignatureCancelation = () => {
+    setIsSignatureUploadDialogOpen(false);
+    setSignatureFile(null);
+    setSignaturePreview("");
+    setSelectedSchoolForSignature("");
   };
 
   // Reset student form function
@@ -4269,6 +4329,60 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                {/* Principal Signature Management Section */}
+                <div className="border-t pt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium">Principal's Signature</h3>
+                      <p className="text-sm text-gray-500">Upload and manage principal signatures for each school branch</p>
+                    </div>
+                    <Button
+                      onClick={() => setIsSignatureUploadDialogOpen(true)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                      data-testid="button-upload-signature"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Upload Signature
+                    </Button>
+                  </div>
+                  
+                  {/* Current Signatures Preview */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {schools?.map((school) => (
+                      <div key={school.id} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium text-sm">{school.name}</h4>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedSchoolForSignature(school.id);
+                              setIsSignatureUploadDialogOpen(true);
+                            }}
+                            data-testid={`button-edit-signature-${school.id}`}
+                          >
+                            <Edit className="w-3 h-3 mr-1" />
+                            {school.principalSignature ? 'Change' : 'Upload'}
+                          </Button>
+                        </div>
+                        {school.principalSignature ? (
+                          <div className="border border-gray-200 dark:border-gray-700 rounded p-2 bg-white">
+                            <img 
+                              src={school.principalSignature} 
+                              alt={`${school.name} Principal Signature`} 
+                              className="max-h-16 mx-auto object-contain" 
+                            />
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded p-4 text-center">
+                            <p className="text-sm text-gray-500">No signature uploaded</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* School Management Section */}
                 <div className="border-t pt-6">
                   <div className="space-y-4">
@@ -4651,6 +4765,90 @@ export default function AdminDashboard() {
                     <Upload className="h-4 w-4 mr-2" />
                   )}
                   {uploadLogoMutation.isPending ? "Uploading..." : "Upload Logo"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Principal Signature Upload Dialog */}
+        <Dialog open={isSignatureUploadDialogOpen} onOpenChange={setIsSignatureUploadDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Upload Principal's Signature</DialogTitle>
+              <DialogDescription>
+                Upload a signature image for the principal. Recommended: PNG with transparent background, 400x150px
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* School Selection */}
+              <div>
+                <label htmlFor="school-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select School Branch
+                </label>
+                <select
+                  id="school-select"
+                  value={selectedSchoolForSignature}
+                  onChange={(e) => setSelectedSchoolForSignature(e.target.value)}
+                  className="block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                  data-testid="select-school-signature"
+                >
+                  <option value="">Select a school...</option>
+                  {schools?.map((school) => (
+                    <option key={school.id} value={school.id}>
+                      {school.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="signature-upload" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Choose Signature File
+                </label>
+                <input
+                  id="signature-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleSignatureFileChange}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  data-testid="input-signature-file"
+                />
+              </div>
+              
+              {signaturePreview && (
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Preview:</p>
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white">
+                    <img 
+                      src={signaturePreview} 
+                      alt="Signature preview" 
+                      className="max-w-full max-h-32 mx-auto"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={handleSignatureCancelation}
+                  data-testid="button-cancel-signature"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSignatureUpload}
+                  disabled={!signatureFile || !selectedSchoolForSignature || uploadSignatureMutation.isPending}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  data-testid="button-upload-signature-submit"
+                >
+                  {uploadSignatureMutation.isPending ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  {uploadSignatureMutation.isPending ? "Uploading..." : "Upload Signature"}
                 </Button>
               </div>
             </div>
