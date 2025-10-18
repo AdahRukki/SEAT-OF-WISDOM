@@ -1249,6 +1249,8 @@ export function ReportCardManagement({
                 <img src="/assets/academy-logo.png" alt="School Logo" class="header-logo" />
                 <div class="header-text">
                   <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+                  <div class="school-info">ASABA, DELTA STATE</div>
+                  <div class="education-levels">PRE NURSERY, NURSERY, PRIMARY & SECONDARY</div>
                   <div class="school-motto">GOVERNMENT, WAEC AND NECO APPROVED</div>
                   <div class="report-title">${report.term} ASSESSMENT REPORT - ${report.session} SESSION</div>
                 </div>
@@ -1367,10 +1369,7 @@ export function ReportCardManagement({
                     <div class="stat-label">ATTENDANCE</div>
                     <div class="stat-value">${attendancePercentage}%</div>
                   </div>
-                  <div class="stat-card">
-                    <div class="stat-label">RESULT</div>
-                    <div class="stat-value">${(totalMarks / (subjects.length * 100)) * 100 >= 40 ? "PASS" : "FAIL"}</div>
-                  </div>
+                  
                 </div>
               </div>
 
@@ -1445,9 +1444,15 @@ export function ReportCardManagement({
                 </div>
               </div>
               
-              <button class="print-button" onclick="window.print()">
-                🖨️ Print Report Card
-              </button>
+              <div class="flex justify-center gap-4 mt-6">
+                <button class="print-button" onclick="window.print()">
+                  🖨️ Print Report Card
+                </button>
+                <button class="print-button" onclick="/* Add your download logic here */ alert('Download logic here');">
+                  ⬇️ Download Report Card
+                </button>
+              </div>
+
             </div>
           </body>
         </html>
@@ -1455,7 +1460,7 @@ export function ReportCardManagement({
 
       reportWindow.document.write(reportHTML);
       reportWindow.document.close();
-      reportWindow.print();
+      
     } catch (error) {
       console.error("Error loading report card data:", error);
       toast({
