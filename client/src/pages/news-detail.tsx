@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Calendar, User, ArrowLeft, Home } from "lucide-react";
 import academyLogo from "@assets/academy-logo.png";
+import { SEO } from "@/components/SEO";
 
 interface NewsItem {
   id: string;
@@ -112,8 +113,46 @@ export default function NewsDetailPage() {
     );
   }
 
+  const articleDescription = newsItem.content.substring(0, 160).trim() + (newsItem.content.length > 160 ? '...' : '');
+  const authorName = `${newsItem.author.firstName} ${newsItem.author.lastName}`;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+      <SEO
+        title={newsItem.title}
+        description={articleDescription}
+        keywords={`${newsItem.tag || 'academy news'}, seat of wisdom academy, school news, educational updates`}
+        ogType="article"
+        ogImage={newsItem.imageUrl || academyLogo}
+        ogUrl={window.location.href}
+        articlePublishedTime={newsItem.publishedAt}
+        articleAuthor={authorName}
+        articleTags={newsItem.tag ? [newsItem.tag] : []}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "BlogPosting",
+          "headline": newsItem.title,
+          "description": articleDescription,
+          "image": newsItem.imageUrl || academyLogo,
+          "datePublished": newsItem.publishedAt,
+          "author": {
+            "@type": "Person",
+            "name": authorName
+          },
+          "publisher": {
+            "@type": "EducationalOrganization",
+            "name": "Seat of Wisdom Academy",
+            "logo": {
+              "@type": "ImageObject",
+              "url": academyLogo
+            }
+          },
+          "mainEntityOfPage": {
+            "@type": "WebPage",
+            "@id": window.location.href
+          }
+        }}
+      />
       {/* Header */}
       <header className="bg-white dark:bg-gray-900 shadow-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

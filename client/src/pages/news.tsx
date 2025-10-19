@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, User, ArrowRight, Home } from "lucide-react";
 import academyLogo from "@assets/academy-logo.png";
+import { SEO } from "@/components/SEO";
 
 interface NewsItem {
   id: string;
@@ -52,8 +53,42 @@ export default function NewsPage() {
     );
   }
 
+  const latestNewsImage = newsItems.length > 0 && newsItems[0].imageUrl ? newsItems[0].imageUrl : academyLogo;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+      <SEO
+        title="Academy News & Updates"
+        description="Stay informed with the latest news, announcements, achievements, and updates from Seat of Wisdom Academy. Read about our students' accomplishments, school events, and educational programs."
+        keywords="academy news, school updates, educational announcements, student achievements, school events, Seat of Wisdom Academy news"
+        ogType="website"
+        ogImage={latestNewsImage}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "Blog",
+          "name": "Seat of Wisdom Academy News",
+          "description": "Official news and updates from Seat of Wisdom Academy",
+          "url": window.location.href,
+          "publisher": {
+            "@type": "EducationalOrganization",
+            "name": "Seat of Wisdom Academy",
+            "logo": {
+              "@type": "ImageObject",
+              "url": academyLogo
+            }
+          },
+          "blogPost": newsItems.slice(0, 5).map(item => ({
+            "@type": "BlogPosting",
+            "headline": item.title,
+            "datePublished": item.publishedAt,
+            "author": {
+              "@type": "Person",
+              "name": `${item.author.firstName} ${item.author.lastName}`
+            },
+            "url": `${window.location.origin}/news/${item.id}`
+          }))
+        }}
+      />
       {/* Header */}
       <header className="bg-white dark:bg-gray-900 shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">

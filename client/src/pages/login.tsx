@@ -10,6 +10,7 @@ import { useLocation } from "wouter";
 import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
+import { SEO } from "@/components/SEO";
 
 export default function Login() {
   const { logoUrl: currentLogoUrl } = useLogo();
@@ -80,6 +81,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+      <SEO
+        title="Student & Staff Login"
+        description="Sign in to Seat of Wisdom Academy portal to access your student dashboard, grades, report cards, and academic information. Secure login for students, teachers, and administrators."
+        keywords="student login, school portal, academic dashboard, student grades, report cards, school management system"
+      />
       {/* Back to Website Button */}
       <div className="absolute top-4 left-4">
         <Button

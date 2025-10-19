@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { GraduationCap, Users, BookOpen, Trophy, MapPin, Phone, Mail, ChevronRight, Baby, School, GraduationCap as GraduationIcon, Grid3X3, ExternalLink, Activity, Dumbbell, Music, Palette, Building, Microscope, Calculator, Award, Menu } from "lucide-react";
+import { SEO } from "@/components/SEO";
 import schoolBuilding1 from "@assets/stock_images/modern_school_buildi_77850497.jpg";
 import schoolBuilding2 from "@assets/stock_images/modern_school_buildi_a486f75c.jpg";
 import classroomImage1 from "@assets/stock_images/children_in_classroo_646d36b7.jpg";
@@ -121,6 +122,26 @@ export default function SchoolHomepage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
+      <SEO
+        title="Seat of Wisdom Academy - Premier Multi-Branch Education"
+        description="Seat of Wisdom Academy is a leading educational institution offering comprehensive learning across four branches. Excellence in academics, character development, and holistic education for students from nursery to senior secondary levels."
+        keywords="seat of wisdom academy, private school, multi-branch school, quality education, academic excellence, nursery school, primary school, secondary school, holistic education, character development"
+        ogType="website"
+        ogImage={schoolBuilding1}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "EducationalOrganization",
+          "name": "Seat of Wisdom Academy",
+          "description": "Premier multi-branch educational institution offering comprehensive learning from nursery to senior secondary levels",
+          "url": window.location.origin,
+          "logo": academyLogo,
+          "address": {
+            "@type": "PostalAddress",
+            "addressCountry": "Nigeria"
+          },
+          "sameAs": []
+        }}
+      />
       {/* Navigation */}
       <nav className="border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
