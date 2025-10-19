@@ -37,6 +37,17 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { 
   Select, 
   SelectContent, 
@@ -103,7 +114,9 @@ import {
   Shield,
   Phone,
   Loader2,
-  Camera
+  Camera,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -565,6 +578,13 @@ export default function AdminDashboard() {
     enabled: !!scoresClassId && !!scoresSubjectId
   });
 
+  // Check if scores are published for selected class/term/session
+  const { data: scoresPublicationStatus } = useQuery<{ published: boolean }>({ 
+    queryKey: ['/api/scores/published-status', scoresClassId, scoresTerm, scoresSession],
+    queryFn: () => apiRequest(`/api/scores/published-status?classId=${scoresClassId}&term=${scoresTerm}&session=${scoresSession}`),
+    enabled: !!scoresClassId && !!scoresTerm && !!scoresSession
+  });
+
   // Class students query for details view
   const { data: classStudents = [] } = useQuery<StudentWithDetails[]>({ 
     queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'],
@@ -864,6 +884,58 @@ export default function AdminDashboard() {
       toast({ 
         title: "Error", 
         description: errorMessage, 
+        variant: "destructive" 
+      });
+    }
+  });
+
+  // Publish scores mutation
+  const publishScoresMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/admin/publish-scores', {
+        method: 'POST',
+        body: { classId: scoresClassId, term: scoresTerm, session: scoresSession }
+      });
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Success", 
+        description: "Scores have been published. Students can now view their scores and report cards." 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/scores/published-status', scoresClassId, scoresTerm, scoresSession] 
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error?.message || "Failed to publish scores", 
+        variant: "destructive" 
+      });
+    }
+  });
+
+  // Unpublish scores mutation
+  const unpublishScoresMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/admin/unpublish-scores', {
+        method: 'POST',
+        body: { classId: scoresClassId, term: scoresTerm, session: scoresSession }
+      });
+    },
+    onSuccess: () => {
+      toast({ 
+        title: "Success", 
+        description: "Scores have been unpublished. Students can no longer view their scores and report cards." 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/scores/published-status', scoresClassId, scoresTerm, scoresSession] 
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error?.message || "Failed to unpublish scores", 
         variant: "destructive" 
       });
     }
@@ -3433,6 +3505,77 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </div>
+
+                {/* Publication Status and Control */}
+                {scoresClassId && scoresTerm && scoresSession && (
+                  <div className="mb-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            Publication Status
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {classes.find(c => c.id === scoresClassId)?.name} - {scoresTerm} {scoresSession}
+                          </span>
+                        </div>
+                        <Badge variant={scoresPublicationStatus?.published ? "default" : "secondary"}>
+                          {scoresPublicationStatus?.published ? "Published" : "Not Published"}
+                        </Badge>
+                      </div>
+                      
+                      {scoresPublicationStatus?.published ? (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" data-testid="button-unpublish-scores">
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Unpublish Scores
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Unpublish Scores?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will hide scores and report cards from students for {classes.find(c => c.id === scoresClassId)?.name} - {scoresTerm} {scoresSession}. 
+                                Students will no longer be able to view their scores until you publish them again.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => unpublishScoresMutation.mutate()}>
+                                Unpublish
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      ) : (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="default" size="sm" data-testid="button-publish-scores">
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Publish Scores
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Publish Scores?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will make scores and report cards visible to students for {classes.find(c => c.id === scoresClassId)?.name} - {scoresTerm} {scoresSession}. 
+                                Make sure all scores have been entered and verified before publishing.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => publishScoresMutation.mutate()}>
+                                Publish
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {scoresClassId && scoresSubjectId ? (
                   <div className="border rounded-lg overflow-x-auto">
