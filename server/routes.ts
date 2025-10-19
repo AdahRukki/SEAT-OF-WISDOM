@@ -2339,6 +2339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create news (main admin only)
   app.post("/api/news", authenticate, async (req: Request, res: Response) => {
     const user = (req as any).user;
+    const objectStorageService = new ObjectStorageService();
     
     try {
       if (user.role !== "admin") {
@@ -2350,6 +2351,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         authorId: user.id
       });
+
+      // If there's an image URL, make it public
+      if (validatedData.imageUrl) {
+        try {
+          const normalizedPath = await objectStorageService.trySetObjectEntityAclPolicy(
+            validatedData.imageUrl,
+            {
+              owner: user.id,
+              visibility: "public"
+            }
+          );
+          validatedData.imageUrl = normalizedPath;
+        } catch (error) {
+          console.error("Error setting image ACL policy:", error);
+          // Continue even if ACL setting fails - the image might still be accessible
+        }
+      }
 
       const newsItem = await storage.createNews(validatedData);
       res.json(newsItem);
@@ -2364,9 +2382,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get all news (public route - no authentication required)
   app.get("/api/news", async (req: Request, res: Response) => {
+    const objectStorageService = new ObjectStorageService();
+    
     try {
       const newsItems = await storage.getAllNews();
-      res.json(newsItems);
+      
+      // Generate signed URLs for images
+      const newsWithSignedUrls = await Promise.all(
+        newsItems.map(async (item) => {
+          if (item.imageUrl && item.imageUrl.startsWith("/objects/")) {
+            try {
+              const signedUrl = await objectStorageService.getSignedUrlForObjectEntity(item.imageUrl, 3600);
+              return { ...item, imageUrl: signedUrl };
+            } catch (error) {
+              console.error(`Error generating signed URL for ${item.imageUrl}:`, error);
+              return item;
+            }
+          }
+          return item;
+        })
+      );
+      
+      res.json(newsWithSignedUrls);
     } catch (error) {
       console.error("Error fetching news:", error);
       res.status(500).json({ error: "Failed to fetch news" });
