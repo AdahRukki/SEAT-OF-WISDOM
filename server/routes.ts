@@ -2390,13 +2390,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate signed URLs for images
       const newsWithSignedUrls = await Promise.all(
         newsItems.map(async (item) => {
-          if (item.imageUrl && item.imageUrl.startsWith("/objects/")) {
+          if (item.imageUrl) {
             try {
-              const signedUrl = await objectStorageService.getSignedUrlForObjectEntity(item.imageUrl, 3600);
-              return { ...item, imageUrl: signedUrl };
+              // Normalize the URL first (converts GCS URLs to /objects/... format)
+              const normalizedPath = objectStorageService.normalizeObjectEntityPath(item.imageUrl);
+              
+              // If it's an object entity path, generate a signed URL
+              if (normalizedPath.startsWith("/objects/")) {
+                const signedUrl = await objectStorageService.getSignedUrlForObjectEntity(normalizedPath, 3600);
+                return { ...item, imageUrl: signedUrl };
+              }
             } catch (error) {
               console.error(`Error generating signed URL for ${item.imageUrl}:`, error);
-              return item;
             }
           }
           return item;
