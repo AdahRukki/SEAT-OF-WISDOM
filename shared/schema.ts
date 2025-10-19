@@ -152,6 +152,16 @@ export const assessments = pgTable("assessments", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Published Scores table (tracks when scores are published for students to view)
+export const publishedScores = pgTable("published_scores", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
+  term: varchar("term", { length: 20 }).notNull(), // "First Term", "Second Term", "Third Term"
+  session: varchar("session", { length: 20 }).notNull(), // "2024/2025"
+  publishedBy: uuid("published_by").notNull().references(() => users.id),
+  publishedAt: timestamp("published_at").defaultNow(),
+});
+
 // Attendance table (total attendance scores per student per term/session)
 export const attendance = pgTable("attendance", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -593,6 +603,14 @@ export const createNotificationSchema = z.object({
   message: z.string().min(1, "Notification message is required"),
 });
 
+// Published Scores validation
+export const insertPublishedScoresSchema = createInsertSchema(publishedScores).omit({ id: true, publishedAt: true });
+export const createPublishedScoresSchema = z.object({
+  classId: z.string().min(1, "Class is required"),
+  term: z.string().min(1, "Term is required"),
+  session: z.string().min(1, "Session is required"),
+});
+
 // Updated grading utility functions
 export const calculateGrade = (total: number): { grade: string; remark: string; color: string } => {
   if (total >= 75) return { grade: 'A1', remark: 'Excellent', color: 'bg-green-600' };
@@ -724,6 +742,11 @@ export type CreateNews = z.infer<typeof createNewsSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type CreateNotification = z.infer<typeof createNotificationSchema>;
+
+// Published Scores types
+export type PublishedScore = typeof publishedScores.$inferSelect;
+export type InsertPublishedScore = z.infer<typeof insertPublishedScoresSchema>;
+export type CreatePublishedScore = z.infer<typeof createPublishedScoresSchema>;
 
 // Enhanced student with non-academic ratings
 export type StudentWithFullDetails = StudentWithDetails & {
