@@ -4,10 +4,12 @@
 Seat of Wisdom Academy is a comprehensive multi-branch academy management system designed for efficient administration and student performance tracking. Built with a React frontend and Express backend, it integrates Firebase for offline-first capabilities and real-time data synchronization. The system supports four school branches and features role-based access for administrators, sub-administrators, and students. Key capabilities include a 20+20+60 scoring system, professional report card generation, robust student financial tracking, and complete teacher grading interface. The project provides a streamlined, scalable solution for academy management with full CRUD operations for students, functional class-based grading, and comprehensive educational oversight tools.
 
 ## Recent Updates (October 2025)
+- ✅ **Blog-Style News System**: Transformed news into blog format with individual article pages, "Read More" buttons, and proper navigation headers on all news pages
+- ✅ **News Image Visibility Fix**: Implemented public ACL policies and signed URL generation for news images, ensuring images display correctly across all pages (homepage, news listing, article detail)
+- ✅ **Academic Session Update**: Changed current session to 2024/2025
 - ✅ **Score Publication Control System**: Complete implementation with admin publish/unpublish functionality, backend security enforcement, and student access control - students cannot view scores/reports until admin explicitly publishes them for each term/session/class combination
 - ✅ **News Management System**: Complete implementation with admin CRUD operations, image uploads via ObjectUploader, and public news page
 - ✅ **In-App Notifications**: Student notification system with real-time inbox, unread count badges, and broadcast messaging from admin
-- ✅ **Homepage News Section**: Latest news excerpts displayed on public homepage with read more links
 - ✅ **Enhanced Admin Dashboard**: Added News and Notifications tabs with modular component architecture
 
 ## Previous Updates (September 2025)
