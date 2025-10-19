@@ -27,6 +27,8 @@ import academyLogo from "@assets/academy-logo.png";
 
 import sch_2_pic from "@assets/sch 2 pic.jpg";
 
+import image_2 from "@assets/image_2.jpg";
+
 interface NewsItem {
   id: string;
   title: string;
@@ -409,7 +411,7 @@ export default function SchoolHomepage() {
             <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-secondary">
               <div className="relative h-48">
                 <img 
-                  src={classroomImage3} 
+                  src={image_2} 
                   alt="Secondary students studying" 
                   className="w-full h-full object-cover"
                 />
