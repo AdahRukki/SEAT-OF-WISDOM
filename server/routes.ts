@@ -2288,14 +2288,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== NEWS ROUTES ====================
   
-  // Upload news image (admin only)
+  // Upload news image (main admin only)
   app.post("/api/upload/news-image", authenticate, async (req: Request, res: Response) => {
     const user = (req as any).user;
     const objectStorageService = new ObjectStorageService();
     
     try {
-      if (user.role !== "admin" && user.role !== "sub-admin") {
-        return res.status(403).json({ error: "Only admins can upload news images" });
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Only main admins can upload news images" });
       }
 
       const uploadURL = await objectStorageService.getObjectEntityUploadURL();
@@ -2306,13 +2306,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Create news (admin only)
+  // Create news (main admin only)
   app.post("/api/news", authenticate, async (req: Request, res: Response) => {
     const user = (req as any).user;
     
     try {
-      if (user.role !== "admin" && user.role !== "sub-admin") {
-        return res.status(403).json({ error: "Only admins can create news" });
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Only main admins can create news" });
       }
 
       // Validate request body using Zod schema
@@ -2343,14 +2343,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete news (admin only)
+  // Delete news (main admin only)
   app.delete("/api/news/:id", authenticate, async (req: Request, res: Response) => {
     const user = (req as any).user;
     const { id } = req.params;
     
     try {
-      if (user.role !== "admin" && user.role !== "sub-admin") {
-        return res.status(403).json({ error: "Only admins can delete news" });
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Only main admins can delete news" });
       }
 
       await storage.deleteNews(id);
@@ -2363,13 +2363,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== NOTIFICATION ROUTES ====================
   
-  // Create notification for all students (admin only)
+  // Create notification for all students (main admin only)
   app.post("/api/notifications", authenticate, async (req: Request, res: Response) => {
     const user = (req as any).user;
     
     try {
-      if (user.role !== "admin" && user.role !== "sub-admin") {
-        return res.status(403).json({ error: "Only admins can send notifications" });
+      if (user.role !== "admin") {
+        return res.status(403).json({ error: "Only main admins can send notifications" });
       }
 
       const { message } = req.body;
@@ -2378,10 +2378,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Message is required" });
       }
 
-      // If sub-admin, only send to their school's students
-      const schoolId = user.role === "sub-admin" ? user.schoolId : undefined;
-      
-      const notifications = await storage.createNotificationForAllStudents(message, schoolId);
+      // Send to all students across all schools (main admin privilege)
+      const notifications = await storage.createNotificationForAllStudents(message, undefined);
       res.json({ 
         success: true, 
         message: `Notification sent to ${notifications.length} students`,
