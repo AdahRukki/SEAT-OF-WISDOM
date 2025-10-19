@@ -1212,6 +1212,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Student profile not found" });
       }
 
+      // Check if scores are published for this class/term/session
+      const useClassId = classId as string || student.classId;
+      const isPublished = await storage.checkIfScoresPublished(
+        useClassId,
+        term as string,
+        session as string
+      );
+
+      if (!isPublished) {
+        return res.status(403).json({ 
+          error: "Scores not yet published",
+          message: "Your scores for this term have not been published yet. Please check back later."
+        });
+      }
+
       const assessments = await storage.getStudentAssessments(
         student.id, 
         term as string, 
@@ -1242,6 +1257,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const useClassId = classId as string || student.classId;
+
+      // Check if scores are published for this class/term/session
+      const isPublished = await storage.checkIfScoresPublished(
+        useClassId,
+        term as string,
+        session as string
+      );
+
+      if (!isPublished) {
+        return res.status(403).json({ 
+          error: "Scores not yet published",
+          message: "Your scores for this term have not been published yet. Please check back later."
+        });
+      }
+
       const ratings = await storage.getNonAcademicRatingByStudent(
         student.id, 
         useClassId,
