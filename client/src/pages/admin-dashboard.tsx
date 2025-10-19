@@ -2949,12 +2949,16 @@ export default function AdminDashboard() {
             <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Users
             </TabsTrigger>
-            <TabsTrigger value="news" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              News
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Notifications
-            </TabsTrigger>
+            {user.role === 'admin' && (
+              <TabsTrigger value="news" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+                News
+              </TabsTrigger>
+            )}
+            {user.role === 'admin' && (
+              <TabsTrigger value="notifications" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+                Notifications
+              </TabsTrigger>
+            )}
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Settings
             </TabsTrigger>
@@ -4658,15 +4662,19 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* News Tab */}
-          <TabsContent value="news" className="space-y-6">
-            <NewsManagement />
-          </TabsContent>
+          {/* News Tab - Main Admin Only */}
+          {user.role === 'admin' && (
+            <TabsContent value="news" className="space-y-6">
+              <NewsManagement />
+            </TabsContent>
+          )}
 
-          {/* Notifications Tab */}
-          <TabsContent value="notifications" className="space-y-6">
-            <NotificationsManagement />
-          </TabsContent>
+          {/* Notifications Tab - Main Admin Only */}
+          {user.role === 'admin' && (
+            <TabsContent value="notifications" className="space-y-6">
+              <NotificationsManagement />
+            </TabsContent>
+          )}
 
         </Tabs>
       </main>
