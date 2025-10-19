@@ -102,6 +102,13 @@ export default function StudentDashboard() {
     enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
 
+  // Check if scores are published for selected class/term/session
+  const { data: scoresPublicationStatus } = useQuery<{ published: boolean }>({ 
+    queryKey: ['/api/scores/published-status', selectedClass, selectedTerm, selectedSession],
+    queryFn: () => apiRequest(`/api/scores/published-status?classId=${selectedClass}&term=${selectedTerm}&session=${selectedSession}`),
+    enabled: !!selectedClass && !!selectedTerm && !!selectedSession
+  });
+
   // Student financial data
   const { data: studentFees = [] } = useQuery<any[]>({ 
     queryKey: ['/api/student/fees', selectedTerm, selectedClass, selectedSession],
@@ -1084,7 +1091,18 @@ padding: 15px;
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {assessments.length > 0 ? (
+                  {!scoresPublicationStatus?.published && selectedClass && selectedTerm && selectedSession ? (
+                    <div className="text-center py-12 px-4">
+                      <AlertCircle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        Scores Not Yet Published
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                        Your scores for {selectedTerm}, {selectedSession} have not been published yet. 
+                        Please check back later or contact your school administrator.
+                      </p>
+                    </div>
+                  ) : assessments.length > 0 ? (
                     assessments.slice(0, 5).map((assessment) => {
                       const total = Number(assessment.total);
                       const { grade, color } = calculateGrade(total);
@@ -1176,7 +1194,19 @@ padding: 15px;
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {assessments.length === 0 ? (
+                {!scoresPublicationStatus?.published && selectedClass && selectedTerm && selectedSession ? (
+                  <div className="text-center py-12 px-4">
+                    <AlertCircle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      Scores Not Yet Published
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                      Your scores for {selectedTerm}, {selectedSession} have not been published yet. 
+                      Your report card will be available once your scores are published. 
+                      Please check back later or contact your school administrator.
+                    </p>
+                  </div>
+                ) : assessments.length === 0 ? (
                   <div className="text-center py-12 px-4">
                     <div className="mb-4">
                       <svg
