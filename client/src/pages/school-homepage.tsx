@@ -61,7 +61,7 @@ function NewsExcerptSection() {
 
         <div className="grid md:grid-cols-3 gap-8">
           {latestNews.map((item) => (
-            <Card key={item.id} className="hover:shadow-lg transition-shadow" data-testid={`card-news-preview-${item.id}`}>
+            <Card key={item.id} className="hover:shadow-lg transition-shadow flex flex-col" data-testid={`card-news-preview-${item.id}`}>
               {item.imageUrl && (
                 <div className="h-48 overflow-hidden rounded-t-lg">
                   <img
@@ -84,10 +84,16 @@ function NewsExcerptSection() {
                   {format(new Date(item.publishedAt), "MMM dd, yyyy")}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-400 line-clamp-2 mb-4">
+              <CardContent className="flex-1 flex flex-col">
+                <p className="text-gray-600 dark:text-gray-400 line-clamp-3 mb-4 flex-1">
                   {item.content}
                 </p>
+                <Link href={`/news/${item.id}`}>
+                  <Button variant="outline" className="w-full" data-testid={`button-read-more-${item.id}`}>
+                    Read More
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           ))}
