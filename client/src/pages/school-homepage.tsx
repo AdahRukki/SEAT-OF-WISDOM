@@ -25,6 +25,8 @@ import labImage1 from "@assets/stock_images/school_library_labor_50c8c89f.jpg";
 import labImage2 from "@assets/stock_images/school_library_labor_35422e2d.jpg";
 import academyLogo from "@assets/academy-logo.png";
 
+import sch_2_pic from "@assets/sch 2 pic.jpg";
+
 interface NewsItem {
   id: string;
   title: string;
@@ -200,7 +202,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </nav>
-
       {/* Hero Section */}
       <section className="relative py-20 lg:py-32 bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-800 dark:to-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -234,7 +235,7 @@ export default function SchoolHomepage() {
             <div className="relative">
               <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
                 <img 
-                  src={schoolBuilding1} 
+                  src={sch_2_pic} 
                   alt="Seat of Wisdom Academy campus" 
                   className="w-full h-64 object-cover"
                   data-testid="img-school-hero"
@@ -256,7 +257,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* Features Section */}
       <section className="py-20 bg-white dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -328,7 +328,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* Education Programs Section */}
       <section className="py-20 bg-gray-50 dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -441,7 +440,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* Visit Our School Section */}
       <section className="py-20 bg-white dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -553,7 +551,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* Extracurricular Activities Section */}
       <section className="py-20 bg-gray-50 dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -653,7 +650,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* School Facilities Section */}
       <section className="py-20 bg-white dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -753,7 +749,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* Approved Examinations Section */}
       <section className="py-20 bg-blue-50 dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -838,7 +833,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* Quick Links Section */}
       <section className="py-20 bg-gray-50 dark:bg-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -911,7 +905,6 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* Gallery Section */}
       <section className="py-20 bg-white dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -991,10 +984,8 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
-
       {/* News Section */}
       <NewsExcerptSection />
-
       {/* Footer */}
       <footer className="bg-gray-900 dark:bg-black text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
