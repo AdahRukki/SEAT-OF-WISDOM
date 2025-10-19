@@ -41,7 +41,7 @@ export function NewsManagement() {
     mutationFn: async (data: { title: string; content: string; imageUrl?: string; tag?: string }) => {
       return await apiRequest("/api/news", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: data,
       });
     },
     onSuccess: () => {
@@ -138,13 +138,30 @@ export function NewsManagement() {
               <div>
                 <Label>Upload Image (optional)</Label>
                 <ObjectUploader
-                  uploadEndpoint="/api/upload/news-image"
-                  onUploadComplete={(url: string) => setImageUrl(url)}
-                  currentImageUrl={imageUrl}
-                  buttonText="Upload News Image"
-                />
+                  onGetUploadParameters={async () => {
+                    const response = await apiRequest("/api/upload/news-image", { method: "POST" });
+                    return {
+                      method: "PUT" as const,
+                      url: response.uploadUrl,
+                    };
+                  }}
+                  onComplete={(result) => {
+                    if (result.successful && result.successful.length > 0) {
+                      const uploadedFile = result.successful[0];
+                      if (uploadedFile.uploadURL) {
+                        const publicUrl = uploadedFile.uploadURL.split('?')[0];
+                        setImageUrl(publicUrl);
+                        toast({ title: "Image uploaded successfully" });
+                      }
+                    }
+                  }}
+                >
+                  Upload News Image
+                </ObjectUploader>
                 {imageUrl && (
-                  <p className="text-sm text-muted-foreground mt-1">Image uploaded successfully</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Image uploaded successfully
+                  </p>
                 )}
               </div>
             </div>

@@ -16,7 +16,7 @@ export function NotificationsManagement() {
     mutationFn: async (message: string) => {
       return await apiRequest("/api/notifications", {
         method: "POST",
-        body: JSON.stringify({ message }),
+        body: { message },
       });
     },
     onSuccess: (data: any) => {
