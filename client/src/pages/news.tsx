@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Calendar, User, ArrowRight, Home } from "lucide-react";
+import academyLogo from "@assets/academy-logo.png";
 
 interface NewsItem {
   id: string;
@@ -50,13 +53,35 @@ export default function NewsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-900 shadow-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <Link href="/">
+              <div className="flex items-center space-x-2 cursor-pointer hover:opacity-80 transition-opacity">
+                <img src={academyLogo} alt="Academy Logo" className="h-8 w-8 object-contain" />
+                <span className="text-lg font-bold text-gray-900 dark:text-white">
+                  Seat of Wisdom Academy
+                </span>
+              </div>
+            </Link>
+            <Link href="/">
+              <Button variant="outline" size="sm" data-testid="button-home">
+                <Home className="w-4 h-4 mr-2" />
+                Home
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
       <div className="container mx-auto px-4 py-12">
         <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-800 mb-4" data-testid="text-news-page-title">
+          <h1 className="text-5xl font-bold text-gray-800 dark:text-white mb-4" data-testid="text-news-page-title">
             Academy News & Updates
           </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
             Stay informed with the latest news, announcements, and updates from Seat of Wisdom Academy
           </p>
         </div>
@@ -64,7 +89,7 @@ export default function NewsPage() {
         {newsItems.length === 0 ? (
           <Card className="max-w-md mx-auto">
             <CardContent className="py-12 text-center">
-              <p className="text-gray-500">No news articles available at the moment.</p>
+              <p className="text-gray-500 dark:text-gray-400">No news articles available at the moment.</p>
             </CardContent>
           </Card>
         ) : (
@@ -72,11 +97,11 @@ export default function NewsPage() {
             {newsItems.map((item) => (
               <Card 
                 key={item.id} 
-                className="overflow-hidden hover:shadow-lg transition-shadow"
+                className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col"
                 data-testid={`card-news-${item.id}`}
               >
                 {item.imageUrl && (
-                  <div className="h-48 overflow-hidden bg-gray-100">
+                  <div className="h-48 overflow-hidden bg-gray-100 dark:bg-gray-700">
                     <img
                       src={item.imageUrl}
                       alt={item.title}
@@ -92,7 +117,7 @@ export default function NewsPage() {
                         {item.tag}
                       </Badge>
                     )}
-                    <div className="flex items-center text-xs text-gray-500">
+                    <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
                       <Calendar className="w-3 h-3 mr-1" />
                       {format(new Date(item.publishedAt), "MMM dd, yyyy")}
                     </div>
@@ -107,10 +132,16 @@ export default function NewsPage() {
                     </span>
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600 line-clamp-3" data-testid={`text-content-${item.id}`}>
+                <CardContent className="flex-1 flex flex-col">
+                  <p className="text-gray-600 dark:text-gray-400 line-clamp-3 mb-4 flex-1" data-testid={`text-content-${item.id}`}>
                     {item.content}
                   </p>
+                  <Link href={`/news/${item.id}`}>
+                    <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" data-testid={`button-read-article-${item.id}`}>
+                      Read Full Article
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             ))}
