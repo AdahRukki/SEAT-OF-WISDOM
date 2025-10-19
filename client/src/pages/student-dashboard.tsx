@@ -13,7 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle, Bell } from "lucide-react";
 // Logo is now loaded dynamically via useLogo hook
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject, Class } from "@shared/schema";
@@ -22,6 +24,14 @@ import { InlineReportCard } from "@/components/inline-report-card";
 import type { z } from "zod";
 
 type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
+
+type Notification = {
+  id: string;
+  userId: string;
+  message: string;
+  isRead: boolean;
+  createdAt: Date | string;
+};
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
@@ -166,6 +176,26 @@ export default function StudentDashboard() {
     enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
 
+  // Fetch notifications
+  const { data: notifications = [] } = useQuery<Notification[]>({ 
+    queryKey: ['/api/notifications'],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch('/api/notifications', {
+        headers,
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch notifications');
+      return response.json();
+    },
+    enabled: !!user
+  });
+
   const calculateGrade = (total: number) => {
     if (total >= 75) return { grade: 'A1', color: 'bg-green-600', remark: 'Excellent' };
     if (total >= 70) return { grade: 'B2', color: 'bg-green-500', remark: 'Very Good' };
@@ -265,6 +295,18 @@ export default function StudentDashboard() {
   const onPasswordSubmit = (data: ChangePasswordForm) => {
     changePasswordMutation.mutate(data);
   };
+
+  // Mark notification as read mutation
+  const markNotificationAsReadMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      return apiRequest(`/api/notifications/${notificationId}/read`, {
+        method: 'PATCH',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+    },
+  });
 
   const handlePrintDetailedReport = async () => {
     if (!profile) return;
@@ -902,6 +944,62 @@ padding: 15px;
               </div>
             </div>
             <div className="flex items-center space-x-1 sm:space-x-2">
+              {/* Notification Bell */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="relative flex items-center space-x-1 text-xs sm:text-sm"
+                    data-testid="button-notifications"
+                  >
+                    <Bell className="h-3 w-3 sm:h-4 sm:w-4" />
+                    {notifications.filter(n => !n.isRead).length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center" data-testid="text-notification-count">
+                        {notifications.filter(n => !n.isRead).length}
+                      </span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="end">
+                  <div className="p-4 border-b">
+                    <h3 className="font-semibold">Notifications</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {notifications.filter(n => !n.isRead).length} unread
+                    </p>
+                  </div>
+                  <ScrollArea className="h-[300px]">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">
+                        No notifications yet
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={`p-4 hover:bg-accent cursor-pointer transition-colors ${
+                              !notification.isRead ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                            }`}
+                            onClick={() => {
+                              if (!notification.isRead) {
+                                markNotificationAsReadMutation.mutate(notification.id);
+                              }
+                            }}
+                            data-testid={`notification-${notification.id}`}
+                          >
+                            <p className="text-sm">{notification.message}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(notification.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+
               <a 
                 href="/profile"
                 className="flex items-center space-x-1 px-2 sm:px-3 py-1 bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors text-xs sm:text-sm"

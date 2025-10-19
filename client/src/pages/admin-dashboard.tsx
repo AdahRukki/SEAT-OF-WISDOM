@@ -44,6 +44,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Tooltip, 
   TooltipContent, 
@@ -103,6 +109,8 @@ import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
 import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import { NewsManagement } from "@/components/news-management";
+import { NotificationsManagement } from "@/components/notifications-management";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
   Class, 
@@ -2918,7 +2926,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-10 gap-1 h-auto p-1">
             <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Overview
             </TabsTrigger>
@@ -2940,6 +2948,12 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Users
+            </TabsTrigger>
+            <TabsTrigger value="news" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+              News
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+              Notifications
             </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Settings
@@ -4642,6 +4656,16 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* News Tab */}
+          <TabsContent value="news" className="space-y-6">
+            <NewsManagement />
+          </TabsContent>
+
+          {/* Notifications Tab */}
+          <TabsContent value="notifications" className="space-y-6">
+            <NotificationsManagement />
           </TabsContent>
 
         </Tabs>

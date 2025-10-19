@@ -271,6 +271,28 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// News table (public news articles)
+export const news = pgTable("news", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  imageUrl: text("image_url"), // Optional image for the news article
+  tag: varchar("tag", { length: 50 }), // Events, Announcements, Academic, etc.
+  publishedAt: timestamp("published_at").defaultNow(),
+  authorId: uuid("author_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Notifications table (admin-to-student messages)
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // Student who receives this
+  message: text("message").notNull(),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const schoolsRelations = relations(schools, ({ many }) => ({
   classes: many(classes),
@@ -426,6 +448,20 @@ export const generatedReportCardsRelations = relations(generatedReportCards, ({ 
   }),
 }));
 
+export const newsRelations = relations(news, ({ one }) => ({
+  author: one(users, {
+    fields: [news.authorId],
+    references: [users.id],
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
 // Zod schemas
 export const insertSchoolSchema = createInsertSchema(schools).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertClassSchema = createInsertSchema(classes).omit({ id: true, createdAt: true, updatedAt: true });
@@ -540,6 +576,21 @@ export const createCalendarEventSchema = z.object({
   eventType: z.string().min(1, "Event type is required"),
   schoolId: z.string().optional(), // Optional - null means all schools
   isSystemWide: z.boolean().default(false),
+});
+
+// News validation
+export const insertNewsSchema = createInsertSchema(news).omit({ id: true, createdAt: true, updatedAt: true, publishedAt: true });
+export const createNewsSchema = z.object({
+  title: z.string().min(1, "News title is required"),
+  content: z.string().min(1, "News content is required"),
+  imageUrl: z.string().optional(),
+  tag: z.string().optional(),
+});
+
+// Notification validation
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export const createNotificationSchema = z.object({
+  message: z.string().min(1, "Notification message is required"),
 });
 
 // Updated grading utility functions
@@ -663,6 +714,16 @@ export type UpdateNonAcademicRating = z.infer<typeof updateNonAcademicRatingSche
 export type CalendarEvent = typeof calendarEvents.$inferSelect;
 export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
 export type CreateCalendarEvent = z.infer<typeof createCalendarEventSchema>;
+
+// News types
+export type News = typeof news.$inferSelect;
+export type InsertNews = z.infer<typeof insertNewsSchema>;
+export type CreateNews = z.infer<typeof createNewsSchema>;
+
+// Notification types
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type CreateNotification = z.infer<typeof createNotificationSchema>;
 
 // Enhanced student with non-academic ratings
 export type StudentWithFullDetails = StudentWithDetails & {

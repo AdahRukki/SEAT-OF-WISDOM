@@ -16,6 +16,7 @@ import SchoolAbout from "@/pages/school-about";
 import SchoolPrograms from "@/pages/school-programs";
 import SchoolAdmissions from "@/pages/school-admissions";
 import SchoolContact from "@/pages/school-contact";
+import NewsPage from "@/pages/news";
 import { useEffect } from "react";
 
 // Portal Routes Component for authenticated users
@@ -126,6 +127,7 @@ function AppRoutes() {
       <Route path="/programs" component={SchoolPrograms} />
       <Route path="/admissions" component={SchoolAdmissions} />
       <Route path="/contact" component={SchoolContact} />
+      <Route path="/news" component={NewsPage} />
       
       {/* Password Reset Route - Public access */}
       <Route path="/reset-password" component={ResetPassword} />

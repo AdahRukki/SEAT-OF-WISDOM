@@ -23,6 +23,8 @@ import {
   insertFeeTypeSchema,
   recordPaymentSchema,
   assignFeeSchema,
+  insertNewsSchema,
+  insertNotificationSchema,
   users,
   students,
   classes
@@ -2281,6 +2283,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching students by class:", error);
       res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  // ==================== NEWS ROUTES ====================
+  
+  // Upload news image (admin only)
+  app.post("/api/upload/news-image", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const objectStorageService = new ObjectStorageService();
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins can upload news images" });
+      }
+
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error("Error getting upload URL for news image:", error);
+      res.status(500).json({ error: "Failed to get upload URL" });
+    }
+  });
+  
+  // Create news (admin only)
+  app.post("/api/news", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins can create news" });
+      }
+
+      // Validate request body using Zod schema
+      const validatedData = insertNewsSchema.parse({
+        ...req.body,
+        authorId: user.id
+      });
+
+      const newsItem = await storage.createNews(validatedData);
+      res.json(newsItem);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid news data", details: error.errors });
+      }
+      console.error("Error creating news:", error);
+      res.status(500).json({ error: "Failed to create news" });
+    }
+  });
+
+  // Get all news (public route - no authentication required)
+  app.get("/api/news", async (req: Request, res: Response) => {
+    try {
+      const newsItems = await storage.getAllNews();
+      res.json(newsItems);
+    } catch (error) {
+      console.error("Error fetching news:", error);
+      res.status(500).json({ error: "Failed to fetch news" });
+    }
+  });
+
+  // Delete news (admin only)
+  app.delete("/api/news/:id", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const { id } = req.params;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins can delete news" });
+      }
+
+      await storage.deleteNews(id);
+      res.json({ success: true, message: "News deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting news:", error);
+      res.status(500).json({ error: "Failed to delete news" });
+    }
+  });
+
+  // ==================== NOTIFICATION ROUTES ====================
+  
+  // Create notification for all students (admin only)
+  app.post("/api/notifications", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins can send notifications" });
+      }
+
+      const { message } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({ error: "Message is required" });
+      }
+
+      // If sub-admin, only send to their school's students
+      const schoolId = user.role === "sub-admin" ? user.schoolId : undefined;
+      
+      const notifications = await storage.createNotificationForAllStudents(message, schoolId);
+      res.json({ 
+        success: true, 
+        message: `Notification sent to ${notifications.length} students`,
+        count: notifications.length 
+      });
+    } catch (error) {
+      console.error("Error creating notification:", error);
+      res.status(500).json({ error: "Failed to send notification" });
+    }
+  });
+
+  // Get user's notifications (student only)
+  app.get("/api/notifications", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      const notifications = await storage.getNotificationsByUser(user.id);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  // Get unread notification count
+  app.get("/api/notifications/unread-count", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      const count = await storage.getUnreadNotificationCount(user.id);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
+  });
+
+  // Mark notification as read
+  app.patch("/api/notifications/:id/read", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const { id } = req.params;
+    
+    try {
+      const notification = await storage.markNotificationAsRead(id);
+      res.json(notification);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ error: "Failed to mark notification as read" });
     }
   });
 

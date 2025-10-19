@@ -18,6 +18,8 @@ import {
   nonAcademicRatings,
   calendarEvents,
   passwordResetTokens,
+  news,
+  notifications,
   type School,
   type User,
   type Student,
@@ -53,6 +55,10 @@ import {
   type InsertAcademicTerm,
   type InsertNonAcademicRating,
   type InsertCalendarEvent,
+  type News,
+  type InsertNews,
+  type Notification,
+  type InsertNotification,
   type StudentWithDetails,
   type StudentFeeWithDetails,
   type PaymentWithDetails,
@@ -117,6 +123,17 @@ export interface IStorage {
   // Calendar operations
   createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent>;
   getCalendarEvents(schoolId?: string): Promise<CalendarEvent[]>;
+  
+  // News operations
+  createNews(newsData: InsertNews): Promise<News>;
+  getAllNews(): Promise<(News & { author: User })[]>;
+  deleteNews(newsId: string): Promise<void>;
+  
+  // Notification operations
+  createNotificationForAllStudents(message: string, schoolId?: string): Promise<Notification[]>;
+  getNotificationsByUser(userId: string): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  markNotificationAsRead(notificationId: string): Promise<Notification>;
   
   // Report card templates
   createReportCardTemplate(templateData: InsertReportCardTemplate): Promise<ReportCardTemplate>;
@@ -1867,6 +1884,117 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query.orderBy(asc(calendarEvents.eventDate));
+  }
+
+  // News operations
+  async createNews(newsData: InsertNews): Promise<News> {
+    const [newsItem] = await db
+      .insert(news)
+      .values(newsData)
+      .returning();
+    return newsItem;
+  }
+
+  async getAllNews(): Promise<(News & { author: User })[]> {
+    const result = await db
+      .select({
+        id: news.id,
+        title: news.title,
+        content: news.content,
+        imageUrl: news.imageUrl,
+        tag: news.tag,
+        publishedAt: news.publishedAt,
+        authorId: news.authorId,
+        createdAt: news.createdAt,
+        updatedAt: news.updatedAt,
+        author: {
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          role: users.role,
+          schoolId: users.schoolId,
+          password: users.password,
+          isActive: users.isActive,
+          passwordUpdatedAt: users.passwordUpdatedAt,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        }
+      })
+      .from(news)
+      .leftJoin(users, eq(news.authorId, users.id))
+      .orderBy(desc(news.publishedAt));
+
+    return result.map(row => ({
+      ...row,
+      author: row.author as User
+    }));
+  }
+
+  async deleteNews(newsId: string): Promise<void> {
+    await db.delete(news).where(eq(news.id, newsId));
+  }
+
+  // Notification operations
+  async createNotificationForAllStudents(message: string, schoolId?: string): Promise<Notification[]> {
+    // Get all students, optionally filtered by school
+    let studentQuery = db
+      .select({
+        userId: students.userId,
+      })
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id));
+
+    if (schoolId) {
+      studentQuery = studentQuery
+        .leftJoin(classes, eq(students.classId, classes.id))
+        .where(eq(classes.schoolId, schoolId)) as any;
+    }
+
+    const studentsData = await studentQuery;
+
+    // Create notification for each student
+    const notificationPromises = studentsData.map(student =>
+      db.insert(notifications).values({
+        userId: student.userId,
+        message,
+      }).returning()
+    );
+
+    const results = await Promise.all(notificationPromises);
+    return results.map(([notification]) => notification);
+  }
+
+  async getNotificationsByUser(userId: string): Promise<Notification[]> {
+    return await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt));
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false)
+        )
+      );
+
+    return result[0]?.count || 0;
+  }
+
+  async markNotificationAsRead(notificationId: string): Promise<Notification> {
+    const [notification] = await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, notificationId))
+      .returning();
+
+    return notification;
   }
 }
 

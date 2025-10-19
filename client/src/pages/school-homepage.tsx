@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +25,87 @@ import labImage1 from "@assets/stock_images/school_library_labor_50c8c89f.jpg";
 import labImage2 from "@assets/stock_images/school_library_labor_35422e2d.jpg";
 import academyLogo from "@assets/academy-logo.png";
 
+interface NewsItem {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl: string | null;
+  tag: string | null;
+  publishedAt: string;
+  author: {
+    firstName: string;
+    lastName: string;
+  };
+}
+
+function NewsExcerptSection() {
+  const { data: newsItems = [] } = useQuery<NewsItem[]>({
+    queryKey: ["/api/news"],
+  });
+
+  const latestNews = newsItems.slice(0, 3);
+
+  if (latestNews.length === 0) return null;
+
+  return (
+    <section className="py-20 bg-gray-50 dark:bg-gray-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-news-section-title">
+            Latest News & Updates
+          </h2>
+          <p className="text-xl text-gray-600 dark:text-gray-300" data-testid="text-news-section-description">
+            Stay informed about academy events, achievements, and announcements
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {latestNews.map((item) => (
+            <Card key={item.id} className="hover:shadow-lg transition-shadow" data-testid={`card-news-preview-${item.id}`}>
+              {item.imageUrl && (
+                <div className="h-48 overflow-hidden rounded-t-lg">
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <CardHeader>
+                {item.tag && (
+                  <Badge variant="secondary" className="mb-2 w-fit">
+                    {item.tag}
+                  </Badge>
+                )}
+                <CardTitle className="line-clamp-2" data-testid={`text-news-preview-title-${item.id}`}>
+                  {item.title}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {format(new Date(item.publishedAt), "MMM dd, yyyy")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600 dark:text-gray-400 line-clamp-2 mb-4">
+                  {item.content}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="text-center mt-12">
+          <Link href="/news">
+            <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-view-all-news">
+              View All News
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function SchoolHomepage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -41,6 +124,7 @@ export default function SchoolHomepage() {
                 <Link href="/about" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">About</Link>
                 <Link href="/programs" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Programs</Link>
                 <Link href="/admissions" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Admissions</Link>
+                <Link href="/news" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">News</Link>
                 <Link href="/contact" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Contact</Link>
                 <Link href="/portal">
                   <Button variant="default" className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-portal-login">
@@ -90,6 +174,11 @@ export default function SchoolHomepage() {
                       <Link href="/admissions" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-admissions">
                           Admissions
+                        </Button>
+                      </Link>
+                      <Link href="/news" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-news">
+                          News
                         </Button>
                       </Link>
                       <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
@@ -896,6 +985,9 @@ export default function SchoolHomepage() {
           </div>
         </div>
       </section>
+
+      {/* News Section */}
+      <NewsExcerptSection />
 
       {/* Footer */}
       <footer className="bg-gray-900 dark:bg-black text-white py-12">
