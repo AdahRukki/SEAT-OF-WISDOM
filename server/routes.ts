@@ -2431,6 +2431,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Publish scores for a class/term/session (admin only)
+  app.post("/api/admin/publish-scores", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    // Only main admins can publish scores
+    if (user.role !== "admin") {
+      return res.status(403).json({ error: "Only administrators can publish scores" });
+    }
+
+    const { classId, term, session } = req.body;
+
+    if (!classId || !term || !session) {
+      return res.status(400).json({ error: "Missing required fields: classId, term, session" });
+    }
+
+    try {
+      await storage.publishScores(classId, term, session, user.id);
+      res.json({ success: true, message: "Scores published successfully" });
+    } catch (error) {
+      console.error("Error publishing scores:", error);
+      res.status(500).json({ error: "Failed to publish scores" });
+    }
+  });
+
+  // Unpublish scores for a class/term/session (admin only)
+  app.post("/api/admin/unpublish-scores", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    // Only main admins can unpublish scores
+    if (user.role !== "admin") {
+      return res.status(403).json({ error: "Only administrators can unpublish scores" });
+    }
+
+    const { classId, term, session } = req.body;
+
+    if (!classId || !term || !session) {
+      return res.status(400).json({ error: "Missing required fields: classId, term, session" });
+    }
+
+    try {
+      await storage.unpublishScores(classId, term, session);
+      res.json({ success: true, message: "Scores unpublished successfully" });
+    } catch (error) {
+      console.error("Error unpublishing scores:", error);
+      res.status(500).json({ error: "Failed to unpublish scores" });
+    }
+  });
+
+  // Check if scores are published for a class/term/session
+  app.get("/api/scores/published-status", authenticate, async (req: Request, res: Response) => {
+    const { classId, term, session } = req.query;
+
+    if (!classId || !term || !session) {
+      return res.status(400).json({ error: "Missing required query parameters: classId, term, session" });
+    }
+
+    try {
+      const isPublished = await storage.checkIfScoresPublished(
+        classId as string, 
+        term as string, 
+        session as string
+      );
+      res.json({ published: isPublished });
+    } catch (error) {
+      console.error("Error checking publication status:", error);
+      res.status(500).json({ error: "Failed to check publication status" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
