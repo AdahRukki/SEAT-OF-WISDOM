@@ -142,7 +142,7 @@ export function NewsManagement() {
                     const response = await apiRequest("/api/upload/news-image", { method: "POST" });
                     return {
                       method: "PUT" as const,
-                      url: response.uploadUrl,
+                      url: response.uploadURL,
                     };
                   }}
                   onComplete={(result) => {
