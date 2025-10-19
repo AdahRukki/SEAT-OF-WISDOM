@@ -20,6 +20,7 @@ import {
   passwordResetTokens,
   news,
   notifications,
+  publishedScores,
   type School,
   type User,
   type Student,
@@ -59,6 +60,8 @@ import {
   type InsertNews,
   type Notification,
   type InsertNotification,
+  type PublishedScore,
+  type InsertPublishedScore,
   type StudentWithDetails,
   type StudentFeeWithDetails,
   type PaymentWithDetails,
@@ -134,6 +137,12 @@ export interface IStorage {
   getNotificationsByUser(userId: string): Promise<Notification[]>;
   getUnreadNotificationCount(userId: string): Promise<number>;
   markNotificationAsRead(notificationId: string): Promise<Notification>;
+  
+  // Published Scores operations
+  publishScores(classId: string, term: string, session: string, publishedBy: string): Promise<void>;
+  unpublishScores(classId: string, term: string, session: string): Promise<void>;
+  checkIfScoresPublished(classId: string, term: string, session: string): Promise<boolean>;
+  getPublishedScoresByClass(classId: string): Promise<any[]>;
   
   // Report card templates
   createReportCardTemplate(templateData: InsertReportCardTemplate): Promise<ReportCardTemplate>;
@@ -1995,6 +2004,78 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return notification;
+  }
+
+  // Published Scores operations
+  async publishScores(classId: string, term: string, session: string, publishedBy: string): Promise<void> {
+    // Check if already published
+    const existing = await db
+      .select()
+      .from(publishedScores)
+      .where(
+        and(
+          eq(publishedScores.classId, classId),
+          eq(publishedScores.term, term),
+          eq(publishedScores.session, session)
+        )
+      );
+
+    if (existing.length > 0) {
+      // Already published, update the publishedAt time
+      await db
+        .update(publishedScores)
+        .set({ publishedAt: new Date(), publishedBy })
+        .where(
+          and(
+            eq(publishedScores.classId, classId),
+            eq(publishedScores.term, term),
+            eq(publishedScores.session, session)
+          )
+        );
+    } else {
+      // Not yet published, insert new record
+      await db.insert(publishedScores).values({
+        classId,
+        term,
+        session,
+        publishedBy,
+      });
+    }
+  }
+
+  async unpublishScores(classId: string, term: string, session: string): Promise<void> {
+    await db
+      .delete(publishedScores)
+      .where(
+        and(
+          eq(publishedScores.classId, classId),
+          eq(publishedScores.term, term),
+          eq(publishedScores.session, session)
+        )
+      );
+  }
+
+  async checkIfScoresPublished(classId: string, term: string, session: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(publishedScores)
+      .where(
+        and(
+          eq(publishedScores.classId, classId),
+          eq(publishedScores.term, term),
+          eq(publishedScores.session, session)
+        )
+      );
+
+    return result.length > 0;
+  }
+
+  async getPublishedScoresByClass(classId: string): Promise<any[]> {
+    return await db
+      .select()
+      .from(publishedScores)
+      .where(eq(publishedScores.classId, classId))
+      .orderBy(desc(publishedScores.publishedAt));
   }
 }
 
