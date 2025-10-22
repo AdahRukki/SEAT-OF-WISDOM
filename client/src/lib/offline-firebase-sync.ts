@@ -40,6 +40,9 @@ const SYNC_QUEUE_KEY = 'sowa_sync_queue';
 const OFFLINE_DATA_KEY = 'sowa_offline_data';
 const LAST_SYNC_KEY = 'sowa_last_sync';
 
+// Check if Firebase is available
+const isFirebaseAvailable = () => db !== null;
+
 export class OfflineFirebaseSync {
   private isOnline = navigator.onLine;
   private syncQueue: QueuedOperation[] = [];
@@ -47,6 +50,10 @@ export class OfflineFirebaseSync {
   private listeners: Array<() => void> = [];
 
   constructor() {
+    if (!isFirebaseAvailable()) {
+      console.log('ℹ️ Offline Firebase sync disabled - Firebase not initialized');
+      return;
+    }
     this.initializeOfflineSupport();
     this.setupNetworkListeners();
     this.loadQueueFromStorage();
@@ -62,17 +69,19 @@ export class OfflineFirebaseSync {
   }
 
   private setupNetworkListeners() {
+    if (!isFirebaseAvailable()) return;
+    
     window.addEventListener('online', async () => {
       this.isOnline = true;
       console.log('🌐 Network online - enabling Firebase sync');
-      await enableNetwork(db);
+      await enableNetwork(db!);
       await this.processSyncQueue();
     });
 
     window.addEventListener('offline', async () => {
       this.isOnline = false;
       console.log('📱 Network offline - switching to local storage');
-      await disableNetwork(db);
+      await disableNetwork(db!);
     });
   }
 
@@ -129,11 +138,13 @@ export class OfflineFirebaseSync {
 
   // Public methods for data operations
   async saveAssessment(assessment: Assessment): Promise<void> {
+    if (!isFirebaseAvailable()) return;
+    
     const documentId = assessment.id;
     
     if (this.isOnline) {
       try {
-        const docRef = doc(db, 'assessments', documentId);
+        const docRef = doc(db!, 'assessments', documentId);
         await setDoc(docRef, {
           ...assessment,
           lastUpdated: new Date().toISOString(),
@@ -153,9 +164,11 @@ export class OfflineFirebaseSync {
   }
 
   async updateAssessment(assessmentId: string, updates: Partial<Assessment>): Promise<void> {
+    if (!isFirebaseAvailable()) return;
+    
     if (this.isOnline) {
       try {
-        const docRef = doc(db, 'assessments', assessmentId);
+        const docRef = doc(db!, 'assessments', assessmentId);
         await updateDoc(docRef, {
           ...updates,
           lastUpdated: new Date().toISOString(),
@@ -175,11 +188,13 @@ export class OfflineFirebaseSync {
   }
 
   async saveStudent(student: Student): Promise<void> {
+    if (!isFirebaseAvailable()) return;
+    
     const documentId = student.id;
     
     if (this.isOnline) {
       try {
-        const docRef = doc(db, 'students', documentId);
+        const docRef = doc(db!, 'students', documentId);
         await setDoc(docRef, {
           ...student,
           lastUpdated: new Date().toISOString(),
@@ -198,11 +213,13 @@ export class OfflineFirebaseSync {
   }
 
   async saveClass(classData: Class): Promise<void> {
+    if (!isFirebaseAvailable()) return;
+    
     const documentId = classData.id;
     
     if (this.isOnline) {
       try {
-        const docRef = doc(db, 'classes', documentId);
+        const docRef = doc(db!, 'classes', documentId);
         await setDoc(docRef, {
           ...classData,
           lastUpdated: new Date().toISOString(),
@@ -272,19 +289,19 @@ export class OfflineFirebaseSync {
   }
 
   async processSyncQueue(): Promise<void> {
-    if (this.syncInProgress || !this.isOnline || this.syncQueue.length === 0) {
+    if (!isFirebaseAvailable() || this.syncInProgress || !this.isOnline || this.syncQueue.length === 0) {
       return;
     }
 
     this.syncInProgress = true;
     console.log('🔄 Processing sync queue:', this.syncQueue.length, 'operations');
 
-    const batch = writeBatch(db);
+    const batch = writeBatch(db!);
     const completedOperations: string[] = [];
 
     for (const operation of this.syncQueue) {
       try {
-        const docRef = doc(db, operation.collection, operation.documentId);
+        const docRef = doc(db!, operation.collection, operation.documentId);
 
         switch (operation.type) {
           case 'CREATE':
@@ -335,10 +352,10 @@ export class OfflineFirebaseSync {
   }
 
   // Setup real-time listeners for online data
-  setupRealTimeSync(collection: string, callback: (data: any[]) => void): () => void {
-    if (!this.isOnline) return () => {};
+  setupRealTimeSync(collectionName: string, callback: (data: any[]) => void): () => void {
+    if (!isFirebaseAvailable() || !this.isOnline) return () => {};
 
-    const q = query(collection(db, collection), orderBy('lastUpdated', 'desc'));
+    const q = query(collection(db!, collectionName), orderBy('lastUpdated', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({

@@ -4,6 +4,7 @@
 Seat of Wisdom Academy is a comprehensive multi-branch academy management system designed for efficient administration and student performance tracking. Built with a React frontend and Express backend, it integrates Firebase for offline-first capabilities and real-time data synchronization. The system supports four school branches and features role-based access for administrators, sub-administrators, and students. Key capabilities include a 20+20+60 scoring system, professional report card generation, robust student financial tracking, and complete teacher grading interface. The project provides a streamlined, scalable solution for academy management with full CRUD operations for students, functional class-based grading, and comprehensive educational oversight tools.
 
 ## Recent Updates (October 2025)
+- ✅ **Firebase Optional Mode**: Firebase is now completely optional - application works without Firebase API keys for VPS deployments, using only PostgreSQL for all data storage
 - ✅ **Blog-Style News System**: Transformed news into blog format with individual article pages, "Read More" buttons, and proper navigation headers on all news pages
 - ✅ **News Image Visibility Fix**: Implemented public ACL policies and signed URL generation for news images, ensuring images display correctly across all pages (homepage, news listing, article detail)
 - ✅ **Academic Session Update**: Changed current session to 2024/2025
@@ -44,7 +45,7 @@ Preferred communication style: Simple, everyday language.
 - **Development**: Hot reloading with tsx and Vite middleware
 
 ### Authentication & Authorization
-- **Authentication**: Firebase Authentication with JWT and local fallback.
+- **Authentication**: JWT-based authentication with PostgreSQL user storage (Firebase optional for offline sync).
 - **Session Handling**: Express sessions with PostgreSQL store.
 - **Role-based Access**: Admin (all schools), sub-admin (single school), student.
 - **Security**: Password hashing, token validation, secure session management.
@@ -67,8 +68,8 @@ Preferred communication style: Simple, everyday language.
 ## External Dependencies
 
 ### Core Dependencies
-- **Firebase**: Authentication and Firestore database.
-- **Neon Database**: Serverless PostgreSQL hosting.
+- **Firebase**: (Optional) Offline-first sync for Replit development environment only.
+- **PostgreSQL**: Primary database for all production data.
 - **Drizzle ORM**: Type-safe PostgreSQL operations.
 - **TanStack Query**: Server state management and caching.
 - **shadcn/ui**: Pre-built UI components.
