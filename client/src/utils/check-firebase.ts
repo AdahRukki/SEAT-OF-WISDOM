@@ -2,12 +2,6 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export async function checkFirebaseData() {
-  // Return null if Firebase is not available
-  if (!db) {
-    console.log('ℹ️ Firebase not initialized - skipping Firebase data check');
-    return null;
-  }
-  
   try {
     // Check all classes in Firebase
     const classesSnapshot = await getDocs(collection(db, 'classes'));

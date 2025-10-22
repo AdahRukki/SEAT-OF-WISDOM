@@ -1,6 +1,6 @@
-import { initializeApp, type FirebaseApp } from "firebase/app";
-import { getFirestore, type Firestore } from "firebase/firestore";
-import { getAuth, type Auth } from "firebase/auth";
+import { initializeApp } from "firebase/app";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -10,23 +10,16 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Only initialize Firebase if API key is present
-let app: FirebaseApp | null = null;
-let db: Firestore | null = null;
-let auth: Auth | null = null;
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 
-if (firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId) {
-  try {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    auth = getAuth(app);
-    console.log('🔥 Firebase initialized with project:', firebaseConfig.projectId);
-  } catch (error) {
-    console.warn('⚠️ Firebase initialization failed:', error);
-  }
-} else {
-  console.log('ℹ️ Firebase disabled - no API keys configured');
-}
+// Initialize Firestore
+export const db = getFirestore(app);
 
-export { db, auth };
+// Initialize Auth
+export const auth = getAuth(app);
+
+// Note: Using production Firebase, not emulator
+console.log('🔥 Firebase initialized with project:', firebaseConfig.projectId);
+
 export default app;

@@ -8,8 +8,7 @@ export function useFirebaseSync(selectedSchoolId?: string) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // Skip if Firebase is not available
-    if (!db || !selectedSchoolId) return;
+    if (!selectedSchoolId) return;
 
     // Listen to classes changes in Firebase
     const classesQuery = query(

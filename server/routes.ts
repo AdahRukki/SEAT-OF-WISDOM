@@ -499,16 +499,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const classData = insertClassSchema.parse(req.body);
       const newClass = await storage.createClass(classData);
       
-      // Sync to Firebase after successful creation (disabled in production)
-      if (process.env.NODE_ENV === 'development') {
-        try {
-          const firebaseSync = await import('../client/src/lib/firebase-sync.js');
-          if (firebaseSync && typeof firebaseSync.syncClassToFirebase === 'function') {
-            await firebaseSync.syncClassToFirebase(newClass);
-          }
-        } catch (syncError) {
-          console.warn("Firebase sync failed:", syncError);
+      // Sync to Firebase after successful creation
+      try {
+        const firebaseSync = await import('../client/src/lib/firebase-sync.js');
+        if (firebaseSync && typeof firebaseSync.syncClassToFirebase === 'function') {
+          await firebaseSync.syncClassToFirebase(newClass);
         }
+      } catch (syncError) {
+        console.warn("Firebase sync failed:", syncError);
       }
       
       res.json(newClass);
