@@ -150,6 +150,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Serve static assets first (before other routes)
   app.use('/assets', express.static(path.join(process.cwd(), 'client/src/assets')));
 
+  // Firebase config endpoint (public - no auth required)
+  // This provides fallback config for production builds where env vars may not be available
+  app.get("/api/firebase-config", (req, res) => {
+    const apiKey = process.env.VITE_FIREBASE_API_KEY;
+    const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
+    const appId = process.env.VITE_FIREBASE_APP_ID;
+
+    // Only return config if all required values are present
+    if (!apiKey || !projectId || !appId) {
+      return res.status(503).json({ 
+        error: "Firebase configuration not available on server" 
+      });
+    }
+
+    res.json({
+      apiKey,
+      authDomain: `${projectId}.firebaseapp.com`,
+      projectId,
+      storageBucket: `${projectId}.firebasestorage.app`,
+      appId,
+    });
+  });
+
   // Object storage routes
   // Endpoint for serving public assets
   app.get("/public-objects/:filePath(*)", async (req, res) => {
