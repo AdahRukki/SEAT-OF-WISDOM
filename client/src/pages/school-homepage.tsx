@@ -249,9 +249,7 @@ export default function SchoolHomepage() {
                   </Button>
                 </Link>
                 <Link href="/portal">
-                  <Button size="lg" variant="outline" data-testid="button-student-portal">
-                    Student Portal
-                  </Button>
+                  <Button size="lg" variant="outline" data-testid="button-student-portal">Student Portal.</Button>
                 </Link>
               </div>
             </div>

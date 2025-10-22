@@ -1,0 +1,65 @@
+root@seatofwisdomacademy:/var/www/SEAT-OF-WISDOM# npm run build
+
+> rest-express@1.0.0 build
+> vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist
+
+vite v5.4.19 building for production...
+transforming (3) src/main.tsxBrowserslist: browsers data (caniuse-lite) is 12 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+transforming (4) src/App.tsx[vite:css] Replace color-adjust to print-color-adjust. The color-adjust shorthand is currently deprecated.
+302|    .print-only img {
+303|      -webkit-print-color-adjust: exact !important;
+304|      color-adjust: exact !important;
+   |      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+305|      display: block !important;
+306|      visibility: visible !important;
+[vite:css] Replace color-adjust to print-color-adjust. The color-adjust shorthand is currently deprecated.
+309|    .report-card img {
+310|      -webkit-print-color-adjust: exact !important;
+311|      color-adjust: exact !important;
+   |      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+312|      display: block !important;
+313|      visibility: visible !important;
+✓ 2995 modules transformed.
+../dist/public/index.html                                             1.11 kB │ gzip:   0.57 kB
+../dist/public/assets/academy-logo-DvYK8vRb.png                      19.01 kB
+../dist/public/assets/sch 2 pic-DU2OnCGV.jpg                         43.67 kB
+../dist/public/assets/image_2-BlrdMJda.jpg                           45.21 kB
+../dist/public/assets/school_library_labor_4709a4fa-BopIFj98.jpg    171.72 kB
+../dist/public/assets/school_library_labor_50c8c89f-oTlm_dEa.jpg    184.27 kB
+../dist/public/assets/children_in_classroo_cd155654-D47xCc0M.jpg    206.28 kB
+../dist/public/assets/school_library_labor_35422e2d-hacsSFzm.jpg    206.88 kB
+../dist/public/assets/children_in_classroo_646d36b7-BZr3rKLE.jpg    207.98 kB
+../dist/public/assets/children_in_classroo_ebca6607-DiKWwvYA.jpg    213.08 kB
+../dist/public/assets/school_library_labor_57146f98-CifKa60_.jpg    214.97 kB
+../dist/public/assets/children_in_classroo_aaa62f0f-Ce1FAL3K.jpg    253.52 kB
+../dist/public/assets/students_playing_spo_89a50a23-B-rZmImc.jpg    311.54 kB
+../dist/public/assets/students_playing_spo_dc5ee1e8-C2TVTP_K.jpg    325.63 kB
+../dist/public/assets/modern_school_buildi_a486f75c-DKQsSpx3.jpg    353.92 kB
+../dist/public/assets/modern_school_buildi_77850497-BRc0gtrg.jpg    396.21 kB
+../dist/public/assets/students_playing_spo_b955460a-BHk9FJys.jpg    420.61 kB
+../dist/public/assets/students_playing_spo_5fbb199e-BLnOPALp.jpg    452.02 kB
+../dist/public/assets/children_in_classroo_7e1fd1a4-DaBkEXdl.jpg    756.64 kB
+../dist/public/assets/index-BeVpg4Yb.css                            176.78 kB │ gzip:  27.73 kB
+../dist/public/assets/index-DYBlvFtG.js                           2,051.26 kB │ gzip: 547.43 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 13.73s
+
+  dist/index.js  174.8kb
+
+⚡ Done in 17ms
+root@seatofwisdomacademy:/var/www/SEAT-OF-WISDOM# pm2 restart sowa-academy
+Use --update-env to update environment variables
+[PM2] Applying action restartProcessId on app [sowa-academy](ids: [ 0 ])
+[PM2] [sowa-academy](0) ✓
+┌────┬─────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name            │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼─────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 0  │ sowa-academy    │ default     │ N/A     │ fork    │ 59207    │ 0s     │ 3    │ online    │ 0%       │ 18.0mb   │ root     │ disabled │
+└────┴─────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+root@seatofwisdomacademy:/var/www/SEAT-OF-WISDOM#
