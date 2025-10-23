@@ -1,8 +1,11 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, ensureFirebaseReady } from '@/lib/firebase';
 
 export async function checkFirebaseData() {
   try {
+    // Wait for Firebase to be fully initialized
+    await ensureFirebaseReady();
+    
     // Check all classes in Firebase
     const classesSnapshot = await getDocs(collection(db, 'classes'));
     const classes = classesSnapshot.docs.map(doc => ({
