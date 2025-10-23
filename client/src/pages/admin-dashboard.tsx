@@ -7,7 +7,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
 import { firebaseSync } from "@/lib/offline-firebase-sync";
-import { useFirebaseSync } from "@/hooks/use-firebase-sync";
 import { 
   Card, 
   CardContent, 
@@ -322,9 +321,6 @@ export default function AdminDashboard() {
       classId: "",
     },
   });
-
-  // Enable Firebase real-time sync for the selected school
-  useFirebaseSync(selectedSchoolId);
 
   // Queries - Move queries to the top to avoid initialization issues
   const { data: schools = [] } = useQuery<SchoolType[]>({ 
