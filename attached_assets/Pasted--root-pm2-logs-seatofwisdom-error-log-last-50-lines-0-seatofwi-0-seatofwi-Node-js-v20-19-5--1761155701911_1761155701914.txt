@@ -1,0 +1,51 @@
+/root/.pm2/logs/seatofwisdom-error.log last 50 lines:
+0|seatofwi |
+0|seatofwi | Node.js v20.19.5
+0|seatofwi | /var/www/SEAT-OF-WISDOM/server/db.ts:9
+0|seatofwi |   throw new Error(
+0|seatofwi |         ^
+0|seatofwi |
+0|seatofwi |
+0|seatofwi | Error: DATABASE_URL must be set. Did you forget to provision a database?
+0|seatofwi |     at <anonymous> (/var/www/SEAT-OF-WISDOM/server/db.ts:9:9)
+0|seatofwi |     at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+0|seatofwi |     at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+0|seatofwi |     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+0|seatofwi |
+0|seatofwi | Node.js v20.19.5
+0|seatofwi | /var/www/SEAT-OF-WISDOM/server/db.ts:9
+0|seatofwi |   throw new Error(
+0|seatofwi |         ^
+0|seatofwi |
+0|seatofwi |
+0|seatofwi | Error: DATABASE_URL must be set. Did you forget to provision a database?
+0|seatofwi |     at <anonymous> (/var/www/SEAT-OF-WISDOM/server/db.ts:9:9)
+0|seatofwi |     at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+0|seatofwi |     at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+0|seatofwi |     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+0|seatofwi |
+0|seatofwi | Node.js v20.19.5
+0|seatofwi | /var/www/SEAT-OF-WISDOM/server/db.ts:9
+0|seatofwi |   throw new Error(
+0|seatofwi |         ^
+0|seatofwi |
+0|seatofwi |
+0|seatofwi | Error: DATABASE_URL must be set. Did you forget to provision a database?
+0|seatofwi |     at <anonymous> (/var/www/SEAT-OF-WISDOM/server/db.ts:9:9)
+0|seatofwi |     at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+0|seatofwi |     at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+0|seatofwi |     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+0|seatofwi |
+0|seatofwi | Node.js v20.19.5
+0|seatofwi | /var/www/SEAT-OF-WISDOM/server/db.ts:9
+0|seatofwi |   throw new Error(
+0|seatofwi |         ^
+0|seatofwi |
+0|seatofwi |
+0|seatofwi | Error: DATABASE_URL must be set. Did you forget to provision a database?
+0|seatofwi |     at <anonymous> (/var/www/SEAT-OF-WISDOM/server/db.ts:9:9)
+0|seatofwi |     at ModuleJob.run (node:internal/modules/esm/module_job:325:25)
+0|seatofwi |     at async ModuleLoader.import (node:internal/modules/esm/loader:606:24)
+0|seatofwi |     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+0|seatofwi |
+0|seatofwi | Node.js v20.19.5

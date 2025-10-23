@@ -1,0 +1,38 @@
+Uncaught TypeError: Cannot read properties of null (reading 'addEventListener')
+    at share-modal.js:1:135Understand this error
+/api/firebase-config:1  Failed to load resource: the server responded with a status of 503 (Service Unavailable)Understand this error
+hook.js:608 ❌ Failed to initialize Firebase: Error: Firebase configuration incomplete. Missing: API Key, Project ID, App ID. Please ensure Firebase environment variables are set or the server config endpoint is available.
+    at getFirebaseConfig (firebase-config.ts:81:11)
+    at async initializeFirebase (firebase.ts:19:28)
+    at async ensureFirebaseReady (firebase.ts:69:3)
+overrideMethod @ hook.js:608Understand this error
+hook.js:608 Failed to initialize Firebase: Error: Firebase configuration incomplete. Missing: API Key, Project ID, App ID. Please ensure Firebase environment variables are set or the server config endpoint is available.
+    at getFirebaseConfig (firebase-config.ts:81:11)
+    at async initializeFirebase (firebase.ts:19:28)
+    at async ensureFirebaseReady (firebase.ts:69:3)
+overrideMethod @ hook.js:608Understand this error
+/api/news:1  Failed to load resource: the server responded with a status of 500 (Internal Server Error)Understand this error
+queryClient.ts:68  GET https://seatofwisdomacademy.com/api/logo 500 (Internal Server Error)
+(anonymous) @ queryClient.ts:68
+fetchFn @ @tanstack_react-query.js?v=6209b3ee:840
+run @ @tanstack_react-query.js?v=6209b3ee:494
+start @ @tanstack_react-query.js?v=6209b3ee:536
+fetch @ @tanstack_react-query.js?v=6209b3ee:926
+executeFetch_fn @ @tanstack_react-query.js?v=6209b3ee:2211
+onSubscribe @ @tanstack_react-query.js?v=6209b3ee:1898
+subscribe @ @tanstack_react-query.js?v=6209b3ee:24
+(anonymous) @ @tanstack_react-query.js?v=6209b3ee:3022
+subscribeToStore @ chunk-RPCDYKBN.js?v=24a8e913:11984
+commitHookEffectListMount @ chunk-RPCDYKBN.js?v=24a8e913:16915
+commitPassiveMountOnFiber @ chunk-RPCDYKBN.js?v=24a8e913:18156
+commitPassiveMountEffects_complete @ chunk-RPCDYKBN.js?v=24a8e913:18129
+commitPassiveMountEffects_begin @ chunk-RPCDYKBN.js?v=24a8e913:18119
+commitPassiveMountEffects @ chunk-RPCDYKBN.js?v=24a8e913:18109
+flushPassiveEffectsImpl @ chunk-RPCDYKBN.js?v=24a8e913:19490
+flushPassiveEffects @ chunk-RPCDYKBN.js?v=24a8e913:19447
+commitRootImpl @ chunk-RPCDYKBN.js?v=24a8e913:19416
+commitRoot @ chunk-RPCDYKBN.js?v=24a8e913:19277
+performSyncWorkOnRoot @ chunk-RPCDYKBN.js?v=24a8e913:18895
+flushSyncCallbacks @ chunk-RPCDYKBN.js?v=24a8e913:9119
+(anonymous) @ chunk-RPCDYKBN.js?v=24a8e913:18627Understand this error
+use-auth.tsx:84  POST https://seatofwisdomacademy.com/api/auth/login 400 (Bad Request)
