@@ -8,7 +8,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
 import { firebaseSync } from "@/lib/offline-firebase-sync";
 import { useFirebaseSync } from "@/hooks/use-firebase-sync";
-import { checkFirebaseData } from "@/utils/check-firebase";
 import { 
   Card, 
   CardContent, 
@@ -370,10 +369,6 @@ export default function AdminDashboard() {
     }
   }, [academicInfo]);
 
-  // Check Firebase data on mount
-  useEffect(() => {
-    checkFirebaseData();
-  }, []);
 
   // Scores management states
   const [scoresClassId, setScoresClassId] = useState("");
