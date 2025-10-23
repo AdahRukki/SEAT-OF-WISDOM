@@ -9,17 +9,7 @@ import express from "express";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
-}  🧩 What “nothing returned” means
-
-  When curl connects successfully but prints no output, that means:
-
-  The TCP connection opened (so Node is listening ✅),
-
-  But Node didn’t send a reply (no headers, no JSON, no HTML),
-
-  And eventually it just hangs or times out.
-
-  So this isn’t Nginx’s fault — it’s your Express app that isn’t responding for those endpoints.from "./objectStorage";
+} from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { 
   loginSchema, 
