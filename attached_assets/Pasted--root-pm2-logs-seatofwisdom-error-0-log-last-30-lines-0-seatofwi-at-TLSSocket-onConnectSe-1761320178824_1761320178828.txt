@@ -1,0 +1,63 @@
+/root/.pm2/logs/seatofwisdom-error-0.log last 30 lines:
+0|seatofwi |       at TLSSocket.onConnectSecure (node:_tls_wrap:1687:27)
+0|seatofwi |       at TLSSocket.emit (node:events:524:28)
+0|seatofwi |       at TLSSocket._finishInit (node:_tls_wrap:1076:8)
+0|seatofwi |       at ssl.onhandshakedone (node:_tls_wrap:862:12) {
+0|seatofwi |     code: 'ERR_TLS_CERT_ALTNAME_INVALID',
+0|seatofwi |     reason: "Host: localhost. is not in the cert's altnames: DNS:seatofwisdomacademy.com, DNS:www.seatofwisdomacademy.com",
+0|seatofwi |     host: 'localhost',
+0|seatofwi |     cert: {
+0|seatofwi |       subject: [Object: null prototype],
+0|seatofwi |       issuer: [Object: null prototype],
+0|seatofwi |       subjectaltname: 'DNS:seatofwisdomacademy.com, DNS:www.seatofwisdomacademy.com',
+0|seatofwi |       infoAccess: [Object: null prototype],
+0|seatofwi |       ca: false,
+0|seatofwi |       bits: 256,
+0|seatofwi |       pubkey: <Buffer 04 f5 e2 e2 9d db 23 5b a9 9f 20 c4 c2 ad 1a bc a6 ea 90 95 e9 cd 2d 9f 84 9d 37 ee a7 64 6e 9f e0 04 e9 84 a6 83 61 ec 3e 3e 09 27 5f 52 f3 8c 0e 77 ... 15 more bytes>,
+0|seatofwi |       asn1Curve: 'prime256v1',
+0|seatofwi |       nistCurve: 'P-256',
+0|seatofwi |       valid_from: 'Oct 24 10:33:44 2025 GMT',
+0|seatofwi |       valid_to: 'Jan 22 10:33:43 2026 GMT',
+0|seatofwi |       fingerprint: '98:27:F1:4F:A8:18:17:43:A9:B5:C7:12:B1:C8:B5:F5:7D:16:65:1A',
+0|seatofwi |       fingerprint256: 'CF:BC:68:CE:DD:32:58:27:79:C7:5E:6C:83:12:F1:3F:2B:41:4F:D9:FB:36:BF:E4:F3:1F:65:DD:9B:C6:24:75',
+0|seatofwi |       fingerprint512: '3B:E8:D6:D6:63:1D:29:E2:A0:E2:5D:B0:36:B4:27:DC:23:04:74:6F:6C:9B:C3:BE:37:A2:BE:81:80:0B:2B:7B:74:66:55:76:E9:F3:3A:25:EF:F2:59:06:B7:7B:9E:DE:EE:89:FC:8E:66:80:5A:FF:F9:50:FC:A0:86:BF:D3:BE',
+0|seatofwi |       ext_key_usage: [Array],
+0|seatofwi |       serialNumber: '05E64F9C60B61BA5E1C2C48039E22E2402AE',
+0|seatofwi |       raw: <Buffer 30 82 03 b7 30 82 03 3d a0 03 02 01 02 02 12 05 e6 4f 9c 60 b6 1b a5 e1 c2 c4 80 39 e2 2e 24 02 ae 30 0a 06 08 2a 86 48 ce 3d 04 03 03 30 32 31 0b 30 ... 905 more bytes>,
+0|seatofwi |       issuerCertificate: [Object]
+0|seatofwi |     }
+0|seatofwi |   },
+0|seatofwi |   [Symbol(kMessage)]: "Hostname/IP does not match certificate's altnames: Host: localhost. is not in the cert's altnames: DNS:seatofwisdomacademy.com, DNS:www.seatofwisdomacademy.com"
+0|seatofwi | }
+
+/root/.pm2/logs/seatofwisdom-out-0.log last 30 lines:
+0|seatofwi | Login request body: { email: 'SOWA/1001', password: 'PASS123' }
+0|seatofwi | 3:00:28 PM [express] POST /api/auth/login 400 in 8ms :: {"error":"Invalid request"}
+0|seatofwi | 3:06:26 PM [express] serving on port 5000
+0|seatofwi | 3:06:45 PM [express] GET /api/firebase-config 304 in 3ms :: {"apiKey":"AIzaSyDe-WAyR3GTqgp1lNcScrUzn…
+0|seatofwi | 3:06:45 PM [express] GET /api/logo 500 in 55ms :: {"error":"Failed to get logo"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:07:09 PM [express] POST /api/auth/login 400 in 12ms :: {"error":"Invalid request"}
+0|seatofwi | 3:13:45 PM [express] GET /api/firebase-config 304 in 1ms :: {"apiKey":"AIzaSyDe-WAyR3GTqgp1lNcScrUzn…
+0|seatofwi | 3:13:46 PM [express] GET /api/logo 500 in 14ms :: {"error":"Failed to get logo"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:13:57 PM [express] POST /api/auth/login 400 in 9ms :: {"error":"Invalid request"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:14:00 PM [express] POST /api/auth/login 400 in 8ms :: {"error":"Invalid request"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:14:01 PM [express] POST /api/auth/login 400 in 7ms :: {"error":"Invalid request"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:14:02 PM [express] POST /api/auth/login 400 in 8ms :: {"error":"Invalid request"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:14:02 PM [express] POST /api/auth/login 400 in 9ms :: {"error":"Invalid request"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:18:22 PM [express] POST /api/auth/login 400 in 16ms :: {"error":"Invalid request"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:18:23 PM [express] POST /api/auth/login 400 in 8ms :: {"error":"Invalid request"}
+0|seatofwi | Login request body: { email: 'adahrukki@gmail.com', password: 'password@123' }
+0|seatofwi | 3:18:34 PM [express] POST /api/auth/login 400 in 9ms :: {"error":"Invalid request"}
+0|seatofwi | 3:22:39 PM [express] GET /api/auth/login 200 in 5ms
+0|seatofwi | 3:35:06 PM [express] GET /api/firebase-config 304 in 2ms :: {"apiKey":"AIzaSyDe-WAyR3GTqgp1lNcScrUzn…
+0|seatofwi | 3:35:06 PM [express] GET /api/logo 500 in 26ms :: {"error":"Failed to get logo"}
+0|seatofwi | Login request body: { email: 'ijeI@gmail.com', password: 'PASS123' }
+0|seatofwi | 3:35:14 PM [express] POST /api/auth/login 400 in 34ms :: {"error":"Invalid request"}
