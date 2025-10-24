@@ -28,7 +28,6 @@ async function createAdmin() {
     if (school.length === 0) {
       console.log('📚 Creating default school...');
       const [newSchool] = await db.insert(schools).values({
-        id: 'SCH1',
         name: 'School 1 Ikpoto',
         address: 'Ikpoto',
         phone: '',
