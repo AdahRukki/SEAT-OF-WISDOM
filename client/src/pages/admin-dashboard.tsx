@@ -5420,13 +5420,15 @@ export default function AdminDashboard() {
                     )}
                   </div>
                   <div>
-                    <Label htmlFor="student-id">Student ID *</Label>
+                    <Label htmlFor="student-id">Student ID * (Auto-Generated)</Label>
                     <div className="flex space-x-2">
                       <Input
                         id="student-id"
                         value={studentCreationForm.studentId}
-                        onChange={(e) => handleStudentFormChange('studentId', e.target.value)}
+                        readOnly
+                        disabled
                         placeholder="e.g., SOWA/1001"
+                        className="bg-gray-100 cursor-not-allowed"
                       />
                       <Button
                         type="button"
