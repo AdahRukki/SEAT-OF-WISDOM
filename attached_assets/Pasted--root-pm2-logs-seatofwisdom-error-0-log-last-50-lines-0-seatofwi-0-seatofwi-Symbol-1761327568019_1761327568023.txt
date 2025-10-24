@@ -1,0 +1,55 @@
+
+/root/.pm2/logs/seatofwisdom-error-0.log last 50 lines:
+0|seatofwi |   },
+0|seatofwi |   [Symbol(kMessage)]: "Hostname/IP does not match certificate's altnames: Host: localhost. is not in the cert's altnames: DNS:seatofwisdomacademy.com, DNS:www.seatofwisdomacademy.com"
+0|seatofwi | }
+0|seatofwi | Login error: ZodError: [
+0|seatofwi |   {
+0|seatofwi |     "code": "custom",
+0|seatofwi |     "message": "Please enter a valid email address or student ID (e.g., SOWA/1001)",
+0|seatofwi |     "path": [
+0|seatofwi |       "email"
+0|seatofwi |     ]
+0|seatofwi |   }
+0|seatofwi | ]
+0|seatofwi |     at get error [as error] (file:///var/www/SEAT-OF-WISDOM/node_modules/zod/lib/index.mjs:587:31)
+0|seatofwi |     at ZodObject.parse (file:///var/www/SEAT-OF-WISDOM/node_modules/zod/lib/index.mjs:663:22)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:2820:47
+0|seatofwi |     at Layer.handle [as handle_request] (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/layer.js:95:5)
+0|seatofwi |     at next (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/route.js:149:13)
+0|seatofwi |     at Route.dispatch (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/route.js:119:3)
+0|seatofwi |     at Layer.handle [as handle_request] (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/layer.js:95:5)
+0|seatofwi |     at /var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:284:15
+0|seatofwi |     at Function.process_params (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:346:12)
+0|seatofwi |     at next (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:280:10) {
+0|seatofwi |   issues: [
+0|seatofwi |     {
+0|seatofwi |       code: 'custom',
+0|seatofwi |       message: 'Please enter a valid email address or student ID (e.g., SOWA/1001)',
+0|seatofwi |       path: [Array]
+0|seatofwi |     }
+0|seatofwi |   ],
+0|seatofwi |   addIssue: [Function (anonymous)],
+0|seatofwi |   addIssues: [Function (anonymous)],
+0|seatofwi |   errors: [
+0|seatofwi |     {
+0|seatofwi |       code: 'custom',
+0|seatofwi |       message: 'Please enter a valid email address or student ID (e.g., SOWA/1001)',
+0|seatofwi |       path: [Array]
+0|seatofwi |     }
+0|seatofwi |   ]
+0|seatofwi | }
+0|seatofwi | Create academic session error: TypeError: value.toISOString is not a function
+0|seatofwi |     at PgTimestamp.mapToDriverValue (file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/pg-core/columns/timestamp.js:34:18)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/sql/sql.js:131:73
+0|seatofwi |     at Array.map (<anonymous>)
+0|seatofwi |     at SQL.buildQueryFromSourceParams (file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/sql/sql.js:73:32)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/sql/sql.js:92:21
+0|seatofwi |     at Array.map (<anonymous>)
+0|seatofwi |     at SQL.buildQueryFromSourceParams (file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/sql/sql.js:73:32)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/sql/sql.js:95:21
+0|seatofwi |     at Array.map (<anonymous>)
+0|seatofwi |     at SQL.buildQueryFromSourceParams (file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/sql/sql.js:73:32)
+
+/root/.pm2/logs/seatofwisdom-out-0.log last 50 lines:
+0|seatofwi | 4:56:17 PM [express] POST /api/auth/login 200 in 65ms :: {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV…
