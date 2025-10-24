@@ -1627,8 +1627,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Download multi-subject Excel template with separate tabs for each subject
-  app.get('/api/assessments/template-multi/:classId', authenticate, async (req, res) => {
+  // BRAND NEW: Bulletproof bulk template download - deduplicates by NAME
+  app.get('/api/assessments/download-bulk/:classId', authenticate, async (req, res) => {
     try {
       const user = (req as any).user;
       if (user.role !== 'admin' && user.role !== 'sub-admin') {
@@ -1637,42 +1637,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { classId } = req.params;
       
-      // Get class info
       const classInfo = await storage.getClassById(classId);
       if (!classInfo) {
         return res.status(404).json({ error: "Class not found" });
       }
       
-      // Get students from the class
       const studentsInClass = await storage.getStudentsByClass(classId);
       if (studentsInClass.length === 0) {
         return res.status(404).json({ error: "No students in this class" });
       }
       
-      // Get subjects assigned to this class and remove duplicates by ID
+      // Get subjects and deduplicate by NAME (not ID) for Excel compatibility
       const allSubjects = await storage.getClassSubjects(classId);
-      const subjectMap = new Map();
+      const nameMap = new Map<string, typeof allSubjects[0]>();
       allSubjects.forEach(subject => {
-        if (!subjectMap.has(subject.id)) {
-          subjectMap.set(subject.id, subject);
+        if (!nameMap.has(subject.name)) {
+          nameMap.set(subject.name, subject);
         }
       });
-      const subjects = Array.from(subjectMap.values());
+      const uniqueSubjects = Array.from(nameMap.values());
       
-      if (subjects.length === 0) {
+      if (uniqueSubjects.length === 0) {
         return res.status(404).json({ error: "No subjects assigned to this class" });
       }
       
-      // Create new Excel workbook
-      const wb = XLSX.utils.book_new();
+      const workbook = XLSX.utils.book_new();
       
-      // Track used sheet names to ensure uniqueness
-      const usedSheetNames = new Set<string>();
-      
-      // Create a sheet for each subject
-      for (const subject of subjects) {
-        // Prepare student data rows
-        const rows = studentsInClass.map(student => ({
+      for (const subject of uniqueSubjects) {
+        const studentRows = studentsInClass.map(student => ({
           'Student ID': student.studentId,
           'Student Name': `${student.user.firstName} ${student.user.lastName}`,
           'First CA': '',
@@ -1680,11 +1672,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Exam': ''
         }));
 
-        // Convert to worksheet
-        const worksheet = XLSX.utils.json_to_sheet(rows);
-        
-        // Set column widths
-        worksheet['!cols'] = [
+        const sheet = XLSX.utils.json_to_sheet(studentRows);
+        sheet['!cols'] = [
           { width: 15 },
           { width: 25 },
           { width: 12 },
@@ -1692,45 +1681,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { width: 12 }
         ];
 
-        // Excel sheet names must be <= 31 characters and unique
-        let baseName = subject.name.substring(0, 31);
-        let sheetName = baseName;
-        let counter = 1;
-        
-        // Ensure sheet name is unique
-        while (usedSheetNames.has(sheetName)) {
-          const suffix = ` (${counter})`;
-          sheetName = baseName.substring(0, 31 - suffix.length) + suffix;
-          counter++;
-        }
-        usedSheetNames.add(sheetName);
-        
-        // Add sheet to workbook
-        XLSX.utils.book_append_sheet(wb, worksheet, sheetName);
+        // Truncate to 31 chars for Excel
+        const sheetName = subject.name.substring(0, 31);
+        XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
       }
 
-      // Generate Excel file buffer
-      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      const fileName = `${classInfo.name.replace(/\s+/g, '-')}-Bulk-Template.xlsx`;
 
-      // Create filename
-      const filename = `${classInfo.name.replace(/\s+/g, '-')}-All-Subjects.xlsx`;
-
-      // Send file
       res.set({
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Content-Length': buffer.length
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+        'Content-Length': excelBuffer.length
       });
 
-      res.send(buffer);
+      res.send(excelBuffer);
 
     } catch (error) {
-      console.error("Multi-subject template error:", error);
+      console.error("Bulk template error:", error);
       res.status(500).json({ 
-        error: "Failed to generate template", 
+        error: "Download failed", 
         details: error instanceof Error ? error.message : String(error) 
       });
     }
+  });
+
+  // OLD endpoint - keep for backwards compatibility  
+  app.get('/api/assessments/template-multi/:classId', authenticate, async (req, res) => {
+    // Redirect to new bulletproof endpoint
+    const { classId } = req.params;
+    return res.redirect(`/api/assessments/download-bulk/${classId}`);
   });
 
   // Report card template routes
