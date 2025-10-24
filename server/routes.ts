@@ -410,7 +410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/academic-terms', authenticate, requireMainAdmin, async (req, res) => {
+  app.get('/api/admin/academic-terms', authenticate, requireAdmin, async (req, res) => {
     try {
       const sessionId = req.query.sessionId as string;
       const terms = await storage.getAcademicTerms(sessionId);

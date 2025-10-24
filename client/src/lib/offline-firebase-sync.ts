@@ -65,14 +65,26 @@ export class OfflineFirebaseSync {
     window.addEventListener('online', async () => {
       this.isOnline = true;
       console.log('🌐 Network online - enabling Firebase sync');
-      await enableNetwork(db);
-      await this.processSyncQueue();
+      if (db) {
+        try {
+          await enableNetwork(db);
+          await this.processSyncQueue();
+        } catch (error) {
+          console.warn('⚠️ Could not enable Firebase network:', error);
+        }
+      }
     });
 
     window.addEventListener('offline', async () => {
       this.isOnline = false;
       console.log('📱 Network offline - switching to local storage');
-      await disableNetwork(db);
+      if (db) {
+        try {
+          await disableNetwork(db);
+        } catch (error) {
+          console.warn('⚠️ Could not disable Firebase network:', error);
+        }
+      }
     });
   }
 
@@ -131,7 +143,7 @@ export class OfflineFirebaseSync {
   async saveAssessment(assessment: Assessment): Promise<void> {
     const documentId = assessment.id;
     
-    if (this.isOnline) {
+    if (this.isOnline && db) {
       try {
         const docRef = doc(db, 'assessments', documentId);
         await setDoc(docRef, {
@@ -153,7 +165,7 @@ export class OfflineFirebaseSync {
   }
 
   async updateAssessment(assessmentId: string, updates: Partial<Assessment>): Promise<void> {
-    if (this.isOnline) {
+    if (this.isOnline && db) {
       try {
         const docRef = doc(db, 'assessments', assessmentId);
         await updateDoc(docRef, {
@@ -177,7 +189,7 @@ export class OfflineFirebaseSync {
   async saveStudent(student: Student): Promise<void> {
     const documentId = student.id;
     
-    if (this.isOnline) {
+    if (this.isOnline && db) {
       try {
         const docRef = doc(db, 'students', documentId);
         await setDoc(docRef, {
@@ -200,7 +212,7 @@ export class OfflineFirebaseSync {
   async saveClass(classData: Class): Promise<void> {
     const documentId = classData.id;
     
-    if (this.isOnline) {
+    if (this.isOnline && db) {
       try {
         const docRef = doc(db, 'classes', documentId);
         await setDoc(docRef, {
@@ -276,6 +288,12 @@ export class OfflineFirebaseSync {
       return;
     }
 
+    // Check if Firebase is initialized
+    if (!db) {
+      console.warn('⚠️ Firebase not initialized, skipping sync');
+      return;
+    }
+
     this.syncInProgress = true;
     console.log('🔄 Processing sync queue:', this.syncQueue.length, 'operations');
 
@@ -335,23 +353,34 @@ export class OfflineFirebaseSync {
   }
 
   // Setup real-time listeners for online data
-  setupRealTimeSync(collection: string, callback: (data: any[]) => void): () => void {
+  setupRealTimeSync(collectionName: string, callback: (data: any[]) => void): () => void {
     if (!this.isOnline) return () => {};
 
-    const q = query(collection(db, collection), orderBy('lastUpdated', 'desc'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      callback(data);
-    }, (error) => {
-      console.error('Real-time sync error:', error);
-    });
+    // Check if Firebase is initialized before using it
+    if (!db) {
+      console.warn('⚠️ Firebase not initialized yet, skipping real-time sync');
+      return () => {};
+    }
 
-    this.listeners.push(unsubscribe);
-    return unsubscribe;
+    try {
+      const q = query(collection(db, collectionName), orderBy('lastUpdated', 'desc'));
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        callback(data);
+      }, (error) => {
+        console.error('Real-time sync error:', error);
+      });
+
+      this.listeners.push(unsubscribe);
+      return unsubscribe;
+    } catch (error) {
+      console.error('❌ Error setting up real-time sync:', error);
+      return () => {};
+    }
   }
 
   getSyncStatus(): { 
