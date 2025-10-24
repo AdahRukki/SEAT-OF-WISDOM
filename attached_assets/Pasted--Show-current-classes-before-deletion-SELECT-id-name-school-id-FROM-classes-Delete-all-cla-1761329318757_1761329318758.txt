@@ -1,0 +1,117 @@
+ Show current classes before deletion
+SELECT id, name, school_id FROM classes;
+
+-- Delete all classes
+DELETE FROM classes;
+
+-- Verify deletion
+SELECT COUNT(*) as remaining_classes FROM classes;
+
+EOF
+    id     |    name     |              school_id
+-----------+-------------+--------------------------------------
+ SCH1-CLS1 | ijei daniel | b46c0e16-4525-4a56-996f-af1ec883152c
+(1 row)
+
+DELETE 1
+ remaining_classes
+-------------------
+                 0
+(1 row)
+
+root@srv1076016:~# psql postgresql://sowa_user:Sowa2025Academy@localhost:5432/sowa_academy << 'EOF'
+
+-- First, create all subjects
+DELETE FROM subjects;
+
+-- BASIC Level Subjects (ID: SUBJ-BASIC-XX)
+INSERT INTO subjects (id, name, description) VALUES
+  ('SUBJ-BASIC-01', 'English Language', 'Language and communication'),
+  ('SUBJ-BASIC-02', 'Mathematics', 'Numeracy and problem solving'),
+  ('SUBJ-BASIC-03', 'Basic Science', 'Introduction to science'),
+  ('SUBJ-BASIC-04', 'Basic Technology', 'Introduction to technology'),
+  ('SUBJ-BASIC-05', 'Social Studies', 'Society and environment'),
+  ('SUBJ-BASIC-06', 'Creative Arts', 'Arts and crafts'),
+  ('SUBJ-BASIC-07', 'Civic Education', 'Citizenship education'),
+  ('SUBJ-BASIC-08', 'Physical Education', 'Sports and health'),
+  ('SUBJ-BASIC-09', 'Christian Religious Studies', 'Religious education');
+
+-- JSS Level Subjects (ID: SUBJ-JSS-XX)
+INSERT INTO subjects (id, name, description) VALUES
+  ('SUBJ-JSS-01', 'English Language', 'Language and literature'),
+  ('SUBJ-JSS-02', 'Mathematics', 'Advanced mathematics'),
+  ('SUBJ-JSS-03', 'Basic Science', 'Integrated science'),
+  ('SUBJ-JSS-04', 'Basic Technology', 'Technical skills'),
+  ('SUBJ-JSS-05', 'Social Studies', 'Social sciences'),
+EOFER BY c.name;subjects cs ON c.id = cs.class_idcts tableure'),guage'),;
+DELETE 0
+ERROR:  invalid input syntax for type uuid: "SUBJ-BASIC-01"
+LINE 2:   ('SUBJ-BASIC-01', 'English Language', 'Language and commun...
+           ^
+ERROR:  invalid input syntax for type uuid: "SUBJ-JSS-01"
+LINE 2:   ('SUBJ-JSS-01', 'English Language', 'Language and literatu...
+           ^
+ERROR:  invalid input syntax for type uuid: "SUBJ-SS-01"
+LINE 2:   ('SUBJ-SS-01', 'English Language', 'English literature and...
+           ^
+DELETE 0
+ERROR:  operator does not exist: uuid ~~ unknown
+LINE 6:   AND s.id LIKE 'SUBJ-BASIC-%';
+                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+ERROR:  operator does not exist: uuid ~~ unknown
+LINE 6:   AND s.id LIKE 'SUBJ-JSS-%';
+                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+ERROR:  operator does not exist: uuid ~~ unknown
+LINE 6:   AND s.id LIKE 'SUBJ-SS-%';
+                   ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+ class_name | subject_count
+------------+---------------
+(0 rows)
+
+root@srv1076016:~# psql postgresql://sowa_user:Sowa2025Academy@localhost:5432/sowa_academy << 'EOF'
+
+-- First, create all subjects with proper UUIDs
+DELETE FROM subjects;
+
+-- BASIC Level Subjects
+INSERT INTO subjects (id, name, description) VALUES
+  (gen_random_uuid(), 'English Language', 'Language and communication'),
+  (gen_random_uuid(), 'Mathematics', 'Numeracy and problem solving'),
+  (gen_random_uuid(), 'Basic Science', 'Introduction to science'),
+  (gen_random_uuid(), 'Basic Technology', 'Introduction to technology'),
+  (gen_random_uuid(), 'Social Studies', 'Society and environment'),
+  (gen_random_uuid(), 'Creative Arts', 'Arts and crafts'),
+  (gen_random_uuid(), 'Civic Education', 'Citizenship education'),
+  (gen_random_uuid(), 'Physical Education', 'Sports and health'),
+  (gen_random_uuid(), 'Christian Religious Studies', 'Religious education');
+
+-- JSS Level Subjects
+INSERT INTO subjects (id, name, description) VALUES
+  (gen_random_uuid(), 'English Language', 'Language and literature'),
+  (gen_random_uuid(), 'Mathematics', 'Advanced mathematics'),
+  (gen_random_uuid(), 'Basic Science', 'Integrated science'),
+  (gen_random_uuid(), 'Basic Technology', 'Technical skills'),
+  (gen_random_uuid(), 'Social Studies', 'Social sciences'),
+EOFECT COUNT(*) as total_subjects FROM subjects;d-36))cts));,ature'),guage'),
+DELETE 0
+ERROR:  null value in column "code" of relation "subjects" violates not-null constraint
+DETAIL:  Failing row contains (416ffaa7-535d-4612-bda6-b6687c4c9389, English Language, null, Language and communication, 2025-10-24 18:07:57.421732, 2025-10-24 18:07:57.421732).
+ERROR:  null value in column "code" of relation "subjects" violates not-null constraint
+DETAIL:  Failing row contains (8e26edbf-249e-4d82-8cc7-c923a8227f74, English Language, null, Language and literature, 2025-10-24 18:07:57.422674, 2025-10-24 18:07:57.422674).
+ERROR:  null value in column "code" of relation "subjects" violates not-null constraint
+DETAIL:  Failing row contains (b822eb88-8412-44f9-97b4-b7edf98d659b, English Language, null, English literature and language, 2025-10-24 18:07:57.422977, 2025-10-24 18:07:57.422977).
+DELETE 0
+INSERT 0 0
+INSERT 0 0
+INSERT 0 0
+ class_name | subject_count
+------------+---------------
+(0 rows)
+
+ total_subjects
+----------------
+              0
+(1 row)
