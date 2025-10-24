@@ -1888,17 +1888,15 @@ export default function AdminDashboard() {
     }
   };
 
-  // Auto-generate student ID in SOWA/X001 format where X is school number
+  // Auto-generate student ID in SOWA/1001 format where first digit is school number
   const generateStudentId = async () => {
     try {
       // Get the selected class to determine school
       const selectedClass = classes.find(c => c.id === (studentCreationForm.classId || selectedClassForStudents));
       
       if (!selectedClass) {
-        // No class selected yet, use generic format
-        const nextNumber = (allStudents.length + 1).toString().padStart(3, '0');
-        const newId = `SOWA/X${nextNumber}`;
-        setStudentCreationForm(prev => ({ ...prev, studentId: newId }));
+        // No class selected yet, don't generate ID
+        setStudentCreationForm(prev => ({ ...prev, studentId: '' }));
         return;
       }
       
@@ -1925,9 +1923,7 @@ export default function AdminDashboard() {
       setStudentCreationForm(prev => ({ ...prev, studentId: newId }));
     } catch (error) {
       console.error('Error generating student ID:', error);
-      // Fallback to timestamp-based ID
-      const timestamp = Date.now().toString().slice(-4);
-      setStudentCreationForm(prev => ({ ...prev, studentId: `SOWA/${timestamp}` }));
+      setStudentCreationForm(prev => ({ ...prev, studentId: '' }));
     }
   };
 
@@ -5424,17 +5420,18 @@ export default function AdminDashboard() {
                     <div className="flex space-x-2">
                       <Input
                         id="student-id"
-                        value={studentCreationForm.studentId}
+                        value={studentCreationForm.studentId || 'Select a class first'}
                         readOnly
                         disabled
-                        placeholder="e.g., SOWA/1001"
-                        className="bg-gray-100 cursor-not-allowed"
+                        className="bg-gray-50 cursor-default text-gray-700 pointer-events-none"
+                        tabIndex={-1}
                       />
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={generateStudentId}
+                        disabled={!studentCreationForm.classId && !selectedClassForStudents}
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
