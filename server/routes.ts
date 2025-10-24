@@ -1637,42 +1637,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { classId } = req.params;
       
-      console.log(`📥 Multi-subject template request for class: ${classId}`);
-      
-      // Get class info for filename
+      // Get class info
       const classInfo = await storage.getClassById(classId);
-      console.log(`📚 Class info:`, classInfo);
-      
       if (!classInfo) {
-        console.error(`❌ Class not found: ${classId}`);
         return res.status(404).json({ error: "Class not found" });
       }
       
       // Get students from the class
       const studentsInClass = await storage.getStudentsByClass(classId);
-      console.log(`👥 Students count: ${studentsInClass.length}`);
+      if (studentsInClass.length === 0) {
+        return res.status(404).json({ error: "No students in this class" });
+      }
       
-      // Get subjects assigned to this class
-      const subjects = await storage.getClassSubjects(classId);
-      console.log(`📖 Subjects count: ${subjects.length}`, subjects.map(s => s.name));
+      // Get subjects assigned to this class and remove duplicates by ID
+      const allSubjects = await storage.getClassSubjects(classId);
+      const subjectMap = new Map();
+      allSubjects.forEach(subject => {
+        if (!subjectMap.has(subject.id)) {
+          subjectMap.set(subject.id, subject);
+        }
+      });
+      const subjects = Array.from(subjectMap.values());
       
       if (subjects.length === 0) {
-        console.error(`❌ No subjects assigned to class: ${classId}`);
         return res.status(404).json({ error: "No subjects assigned to this class" });
       }
       
-      // Remove duplicate subjects by subject ID
-      const uniqueSubjects = subjects.filter((subject, index, self) => 
-        index === self.findIndex(s => s.id === subject.id)
-      );
-      console.log(`📖 Unique subjects: ${uniqueSubjects.length}`, uniqueSubjects.map(s => s.name));
-      
-      // Create workbook
+      // Create new Excel workbook
       const wb = XLSX.utils.book_new();
       
-      // Add a sheet for each unique subject
-      for (const subject of uniqueSubjects) {
-        const templateData = studentsInClass.map(student => ({
+      // Create a sheet for each subject
+      for (const subject of subjects) {
+        // Prepare student data rows
+        const rows = studentsInClass.map(student => ({
           'Student ID': student.studentId,
           'Student Name': `${student.user.firstName} ${student.user.lastName}`,
           'First CA': '',
@@ -1680,29 +1677,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'Exam': ''
         }));
 
-        const ws = XLSX.utils.json_to_sheet(templateData);
+        // Convert to worksheet
+        const worksheet = XLSX.utils.json_to_sheet(rows);
         
         // Set column widths
-        ws['!cols'] = [
-          { width: 15 }, // Student ID
-          { width: 25 }, // Student Name
-          { width: 12 }, // First CA
-          { width: 12 }, // Second CA
-          { width: 12 }  // Exam
+        worksheet['!cols'] = [
+          { width: 15 },
+          { width: 25 },
+          { width: 12 },
+          { width: 12 },
+          { width: 12 }
         ];
 
-        // Truncate sheet name if too long (Excel limit is 31 characters)
-        const sheetName = subject.name.length > 31 ? subject.name.substring(0, 31) : subject.name;
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        // Excel sheet names must be <= 31 characters and unique
+        let sheetName = subject.name.substring(0, 31);
+        
+        // Add sheet to workbook
+        XLSX.utils.book_append_sheet(wb, worksheet, sheetName);
       }
 
-      // Generate buffer
+      // Generate Excel file buffer
       const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-      // Create filename: Class-All-Subjects.xlsx (e.g., JSS1-All-Subjects.xlsx)
+      // Create filename
       const filename = `${classInfo.name.replace(/\s+/g, '-')}-All-Subjects.xlsx`;
 
-      // Set headers for download
+      // Send file
       res.set({
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${filename}"`,
@@ -1712,9 +1712,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(buffer);
 
     } catch (error) {
-      console.error("❌ Multi-subject template download error:", error);
-      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
-      res.status(500).json({ error: "Failed to generate template", details: error instanceof Error ? error.message : String(error) });
+      console.error("Multi-subject template error:", error);
+      res.status(500).json({ 
+        error: "Failed to generate template", 
+        details: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
 
