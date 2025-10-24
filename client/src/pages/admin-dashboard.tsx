@@ -2147,15 +2147,22 @@ export default function AdminDashboard() {
     }
 
     try {
+      const token = localStorage.getItem('auth_token');
+      console.log('🔑 Auth token exists:', !!token);
+      
       const response = await fetch(`/api/assessments/template-single/${scoresClassId}/${scoresSubjectId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
+      console.log('📡 Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to download template');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Error response:', errorData);
+        throw new Error(errorData.error || 'Failed to download template');
       }
 
       // Get filename from Content-Disposition header or use default
@@ -2206,15 +2213,22 @@ export default function AdminDashboard() {
     }
 
     try {
+      const token = localStorage.getItem('auth_token');
+      console.log('🔑 Auth token exists:', !!token);
+      
       const response = await fetch(`/api/assessments/template-multi/${scoresClassId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
+      console.log('📡 Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to download template');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Error response:', errorData);
+        throw new Error(errorData.error || 'Failed to download template');
       }
 
       // Get filename from Content-Disposition header or use default
