@@ -3022,9 +3022,11 @@ export default function AdminDashboard() {
                 Notifications
               </TabsTrigger>
             )}
-            <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Settings
-            </TabsTrigger>
+            {user.role === 'admin' && (
+              <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
+                Settings
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Overview Tab */}

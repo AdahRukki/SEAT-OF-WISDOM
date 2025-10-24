@@ -7,7 +7,8 @@ Seat of Wisdom Academy is a comprehensive multi-branch academy management system
 - ✅ **Production Deployment Fix**: Fixed critical login issue by updating database driver to auto-detect environment (Neon for development, standard PostgreSQL for production), created ecosystem.config.cjs for PM2 process management
 - ✅ **Admin User Creation**: Created production admin creation script (server/create-admin.ts) with proper password hashing and school assignment
 - ✅ **User Management Security**: Restricted all user management routes to main admins only - sub-admins can no longer access user creation, editing, or deletion endpoints
-- ✅ **Sub-Admin Access Control**: Added frontend access control to prevent sub-admins from viewing user management page, displays clear "Access Denied" message
+- ✅ **Sub-Admin Access Control**: Added frontend access control to prevent sub-admins from viewing user management page and Settings tab, displays clear "Access Denied" message, Settings tab only visible to main admins
+- ✅ **Profile Navigation**: User avatar/name in header is clickable and navigates to dedicated profile page (/portal/profile) where admins can view and edit their profile information
 - ✅ **Mobile Responsive Dashboard**: Dashboard already includes comprehensive mobile responsiveness with adaptive grid layouts (2-column mobile to 10-column desktop) and proper breakpoints for all screen sizes
 - ✅ **Firebase Initialization Fix**: Fixed critical admin dashboard crash by adding null checks for Firebase `db` instance throughout offline-firebase-sync.ts - prevents collection() errors when Firebase hasn't initialized yet, ensuring dashboard loads properly on cold starts
 - ✅ **Sub-Admin Reports Access**: Fixed 403 error preventing sub-admins from accessing academic terms endpoint - sub-admins can now generate report cards for their assigned school while term creation/modification remains restricted to main admins
