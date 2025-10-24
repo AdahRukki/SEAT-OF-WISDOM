@@ -1661,11 +1661,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "No subjects assigned to this class" });
       }
       
+      // Remove duplicate subjects by subject ID
+      const uniqueSubjects = subjects.filter((subject, index, self) => 
+        index === self.findIndex(s => s.id === subject.id)
+      );
+      console.log(`📖 Unique subjects: ${uniqueSubjects.length}`, uniqueSubjects.map(s => s.name));
+      
       // Create workbook
       const wb = XLSX.utils.book_new();
       
-      // Add a sheet for each subject
-      for (const subject of subjects) {
+      // Add a sheet for each unique subject
+      for (const subject of uniqueSubjects) {
         const templateData = studentsInClass.map(student => ({
           'Student ID': student.studentId,
           'Student Name': `${student.user.firstName} ${student.user.lastName}`,
