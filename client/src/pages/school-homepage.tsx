@@ -30,6 +30,8 @@ import sch_2_pic from "@assets/sch 2 pic.jpg";
 
 import image_2 from "@assets/image_2.jpg";
 
+import WhatsApp_Image_2025_10_24_at_03_44_15_e8340d72 from "@assets/WhatsApp Image 2025-10-24 at 03.44.15_e8340d72.jpg";
+
 interface NewsItem {
   id: string;
   title: string;
@@ -689,7 +691,7 @@ export default function SchoolHomepage() {
             <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-facility-1">
               <div className="relative h-48">
                 <img 
-                  src={libraryImage1} 
+                  src={WhatsApp_Image_2025_10_24_at_03_44_15_e8340d72} 
                   alt="School library" 
                   className="w-full h-full object-cover"
                 />
