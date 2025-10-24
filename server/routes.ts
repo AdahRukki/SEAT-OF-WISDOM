@@ -1561,19 +1561,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { classId, subjectId } = req.params;
       
+      console.log(`📥 Single template request for class: ${classId}, subject: ${subjectId}`);
+      
       // Get class info for filename
       const classInfo = await storage.getClassById(classId);
+      console.log(`📚 Class info:`, classInfo);
       
       // Get subject info from all subjects
       const allSubjects = await storage.getAllSubjects();
       const subjectInfo = allSubjects.find(s => s.id === subjectId);
+      console.log(`📖 Subject info:`, subjectInfo);
       
       if (!classInfo || !subjectInfo) {
+        console.error(`❌ Not found - Class: ${!!classInfo}, Subject: ${!!subjectInfo}`);
         return res.status(404).json({ error: "Class or subject not found" });
       }
       
       // Get students from the class
       const studentsInClass = await storage.getStudentsByClass(classId);
+      console.log(`👥 Students count: ${studentsInClass.length}`);
       
       // Create Excel template with student IDs
       const templateData = studentsInClass.map(student => ({
@@ -1615,8 +1621,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(buffer);
 
     } catch (error) {
-      console.error("Single subject template download error:", error);
-      res.status(500).json({ error: "Failed to generate template" });
+      console.error("❌ Single subject template download error:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+      res.status(500).json({ error: "Failed to generate template", details: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -1630,20 +1637,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { classId } = req.params;
       
+      console.log(`📥 Multi-subject template request for class: ${classId}`);
+      
       // Get class info for filename
       const classInfo = await storage.getClassById(classId);
+      console.log(`📚 Class info:`, classInfo);
       
       if (!classInfo) {
+        console.error(`❌ Class not found: ${classId}`);
         return res.status(404).json({ error: "Class not found" });
       }
       
       // Get students from the class
       const studentsInClass = await storage.getStudentsByClass(classId);
+      console.log(`👥 Students count: ${studentsInClass.length}`);
       
       // Get subjects assigned to this class
       const subjects = await storage.getClassSubjects(classId);
+      console.log(`📖 Subjects count: ${subjects.length}`, subjects.map(s => s.name));
       
       if (subjects.length === 0) {
+        console.error(`❌ No subjects assigned to class: ${classId}`);
         return res.status(404).json({ error: "No subjects assigned to this class" });
       }
       
@@ -1692,8 +1706,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(buffer);
 
     } catch (error) {
-      console.error("Multi-subject template download error:", error);
-      res.status(500).json({ error: "Failed to generate template" });
+      console.error("❌ Multi-subject template download error:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+      res.status(500).json({ error: "Failed to generate template", details: error instanceof Error ? error.message : String(error) });
     }
   });
 
