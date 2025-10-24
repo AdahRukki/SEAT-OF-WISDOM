@@ -1,0 +1,106 @@
+share-modal.js:1 Uncaught TypeError: Cannot read properties of null (reading 'addEventListener')
+    at share-modal.js:1:135
+(anonymous) @ share-modal.js:1
+setTimeout
+(anonymous) @ share-modal.js:1Understand this error
+index-jcOVqKoG.js:3822 ❌ Error checking Firebase: FirebaseError: Expected first argument to collection() to be a CollectionReference, a DocumentReference or FirebaseFirestore
+overrideMethod @ hook.js:608
+xge @ index-jcOVqKoG.js:3822
+(anonymous) @ index-jcOVqKoG.js:4506
+P2 @ index-jcOVqKoG.js:40
+Xm @ index-jcOVqKoG.js:40
+tse @ index-jcOVqKoG.js:40
+oh @ index-jcOVqKoG.js:40
+UD @ index-jcOVqKoG.js:40
+Md @ index-jcOVqKoG.js:38
+(anonymous) @ index-jcOVqKoG.js:40
+setTimeout
+s @ index-jcOVqKoG.js:48
+o @ index-jcOVqKoG.js:48
+batch @ index-jcOVqKoG.js:48
+hc @ index-jcOVqKoG.js:48
+setData @ index-jcOVqKoG.js:48
+onSuccess @ index-jcOVqKoG.js:48
+h @ index-jcOVqKoG.js:48
+Promise.then
+x @ index-jcOVqKoG.js:48
+start @ index-jcOVqKoG.js:48
+fetch @ index-jcOVqKoG.js:48
+nx @ index-jcOVqKoG.js:48
+onSubscribe @ index-jcOVqKoG.js:48
+subscribe @ index-jcOVqKoG.js:48
+(anonymous) @ index-jcOVqKoG.js:48
+D7 @ index-jcOVqKoG.js:38
+P2 @ index-jcOVqKoG.js:40
+Xm @ index-jcOVqKoG.js:40
+UD @ index-jcOVqKoG.js:40
+Md @ index-jcOVqKoG.js:38
+tse @ index-jcOVqKoG.js:40
+oh @ index-jcOVqKoG.js:40
+hU @ index-jcOVqKoG.js:40
+O @ index-jcOVqKoG.js:25
+P @ index-jcOVqKoG.js:25Understand this error
+index-jcOVqKoG.js:40 FirebaseError: Expected first argument to collection() to be a CollectionReference, a DocumentReference or FirebaseFirestore
+overrideMethod @ hook.js:608
+zj @ index-jcOVqKoG.js:40
+Q7.r.callback @ index-jcOVqKoG.js:40
+bD @ index-jcOVqKoG.js:38
+MD @ index-jcOVqKoG.js:40
+dU @ index-jcOVqKoG.js:40
+Qne @ index-jcOVqKoG.js:40
+tse @ index-jcOVqKoG.js:40
+oh @ index-jcOVqKoG.js:40
+UD @ index-jcOVqKoG.js:40
+Md @ index-jcOVqKoG.js:38
+tse @ index-jcOVqKoG.js:40
+oh @ index-jcOVqKoG.js:40
+hU @ index-jcOVqKoG.js:40
+O @ index-jcOVqKoG.js:25
+P @ index-jcOVqKoG.js:25Understand this error
+index-jcOVqKoG.js:38 Uncaught FirebaseError: Expected first argument to collection() to be a CollectionReference, a DocumentReference or FirebaseFirestoreUnderstand this error
+index-jcOVqKoG.js:48  GET https://seatofwisdomacademy.com/api/admin/academic-terms 403 (Forbidden)
+(anonymous) @ index-jcOVqKoG.js:48
+o @ index-jcOVqKoG.js:48
+x @ index-jcOVqKoG.js:48
+start @ index-jcOVqKoG.js:48
+fetch @ index-jcOVqKoG.js:48
+nx @ index-jcOVqKoG.js:48
+onSubscribe @ index-jcOVqKoG.js:48
+subscribe @ index-jcOVqKoG.js:48
+(anonymous) @ index-jcOVqKoG.js:48
+D7 @ index-jcOVqKoG.js:38
+P2 @ index-jcOVqKoG.js:40
+Xm @ index-jcOVqKoG.js:40
+tse @ index-jcOVqKoG.js:40
+oh @ index-jcOVqKoG.js:40
+UD @ index-jcOVqKoG.js:40
+Md @ index-jcOVqKoG.js:38
+(anonymous) @ index-jcOVqKoG.js:40
+setTimeout
+s @ index-jcOVqKoG.js:48
+o @ index-jcOVqKoG.js:48
+batch @ index-jcOVqKoG.js:48
+hc @ index-jcOVqKoG.js:48
+setData @ index-jcOVqKoG.js:48
+onSuccess @ index-jcOVqKoG.js:48
+h @ index-jcOVqKoG.js:48
+Promise.then
+x @ index-jcOVqKoG.js:48
+start @ index-jcOVqKoG.js:48
+fetch @ index-jcOVqKoG.js:48
+nx @ index-jcOVqKoG.js:48
+onSubscribe @ index-jcOVqKoG.js:48
+subscribe @ index-jcOVqKoG.js:48
+(anonymous) @ index-jcOVqKoG.js:48
+D7 @ index-jcOVqKoG.js:38
+P2 @ index-jcOVqKoG.js:40
+Xm @ index-jcOVqKoG.js:40
+UD @ index-jcOVqKoG.js:40
+Md @ index-jcOVqKoG.js:38
+tse @ index-jcOVqKoG.js:40
+oh @ index-jcOVqKoG.js:40
+hU @ index-jcOVqKoG.js:40
+O @ index-jcOVqKoG.js:25
+P @ index-jcOVqKoG.js:25Understand this error
+share-modal.js:1 Uncaught TypeError: Cannot read properties of null (reading 'addEventListener')
+    at share-modal.js:1:135
