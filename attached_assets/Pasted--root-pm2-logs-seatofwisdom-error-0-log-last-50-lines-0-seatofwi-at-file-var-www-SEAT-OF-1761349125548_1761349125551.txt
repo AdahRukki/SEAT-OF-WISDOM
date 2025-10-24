@@ -1,0 +1,54 @@
+/root/.pm2/logs/seatofwisdom-error-0.log last 50 lines:
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | ❌ Multi-subject template download error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Error stack: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | ❌ Multi-subject template download error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Error stack: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | ❌ Multi-subject template download error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Error stack: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | ❌ Multi-subject template download error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Error stack: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3923:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Multi-subject template error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3918:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Multi-subject template error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3918:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Multi-subject template error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3918:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+0|seatofwi | Multi-subject template error: Error: Worksheet with name |Mathematics| already exists!
+0|seatofwi |     at Object.book_append_sheet (/var/www/SEAT-OF-WISDOM/node_modules/xlsx/xlsx.js:24227:45)
+0|seatofwi |     at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3918:20
+0|seatofwi |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+
+/root/.pm2/logs/seatofwisdom-out-0.log last 50 lines:
+0|seatofwi | }

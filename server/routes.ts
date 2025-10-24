@@ -1666,6 +1666,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create new Excel workbook
       const wb = XLSX.utils.book_new();
       
+      // Track used sheet names to ensure uniqueness
+      const usedSheetNames = new Set<string>();
+      
       // Create a sheet for each subject
       for (const subject of subjects) {
         // Prepare student data rows
@@ -1690,7 +1693,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ];
 
         // Excel sheet names must be <= 31 characters and unique
-        let sheetName = subject.name.substring(0, 31);
+        let baseName = subject.name.substring(0, 31);
+        let sheetName = baseName;
+        let counter = 1;
+        
+        // Ensure sheet name is unique
+        while (usedSheetNames.has(sheetName)) {
+          const suffix = ` (${counter})`;
+          sheetName = baseName.substring(0, 31 - suffix.length) + suffix;
+          counter++;
+        }
+        usedSheetNames.add(sheetName);
         
         // Add sheet to workbook
         XLSX.utils.book_append_sheet(wb, worksheet, sheetName);
