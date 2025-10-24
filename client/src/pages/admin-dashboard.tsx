@@ -432,8 +432,9 @@ export default function AdminDashboard() {
 
   // Multi-step form validation
   const isStep1Valid = () => {
-    const { firstName, lastName, studentId, classId } = studentCreationForm;
-    return firstName && lastName && studentId && classId;
+    const { firstName, lastName, classId } = studentCreationForm;
+    // Don't check studentId since it's auto-generated
+    return firstName && lastName && classId && !studentFormErrors.firstName && !studentFormErrors.lastName;
   };
 
   const isStep2Valid = () => {
@@ -1887,12 +1888,40 @@ export default function AdminDashboard() {
     }
   };
 
-  // Auto-generate student ID in SOWA format
+  // Auto-generate student ID in SOWA/X001 format where X is school number
   const generateStudentId = async () => {
     try {
-      // Get count of existing students to determine next ID
-      const nextNumber = (allStudents.length + 1).toString().padStart(4, '0');
-      const newId = `SOWA/${nextNumber}`;
+      // Get the selected class to determine school
+      const selectedClass = classes.find(c => c.id === (studentCreationForm.classId || selectedClassForStudents));
+      
+      if (!selectedClass) {
+        // No class selected yet, use generic format
+        const nextNumber = (allStudents.length + 1).toString().padStart(3, '0');
+        const newId = `SOWA/X${nextNumber}`;
+        setStudentCreationForm(prev => ({ ...prev, studentId: newId }));
+        return;
+      }
+      
+      // Find the school for this class
+      const school = schools.find(s => s.id === selectedClass.schoolId);
+      
+      // Extract school number from school name (e.g., "School 1 Ikpoto" -> "1")
+      let schoolNumber = '1';
+      if (school?.name) {
+        const match = school.name.match(/School (\d+)/);
+        if (match) {
+          schoolNumber = match[1];
+        }
+      }
+      
+      // Get count of existing students in this school to determine next ID
+      const studentsInSchool = allStudents.filter(s => {
+        const studentClass = classes.find(c => c.id === s.classId);
+        return studentClass?.schoolId === selectedClass.schoolId;
+      });
+      
+      const nextNumber = (studentsInSchool.length + 1).toString().padStart(3, '0');
+      const newId = `SOWA/${schoolNumber}${nextNumber}`;
       setStudentCreationForm(prev => ({ ...prev, studentId: newId }));
     } catch (error) {
       console.error('Error generating student ID:', error);
@@ -1902,12 +1931,12 @@ export default function AdminDashboard() {
     }
   };
 
-  // Auto-generate student ID when dialog opens
+  // Auto-generate student ID when dialog opens or class changes
   useEffect(() => {
-    if (isStudentDialogOpen && !studentCreationForm.studentId) {
+    if (isStudentDialogOpen && (studentCreationForm.classId || selectedClassForStudents)) {
       generateStudentId();
     }
-  }, [isStudentDialogOpen, allStudents.length, studentCreationForm.studentId]);
+  }, [isStudentDialogOpen, studentCreationForm.classId, selectedClassForStudents, allStudents.length]);
 
   const handleScoreChange = (studentId: string, field: string, value: string) => {
     // Validate score limits based on field type
