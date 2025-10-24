@@ -39,7 +39,7 @@ async function createAdmin() {
     // Create admin user
     await db.insert(users).values({
       email: 'adahrukki@gmail.com',
-      passwordHash: hashedPassword,
+      password: hashedPassword,
       firstName: 'Admin',
       lastName: 'User',
       role: 'admin',
