@@ -430,34 +430,29 @@ export default function AdminDashboard() {
     }
   };
 
-  // Multi-step form validation
+  // Multi-step form validation (3 steps now)
   const isStep1Valid = () => {
     const { firstName, lastName, classId } = studentCreationForm;
-    // Don't check studentId since it's auto-generated
-    return firstName && lastName && classId && !studentFormErrors.firstName && !studentFormErrors.lastName;
+    const hasErrors = studentFormErrors.firstName || studentFormErrors.lastName || studentFormErrors.middleName;
+    return firstName && lastName && classId && !hasErrors;
   };
 
   const isStep2Valid = () => {
-    const { gender } = studentCreationForm;
-    return gender; // Gender is required
+    const { gender, email, password, parentWhatsApp } = studentCreationForm;
+    return gender && email && password && parentWhatsApp;
   };
 
   const isStep3Valid = () => {
-    const { email, password, parentWhatsApp } = studentCreationForm;
-    return email && password && parentWhatsApp;
-  };
-
-  const isStep4Valid = () => {
-    return true; // Step 4 is optional fields only
+    return true; // Step 3 is all optional fields
   };
 
   const isStudentFormValid = () => {
-    return isStep1Valid() && isStep2Valid() && isStep3Valid() && isStep4Valid();
+    return isStep1Valid() && isStep2Valid();
   };
 
-  // Multi-step navigation
+  // Multi-step navigation (3 steps now)
   const nextStep = () => {
-    if (currentStep < 4) {
+    if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -5342,11 +5337,11 @@ export default function AdminDashboard() {
         }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto student-dialog-content">
             <DialogHeader>
-              <DialogTitle className="text-center">Create New Student - Step {currentStep} of 4</DialogTitle>
+              <DialogTitle className="text-center">Create New Student - Step {currentStep} of 3</DialogTitle>
               
               {/* Progress Bar */}
               <div className="flex items-center justify-center space-x-2 mt-4">
-                {[1, 2, 3, 4].map((step) => (
+                {[1, 2, 3].map((step) => (
                   <div key={step} className="flex items-center">
                     <div 
                       className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
@@ -5359,7 +5354,7 @@ export default function AdminDashboard() {
                     >
                       {step < currentStep ? '✓' : step}
                     </div>
-                    {step < 4 && (
+                    {step < 3 && (
                       <div className={`w-12 h-1 ${
                         step < currentStep ? 'bg-green-600' : 'bg-gray-200'
                       }`} />
@@ -5458,10 +5453,10 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Step 2: Personal Details */}
+              {/* Step 2: Personal & Contact Details */}
               {currentStep === 2 && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-center text-green-600">Personal Details</h3>
+                  <h3 className="text-lg font-semibold text-center text-green-600">Personal & Contact Information</h3>
                   <div>
                     <Label htmlFor="student-gender">Gender *</Label>
                     <Select 
@@ -5478,24 +5473,15 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="student-dob">Date of Birth (Optional)</Label>
-                      <Input
-                        id="student-dob"
-                        type="date"
-                        value={studentCreationForm.dateOfBirth}
-                        onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
-                      />
-                    </div>
+                  <div>
+                    <Label htmlFor="student-dob">Date of Birth (Optional)</Label>
+                    <Input
+                      id="student-dob"
+                      type="date"
+                      value={studentCreationForm.dateOfBirth}
+                      onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
+                    />
                   </div>
-                </div>
-              )}
-
-              {/* Step 3: Contact Information */}
-              {currentStep === 3 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-center text-orange-600">Contact Information</h3>
                   <div>
                     <Label htmlFor="student-email">Email *</Label>
                     <Input
@@ -5549,10 +5535,11 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Step 4: Additional Information */}
-              {currentStep === 4 && (
+              {/* Step 3: Additional Information (All Optional) */}
+              {currentStep === 3 && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-center text-purple-600">Additional Information</h3>
+                  <h3 className="text-lg font-semibold text-center text-orange-600">Additional Information (Optional)</h3>
+                  <p className="text-sm text-gray-600 text-center">These fields are optional. You can skip this step or fill them in later.</p>
                   <div>
                     <Label htmlFor="student-address">Address (Optional)</Label>
                     <Input
@@ -5605,13 +5592,12 @@ export default function AdminDashboard() {
                   {currentStep === 1 ? 'Cancel' : 'Previous'}
                 </Button>
                 
-                {currentStep < 4 ? (
+                {currentStep < 3 ? (
                   <Button 
                     onClick={nextStep}
                     disabled={
                       (currentStep === 1 && !isStep1Valid()) ||
-                      (currentStep === 2 && !isStep2Valid()) ||
-                      (currentStep === 3 && !isStep3Valid())
+                      (currentStep === 2 && !isStep2Valid())
                     }
                   >
                     Next
