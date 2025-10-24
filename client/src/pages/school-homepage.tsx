@@ -22,7 +22,7 @@ import sportsImage3 from "@assets/stock_images/students_playing_spo_dc5ee1e8.jpg
 import sportsImage4 from "@assets/stock_images/students_playing_spo_89a50a23.jpg";
 import libraryImage1 from "@assets/stock_images/school_library_labor_57146f98.jpg";
 import libraryImage2 from "@assets/stock_images/school_library_labor_4709a4fa.jpg";
-import labImage1 from "@assets/stock_images/school_library_labor_50c8c89f.jpg";
+import labImage1 from "@assets/attached_assets/stock_images/school_library_labor_50c8c89f.jpg";
 import labImage2 from "@assets/stock_images/school_library_labor_35422e2d.jpg";
 import academyLogo from "@assets/academy-logo.png";
 
