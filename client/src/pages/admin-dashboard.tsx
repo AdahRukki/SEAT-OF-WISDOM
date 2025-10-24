@@ -5398,12 +5398,12 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor="student-middlename">Middle Name (Optional)</Label>
+                    <Label htmlFor="student-middlename" className="text-gray-600">Middle Name <span className="text-xs text-gray-400">(Optional)</span></Label>
                     <Input
                       id="student-middlename"
                       value={studentCreationForm.middleName}
                       onChange={(e) => handleStudentFormChange('middleName', e.target.value)}
-                      placeholder="Smith"
+                      placeholder="Optional - Leave blank if none"
                       className={studentFormErrors.middleName ? "border-red-500" : ""}
                     />
                     {studentFormErrors.middleName && (
@@ -5475,12 +5475,77 @@ export default function AdminDashboard() {
                   </div>
                   <div>
                     <Label htmlFor="student-dob">Date of Birth (Optional)</Label>
-                    <Input
-                      id="student-dob"
-                      type="date"
-                      value={studentCreationForm.dateOfBirth}
-                      onChange={(e) => handleStudentFormChange('dateOfBirth', e.target.value)}
-                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <Select 
+                        value={studentCreationForm.dateOfBirth ? new Date(studentCreationForm.dateOfBirth).getDate().toString() : ""} 
+                        onValueChange={(day) => {
+                          const current = studentCreationForm.dateOfBirth ? new Date(studentCreationForm.dateOfBirth) : new Date(2010, 0, 1);
+                          const year = current.getFullYear();
+                          const month = current.getMonth() + 1;
+                          const newDate = `${year}-${month.toString().padStart(2, '0')}-${day.padStart(2, '0')}`;
+                          handleStudentFormChange('dateOfBirth', newDate);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Day" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {Array.from({length: 31}, (_, i) => i + 1).map(day => (
+                            <SelectItem key={day} value={day.toString()}>{day}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select 
+                        value={studentCreationForm.dateOfBirth ? (new Date(studentCreationForm.dateOfBirth).getMonth() + 1).toString() : ""} 
+                        onValueChange={(month) => {
+                          const current = studentCreationForm.dateOfBirth ? new Date(studentCreationForm.dateOfBirth) : new Date(2010, 0, 1);
+                          const year = current.getFullYear();
+                          const day = current.getDate();
+                          const newDate = `${year}-${month.padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+                          handleStudentFormChange('dateOfBirth', newDate);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">January</SelectItem>
+                          <SelectItem value="2">February</SelectItem>
+                          <SelectItem value="3">March</SelectItem>
+                          <SelectItem value="4">April</SelectItem>
+                          <SelectItem value="5">May</SelectItem>
+                          <SelectItem value="6">June</SelectItem>
+                          <SelectItem value="7">July</SelectItem>
+                          <SelectItem value="8">August</SelectItem>
+                          <SelectItem value="9">September</SelectItem>
+                          <SelectItem value="10">October</SelectItem>
+                          <SelectItem value="11">November</SelectItem>
+                          <SelectItem value="12">December</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select 
+                        value={studentCreationForm.dateOfBirth ? new Date(studentCreationForm.dateOfBirth).getFullYear().toString() : ""} 
+                        onValueChange={(year) => {
+                          const current = studentCreationForm.dateOfBirth ? new Date(studentCreationForm.dateOfBirth) : new Date(2010, 0, 1);
+                          const month = current.getMonth() + 1;
+                          const day = current.getDate();
+                          const newDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+                          handleStudentFormChange('dateOfBirth', newDate);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Year" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {Array.from({length: 30}, (_, i) => new Date().getFullYear() - 3 - i).map(year => (
+                            <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Select day, month, and year
+                    </p>
                   </div>
                   <div>
                     <Label htmlFor="student-email">Email *</Label>
