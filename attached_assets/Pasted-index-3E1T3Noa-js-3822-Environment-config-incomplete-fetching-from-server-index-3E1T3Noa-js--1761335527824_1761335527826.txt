@@ -1,0 +1,314 @@
+index-3E1T3Noa.js:3822 🔍 Environment config incomplete, fetching from server...
+index-3E1T3Noa.js:3822 🔄 Firebase offline-first sync initialized
+index-3E1T3Noa.js:3822 📡 Loaded Firebase config from server
+index-3E1T3Noa.js:637  [2025-10-24T19:31:32.356Z]  @firebase/firestore: Firestore (12.0.0): enableIndexedDbPersistence() will be deprecated in the future, you can use `FirestoreSettings.cache` instead.
+Pce @ index-3E1T3Noa.js:637
+warn @ index-3E1T3Noa.js:637
+l0 @ index-3E1T3Noa.js:869
+sme @ index-3E1T3Noa.js:2637
+O0e @ index-3E1T3Noa.js:3822
+await in O0e
+(anonymous) @ index-3E1T3Noa.js:3822
+index-3E1T3Noa.js:3822 🔄 Firebase offline-first sync initialized
+[NEW] Explain Console errors by using Copilot in Edge: click
+         
+         to explain an error. 
+        Learn more
+        Don't show again
+index-3E1T3Noa.js:3822 🔥 Firebase initialized with project: sowa-test-fd7c0
+index-3E1T3Noa.js:3822 🌐 Environment: production
+index-3E1T3Noa.js:3822 🔗 Domain: seatofwisdomacademy.com
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506   GET https://seatofwisdomacademy.com/api/assessments/template-multi/SCH1-SS3 500 (Internal Server Error)
+Ste @ index-3E1T3Noa.js:4506
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 📡 Response status: 500
+index-3E1T3Noa.js:4506  ❌ Error response: {error: 'Failed to generate template'}
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506  Multi-subject template download error: Error: Failed to generate template
+    at Ste (index-3E1T3Noa.js:4506:33095)
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506   GET https://seatofwisdomacademy.com/api/assessments/template-multi/SCH1-SS3 500 (Internal Server Error)
+Ste @ index-3E1T3Noa.js:4506
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 📡 Response status: 500
+index-3E1T3Noa.js:4506  ❌ Error response: {error: 'Failed to generate template'}
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506  Multi-subject template download error: Error: Failed to generate template
+    at Ste (index-3E1T3Noa.js:4506:33095)
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:3822 🔄 Processing sync queue: 12 operations
+index-3E1T3Noa.js:3822  Uncaught (in promise) FirebaseError: Expected type 'Hc', but it was: a custom bound Hc object
+setInterval
+startPeriodicSync @ index-3E1T3Noa.js:3822
+uge @ index-3E1T3Noa.js:3822
+(anonymous) @ index-3E1T3Noa.js:3822
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506   GET https://seatofwisdomacademy.com/api/assessments/template-multi/SCH1-SS3 500 (Internal Server Error)
+Ste @ index-3E1T3Noa.js:4506
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 📡 Response status: 500
+index-3E1T3Noa.js:4506  ❌ Error response: {error: 'Failed to generate template'}
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506  Multi-subject template download error: Error: Failed to generate template
+    at Ste (index-3E1T3Noa.js:4506:33095)
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506 📡 Response status: 200
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506   GET https://seatofwisdomacademy.com/api/assessments/template-multi/SCH1-SS3 500 (Internal Server Error)
+Ste @ index-3E1T3Noa.js:4506
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 📡 Response status: 500
+index-3E1T3Noa.js:4506  ❌ Error response: {error: 'Failed to generate template'}
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506  Multi-subject template download error: Error: Failed to generate template
+    at Ste (index-3E1T3Noa.js:4506:33095)
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506   GET https://seatofwisdomacademy.com/api/assessments/template-multi/SCH1-SS3 500 (Internal Server Error)
+Ste @ index-3E1T3Noa.js:4506
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 📡 Response status: 500
+index-3E1T3Noa.js:4506  ❌ Error response: {error: 'Failed to generate template'}error: "Failed to generate template"[[Prototype]]: Objectconstructor: ƒ Object()assign: ƒ assign()create: ƒ create()defineProperties: ƒ defineProperties()defineProperty: ƒ defineProperty()entries: ƒ entries()freeze: ƒ freeze()fromEntries: ƒ fromEntries()getOwnPropertyDescriptor: ƒ getOwnPropertyDescriptor()getOwnPropertyDescriptors: ƒ getOwnPropertyDescriptors()getOwnPropertyNames: ƒ getOwnPropertyNames()getOwnPropertySymbols: ƒ getOwnPropertySymbols()getPrototypeOf: ƒ getPrototypeOf()groupBy: ƒ groupBy()hasOwn: ƒ hasOwn()is: ƒ is()isExtensible: ƒ isExtensible()isFrozen: ƒ isFrozen()isSealed: ƒ isSealed()keys: ƒ keys()length: 1name: "Object"preventExtensions: ƒ preventExtensions()prototype: {__defineGetter__: ƒ, __defineSetter__: ƒ, hasOwnProperty: ƒ, __lookupGetter__: ƒ, __lookupSetter__: ƒ, …}seal: ƒ seal()setPrototypeOf: ƒ setPrototypeOf()values: ƒ values()arguments: (...)caller: (...)[[Prototype]]: ƒ ()[[Scopes]]: Scopes[0]hasOwnProperty: ƒ hasOwnProperty()isPrototypeOf: ƒ isPrototypeOf()propertyIsEnumerable: ƒ propertyIsEnumerable()toLocaleString: ƒ toLocaleString()toString: ƒ toString()valueOf: ƒ valueOf()__defineGetter__: ƒ __defineGetter__()__defineSetter__: ƒ __defineSetter__()__lookupGetter__: ƒ __lookupGetter__()__lookupSetter__: ƒ __lookupSetter__()__proto__: (...)get __proto__: ƒ __proto__()length: 0name: "get __proto__"arguments: (...)caller: (...)[[Prototype]]: ƒ ()[[Scopes]]: Scopes[0]set __proto__: ƒ __proto__()
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506  Multi-subject template download error: Error: Failed to generate template
+    at Ste (index-3E1T3Noa.js:4506:33095)
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506 📡 Response status: 200
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506 📡 Response status: 200
+index-3E1T3Noa.js:4506 🔑 Auth token exists: true
+index-3E1T3Noa.js:4506   GET https://seatofwisdomacademy.com/api/assessments/template-multi/SCH1-SS3 500 (Internal Server Error)
+Ste @ index-3E1T3Noa.js:4506
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506 📡 Response status: 500
+index-3E1T3Noa.js:4506  ❌ Error response: {error: 'Failed to generate template'}
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
+index-3E1T3Noa.js:4506  Multi-subject template download error: Error: Failed to generate template
+    at Ste (index-3E1T3Noa.js:4506:33095)
+Ste @ index-3E1T3Noa.js:4506
+await in Ste
+(anonymous) @ index-3E1T3Noa.js:48
+lre @ index-3E1T3Noa.js:37
+ure @ index-3E1T3Noa.js:37
+dre @ index-3E1T3Noa.js:37
+rD @ index-3E1T3Noa.js:37
+u7 @ index-3E1T3Noa.js:37
+(anonymous) @ index-3E1T3Noa.js:37
+Jk @ index-3E1T3Noa.js:40
+DV @ index-3E1T3Noa.js:37
+IE @ index-3E1T3Noa.js:37
+Tk @ index-3E1T3Noa.js:37
+jre @ index-3E1T3Noa.js:37
