@@ -259,6 +259,38 @@ export default function UserManagement() {
     setIsEditUserDialogOpen(true);
   };
 
+  // Access control - only main admins can access user management
+  if (user?.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-600">
+              <Users className="w-6 h-6" />
+              Access Denied
+            </CardTitle>
+            <CardDescription>
+              User management is only available to main administrators.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              You do not have permission to access this page. Please contact a main administrator if you need assistance.
+            </p>
+            <Button
+              onClick={() => window.history.back()}
+              className="w-full"
+              data-testid="button-back"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Go Back
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

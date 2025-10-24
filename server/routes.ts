@@ -376,8 +376,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin routes - User management
-  app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+  // Admin routes - User management (main admin only)
+  app.post('/api/admin/users', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       const user = await storage.createUser(userData);
@@ -609,8 +609,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Users routes
-  app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+  // Users routes (main admin only - sub-admins cannot access user management)
+  app.get('/api/admin/users', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const adminOnly = req.query.adminOnly === 'true';
       const users = await storage.getAllUsers(adminOnly);
@@ -621,8 +621,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update user (admin only)
-  app.put('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
+  // Update user (main admin only)
+  app.put('/api/admin/users/:id', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { firstName, lastName, email, schoolId, isActive, password } = req.body;
@@ -661,8 +661,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // PATCH user (admin only) - for partial updates like password changes
-  app.patch('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
+  // PATCH user (main admin only) - for partial updates like password changes
+  app.patch('/api/admin/users/:id', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { password, ...otherData } = req.body;
@@ -690,8 +690,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete user (admin only)
-  app.delete('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
+  // Delete user (main admin only)
+  app.delete('/api/admin/users/:id', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -713,7 +713,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/users', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
       const newUser = await storage.createUser(userData);
@@ -724,8 +724,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create sub-admin (with school assignment)
-  app.post('/api/admin/create-sub-admin', authenticate, requireAdmin, async (req, res) => {
+  // Create sub-admin (with school assignment) - main admin only
+  app.post('/api/admin/create-sub-admin', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const { firstName, lastName, email, password, schoolId } = req.body;
       
@@ -757,8 +757,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create main admin (no school assignment)
-  app.post('/api/admin/create-main-admin', authenticate, requireAdmin, async (req, res) => {
+  // Create main admin (no school assignment) - main admin only
+  app.post('/api/admin/create-main-admin', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const { firstName, lastName, email, password } = req.body;
       
@@ -793,7 +793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // === PASSWORD MANAGEMENT ROUTES ===
   
   // Change user password (main admin only)
-  app.patch('/api/admin/users/:id/password', authenticate, requireAdmin, async (req, res) => {
+  app.patch('/api/admin/users/:id/password', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { newPassword } = req.body;
