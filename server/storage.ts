@@ -68,7 +68,7 @@ import {
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql, inArray, ne } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray, ne, isNotNull } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -130,6 +130,7 @@ export interface IStorage {
   // News operations
   createNews(newsData: InsertNews): Promise<News>;
   getAllNews(): Promise<(News & { author: User })[]>;
+  getAllPublishedNews(): Promise<(News & { author: User })[]>;
   deleteNews(newsId: string): Promise<void>;
   
   // Notification operations
@@ -1932,6 +1933,43 @@ export class DatabaseStorage implements IStorage {
       })
       .from(news)
       .leftJoin(users, eq(news.authorId, users.id))
+      .orderBy(desc(news.publishedAt));
+
+    return result.map(row => ({
+      ...row,
+      author: row.author as User
+    }));
+  }
+
+  async getAllPublishedNews(): Promise<(News & { author: User })[]> {
+    const result = await db
+      .select({
+        id: news.id,
+        title: news.title,
+        content: news.content,
+        imageUrl: news.imageUrl,
+        tag: news.tag,
+        publishedAt: news.publishedAt,
+        authorId: news.authorId,
+        createdAt: news.createdAt,
+        updatedAt: news.updatedAt,
+        author: {
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          role: users.role,
+          schoolId: users.schoolId,
+          password: users.password,
+          isActive: users.isActive,
+          passwordUpdatedAt: users.passwordUpdatedAt,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        }
+      })
+      .from(news)
+      .leftJoin(users, eq(news.authorId, users.id))
+      .where(isNotNull(news.publishedAt))
       .orderBy(desc(news.publishedAt));
 
     return result.map(row => ({

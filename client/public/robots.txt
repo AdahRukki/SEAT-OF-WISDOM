@@ -1,0 +1,21 @@
+# Seat of Wisdom Academy - Robots.txt
+# Allow search engines to crawl public pages only
+
+User-agent: *
+
+# Allow public pages
+Allow: /
+Allow: /about
+Allow: /programs
+Allow: /admissions
+Allow: /contact
+Allow: /news
+Allow: /login
+
+# Block private portal areas
+Disallow: /portal/
+Disallow: /student-portal/
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://seatofwisdomacademy.com/sitemap.xml

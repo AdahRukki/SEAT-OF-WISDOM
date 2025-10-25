@@ -173,6 +173,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Sitemap endpoint (public - for Google Search Console)
+  app.get("/sitemap.xml", async (req, res) => {
+    try {
+      const baseUrl = process.env.NODE_ENV === 'production' 
+        ? 'https://seatofwisdomacademy.com'
+        : `https://${req.get('host')}`;
+
+      // Static public pages
+      const staticPages = [
+        { url: '/', changefreq: 'daily', priority: '1.0' },
+        { url: '/about', changefreq: 'monthly', priority: '0.8' },
+        { url: '/programs', changefreq: 'monthly', priority: '0.8' },
+        { url: '/admissions', changefreq: 'monthly', priority: '0.8' },
+        { url: '/contact', changefreq: 'monthly', priority: '0.7' },
+        { url: '/news', changefreq: 'daily', priority: '0.9' },
+        { url: '/login', changefreq: 'yearly', priority: '0.3' },
+      ];
+
+      // Fetch all published news articles
+      const newsArticles = await storage.getAllPublishedNews();
+      
+      // Build sitemap XML
+      let sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n';
+      sitemap += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n';
+
+      // Add static pages
+      for (const page of staticPages) {
+        sitemap += '  <url>\n';
+        sitemap += `    <loc>${baseUrl}${page.url}</loc>\n`;
+        sitemap += `    <changefreq>${page.changefreq}</changefreq>\n`;
+        sitemap += `    <priority>${page.priority}</priority>\n`;
+        sitemap += '  </url>\n';
+      }
+
+      // Add news articles with images
+      for (const article of newsArticles) {
+        sitemap += '  <url>\n';
+        sitemap += `    <loc>${baseUrl}/news/${article.id}</loc>\n`;
+        sitemap += `    <lastmod>${new Date(article.publishedAt || article.createdAt).toISOString()}</lastmod>\n`;
+        sitemap += '    <changefreq>weekly</changefreq>\n';
+        sitemap += '    <priority>0.7</priority>\n';
+        
+        // Add image if available
+        if (article.imageUrl) {
+          sitemap += '    <image:image>\n';
+          sitemap += `      <image:loc>${baseUrl}/public-objects/${article.imageUrl}</image:loc>\n`;
+          sitemap += `      <image:title>${article.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</image:title>\n`;
+          sitemap += '    </image:image>\n';
+        }
+        
+        sitemap += '  </url>\n';
+      }
+
+      sitemap += '</urlset>';
+
+      res.header('Content-Type', 'application/xml');
+      res.send(sitemap);
+    } catch (error) {
+      console.error("Error generating sitemap:", error);
+      res.status(500).send('Error generating sitemap');
+    }
+  });
+
   // Object storage routes
   // Endpoint for serving public assets
   app.get("/public-objects/:filePath(*)", async (req, res) => {

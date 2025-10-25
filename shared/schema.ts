@@ -486,9 +486,9 @@ export const insertGeneratedReportCardSchema = createInsertSchema(generatedRepor
 // Additional validation schemas
 export const loginSchema = z.object({
   email: z.string().min(1, "Email or Student ID is required").refine((val) => {
-    // Accept either email format or SOWA/#### student ID format
+    // Accept either email format or SOWA/#### student ID format (4+ digits)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const studentIdRegex = /^SOWA\/\d{4}$/;
+    const studentIdRegex = /^SOWA\/\d{4,}$/;
     return emailRegex.test(val) || studentIdRegex.test(val);
   }, {
     message: "Please enter a valid email address or student ID (e.g., SOWA/1001)",
