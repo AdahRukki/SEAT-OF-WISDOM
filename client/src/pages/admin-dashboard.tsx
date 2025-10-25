@@ -3528,7 +3528,7 @@ export default function AdminDashboard() {
                     >
                       <Upload className="h-4 w-4 mr-2" />
                       <span className="hidden sm:inline">Upload Multi-Subject Excel</span>
-                      <span className="sm:hidden">Upload Excel</span>
+                      <span className="sm:hidden">Upload Multi-Subject</span>
                     </label>
                   </div>
                   
