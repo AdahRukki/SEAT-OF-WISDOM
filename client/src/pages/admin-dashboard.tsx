@@ -3505,31 +3505,31 @@ export default function AdminDashboard() {
                     type="file"
                     id="excel-upload"
                     accept=".xlsx,.xls,.csv"
-                    style={{ display: 'none' }}
+                    className="hidden"
                     onChange={handleExcelUpload}
                   />
                   
                   {/* Upload Button - Full Width on Mobile */}
                   <div className="mb-3">
-                    <Button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const input = document.getElementById('excel-upload') as HTMLInputElement;
-                        if (input) {
-                          input.click();
-                        }
-                      }}
-                      disabled={!scoresClassId}
-                      variant="default"
-                      className="w-full h-11"
+                    <label 
+                      htmlFor="excel-upload" 
+                      className={`inline-flex items-center justify-center rounded-md text-sm font-medium h-11 px-4 py-2 w-full transition-colors ${
+                        !scoresClassId 
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer active:scale-95'
+                      }`}
                       data-testid="button-upload-excel"
                       title="Upload scores from Excel file - works for single or multiple subjects"
+                      onClick={(e) => {
+                        if (!scoresClassId) {
+                          e.preventDefault();
+                        }
+                      }}
                     >
                       <Upload className="h-4 w-4 mr-2" />
                       <span className="hidden sm:inline">Upload Multi-Subject Excel</span>
                       <span className="sm:hidden">Upload Excel</span>
-                    </Button>
+                    </label>
                   </div>
                   
                   {/* Download Buttons - Stack on Mobile, Side by Side on Desktop */}
