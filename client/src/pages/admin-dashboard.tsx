@@ -3429,7 +3429,8 @@ export default function AdminDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                {/* Filters - Responsive Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   <div>
                     <Label>Select Term</Label>
                     <Select value={scoresTerm} onValueChange={setScoresTerm}>
@@ -3496,78 +3497,86 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <input
-                      type="file"
-                      id="excel-upload"
-                      accept=".xlsx,.xls,.csv"
-                      style={{ display: 'none' }}
-                      onChange={handleExcelUpload}
-                    />
-                    <div className="flex gap-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={() => document.getElementById('excel-upload')?.click()}
-                            disabled={!scoresClassId}
-                            variant="default"
-                            className="flex-1"
-                            data-testid="button-upload-excel"
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            Upload Multi-Subject Excel
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Upload scores from Excel file - works for single or multiple subjects</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={handleDownloadSingleSubjectTemplate}
-                            disabled={!scoresClassId || !scoresSubjectId}
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            data-testid="button-download-single-subject"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            Single Subject
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Download template for selected subject only</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={handleDownloadMultiSubjectTemplate}
-                            disabled={!scoresClassId}
-                            variant="default"
-                            size="sm"
-                            className="flex-1"
-                            data-testid="button-download-all-subjects"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            All Subjects
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Download Excel with tabs for all subjects in class</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
+                </div>
+
+                {/* Action Buttons - Mobile Responsive */}
+                <div className="mb-6">
+                  <input
+                    type="file"
+                    id="excel-upload"
+                    accept=".xlsx,.xls,.csv"
+                    style={{ display: 'none' }}
+                    onChange={handleExcelUpload}
+                  />
+                  
+                  {/* Upload Button - Full Width on Mobile */}
+                  <div className="mb-3">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={() => document.getElementById('excel-upload')?.click()}
+                          disabled={!scoresClassId}
+                          variant="default"
+                          className="w-full h-11"
+                          data-testid="button-upload-excel"
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          <span className="hidden sm:inline">Upload Multi-Subject Excel</span>
+                          <span className="sm:hidden">Upload Excel</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Upload scores from Excel file - works for single or multiple subjects</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  
+                  {/* Download Buttons - Stack on Mobile, Side by Side on Desktop */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={handleDownloadSingleSubjectTemplate}
+                          disabled={!scoresClassId || !scoresSubjectId}
+                          variant="outline"
+                          className="w-full h-11"
+                          data-testid="button-download-single-subject"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          <span className="hidden sm:inline">Download Single Subject</span>
+                          <span className="sm:hidden">Single Subject</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Download template for selected subject only</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={handleDownloadMultiSubjectTemplate}
+                          disabled={!scoresClassId}
+                          variant="default"
+                          className="w-full h-11"
+                          data-testid="button-download-all-subjects"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          <span className="hidden sm:inline">Download All Subjects</span>
+                          <span className="sm:hidden">All Subjects</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Download Excel with tabs for all subjects in class</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
 
-                {/* Publication Status and Control */}
+                {/* Publication Status and Control - Mobile Responsive */}
                 {scoresClassId && scoresTerm && scoresSession && (
                   <div className="mb-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <div className="flex flex-col">
                           <span className="text-sm font-medium text-gray-900 dark:text-white">
@@ -3585,7 +3594,7 @@ export default function AdminDashboard() {
                       {scoresPublicationStatus?.published ? (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm" data-testid="button-unpublish-scores">
+                            <Button variant="destructive" size="sm" className="w-full sm:w-auto" data-testid="button-unpublish-scores">
                               <XCircle className="h-4 w-4 mr-2" />
                               Unpublish Scores
                             </Button>
@@ -3609,7 +3618,7 @@ export default function AdminDashboard() {
                       ) : (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="default" size="sm" data-testid="button-publish-scores">
+                            <Button variant="default" size="sm" className="w-full sm:w-auto" data-testid="button-publish-scores">
                               <CheckCircle className="h-4 w-4 mr-2" />
                               Publish Scores
                             </Button>
