@@ -209,9 +209,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Add news articles with images
       for (const article of newsArticles) {
+        // Since we filter for published news only, publishedAt is guaranteed to be non-null
+        const lastModDate = article.publishedAt ? new Date(article.publishedAt) : new Date(article.createdAt);
+        
         sitemap += '  <url>\n';
         sitemap += `    <loc>${baseUrl}/news/${article.id}</loc>\n`;
-        sitemap += `    <lastmod>${new Date(article.publishedAt || article.createdAt).toISOString()}</lastmod>\n`;
+        sitemap += `    <lastmod>${lastModDate.toISOString()}</lastmod>\n`;
         sitemap += '    <changefreq>weekly</changefreq>\n';
         sitemap += '    <priority>0.7</priority>\n';
         
