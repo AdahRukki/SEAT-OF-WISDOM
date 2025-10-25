@@ -122,6 +122,7 @@ import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { NewsManagement } from "@/components/news-management";
 import { NotificationsManagement } from "@/components/notifications-management";
+import { usePwaInstall } from "@/hooks/use-pwa-install";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
   Class, 
@@ -149,6 +150,7 @@ export default function AdminDashboard() {
   const { logoUrl: currentLogoUrl, isLoading: logoLoading } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { canInstall, installApp } = usePwaInstall();
   
   // Firebase sync status
   const [syncStatus, setSyncStatus] = useState(firebaseSync.getSyncStatus());
@@ -2976,6 +2978,35 @@ export default function AdminDashboard() {
                 <span className="hidden md:inline">{user.firstName} {user.lastName}</span>
                 <span className="md:hidden text-xs">{user.firstName}</span>
               </a>
+              
+              {/* PWA Install Button */}
+              {canInstall && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      onClick={async () => {
+                        const success = await installApp();
+                        if (success) {
+                          toast({
+                            title: "App Installed!",
+                            description: "You can now access SOWA Academy from your desktop or home screen."
+                          });
+                        }
+                      }}
+                      className="px-2 sm:px-4"
+                      data-testid="button-install-app"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span className="hidden sm:inline sm:ml-2">Install App</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Install as desktop or mobile app</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               
               {/* Logout Button - Icon only on mobile */}
               <Tooltip>
