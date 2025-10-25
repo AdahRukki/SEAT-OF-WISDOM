@@ -3497,44 +3497,29 @@ export default function AdminDashboard() {
                     </Select>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          onClick={handleSaveAllScores} 
-                          disabled={!scoresClassId || !scoresSubjectId || Object.keys(scoreInputs).length === 0}
-                          className="w-full"
-                        >
-                          <Save className="h-4 w-4 mr-2" />
-                          Save All Scores
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Save all entered scores for the selected class and subject</p>
-                      </TooltipContent>
-                    </Tooltip>
+                    <input
+                      type="file"
+                      id="excel-upload"
+                      accept=".xlsx,.xls,.csv"
+                      style={{ display: 'none' }}
+                      onChange={handleExcelUpload}
+                    />
                     <div className="flex gap-1">
-                      <input
-                        type="file"
-                        id="excel-upload"
-                        accept=".xlsx,.xls,.csv"
-                        style={{ display: 'none' }}
-                        onChange={handleExcelUpload}
-                      />
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             onClick={() => document.getElementById('excel-upload')?.click()}
-                            disabled={!scoresClassId || !scoresSubjectId}
-                            variant="outline"
-                            size="sm"
+                            disabled={!scoresClassId}
+                            variant="default"
                             className="flex-1"
+                            data-testid="button-upload-excel"
                           >
-                            <Upload className="h-4 w-4 mr-1" />
-                            Upload
+                            <Upload className="h-4 w-4 mr-2" />
+                            Upload Multi-Subject Excel
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Upload scores from Excel file (XLSX, XLS, CSV)</p>
+                          <p>Upload scores from Excel file - works for single or multiple subjects</p>
                         </TooltipContent>
                       </Tooltip>
                       
