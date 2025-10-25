@@ -3487,48 +3487,43 @@ export default function AdminDashboard() {
                         </TooltipContent>
                       </Tooltip>
                       
-                      <DropdownMenu>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                disabled={!scoresClassId}
-                                variant="outline"
-                                size="sm"
-                                className="flex-1"
-                              >
-                                <Download className="h-4 w-4 mr-1" />
-                                Template
-                              </Button>
-                            </DropdownMenuTrigger>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Download Excel template options</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
                             onClick={handleDownloadSingleSubjectTemplate}
                             disabled={!scoresClassId || !scoresSubjectId}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            data-testid="button-download-single-subject"
                           >
-                            <Download className="h-4 w-4 mr-2" />
-                            <div className="flex flex-col">
-                              <span className="font-medium">Single Subject</span>
-                              <span className="text-xs text-muted-foreground">Subject-Class.xlsx</span>
-                            </div>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
+                            <Download className="h-4 w-4 mr-1" />
+                            Single Subject
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Download template for selected subject only</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
                             onClick={handleDownloadMultiSubjectTemplate}
                             disabled={!scoresClassId}
+                            variant="default"
+                            size="sm"
+                            className="flex-1"
+                            data-testid="button-download-all-subjects"
                           >
-                            <Download className="h-4 w-4 mr-2" />
-                            <div className="flex flex-col">
-                              <span className="font-medium">All Subjects</span>
-                              <span className="text-xs text-muted-foreground">Class-All-Subjects.xlsx (tabs)</span>
-                            </div>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            <Download className="h-4 w-4 mr-1" />
+                            All Subjects
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Download Excel with tabs for all subjects in class</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 </div>
