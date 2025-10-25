@@ -3507,29 +3507,21 @@ export default function AdminDashboard() {
                     accept=".xlsx,.xls,.csv"
                     className="hidden"
                     onChange={handleExcelUpload}
+                    disabled={!scoresClassId}
                   />
                   
                   {/* Upload Button - Full Width on Mobile */}
                   <div className="mb-3">
-                    <label 
-                      htmlFor="excel-upload" 
-                      className={`inline-flex items-center justify-center rounded-md text-sm font-medium h-11 px-4 py-2 w-full transition-colors ${
-                        !scoresClassId 
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                          : 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer active:scale-95'
-                      }`}
+                    <Button
+                      type="button"
+                      disabled={!scoresClassId}
+                      onClick={() => document.getElementById('excel-upload')?.click()}
+                      className="w-full h-11"
                       data-testid="button-upload-excel"
-                      title="Upload scores from Excel file - works for single or multiple subjects"
-                      onClick={(e) => {
-                        if (!scoresClassId) {
-                          e.preventDefault();
-                        }
-                      }}
                     >
                       <Upload className="h-4 w-4 mr-2" />
-                      <span className="hidden sm:inline">Upload Multi-Subject Excel</span>
-                      <span className="sm:hidden">Upload Multi-Subject</span>
-                    </label>
+                      Upload Multi-Subject
+                    </Button>
                   </div>
                   
                   {/* Download Buttons - Stack on Mobile, Side by Side on Desktop */}
