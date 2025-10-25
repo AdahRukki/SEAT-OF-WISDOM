@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -204,7 +205,8 @@ export default function AdminDashboard() {
     parentContact: "",
     parentWhatsApp: "",
     address: "",
-    newPassword: ""
+    newPassword: "",
+    isActive: true
   });
   
   // Profile image upload states
@@ -1500,7 +1502,8 @@ export default function AdminDashboard() {
         parentContact: "",
         parentWhatsApp: "",
         address: "",
-        newPassword: ""
+        newPassword: "",
+        isActive: true
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
     },
@@ -1529,7 +1532,8 @@ export default function AdminDashboard() {
       parentContact: student.parentContact || "",
       parentWhatsApp: student.parentWhatsapp || "",
       address: student.address || "",
-      newPassword: ""
+      newPassword: "",
+      isActive: student.user?.isActive ?? true
     });
     setIsEditStudentDialogOpen(true);
   };
@@ -6494,10 +6498,10 @@ export default function AdminDashboard() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Shield className="h-5 w-5 text-orange-500" />
-                    Security Settings
+                    Security & Status Settings
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="newPassword" className="text-sm font-medium text-gray-700 dark:text-gray-300">New Password</Label>
                     <div className="relative">
@@ -6526,6 +6530,21 @@ export default function AdminDashboard() {
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Leave blank to keep the current password unchanged
                     </p>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="isActive" className="text-sm font-medium text-gray-700 dark:text-gray-300">Student Status</Label>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {studentEditForm.isActive ? "Active - Student can access the system" : "Inactive - Student is no longer in school"}
+                      </p>
+                    </div>
+                    <Switch
+                      id="isActive"
+                      checked={studentEditForm.isActive}
+                      onCheckedChange={(checked) => setStudentEditForm(prev => ({...prev, isActive: checked}))}
+                      data-testid="switch-student-active"
+                    />
                   </div>
                 </CardContent>
               </Card>

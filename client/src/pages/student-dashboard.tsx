@@ -1038,27 +1038,15 @@ padding: 15px;
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Overall Average</CardTitle>
-                  <Trophy className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{overallAverage}%</div>
-                  <Badge className={`${overallGrade.color} text-white mt-2`}>
-                    Grade {overallGrade.grade}
-                  </Badge>
-                </CardContent>
-              </Card>
-              
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Subjects</CardTitle>
                   <BookOpen className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{assessments.length}</div>
+                  <div className="text-2xl font-bold">{assessments.filter(a => a.total > 0).length}</div>
+                  <p className="text-xs text-gray-500 mt-1">Subjects with scores</p>
                 </CardContent>
               </Card>
 
