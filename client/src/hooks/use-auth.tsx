@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useNetworkStatus } from "./use-network-status";
 import type { User, LoginData } from "@shared/schema";
 
 interface AuthUser {
@@ -21,6 +22,9 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Security: Inactivity timeout (30 minutes)
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => {
@@ -55,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return currentToken;
   });
   const queryClient = useQueryClient();
+  const lastActivityRef = useRef<number>(Date.now());
+  const inactivityTimerRef = useRef<number | null>(null);
 
   // Get current user with aggressive re-validation
   const { data: user, isLoading, error } = useQuery({
@@ -118,8 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const logout = async () => {
+  const logout = async (reason: 'manual' | 'offline' | 'inactivity' = 'manual') => {
     const timestamp = Date.now();
+    
+    console.log(`🔐 Security logout triggered: ${reason}`);
     
     try {
       // Call server logout endpoint with token for server-side invalidation
@@ -138,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Store logout timestamp first
     localStorage.setItem('logout_timestamp', timestamp.toString());
     localStorage.setItem('force_logout', 'true');
+    localStorage.setItem('logout_reason', reason);
     
     // Clear all client-side storage
     const authToken = localStorage.getItem('auth_token');
@@ -148,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('logout_timestamp', timestamp.toString());
     localStorage.setItem('force_logout', 'true');
     localStorage.setItem('logged_out_token', authToken || 'no_token');
+    localStorage.setItem('logout_reason', reason);
     
     setToken(null);
     queryClient.clear();
@@ -182,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Block all back navigation permanently
     const blockNavigation = () => {
       window.history.pushState(null, '', '/portal/login');
-      window.location.replace('/portal/login?logout=' + timestamp);
+      window.location.replace(`/portal/login?logout=${timestamp}&reason=${reason}`);
     };
     
     // Comprehensive event blocking
@@ -203,8 +213,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, { capture: true, passive: false });
     
     // Nuclear option - completely refresh and redirect
-    window.location.replace('/portal/login?forced_logout=' + timestamp);
+    window.location.replace(`/portal/login?forced_logout=${timestamp}&reason=${reason}`);
   };
+
+  // SECURITY: Network status monitoring - auto logout when offline
+  useNetworkStatus(
+    () => {
+      // When user goes offline, immediately logout for security
+      if (token && user) {
+        console.warn('⚠️ Network offline detected - logging out for security');
+        logout('offline');
+      }
+    },
+    () => {
+      // When back online, user must re-authenticate
+      console.log('🌐 Network back online - please log in again');
+    }
+  );
+
+  // SECURITY: Inactivity timeout monitoring
+  useEffect(() => {
+    if (!token || !user) return;
+
+    // Reset activity on user interaction
+    const resetActivity = () => {
+      lastActivityRef.current = Date.now();
+      
+      // Clear existing timer
+      if (inactivityTimerRef.current) {
+        window.clearTimeout(inactivityTimerRef.current);
+      }
+      
+      // Set new inactivity timer
+      inactivityTimerRef.current = window.setTimeout(() => {
+        console.warn('⏰ Inactivity timeout - logging out for security');
+        logout('inactivity');
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    // Track user activity
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    events.forEach(event => {
+      document.addEventListener(event, resetActivity, { passive: true });
+    });
+
+    // Initial timer setup
+    resetActivity();
+
+    // Cleanup
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, resetActivity);
+      });
+      if (inactivityTimerRef.current) {
+        window.clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, [token, user]);
 
   // Set up API client with auth token
   useEffect(() => {

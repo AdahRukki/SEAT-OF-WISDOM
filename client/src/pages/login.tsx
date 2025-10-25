@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home } from "lucide-react";
+import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home, Shield } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { SEO } from "@/components/SEO";
@@ -24,6 +24,40 @@ export default function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+
+  // Show security logout message if redirected after auto-logout
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const reason = urlParams.get('reason');
+    
+    if (reason) {
+      let message = '';
+      let description = '';
+      
+      switch (reason) {
+        case 'offline':
+          message = 'Logged Out for Security';
+          description = 'You were automatically logged out because your device went offline. Please log in again.';
+          break;
+        case 'inactivity':
+          message = 'Session Expired';
+          description = 'You were logged out due to 30 minutes of inactivity. Please log in again.';
+          break;
+        default:
+          message = 'Logged Out';
+          description = 'Please log in again.';
+      }
+      
+      toast({
+        title: message,
+        description,
+        variant: "default",
+      });
+      
+      // Clear URL params
+      window.history.replaceState({}, '', '/portal/login');
+    }
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
