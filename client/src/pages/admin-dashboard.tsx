@@ -1983,26 +1983,34 @@ export default function AdminDashboard() {
     updateScoresMutation.mutate(scoresData);
   };
 
-  // Handle Excel file upload
+  // Handle Excel file upload (supports both single and multi-subject files)
   const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!scoresClassId || !scoresSubjectId) {
+    // Validate required fields
+    if (!scoresClassId) {
       toast({
         title: "Error",
-        description: "Please select class and subject first",
+        description: "Please select a class first",
         variant: "destructive"
       });
       return;
     }
 
+    // Note: subjectId is optional for multi-subject Excel files
+    // The backend will auto-detect and process all sheets
+
     const formData = new FormData();
     formData.append('excelFile', file);
     formData.append('classId', scoresClassId);
-    formData.append('subjectId', scoresSubjectId);
     formData.append('term', scoresTerm);
     formData.append('session', scoresSession);
+    
+    // Include subjectId if selected (required for single-subject files)
+    if (scoresSubjectId) {
+      formData.append('subjectId', scoresSubjectId);
+    }
 
     try {
       const response = await fetch('/api/assessments/upload', {
@@ -2019,9 +2027,14 @@ export default function AdminDashboard() {
         throw new Error(result.error || 'Upload failed');
       }
 
+      // Show appropriate success message based on file type
+      const successMessage = result.isMultiSubject
+        ? `Multi-subject upload complete! ${result.sheetsProcessed || 0} subject(s), ${result.successCount} total scores uploaded`
+        : `${result.successCount} students processed successfully`;
+
       toast({
         title: "Excel Upload Success",
-        description: `${result.successCount} students processed successfully${result.errorCount > 0 ? `, ${result.errorCount} errors` : ''}`,
+        description: successMessage + (result.errorCount > 0 ? ` (${result.errorCount} errors)` : ''),
       });
 
       if (result.errors && result.errors.length > 0) {
@@ -2033,10 +2046,17 @@ export default function AdminDashboard() {
         });
       }
 
-      // Refresh assessments
+      // Refresh assessments - invalidate all assessment queries for this class
       queryClient.invalidateQueries({ 
-        queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId: scoresSubjectId }] 
+        queryKey: ['/api/admin/assessments']
       });
+      
+      // Also invalidate specific subject query if available
+      if (scoresSubjectId) {
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/admin/assessments', { classId: scoresClassId, subjectId: scoresSubjectId }] 
+        });
+      }
 
     } catch (error) {
       console.error("Excel upload error:", error);

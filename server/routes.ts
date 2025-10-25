@@ -1387,7 +1387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Excel upload for bulk score updates
+  // Excel upload for bulk score updates (supports both single and multi-subject files)
   app.post('/api/assessments/upload', authenticate, upload.single('excelFile'), async (req, res) => {
     try {
       const user = (req as any).user;
@@ -1400,94 +1400,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { classId, subjectId, term, session } = req.body;
-      if (!classId || !subjectId || !term || !session) {
+      if (!classId || !term || !session) {
         return res.status(400).json({ 
-          error: "Missing required fields: classId, subjectId, term, session" 
+          error: "Missing required fields: classId, term, session" 
         });
       }
 
       // Parse Excel file
       const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+      const sheetCount = workbook.SheetNames.length;
+      
+      console.log(`📊 Excel file has ${sheetCount} sheet(s):`, workbook.SheetNames);
 
-      console.log("[DEBUG] Excel data parsed:", data);
+      // Detect if this is a multi-subject file (multiple sheets)
+      const isMultiSubject = sheetCount > 1;
+      
+      let allResults = [];
+      let allErrors = [];
+      let sheetsProcessed = 0;
 
-      // Process each row
-      const results = [];
-      const errors = [];
+      // Get all subjects for the class to match sheet names (only for multi-subject files)
+      const classSubjects = isMultiSubject ? await storage.getClassSubjects(classId) : [];
+      
+      // For single-sheet files, subjectId is required
+      if (!isMultiSubject && !subjectId) {
+        return res.status(400).json({ 
+          error: "subjectId is required for single-subject uploads" 
+        });
+      }
+      
+      // Process each sheet
+      for (const sheetName of workbook.SheetNames) {
+        console.log(`\n📋 Processing sheet: "${sheetName}"`);
+        
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet);
 
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i] as any;
-        try {
-          // Map Excel columns to our data structure
-          // Expected columns: Student ID, First CA, Second CA, Exam
-          const studentId = row['Student ID'] || row['student_id'] || row['studentId'];
-          const firstCA = parseFloat(row['First CA'] || row['first_ca'] || row['firstCA'] || '0');
-          const secondCA = parseFloat(row['Second CA'] || row['second_ca'] || row['secondCA'] || '0');
-          const exam = parseFloat(row['Exam'] || row['exam'] || '0');
-
-          if (!studentId) {
-            errors.push(`Row ${i + 2}: Missing student ID`);
-            continue;
-          }
-
-          // Find student by studentId (SOWA/0001 format)
-          const student = await storage.getStudentByStudentId(studentId);
-          if (!student) {
-            errors.push(`Row ${i + 2}: Student ${studentId} not found`);
-            continue;
-          }
-
-          // Validate scores
-          if (firstCA < 0 || firstCA > 20) {
-            errors.push(`Row ${i + 2}: First CA must be between 0-20`);
-            continue;
-          }
-          if (secondCA < 0 || secondCA > 20) {
-            errors.push(`Row ${i + 2}: Second CA must be between 0-20`);
-            continue;
-          }
-          if (exam < 0 || exam > 60) {
-            errors.push(`Row ${i + 2}: Exam must be between 0-60`);
-            continue;
-          }
-
-          // Create or update assessment
-          const assessment = await storage.createOrUpdateAssessment({
-            studentId: student.id,
-            subjectId,
-            classId,
-            term,
-            session,
-            firstCA,
-            secondCA,
-            exam
-          });
-
-          results.push({
-            studentId,
-            studentName: `${student.user.firstName} ${student.user.lastName}`,
-            firstCA,
-            secondCA,
-            exam,
-            total: firstCA + secondCA + exam,
-            status: 'success'
-          });
-
-        } catch (error) {
-          console.error(`Error processing row ${i + 2}:`, error);
-          errors.push(`Row ${i + 2}: ${(error as Error).message || 'Processing error'}`);
+        if (data.length === 0) {
+          console.log(`⚠️  Sheet "${sheetName}" is empty, skipping...`);
+          continue;
         }
+
+        // Determine which subject to use for this sheet
+        let currentSubjectId = subjectId; // Default to provided subjectId
+        
+        if (isMultiSubject) {
+          // Try to match sheet name to subject name
+          const matchingSubject = classSubjects.find(
+            s => s.name.toLowerCase().trim() === sheetName.toLowerCase().trim()
+          );
+          
+          if (!matchingSubject) {
+            const warning = `Sheet "${sheetName}": No matching subject found, skipping this sheet`;
+            allErrors.push(warning);
+            console.log(`⚠️  ${warning}`);
+            continue;
+          }
+          
+          currentSubjectId = matchingSubject.id;
+          console.log(`✅ Matched sheet "${sheetName}" to subject "${matchingSubject.name}" (${currentSubjectId})`);
+        }
+
+        // Process each row in the sheet
+        const sheetResults = [];
+        const sheetErrors = [];
+
+        for (let i = 0; i < data.length; i++) {
+          const row = data[i] as any;
+          try {
+            // Map Excel columns to our data structure
+            const studentId = row['Student ID'] || row['student_id'] || row['studentId'];
+            const firstCA = parseFloat(row['First CA'] || row['first_ca'] || row['firstCA'] || '0');
+            const secondCA = parseFloat(row['Second CA'] || row['second_ca'] || row['secondCA'] || '0');
+            const exam = parseFloat(row['Exam'] || row['exam'] || '0');
+
+            if (!studentId) {
+              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Missing student ID`);
+              continue;
+            }
+
+            // Find student by studentId (SOWA/0001 format)
+            const student = await storage.getStudentByStudentId(studentId);
+            if (!student) {
+              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Student ${studentId} not found`);
+              continue;
+            }
+
+            // Validate scores
+            if (firstCA < 0 || firstCA > 20) {
+              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: First CA must be between 0-20`);
+              continue;
+            }
+            if (secondCA < 0 || secondCA > 20) {
+              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Second CA must be between 0-20`);
+              continue;
+            }
+            if (exam < 0 || exam > 60) {
+              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Exam must be between 0-60`);
+              continue;
+            }
+
+            // Create or update assessment
+            await storage.createOrUpdateAssessment({
+              studentId: student.id,
+              subjectId: currentSubjectId,
+              classId,
+              term,
+              session,
+              firstCA,
+              secondCA,
+              exam
+            });
+
+            sheetResults.push({
+              sheet: sheetName,
+              studentId,
+              studentName: `${student.user.firstName} ${student.user.lastName}`,
+              firstCA,
+              secondCA,
+              exam,
+              total: firstCA + secondCA + exam,
+              status: 'success'
+            });
+
+          } catch (error) {
+            console.error(`Error processing row ${i + 2} in sheet "${sheetName}":`, error);
+            sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: ${(error as Error).message || 'Processing error'}`);
+          }
+        }
+
+        allResults.push(...sheetResults);
+        allErrors.push(...sheetErrors);
+        sheetsProcessed++;
+        
+        console.log(`✅ Sheet "${sheetName}": ${sheetResults.length} students processed, ${sheetErrors.length} errors`);
       }
 
+      const message = isMultiSubject 
+        ? `Processed ${sheetsProcessed} subject(s), ${allResults.length} student scores uploaded`
+        : `Processed ${allResults.length} students successfully`;
+
       res.json({
-        message: `Processed ${results.length} students successfully`,
-        successCount: results.length,
-        errorCount: errors.length,
-        results,
-        errors
+        message,
+        isMultiSubject,
+        sheetsProcessed,
+        successCount: allResults.length,
+        errorCount: allErrors.length,
+        results: allResults,
+        errors: allErrors
       });
 
     } catch (error) {
