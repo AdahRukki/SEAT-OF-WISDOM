@@ -202,7 +202,6 @@ export default function AdminDashboard() {
     dateOfBirth: "",
     gender: "",
     profileImage: "",
-    parentContact: "",
     parentWhatsApp: "",
     address: "",
     newPassword: "",
@@ -393,7 +392,6 @@ export default function AdminDashboard() {
     dateOfBirth: "",
     gender: "",
     profileImage: "",
-    parentContact: "",
     parentWhatsApp: "",
     address: ""
   });
@@ -480,7 +478,6 @@ export default function AdminDashboard() {
       dateOfBirth: "",
       gender: "",
       profileImage: "",
-      parentContact: "",
       parentWhatsApp: "",
       address: ""
     });
@@ -706,7 +703,6 @@ export default function AdminDashboard() {
         password: "",
         classId: "",
         dateOfBirth: "",
-        parentContact: "",
         parentWhatsApp: "",
         address: ""
       });
@@ -960,7 +956,6 @@ export default function AdminDashboard() {
       dateOfBirth: studentCreationForm.dateOfBirth || undefined,
       age: studentCreationForm.age ? parseInt(studentCreationForm.age) : undefined,
       gender: studentCreationForm.gender || undefined,
-      parentContact: studentCreationForm.parentContact || undefined,
       parentWhatsApp: studentCreationForm.parentWhatsApp,
       address: studentCreationForm.address || undefined,
       profileImage: studentCreationForm.profileImage || undefined
@@ -1277,7 +1272,7 @@ export default function AdminDashboard() {
             fullName,
             age,
             student.gender || 'N/A',
-            student.parentWhatsapp || student.parentContact || 'N/A',
+            student.parentWhatsapp || 'N/A',
             student.studentId || 'N/A',
             className
           ]);
@@ -1353,7 +1348,6 @@ export default function AdminDashboard() {
                   <th>Full Name</th>
                   <th>Email</th>
                   <th>Class</th>
-                  <th>Parent Contact</th>
                   <th>Parent WhatsApp</th>
                 </tr>
               </thead>
@@ -1367,8 +1361,7 @@ export default function AdminDashboard() {
                       <td>${fullName}</td>
                       <td>${student.email || 'N/A'}</td>
                       <td>${className}</td>
-                      <td>${student.parentContact || 'N/A'}</td>
-                      <td>${student.parentWhatsApp || 'N/A'}</td>
+                      <td>${student.parentWhatsapp || 'N/A'}</td>
                     </tr>
                   `;
                 }).join('')}
@@ -1499,7 +1492,6 @@ export default function AdminDashboard() {
         classId: "",
         dateOfBirth: "",
         gender: "",
-        parentContact: "",
         parentWhatsApp: "",
         address: "",
         newPassword: "",
@@ -1529,7 +1521,6 @@ export default function AdminDashboard() {
       age: student.age?.toString() || "",
       gender: student.gender || "",
       profileImage: student.profileImage || "",
-      parentContact: student.parentContact || "",
       parentWhatsApp: student.parentWhatsapp || "",
       address: student.address || "",
       newPassword: "",
@@ -1871,7 +1862,6 @@ export default function AdminDashboard() {
       dateOfBirth: "",
       gender: "",
       profileImage: "",
-      parentContact: "",
       parentWhatsApp: "",
       address: ""
     });
@@ -3524,7 +3514,8 @@ export default function AdminDashboard() {
                       data-testid="button-upload-excel"
                     >
                       <Upload className="h-4 w-4 mr-2" />
-                      Upload Multi-Subject
+                      <span className="hidden sm:inline">Upload Scores from Excel</span>
+                      <span className="sm:hidden">Upload Scores</span>
                     </Button>
                   </div>
                   
@@ -3540,8 +3531,8 @@ export default function AdminDashboard() {
                           data-testid="button-download-single-subject"
                         >
                           <Download className="h-4 w-4 mr-2" />
-                          <span className="hidden sm:inline">Download Single Subject</span>
-                          <span className="sm:hidden">Single Subject</span>
+                          <span className="hidden sm:inline">Download Template (Single)</span>
+                          <span className="sm:hidden">Template (1)</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -3559,8 +3550,8 @@ export default function AdminDashboard() {
                           data-testid="button-download-all-subjects"
                         >
                           <Download className="h-4 w-4 mr-2" />
-                          <span className="hidden sm:inline">Download All Subjects</span>
-                          <span className="sm:hidden">All Subjects</span>
+                          <span className="hidden sm:inline">Download Template (All Subjects)</span>
+                          <span className="sm:hidden">Template (All)</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -5032,7 +5023,7 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Name</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Email</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Parent Contact</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Parent WhatsApp</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -5048,7 +5039,7 @@ export default function AdminDashboard() {
                             {student.user.email}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                            {student.parentContact || 'Not provided'}
+                            {student.parentWhatsapp || 'Not provided'}
                           </td>
                         </tr>
                       ))}
@@ -5637,15 +5628,7 @@ export default function AdminDashboard() {
                       value={studentCreationForm.parentWhatsApp}
                       onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
                       placeholder="+234 XXX XXX XXXX"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="student-parent-contact">Parent Contact (Optional)</Label>
-                    <Input
-                      id="student-parent-contact"
-                      value={studentCreationForm.parentContact}
-                      onChange={(e) => handleStudentFormChange('parentContact', e.target.value)}
-                      placeholder="Parent phone number"
+                      required
                     />
                   </div>
                 </div>
@@ -6239,7 +6222,7 @@ export default function AdminDashboard() {
 
         {/* Subject Assignment Dialog */}
         <Dialog open={isAssignSubjectDialogOpen} onOpenChange={setIsAssignSubjectDialogOpen}>
-          <DialogContent>
+          <DialogContent className="w-[95vw] max-w-md">
             <DialogHeader>
               <DialogTitle>Assign Subject to Class</DialogTitle>
               <DialogDescription>
@@ -6250,7 +6233,7 @@ export default function AdminDashboard() {
               <div>
                 <Label htmlFor="classForSubject">Select Class</Label>
                 <Select value={selectedClassForSubject} onValueChange={setSelectedClassForSubject}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full h-11">
                     <SelectValue placeholder="Choose a class" />
                   </SelectTrigger>
                   <SelectContent>
@@ -6265,7 +6248,7 @@ export default function AdminDashboard() {
               <div>
                 <Label htmlFor="subjectToAssign">Select Subject</Label>
                 <Select value={selectedSubjectToAssign} onValueChange={setSelectedSubjectToAssign}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full h-11">
                     <SelectValue placeholder="Choose a subject" />
                   </SelectTrigger>
                   <SelectContent>
@@ -6278,8 +6261,12 @@ export default function AdminDashboard() {
                 </Select>
               </div>
               
-              <div className="flex justify-between pt-4">
-                <Button variant="outline" onClick={() => setIsAssignSubjectDialogOpen(false)}>
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-between pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsAssignSubjectDialogOpen(false)}
+                  className="w-full sm:w-auto h-11"
+                >
                   Cancel
                 </Button>
                 <Button 
@@ -6288,6 +6275,7 @@ export default function AdminDashboard() {
                     subjectId: selectedSubjectToAssign
                   })}
                   disabled={!selectedClassForSubject || !selectedSubjectToAssign || assignSubjectToClassMutation.isPending}
+                  className="w-full sm:w-auto h-11"
                 >
                   {assignSubjectToClassMutation.isPending ? "Assigning..." : "Assign Subject"}
                 </Button>
@@ -6560,23 +6548,14 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="parentContact" className="text-sm font-medium text-gray-700 dark:text-gray-300">Parent Contact</Label>
-                      <Input
-                        id="parentContact"
-                        value={studentEditForm.parentContact}
-                        onChange={(e) => setStudentEditForm(prev => ({...prev, parentContact: e.target.value}))}
-                        placeholder="Enter parent phone number"
-                        className="transition-all duration-200 focus:ring-2 focus:ring-purple-500"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="parentWhatsApp" className="text-sm font-medium text-gray-700 dark:text-gray-300">Parent WhatsApp</Label>
+                      <Label htmlFor="parentWhatsApp" className="text-sm font-medium text-gray-700 dark:text-gray-300">Parent WhatsApp *</Label>
                       <Input
                         id="parentWhatsApp"
                         value={studentEditForm.parentWhatsApp}
                         onChange={(e) => setStudentEditForm(prev => ({...prev, parentWhatsApp: e.target.value}))}
                         placeholder="Enter parent WhatsApp number"
                         className="transition-all duration-200 focus:ring-2 focus:ring-purple-500"
+                        required
                       />
                     </div>
                     <div className="md:col-span-2 space-y-2">

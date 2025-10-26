@@ -126,8 +126,7 @@ export const students = pgTable("students", {
   age: integer("age"), // Student's age
   gender: varchar("gender", { length: 10 }), // Male, Female, Other
   profileImage: text("profile_image"), // URL or path to profile image
-  parentContact: varchar("parent_contact", { length: 255 }),
-  parentWhatsapp: varchar("parent_whatsapp", { length: 20 }), // WhatsApp number for parents
+  parentWhatsapp: varchar("parent_whatsapp", { length: 20 }).notNull(), // WhatsApp number for parents (required)
   address: text("address"),
   status: varchar("status", { length: 20 }).default("active"), // active, graduated
   createdAt: timestamp("created_at").defaultNow(),

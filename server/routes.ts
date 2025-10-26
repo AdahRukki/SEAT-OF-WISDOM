@@ -1000,7 +1000,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         age,
         gender,
         profileImage,
-        parentContact,
         parentWhatsApp,
         address,
         schoolId: requestSchoolId
@@ -1062,7 +1061,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         age: age ? parseInt(age) : null,
         profileImage: profileImage || null,
         gender: gender || null,
-        parentContact: parentContact || '',
         parentWhatsapp: parentWhatsApp,
         address: address || ''
       });

@@ -483,6 +483,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async assignSubjectToClass(classId: string, subjectId: string): Promise<void> {
+    // Check if this subject is already assigned to this class
+    const existing = await db.select()
+      .from(classSubjects)
+      .where(and(
+        eq(classSubjects.classId, classId),
+        eq(classSubjects.subjectId, subjectId)
+      ))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      throw new Error('This subject is already assigned to this class');
+    }
+    
     await db.insert(classSubjects).values({ classId, subjectId });
   }
 
@@ -1527,7 +1540,6 @@ export class DatabaseStorage implements IStorage {
         classId: students.classId,
         studentId: students.studentId,
         dateOfBirth: students.dateOfBirth,
-        parentContact: students.parentContact,
         parentWhatsapp: students.parentWhatsapp,
         address: students.address,
         status: students.status,

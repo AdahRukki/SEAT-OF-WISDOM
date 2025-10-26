@@ -793,8 +793,32 @@ export function ReportCardManagement({
         (a: any) => a.studentId === report.studentId,
       );
 
-      // Calculate totals
-      const totalMarks = subjects.reduce((sum: number, subject: any) => {
+      // Filter subjects to only show those with scores (total > 0)
+      const subjectsWithScores = subjects.filter((subject: any) => {
+        const assessment = assessments.find(
+          (a: any) => a.studentId === student.id && a.subjectId === subject.id,
+        );
+        const total = (assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0);
+        return total > 0;
+      });
+
+      // Get class name to check if it's SSS class
+      const className = classes.find((c) => c.id === report.classId)?.name || "";
+      // Match SSS classes: "S.S.S 1", "S.S.S 2", "S.S.S 3" or "SSS1", "SSS2", "SSS3"
+      const isSSSClass = /S\.?S\.?S\.?\s*[123]/i.test(className);
+      
+      // Validate minimum 8 subjects for SSS classes
+      if (isSSSClass && subjectsWithScores.length < 8) {
+        toast({
+          title: "Insufficient Subjects",
+          description: `${className} requires at least 8 subjects with scores. Currently has ${subjectsWithScores.length} subjects.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Calculate totals using only subjects with scores
+      const totalMarks = subjectsWithScores.reduce((sum: number, subject: any) => {
         const assessment = assessments.find(
           (a: any) => a.studentId === student.id && a.subjectId === subject.id,
         );
@@ -1332,7 +1356,7 @@ export function ReportCardManagement({
                   </tr>
                 </thead>
                 <tbody>
-                  ${subjects
+                  ${subjectsWithScores
                     .map((subject: any) => {
                       const assessment = assessments.find(
                         (a: any) =>
@@ -1370,7 +1394,7 @@ export function ReportCardManagement({
                   </div>
                   <div class="stat-card">
                     <div class="stat-label">AVERAGE</div>
-                    <div class="stat-value">${subjects.length ? ((totalMarks / (subjects.length * 100)) * 100).toFixed(1) : "0"}%</div>
+                    <div class="stat-value">${subjectsWithScores.length ? ((totalMarks / (subjectsWithScores.length * 100)) * 100).toFixed(1) : "0"}%</div>
                   </div>
                   <div class="stat-card">
                     <div class="stat-label">ATTENDANCE</div>
