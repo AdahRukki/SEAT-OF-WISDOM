@@ -730,17 +730,7 @@ export default function AdminDashboard() {
         description: "Student created successfully with auto-generated SOWA ID",
       });
       setIsStudentDialogOpen(false);
-      setStudentCreationForm({
-        firstName: "",
-        lastName: "",
-        middleName: "",
-        email: "",
-        password: "",
-        classId: "",
-        dateOfBirth: "",
-        parentWhatsApp: "",
-        address: ""
-      });
+      resetFormToStep1();
       setStudentFormErrors({});
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'] });
