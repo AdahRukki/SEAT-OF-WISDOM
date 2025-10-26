@@ -16,7 +16,14 @@ export async function apiRequest(
 ): Promise<any> {
   const method = options?.method || 'GET';
   const token = localStorage.getItem('auth_token');
-  const headers: Record<string, string> = options?.body ? { "Content-Type": "application/json" } : {};
+  
+  // Check if body is FormData - if so, don't set Content-Type (browser will set it with boundary)
+  const isFormData = options?.body instanceof FormData;
+  const headers: Record<string, string> = {};
+  
+  if (!isFormData && options?.body) {
+    headers["Content-Type"] = "application/json";
+  }
   
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -25,7 +32,7 @@ export async function apiRequest(
   const res = await fetch(url, {
     method,
     headers,
-    body: options?.body ? JSON.stringify(options.body) : undefined,
+    body: isFormData ? options.body as FormData : (options?.body ? JSON.stringify(options.body) : undefined),
     credentials: "include",
   });
 

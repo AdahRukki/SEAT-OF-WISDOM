@@ -730,8 +730,7 @@ export default function AdminDashboard() {
     mutationFn: async (formData: FormData) => {
       return await apiRequest('/api/admin/students/batch-upload', {
         method: 'POST',
-        body: formData,
-        headers: {}  // Let browser set multipart/form-data with boundary
+        body: formData
       });
     },
     onSuccess: (data) => {
