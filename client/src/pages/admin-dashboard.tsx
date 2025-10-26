@@ -382,6 +382,9 @@ export default function AdminDashboard() {
   // Class-based student viewing
   const [selectedClassForStudents, setSelectedClassForStudents] = useState("");
   
+  // Batch upload class selection (separate from students tab filter)
+  const [selectedBatchUploadClassId, setSelectedBatchUploadClassId] = useState("");
+  
   // Multi-step student creation form
   const [currentStep, setCurrentStep] = useState(1);
   const [studentCreationForm, setStudentCreationForm] = useState({
@@ -995,19 +998,22 @@ export default function AdminDashboard() {
 
   // Batch student upload handlers
   const handleDownloadBatchStudentTemplate = async () => {
-    if (!selectedClassForStudents) return;
+    if (!selectedBatchUploadClassId) return;
     
     try {
-      const url = `/api/admin/students/batch-template/${selectedClassForStudents}`;
+      const token = localStorage.getItem('auth_token');
+      const url = `/api/admin/students/batch-template/${selectedBatchUploadClassId}`;
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
         },
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        throw new Error('Failed to download template');
+        const error = await response.json().catch(() => ({ error: 'Failed to download template' }));
+        throw new Error(error.error || 'Failed to download template');
       }
 
       // Get the blob and create download
@@ -1015,7 +1021,7 @@ export default function AdminDashboard() {
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `student_upload_template_${classes.find(c => c.id === selectedClassForStudents)?.name || 'class'}.xlsx`;
+      link.download = `student_upload_template_${classes.find(c => c.id === selectedBatchUploadClassId)?.name || 'class'}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1023,17 +1029,17 @@ export default function AdminDashboard() {
     } catch (error) {
       toast({
         title: "Download Failed",
-        description: "Could not download the template. Please try again.",
+        description: error instanceof Error ? error.message : "Could not download the template. Please try again.",
         variant: "destructive"
       });
     }
   };
 
   const handleBatchStudentUpload = () => {
-    if (!batchUploadFile || !selectedClassForStudents) {
+    if (!batchUploadFile || !selectedBatchUploadClassId) {
       toast({
         title: "Missing Information",
-        description: "Please select a file to upload",
+        description: "Please select a class and file to upload",
         variant: "destructive"
       });
       return;
@@ -1041,7 +1047,7 @@ export default function AdminDashboard() {
 
     const formData = new FormData();
     formData.append('file', batchUploadFile);
-    formData.append('classId', selectedClassForStudents);
+    formData.append('classId', selectedBatchUploadClassId);
 
     batchUploadMutation.mutate(formData);
   };
@@ -1050,6 +1056,7 @@ export default function AdminDashboard() {
     setIsBatchUploadDialogOpen(false);
     setBatchUploadFile(null);
     setBatchUploadResults(null);
+    setSelectedBatchUploadClassId(''); // Clear the class selection when closing
   };
 
   // Helper function to sort classes in proper order
@@ -3392,48 +3399,25 @@ export default function AdminDashboard() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2 flex-col sm:flex-row">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div>
-                          <Button 
-                            onClick={() => setIsBatchUploadDialogOpen(true)}
-                            disabled={!selectedClassForStudents}
-                            variant="outline"
-                            className="w-full sm:w-auto"
-                            data-testid="button-batch-upload"
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            <span className="hidden sm:inline">Batch Upload</span>
-                            <span className="sm:hidden">Batch</span>
-                          </Button>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{selectedClassForStudents ? "Upload multiple students from Excel" : "Select a class first"}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div>
-                          <Button 
-                            onClick={() => setIsStudentDialogOpen(true)}
-                            disabled={!selectedClassForStudents}
-                            className="w-full sm:w-auto"
-                            data-testid="button-add-student"
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Student
-                          </Button>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{selectedClassForStudents ? "Create new student account with auto-generated SOWA ID" : "Select a class first to add students"}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Button 
+                    onClick={() => setIsBatchUploadDialogOpen(true)}
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    data-testid="button-batch-upload"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    <span className="hidden sm:inline">Batch Upload</span>
+                    <span className="sm:hidden">Batch</span>
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => setIsStudentDialogOpen(true)}
+                    className="w-full sm:w-auto"
+                    data-testid="button-add-student"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Student
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -5852,17 +5836,35 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle>Batch Student Upload</DialogTitle>
               <DialogDescription>
-                Upload multiple students from Excel for {classes.find(c => c.id === selectedClassForStudents)?.name}
+                Upload multiple students from Excel
               </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-4">
               {!batchUploadResults ? (
                 <>
+                  {/* Class Selection */}
+                  <div>
+                    <Label htmlFor="batch-class-select">Select Class *</Label>
+                    <Select value={selectedBatchUploadClassId} onValueChange={setSelectedBatchUploadClassId}>
+                      <SelectTrigger id="batch-class-select">
+                        <SelectValue placeholder="Choose a class for batch upload..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sortClassesByOrder(classes).map((classItem) => (
+                          <SelectItem key={classItem.id} value={classItem.id}>
+                            {classItem.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
                     <h4 className="font-medium text-sm mb-2 text-blue-900 dark:text-blue-100">Instructions:</h4>
                     <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
-                      <li>Download the Excel template below</li>
+                      <li>Select a class above</li>
+                      <li>Download the Excel template</li>
                       <li>Fill in student details (all students will be assigned password: <strong>password@123</strong>)</li>
                       <li>Parent WhatsApp is required for all students</li>
                       <li>Upload the completed Excel file</li>
@@ -5874,6 +5876,7 @@ export default function AdminDashboard() {
                       onClick={handleDownloadBatchStudentTemplate}
                       variant="outline"
                       className="flex-1"
+                      disabled={!selectedBatchUploadClassId}
                       data-testid="button-download-batch-template"
                     >
                       <Download className="h-4 w-4 mr-2" />
@@ -5909,7 +5912,7 @@ export default function AdminDashboard() {
                     </Button>
                     <Button 
                       onClick={handleBatchStudentUpload}
-                      disabled={!batchUploadFile || batchUploadMutation.isPending}
+                      disabled={!batchUploadFile || !selectedBatchUploadClassId || batchUploadMutation.isPending}
                       className="flex-1"
                       data-testid="button-submit-batch-upload"
                     >
