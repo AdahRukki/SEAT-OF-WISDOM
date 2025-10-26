@@ -20,7 +20,6 @@ import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeO
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject, Class } from "@shared/schema";
 import { changePasswordSchema, calculateGrade } from "@shared/schema";
-import { InlineReportCard } from "@/components/inline-report-card";
 import type { z } from "zod";
 
 type ChangePasswordForm = z.infer<typeof changePasswordSchema>;
@@ -44,7 +43,6 @@ export default function StudentDashboard() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [showInlineReportCard, setShowInlineReportCard] = useState(false);
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
@@ -1223,36 +1221,21 @@ padding: 15px;
                   <>
                     <div className="flex gap-2 mb-4">
                       <Button
-                        onClick={() => setShowInlineReportCard(!showInlineReportCard)}
+                        onClick={handlePrintDetailedReport}
                         variant="outline"
                         data-testid="button-view-report-content"
                       >
                         <Eye className="h-4 w-4 mr-2" />
-                        {showInlineReportCard ? 'Hide Report' : 'View Report Card'}
+                        View Report Card
                       </Button>
                       <Button
                         onClick={handlePrintDetailedReport}
                         data-testid="button-print-report-content"
                       >
                         <Printer className="h-4 w-4 mr-2" />
-                        Print Detailed Report Card
+                        Print Report Card
                       </Button>
                     </div>
-                    
-                    {/* Inline Report Card Viewer */}
-                    {showInlineReportCard && profile && (
-                      <div className="mb-6" data-testid="inline-report-card">
-                        <InlineReportCard
-                          profile={profile}
-                          assessments={assessments}
-                          user={user}
-                          selectedTerm={selectedTerm}
-                          selectedSession={selectedSession || ''}
-                          calculateAge={calculateAge}
-                          behavioralRating={behavioralRating}
-                        />
-                      </div>
-                    )}
                   </>
                 )}
               </CardContent>
