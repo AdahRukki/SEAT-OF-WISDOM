@@ -381,9 +381,12 @@ export class DatabaseStorage implements IStorage {
         if (studentId && studentId.startsWith(schoolPrefix)) {
           // Extract number from format SOWA/1001 (school number + sequence)
           const numberPart = studentId.substring(schoolPrefix.length);
-          const num = parseInt(numberPart, 10);
-          if (!isNaN(num)) {
-            existingNumbers.push(num);
+          // Ensure the remaining part is ONLY digits (prevents matching School 41 when checking School 4)
+          if (/^\d+$/.test(numberPart)) {
+            const num = parseInt(numberPart, 10);
+            if (!isNaN(num)) {
+              existingNumbers.push(num);
+            }
           }
         }
       });
