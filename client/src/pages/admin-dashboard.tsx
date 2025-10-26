@@ -5897,20 +5897,37 @@ export default function AdminDashboard() {
                     </Button>
                   </div>
 
-                  <div className="border-2 border-dashed rounded-lg p-6 text-center space-y-3">
-                    <Upload className="h-12 w-12 mx-auto text-gray-400" />
+                  <div className="border-2 border-dashed rounded-lg p-4 sm:p-6 space-y-3">
+                    <Upload className="h-10 w-10 sm:h-12 sm:w-12 mx-auto text-gray-400" />
                     
-                    <div className="space-y-2">
-                      <Label htmlFor="batch-file-input" className="block text-sm font-medium">
-                        {batchUploadFile ? 'Selected File:' : 'Choose Excel File'}
-                      </Label>
+                    <div className="text-center">
+                      <p className="text-sm font-medium mb-3">
+                        {batchUploadFile ? 'Selected: ' + batchUploadFile.name : 'Choose Excel File'}
+                      </p>
                       
-                      {batchUploadFile && (
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-                          {batchUploadFile.name}
-                        </p>
-                      )}
+                      {/* Traditional form for mobile compatibility - bypasses JavaScript file APIs */}
+                      <form 
+                        id="batch-upload-form" 
+                        method="POST" 
+                        action="/api/admin/students/batch-upload" 
+                        encType="multipart/form-data"
+                        style={{ display: 'none' }}
+                      >
+                        <input type="hidden" name="classId" value={selectedBatchUploadClassId || ''} />
+                        <input
+                          type="file"
+                          name="file"
+                          id="mobile-file-input"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setBatchUploadFile(file);
+                            }
+                          }}
+                        />
+                      </form>
                       
+                      {/* Desktop/working file input */}
                       <input
                         id="batch-file-input"
                         type="file"
@@ -5948,14 +5965,18 @@ export default function AdminDashboard() {
                           setBatchUploadFile(file);
                         }}
                         className="block w-full text-sm text-gray-900 dark:text-gray-100
-                                   file:mr-4 file:py-2 file:px-4
+                                   file:mr-2 sm:file:mr-4 file:py-2 file:px-3 sm:file:px-4
                                    file:rounded-md file:border-0
-                                   file:text-sm file:font-semibold
+                                   file:text-xs sm:file:text-sm file:font-semibold
                                    file:bg-primary file:text-primary-foreground
                                    hover:file:bg-primary/90
                                    cursor-pointer"
                         data-testid="input-batch-upload-file"
                       />
+                      
+                      <p className="text-xs text-gray-500 mt-2">
+                        If file selection doesn't work, try using a desktop browser
+                      </p>
                     </div>
                   </div>
 
