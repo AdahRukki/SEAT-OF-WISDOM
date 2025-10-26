@@ -446,8 +446,8 @@ export default function AdminDashboard() {
   };
 
   const isStep2Valid = () => {
-    const { gender, email, password, parentWhatsApp } = studentCreationForm;
-    return gender && email && password && parentWhatsApp;
+    const { gender, password, parentWhatsApp } = studentCreationForm;
+    return gender && password && parentWhatsApp; // Email is now optional
   };
 
   const isStep3Valid = () => {
@@ -5702,7 +5702,7 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                   <div>
-                    <Label htmlFor="student-email">Email *</Label>
+                    <Label htmlFor="student-email">Email (Optional)</Label>
                     <Input
                       id="student-email"
                       type="email"
