@@ -730,6 +730,7 @@ export default function AdminDashboard() {
         description: "Student created successfully with auto-generated SOWA ID",
       });
       setIsStudentDialogOpen(false);
+      setCurrentStep(1); // Reset to step 1 for next student creation
       setStudentCreationForm({
         firstName: "",
         lastName: "",
