@@ -5914,6 +5914,7 @@ export default function AdminDashboard() {
                       <input
                         id="batch-file-input"
                         type="file"
+                        accept=".xlsx,.xls"
                         onChange={(e) => {
                           const file = e.target.files?.[0] || null;
                           console.log('File selected:', file);
