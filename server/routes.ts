@@ -1178,6 +1178,223 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Download Excel template for batch student upload
+  app.get('/api/admin/students/batch-template/:classId', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId } = req.params;
+      
+      // Get class info
+      const classInfo = await storage.getClassById(classId);
+      if (!classInfo) {
+        return res.status(404).json({ error: "Class not found" });
+      }
+
+      // Create Excel template with columns
+      const templateData = [
+        {
+          'First Name': 'John',
+          'Last Name': 'Doe',
+          'Middle Name': 'Michael',
+          'Email': 'john.doe@example.com',
+          'Date of Birth (DD/MM/YYYY)': '15/01/2010',
+          'Gender (M/F)': 'M',
+          'Parent WhatsApp': '08012345678',
+          'Address': '123 Main Street, City'
+        }
+      ];
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 15 }, // First Name
+        { wch: 15 }, // Last Name
+        { wch: 15 }, // Middle Name
+        { wch: 25 }, // Email
+        { wch: 25 }, // Date of Birth
+        { wch: 15 }, // Gender
+        { wch: 20 }, // Parent WhatsApp
+        { wch: 30 }  // Address
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Students');
+
+      // Generate buffer
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      // Set headers for download
+      res.set({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="batch_students_template_${classInfo.name.replace(/\s+/g, '_')}.xlsx"`,
+        'Content-Length': buffer.length
+      });
+
+      res.send(buffer);
+
+    } catch (error) {
+      console.error("Batch template download error:", error);
+      res.status(500).json({ error: "Failed to generate template" });
+    }
+  });
+
+  // Bulk student upload from Excel
+  app.post('/api/admin/students/batch-upload', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
+    try {
+      const { classId } = req.body;
+      
+      if (!classId) {
+        return res.status(400).json({ error: "Class ID is required" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "Excel file is required" });
+      }
+
+      const user = (req as any).user;
+      
+      // Get class info to determine school
+      const classInfo = await storage.getClassById(classId);
+      if (!classInfo) {
+        return res.status(404).json({ error: "Class not found" });
+      }
+
+      // Sub-admin can only upload to their school
+      if (user.role === 'sub-admin' && classInfo.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied to this school's data" });
+      }
+
+      const schoolId = classInfo.schoolId!;
+
+      // Parse Excel file
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet);
+
+      if (!data || data.length === 0) {
+        return res.status(400).json({ error: "Excel file is empty" });
+      }
+
+      const results = {
+        successful: [] as any[],
+        failed: [] as any[]
+      };
+
+      // Get school number for student ID generation
+      const schoolNumber = await storage.getSchoolNumber(schoolId);
+      let studentCount = await storage.getStudentCountForSchool(schoolId);
+
+      // Process each row
+      for (const row of data as any[]) {
+        try {
+          const firstName = row['First Name']?.toString().trim();
+          const lastName = row['Last Name']?.toString().trim();
+          const middleName = row['Middle Name']?.toString().trim() || '';
+          const email = row['Email']?.toString().trim();
+          const dateOfBirthStr = row['Date of Birth (DD/MM/YYYY)']?.toString().trim();
+          const gender = row['Gender (M/F)']?.toString().trim();
+          const parentWhatsApp = row['Parent WhatsApp']?.toString().trim();
+          const address = row['Address']?.toString().trim() || '';
+
+          // Validate required fields
+          if (!firstName || !lastName || !email || !parentWhatsApp) {
+            results.failed.push({
+              row,
+              error: "Missing required fields (First Name, Last Name, Email, Parent WhatsApp)"
+            });
+            continue;
+          }
+
+          // Validate names (single words only)
+          if (firstName.includes(' ') || lastName.includes(' ') || (middleName && middleName.includes(' '))) {
+            results.failed.push({
+              row,
+              error: "Names must be single words without spaces"
+            });
+            continue;
+          }
+
+          // Parse date of birth (DD/MM/YYYY)
+          let dateOfBirth: Date | null = null;
+          if (dateOfBirthStr) {
+            const parts = dateOfBirthStr.split('/');
+            if (parts.length === 3) {
+              const day = parseInt(parts[0]);
+              const month = parseInt(parts[1]) - 1; // Month is 0-indexed
+              const year = parseInt(parts[2]);
+              dateOfBirth = new Date(year, month, day);
+            }
+          }
+
+          // Calculate age if date of birth is provided
+          let age: number | null = null;
+          if (dateOfBirth && !isNaN(dateOfBirth.getTime())) {
+            const today = new Date();
+            age = today.getFullYear() - dateOfBirth.getFullYear();
+            const monthDiff = today.getMonth() - dateOfBirth.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dateOfBirth.getDate())) {
+              age--;
+            }
+          }
+
+          // Auto-generate student ID
+          studentCount++;
+          const autoStudentId = `SOWA/${schoolNumber}${studentCount.toString().padStart(3, '0')}`;
+
+          // Create user with default password
+          const userData = insertUserSchema.parse({
+            firstName,
+            lastName,
+            email,
+            password: 'password@123', // Default password
+            role: 'student',
+            schoolId: schoolId
+          });
+
+          const newUser = await storage.createUser(userData);
+
+          // Create student record
+          const studentData = insertStudentSchema.parse({
+            userId: newUser.id,
+            classId,
+            studentId: autoStudentId,
+            dateOfBirth: dateOfBirth,
+            age: age,
+            profileImage: null,
+            gender: gender || null,
+            parentWhatsapp: parentWhatsApp,
+            address: address
+          });
+
+          const student = await storage.createStudent(studentData);
+
+          results.successful.push({
+            studentId: autoStudentId,
+            name: `${firstName} ${lastName}`,
+            email
+          });
+
+        } catch (error: any) {
+          results.failed.push({
+            row,
+            error: error.message || "Failed to create student"
+          });
+        }
+      }
+
+      res.json({
+        message: `Batch upload complete. ${results.successful.length} successful, ${results.failed.length} failed.`,
+        results
+      });
+
+    } catch (error: any) {
+      console.error("Batch upload error:", error);
+      res.status(500).json({ error: error.message || "Failed to process batch upload" });
+    }
+  });
+
   // Get class subjects (admin only)
   app.get('/api/admin/classes/:classId/subjects', authenticate, requireAdmin, async (req, res) => {
     try {

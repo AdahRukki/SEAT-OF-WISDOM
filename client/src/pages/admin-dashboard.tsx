@@ -163,6 +163,9 @@ export default function AdminDashboard() {
   // State for dialogs
   const [isClassDialogOpen, setIsClassDialogOpen] = useState(false);
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false);
+  const [isBatchUploadDialogOpen, setIsBatchUploadDialogOpen] = useState(false);
+  const [batchUploadFile, setBatchUploadFile] = useState<File | null>(null);
+  const [batchUploadResults, setBatchUploadResults] = useState<any>(null);
   const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
   const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
   const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false);
@@ -719,6 +722,32 @@ export default function AdminDashboard() {
     },
   });
 
+  // Batch student upload mutation
+  const batchUploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      return await apiRequest('/api/admin/students/batch-upload', {
+        method: 'POST',
+        body: formData,
+        headers: {}  // Let browser set multipart/form-data with boundary
+      });
+    },
+    onSuccess: (data) => {
+      setBatchUploadResults(data.results);
+      toast({
+        title: "Batch Upload Complete",
+        description: `${data.results.successful.length} students created, ${data.results.failed.length} failed`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to upload students",
+        variant: "destructive",
+      });
+    },
+  });
+
   // User Management Mutations
   const createSubAdminMutation = useMutation({
     mutationFn: async (data: {
@@ -962,6 +991,37 @@ export default function AdminDashboard() {
     };
 
     createStudentMutation.mutate(studentData);
+  };
+
+  // Batch student upload handlers
+  const handleDownloadBatchStudentTemplate = () => {
+    if (!selectedClassForStudents) return;
+    
+    const url = `/api/admin/students/batch-template/${selectedClassForStudents}`;
+    window.open(url, '_blank');
+  };
+
+  const handleBatchStudentUpload = () => {
+    if (!batchUploadFile || !selectedClassForStudents) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a file to upload",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', batchUploadFile);
+    formData.append('classId', selectedClassForStudents);
+
+    batchUploadMutation.mutate(formData);
+  };
+
+  const closeBatchUploadDialog = () => {
+    setIsBatchUploadDialogOpen(false);
+    setBatchUploadFile(null);
+    setBatchUploadResults(null);
   };
 
   // Helper function to sort classes in proper order
@@ -3296,24 +3356,50 @@ export default function AdminDashboard() {
                     Select a class to view and manage students
                   </CardDescription>
                 </div>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <Button 
-                          onClick={() => setIsStudentDialogOpen(true)}
-                          disabled={!selectedClassForStudents}
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Student
-                        </Button>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{selectedClassForStudents ? "Create new student account with auto-generated SOWA ID" : "Select a class first to add students"}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <div className="flex gap-2 flex-col sm:flex-row">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Button 
+                            onClick={() => setIsBatchUploadDialogOpen(true)}
+                            disabled={!selectedClassForStudents}
+                            variant="outline"
+                            className="w-full sm:w-auto"
+                            data-testid="button-batch-upload"
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            <span className="hidden sm:inline">Batch Upload</span>
+                            <span className="sm:hidden">Batch</span>
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{selectedClassForStudents ? "Upload multiple students from Excel" : "Select a class first"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Button 
+                            onClick={() => setIsStudentDialogOpen(true)}
+                            disabled={!selectedClassForStudents}
+                            className="w-full sm:w-auto"
+                            data-testid="button-add-student"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Student
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{selectedClassForStudents ? "Create new student account with auto-generated SOWA ID" : "Select a class first to add students"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </CardHeader>
               <CardContent>
                 {/* Class Selection */}
@@ -5721,6 +5807,148 @@ export default function AdminDashboard() {
                   </Button>
                 )}
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Batch Student Upload Dialog */}
+        <Dialog open={isBatchUploadDialogOpen} onOpenChange={closeBatchUploadDialog}>
+          <DialogContent className="max-w-2xl dialog-content-scrollable">
+            <DialogHeader>
+              <DialogTitle>Batch Student Upload</DialogTitle>
+              <DialogDescription>
+                Upload multiple students from Excel for {classes.find(c => c.id === selectedClassForStudents)?.name}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {!batchUploadResults ? (
+                <>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <h4 className="font-medium text-sm mb-2 text-blue-900 dark:text-blue-100">Instructions:</h4>
+                    <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
+                      <li>Download the Excel template below</li>
+                      <li>Fill in student details (all students will be assigned password: <strong>password@123</strong>)</li>
+                      <li>Parent WhatsApp is required for all students</li>
+                      <li>Upload the completed Excel file</li>
+                    </ol>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={handleDownloadBatchStudentTemplate}
+                      variant="outline"
+                      className="flex-1"
+                      data-testid="button-download-batch-template"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Template
+                    </Button>
+                  </div>
+
+                  <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                    <Input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={(e) => setBatchUploadFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                      id="batch-upload-file"
+                      data-testid="input-batch-upload-file"
+                    />
+                    <label htmlFor="batch-upload-file" className="cursor-pointer">
+                      <Upload className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {batchUploadFile ? batchUploadFile.name : 'Click to select Excel file'}
+                      </p>
+                    </label>
+                  </div>
+
+                  <div className="flex gap-2 pt-4">
+                    <Button 
+                      variant="outline" 
+                      onClick={closeBatchUploadDialog}
+                      className="flex-1"
+                      data-testid="button-cancel-batch-upload"
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleBatchStudentUpload}
+                      disabled={!batchUploadFile || batchUploadMutation.isPending}
+                      className="flex-1"
+                      data-testid="button-submit-batch-upload"
+                    >
+                      {batchUploadMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Upload Students
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          <h4 className="font-medium text-green-900 dark:text-green-100">Successful</h4>
+                        </div>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">{batchUploadResults.successful.length}</p>
+                      </div>
+                      <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
+                        <div className="flex items-center gap-2 mb-1">
+                          <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                          <h4 className="font-medium text-red-900 dark:text-red-100">Failed</h4>
+                        </div>
+                        <p className="text-2xl font-bold text-red-600 dark:text-red-400">{batchUploadResults.failed.length}</p>
+                      </div>
+                    </div>
+
+                    {batchUploadResults.successful.length > 0 && (
+                      <div className="border rounded-lg p-4 max-h-60 overflow-y-auto">
+                        <h4 className="font-medium mb-2 text-green-900 dark:text-green-100">Successfully Created Students:</h4>
+                        <div className="space-y-1">
+                          {batchUploadResults.successful.map((student: any, index: number) => (
+                            <div key={index} className="text-sm text-gray-700 dark:text-gray-300">
+                              ✓ {student.name} ({student.studentId}) - {student.email}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {batchUploadResults.failed.length > 0 && (
+                      <div className="border border-red-200 dark:border-red-800 rounded-lg p-4 max-h-60 overflow-y-auto">
+                        <h4 className="font-medium mb-2 text-red-900 dark:text-red-100">Failed Uploads:</h4>
+                        <div className="space-y-2">
+                          {batchUploadResults.failed.map((failure: any, index: number) => (
+                            <div key={index} className="text-sm">
+                              <p className="font-medium text-red-700 dark:text-red-300">Error: {failure.error}</p>
+                              <p className="text-gray-600 dark:text-gray-400 text-xs">Row data: {JSON.stringify(failure.row)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button 
+                    onClick={closeBatchUploadDialog}
+                    className="w-full"
+                    data-testid="button-close-batch-results"
+                  >
+                    Close
+                  </Button>
+                </>
+              )}
             </div>
           </DialogContent>
         </Dialog>
