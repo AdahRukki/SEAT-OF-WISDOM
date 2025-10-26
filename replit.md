@@ -1,55 +1,7 @@
 # Seat of Wisdom Academy
 
 ## Overview
-Seat of Wisdom Academy is a comprehensive multi-branch academy management system designed for efficient administration and student performance tracking. Built with a React frontend and Express backend, it integrates Firebase for offline-first capabilities and real-time data synchronization. The system supports four school branches and features role-based access for administrators, sub-administrators, and students. Key capabilities include a 20+20+60 scoring system, professional report card generation, robust student financial tracking, and complete teacher grading interface. The project provides a streamlined, scalable solution for academy management with full CRUD operations for students, functional class-based grading, and comprehensive educational oversight tools.
-
-## Recent Updates (October 2025)
-- ✅ **Student Report Card UX Fix**: Fixed student dashboard report card buttons - both "View Report" and "Print Report" now show the same detailed report card (professional format with school header, grades table, statistics, behavioral assessment, and principal's comment)
-- ✅ **Optional Email for Students**: Email is now optional for student registration - system auto-generates placeholder emails (e.g., SOWA1001@student.local) when not provided, updated batch upload template to mark Email as optional, frontend form validation updated
-- ✅ **Critical Bug Fix**: Fixed batch upload FormData handling - apiRequest function now properly detects FormData and sends it without JSON stringification or wrong Content-Type headers, ensuring classId and file reach server correctly
-- ✅ **Bug Fixes**: Fixed Excel template download authentication error (now uses authenticated fetch with bearer token and correct 'auth_token' localStorage key), fixed student creation form class selection bug (pre-selected class now registers immediately without re-selection), fixed mobile file picker by replacing hidden input with visible styled input (no ref complexity, works reliably on all devices)
-- ✅ **UX Improvements**: Add Student and Batch Upload buttons are now always active - no need to select class beforehand. Class selection happens inside the respective dialogs. Batch upload has independent class selection that doesn't affect Students tab filter
-- ✅ **Batch Student Upload**: Complete Excel-based bulk student creation - template download endpoint with sample data, upload dialog with instructions, DD/MM/YYYY date parsing, auto-SOWA ID generation, default password@123, comprehensive validation (required fields, single-word names, parent WhatsApp), detailed success/failure reporting with fully mobile-responsive UI (single column layout on mobile, smaller text, optimized spacing), visible file input for better mobile compatibility, comprehensive debugging logs
-- ✅ **Report Card Enhancements**: Filter subjects to show only those with scores (total > 0), SSS1/SSS2/SSS3 minimum 8 subjects validation with regex pattern /S\.?S\.?S\.?\s*[123]/i, average calculation based on scored subjects only
-- ✅ **Parent Contact Consolidation**: Removed parentContact field system-wide - parentWhatsApp is now the only contact field and is required for all students
-- ✅ **Duplicate Subject Prevention**: Database-level validation prevents assigning the same subject to a class multiple times
-- ✅ **Mobile UX Improvements**: Responsive "Add Subject to Class" dialog with stacked buttons on mobile, descriptive Scores page button labels (Download Template Single/All Subjects, Upload Scores from Excel), improved touch targets and layout
-- ✅ **Google Search Console Readiness**: Complete SEO optimization - created robots.txt to control search engine crawling, implemented dynamic sitemap.xml with all public pages (home, about, programs, admissions, contact, news), automated news article inclusion with lastmod dates, integrated image sitemap for Google Image Search crawlability
-- ✅ **Student ID Future-Proofing**: Updated validation regex from exactly 4 digits to 4+ flexible digits - supports schools with 1000+ students (SOWA/11000, SOWA/21234, etc.) while maintaining backward compatibility with existing 4-digit IDs
-- ✅ **Auto-Logout Security System**: Implemented comprehensive security features - auto-logout when device goes offline, 30-minute inactivity timeout, complete token/data clearing on logout, logout reason tracking and user feedback on login page
-- ✅ **Scores Page UX Improvement**: Removed duplicate "Save All Scores" button, made Excel upload work without subject selection (only class required), renamed to "Upload Multi-Subject Excel" for clarity, fully mobile responsive layout with proper button stacking and touch targets
-- ✅ **Mobile Responsive Scores Page**: Complete mobile optimization - buttons stack vertically on mobile (full width), filters use responsive grid (1/2/4 columns), shortened button text for mobile, consistent touch-friendly button heights
-- ✅ **Multi-Subject Excel Upload Fix**: Fixed critical bug where multi-subject Excel uploads only saved the first sheet - backend now processes ALL sheets, matches each sheet name to corresponding subject, and saves scores for all subjects simultaneously
-- ✅ **PWA Installation**: Complete Progressive Web App implementation - users can install SOWA Academy as a desktop/mobile app with offline capabilities, service worker for caching, and "Install App" button in header. **IMPORTANT**: Chrome requires 30 seconds of user engagement (clicking/interacting with the page) before the install button appears - this is normal browser behavior, not a bug!
-- ✅ **Bulk Template Download**: Created bulletproof bulk template download system - new `/api/assessments/download-bulk/:classId` endpoint deduplicates subjects by NAME (not ID), replaced dropdown menu with two clear standalone buttons ("Single Subject" and "All Subjects") on Scores page for better UX
-- ✅ **Student Creation Form UX**: Reduced to 3-step process with improved date picker using separate day/month/year dropdowns, middle name clearly marked as optional, all fields auto-clear on dialog close
-- ✅ **Production Deployment Fix**: Fixed critical login issue by updating database driver to auto-detect environment (Neon for development, standard PostgreSQL for production), created ecosystem.config.cjs for PM2 process management
-- ✅ **Admin User Creation**: Created production admin creation script (server/create-admin.ts) with proper password hashing and school assignment
-- ✅ **User Management Security**: Restricted all user management routes to main admins only - sub-admins can no longer access user creation, editing, or deletion endpoints
-- ✅ **Sub-Admin Access Control**: Added frontend access control to prevent sub-admins from viewing user management page and Settings tab, displays clear "Access Denied" message, Settings tab only visible to main admins
-- ✅ **Profile Navigation**: User avatar/name in header is clickable and navigates to dedicated profile page (/portal/profile) where admins can view and edit their profile information
-- ✅ **Mobile Responsive Dashboard**: Dashboard already includes comprehensive mobile responsiveness with adaptive grid layouts (2-column mobile to 10-column desktop) and proper breakpoints for all screen sizes
-- ✅ **Firebase Initialization Fix**: Fixed critical admin dashboard crash by adding null checks for Firebase `db` instance throughout offline-firebase-sync.ts - prevents collection() errors when Firebase hasn't initialized yet, ensuring dashboard loads properly on cold starts
-- ✅ **Sub-Admin Reports Access**: Fixed 403 error preventing sub-admins from accessing academic terms endpoint - sub-admins can now generate report cards for their assigned school while term creation/modification remains restricted to main admins
-- ✅ **School Branch Renaming**: Updated all school branches from generic names to proper locations - School 1 Ikpoto, School 2 Bonsaac, School 3 Akwuofor, School 4 Akwuose
-- ✅ **Production Firebase Configuration**: Enhanced Firebase initialization with production-ready features - async configuration loading with fallback to server endpoint, offline persistence for unreliable connections, auto-detection of long-polling for restrictive networks, comprehensive error handling and diagnostics, ensures Firebase works on custom domain (seatofwisdomacademy.com)
-- ✅ **SEO Implementation**: Complete SEO system with dynamic meta tags, Open Graph tags for social sharing, Twitter Cards, and structured data (JSON-LD) for better search engine indexing - applied to homepage, news listing, individual blog posts, and login page with proper cleanup on navigation
-- ✅ **Blog-Style News System**: Transformed news into blog format with individual article pages, "Read More" buttons, and proper navigation headers on all news pages
-- ✅ **News Image Visibility Fix**: Implemented public ACL policies and signed URL generation for news images, ensuring images display correctly across all pages (homepage, news listing, article detail)
-- ✅ **Academic Session Update**: Changed current session to 2024/2025
-- ✅ **Score Publication Control System**: Complete implementation with admin publish/unpublish functionality, backend security enforcement, and student access control - students cannot view scores/reports until admin explicitly publishes them for each term/session/class combination
-- ✅ **News Management System**: Complete implementation with admin CRUD operations, image uploads via ObjectUploader, and public news page
-- ✅ **In-App Notifications**: Student notification system with real-time inbox, unread count badges, and broadcast messaging from admin
-- ✅ **Enhanced Admin Dashboard**: Added News and Notifications tabs with modular component architecture
-
-## Previous Updates (September 2025)
-- ✅ **Password Management System**: Complete implementation with admin password changes and email-based user resets
-- ✅ **Security Enhancement**: Fixed critical JWT session invalidation vulnerability after password changes
-- ✅ **Teacher Grading Interface**: Fully functional with class selection and student loading
-- ✅ **Student Management**: Complete CRUD operations with secure deletion functionality
-- ✅ **Authentication System**: Enhanced with proper schoolId support and password security
-- ✅ **Multi-School Support**: Proper admin/sub-admin role-based school access
-- ✅ **Test Data**: Created sample students across multiple classes for testing grading workflows
+Seat of Wisdom Academy is a multi-branch academy management system for efficient administration and student performance tracking. Built with a React frontend and Express backend, it integrates Firebase for offline-first capabilities and real-time data synchronization. The system supports four school branches and features role-based access for administrators, sub-administrators, and students. Key capabilities include a 20+20+60 scoring system, professional report card generation, robust student financial tracking, complete teacher grading interface, and a news management system. The project provides a streamlined, scalable solution for academy management with full CRUD operations for students, class-based grading, and comprehensive educational oversight tools. It aims to offer a complete, modern solution for academy management with a focus on user experience and data integrity, including PWA installation for offline access and SEO optimization for discoverability.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -57,66 +9,73 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend Architecture
-- **Framework**: React 18 with TypeScript
-- **Routing**: Wouter for client-side routing
-- **UI Components**: shadcn/ui built on Radix UI
-- **Styling**: Tailwind CSS with CSS variables
-- **State Management**: TanStack Query for server state
-- **Form Handling**: React Hook Form with Zod validation
-- **Build Tool**: Vite
+-   **Framework**: React 18 with TypeScript
+-   **Routing**: Wouter for client-side routing
+-   **UI Components**: shadcn/ui built on Radix UI
+-   **Styling**: Tailwind CSS with CSS variables
+-   **State Management**: TanStack Query for server state
+-   **Form Handling**: React Hook Form with Zod validation
+-   **Build Tool**: Vite
+-   **UI/UX Decisions**: Responsive design for all modules (dashboard, scores, report cards, news), professional report card template, mobile-friendly forms and buttons, PWA installation support.
 
 ### Backend Architecture
-- **Framework**: Express.js with TypeScript
-- **Database ORM**: Drizzle ORM for PostgreSQL
-- **Data Validation**: Zod schemas
-- **Storage Interface**: Abstracted storage layer
-- **Session Management**: Express sessions with PostgreSQL store
-- **Development**: Hot reloading with tsx and Vite middleware
+-   **Framework**: Express.js with TypeScript
+-   **Database ORM**: Drizzle ORM for PostgreSQL
+-   **Data Validation**: Zod schemas
+-   **Storage Interface**: Abstracted storage layer
+-   **Session Management**: Express sessions with PostgreSQL store
+-   **Development**: Hot reloading with tsx and Vite middleware
+-   **Technical Implementations**: Intelligent student ID reuse, score publication control, comprehensive security features including auto-logout and JWT invalidation, Excel-based bulk student and score uploads.
 
 ### Authentication & Authorization
-- **Authentication**: Firebase Authentication with JWT and local fallback.
-- **Firebase Configuration**: Production-ready async configuration loading with server-side fallback endpoint, environment variable support, offline persistence, auto-detection of long-polling for restrictive networks.
-- **Session Handling**: Express sessions with PostgreSQL store.
-- **Role-based Access**: Admin (all schools), sub-admin (single school), student.
-- **Security**: Password hashing, token validation, secure session management.
+-   **Authentication**: Firebase Authentication with JWT and local fallback.
+-   **Firebase Configuration**: Production-ready async configuration loading, offline persistence, auto-detection of long-polling, comprehensive error handling.
+-   **Session Handling**: Express sessions with PostgreSQL store.
+-   **Role-based Access**: Admin (all schools), sub-admin (single school), student with granular control over features (e.g., user management restricted to main admin).
+-   **Security**: Password hashing, token validation, secure session management, auto-logout on inactivity/offline, critical bug fixes for session invalidation.
 
 ### Data Schema
-- **User Management**: Roles for admin, sub-admin, and student.
-- **Multi-Branch Structure**: Schools, classes, subjects, with branch isolation.
-- **Student Records**: Profiles linked to users, classes, and school branches (SOWA/#### ID).
-- **Assessment System**: 20+20+60 scoring with automatic grading.
-- **Report Cards**: Printable academic summaries.
-- **News System**: Public news articles with title, content, images, tags, and publication dates.
-- **Notifications**: In-app student notifications with read/unread status and fan-out broadcasting.
-- **Database Relations**: Normalized PostgreSQL schema with Firebase sync.
+-   **User Management**: Roles for admin, sub-admin, and student.
+-   **Multi-Branch Structure**: Schools, classes, subjects, with branch isolation (e.g., School 1 Ikpoto, School 2 Bonsaac).
+-   **Student Records**: Profiles linked to users, classes, and school branches (SOWA/#### ID), including parent WhatsApp as primary contact.
+-   **Assessment System**: 20+20+60 scoring with automatic grading and subject filtering.
+-   **Report Cards**: Professional, printable academic summaries with school header, statistics, and behavioral assessment.
+-   **News System**: Public news articles with title, content, images, tags, and publication dates, transformed into a blog format with individual article pages.
+-   **Notifications**: In-app student notifications with real-time inbox, unread counts, and broadcast messaging.
+-   **Database Relations**: Normalized PostgreSQL schema with Firebase sync, including database-level validation for duplicate subjects.
 
 ### Development Environment
-- **Monorepo Structure**: Shared schemas and types.
-- **TypeScript Configuration**: Unified tsconfig.
-- **Development Workflow**: Concurrent frontend/backend development with Vite proxy.
+-   **Monorepo Structure**: Shared schemas and types.
+-   **TypeScript Configuration**: Unified tsconfig.
+-   **Development Workflow**: Concurrent frontend/backend development with Vite proxy.
 
 ## External Dependencies
 
 ### Core Dependencies
-- **Firebase**: Authentication and Firestore database.
-- **Neon Database**: Serverless PostgreSQL hosting.
-- **Drizzle ORM**: Type-safe PostgreSQL operations.
-- **TanStack Query**: Server state management and caching.
-- **shadcn/ui**: Pre-built UI components.
+-   **Firebase**: Authentication and Firestore database for real-time sync and offline capabilities.
+-   **Neon Database**: Serverless PostgreSQL hosting for production and development.
+-   **Drizzle ORM**: Type-safe PostgreSQL operations.
+-   **TanStack Query**: Server state management and caching.
+-   **shadcn/ui**: Pre-built UI components.
 
 ### UI & Styling
-- **Radix UI**: Headless component primitives.
-- **Tailwind CSS**: Utility-first CSS framework.
-- **Lucide React**: Icon library.
-- **class-variance-authority**: Type-safe CSS class variants.
+-   **Radix UI**: Headless component primitives.
+-   **Tailwind CSS**: Utility-first CSS framework.
+-   **Lucide React**: Icon library.
+-   **class-variance-authority**: Type-safe CSS class variants.
 
 ### Development Tools
-- **Vite**: Build tool and development server.
-- **TypeScript**: Type safety.
-- **ESBuild**: Fast JavaScript bundling.
-- **PostCSS**: CSS processing.
+-   **Vite**: Build tool and development server.
+-   **TypeScript**: Type safety.
+-   **ESBuild**: Fast JavaScript bundling.
+-   **PostCSS**: CSS processing.
+-   **PM2**: Process management for Node.js applications in production.
 
 ### Validation & Forms
-- **Zod**: Runtime type validation.
-- **React Hook Form**: Performance-focused form library.
-- **@hookform/resolvers**: Zod integration for form validation.
+-   **Zod**: Runtime type validation.
+-   **React Hook Form**: Performance-focused form library.
+-   **@hookform/resolvers**: Zod integration for form validation.
+
+### Other Integrations
+-   **Google Search Console**: Robots.txt, dynamic sitemap.xml, image sitemap for SEO.
+-   **ObjectUploader**: For image uploads in news management.
