@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -166,7 +166,6 @@ export default function AdminDashboard() {
   const [isBatchUploadDialogOpen, setIsBatchUploadDialogOpen] = useState(false);
   const [batchUploadFile, setBatchUploadFile] = useState<File | null>(null);
   const [batchUploadResults, setBatchUploadResults] = useState<any>(null);
-  const batchUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
   const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
   const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false);
@@ -1037,6 +1036,10 @@ export default function AdminDashboard() {
   };
 
   const handleBatchStudentUpload = () => {
+    console.log('=== BATCH UPLOAD DEBUG ===');
+    console.log('File:', batchUploadFile);
+    console.log('Selected Class ID:', selectedBatchUploadClassId);
+    
     if (!batchUploadFile || !selectedBatchUploadClassId) {
       toast({
         title: "Missing Information",
@@ -1049,6 +1052,10 @@ export default function AdminDashboard() {
     const formData = new FormData();
     formData.append('file', batchUploadFile);
     formData.append('classId', selectedBatchUploadClassId);
+
+    console.log('FormData created with:');
+    console.log('- file:', formData.get('file'));
+    console.log('- classId:', formData.get('classId'));
 
     batchUploadMutation.mutate(formData);
   };
@@ -5847,8 +5854,14 @@ export default function AdminDashboard() {
                   {/* Class Selection */}
                   <div>
                     <Label htmlFor="batch-class-select">Select Class *</Label>
-                    <Select value={selectedBatchUploadClassId} onValueChange={setSelectedBatchUploadClassId}>
-                      <SelectTrigger id="batch-class-select">
+                    <Select 
+                      value={selectedBatchUploadClassId} 
+                      onValueChange={(value) => {
+                        console.log('Class selected for batch upload:', value);
+                        setSelectedBatchUploadClassId(value);
+                      }}
+                    >
+                      <SelectTrigger id="batch-class-select" data-testid="select-batch-upload-class">
                         <SelectValue placeholder="Choose a class for batch upload..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -5886,44 +5899,38 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="border-2 border-dashed rounded-lg p-6 text-center space-y-3">
-                    <input
-                      ref={batchUploadInputRef}
-                      type="file"
-                      accept=".xlsx,.xls"
-                      onChange={(e) => setBatchUploadFile(e.target.files?.[0] || null)}
-                      style={{ display: 'none' }}
-                      data-testid="input-batch-upload-file"
-                    />
                     <Upload className="h-12 w-12 mx-auto text-gray-400" />
-                    {batchUploadFile ? (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-file-input" className="block text-sm font-medium">
+                        {batchUploadFile ? 'Selected File:' : 'Choose Excel File'}
+                      </Label>
+                      
+                      {batchUploadFile && (
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                           {batchUploadFile.name}
                         </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => batchUploadInputRef.current?.click()}
-                          data-testid="button-change-file"
-                        >
-                          Change File
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-sm text-gray-600 dark:text-gray-300">
-                          No file selected
-                        </p>
-                        <Button
-                          variant="outline"
-                          onClick={() => batchUploadInputRef.current?.click()}
-                          data-testid="button-select-file"
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          Select Excel File
-                        </Button>
-                      </div>
-                    )}
+                      )}
+                      
+                      <input
+                        id="batch-file-input"
+                        type="file"
+                        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          console.log('File selected:', file);
+                          setBatchUploadFile(file);
+                        }}
+                        className="block w-full text-sm text-gray-900 dark:text-gray-100
+                                   file:mr-4 file:py-2 file:px-4
+                                   file:rounded-md file:border-0
+                                   file:text-sm file:font-semibold
+                                   file:bg-primary file:text-primary-foreground
+                                   hover:file:bg-primary/90
+                                   cursor-pointer"
+                        data-testid="input-batch-upload-file"
+                      />
+                    </div>
                   </div>
 
                   <div className="flex gap-2 pt-4">
@@ -5936,6 +5943,7 @@ export default function AdminDashboard() {
                       Cancel
                     </Button>
                     <Button 
+                      type="button"
                       onClick={handleBatchStudentUpload}
                       disabled={!batchUploadFile || !selectedBatchUploadClassId || batchUploadMutation.isPending}
                       className="flex-1"
