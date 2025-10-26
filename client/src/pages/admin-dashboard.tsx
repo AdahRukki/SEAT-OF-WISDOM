@@ -193,6 +193,10 @@ export default function AdminDashboard() {
   const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentWithDetails | null>(null);
   
+  // Class deletion states
+  const [isDeleteClassDialogOpen, setIsDeleteClassDialogOpen] = useState(false);
+  const [selectedClassForDeletion, setSelectedClassForDeletion] = useState<Class & { school: SchoolType } | null>(null);
+  
   // Student deletion states
   const [isDeleteStudentDialogOpen, setIsDeleteStudentDialogOpen] = useState(false);
   const [selectedStudentForDeletion, setSelectedStudentForDeletion] = useState<StudentWithDetails | null>(null);
@@ -656,6 +660,31 @@ export default function AdminDashboard() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create class", variant: "destructive" });
+    }
+  });
+
+  // Delete class mutation
+  const deleteClassMutation = useMutation({
+    mutationFn: async (classId: string) => {
+      return apiRequest(`/api/admin/classes/${classId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
+      setIsDeleteClassDialogOpen(false);
+      setSelectedClassForDeletion(null);
+      toast({
+        title: "Success",
+        description: "Class deleted successfully"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error", 
+        description: error?.message || "Failed to delete class",
+        variant: "destructive"
+      });
     }
   });
 
@@ -3338,9 +3367,32 @@ export default function AdminDashboard() {
                         <CardHeader className="pb-3">
                           <div className="flex items-center justify-between">
                             <CardTitle className="text-lg">{classItem.name}</CardTitle>
-                            <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                              {classItem.id}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                {classItem.id}
+                              </span>
+                              {user?.role === 'admin' && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedClassForDeletion(classItem);
+                                        setIsDeleteClassDialogOpen(true);
+                                      }}
+                                      className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      data-testid={`button-delete-class-${classItem.id}`}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Delete this class</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
                           </div>
                           <CardDescription>
                             {classItem.description || `Class in ${classItem.school?.name || 'Unknown School'}`}
@@ -7195,6 +7247,56 @@ export default function AdminDashboard() {
                   Export as Excel
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Class Confirmation Dialog */}
+        <Dialog open={isDeleteClassDialogOpen} onOpenChange={setIsDeleteClassDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Delete Class</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this class? This action cannot be undone and may affect associated data including student enrollments, scores, and attendance records.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedClassForDeletion && (
+              <div className="py-4">
+                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <BookOpen className="h-4 w-4 text-red-600" />
+                    <span className="font-medium text-red-800">
+                      {selectedClassForDeletion.name}
+                    </span>
+                  </div>
+                  <p className="text-sm text-red-700">Class ID: {selectedClassForDeletion.id}</p>
+                  <p className="text-sm text-red-700">School: {selectedClassForDeletion.school?.name}</p>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteClassDialogOpen(false);
+                  setSelectedClassForDeletion(null);
+                }}
+                data-testid="button-cancel-delete-class"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (selectedClassForDeletion) {
+                    deleteClassMutation.mutate(selectedClassForDeletion.id);
+                  }
+                }}
+                disabled={deleteClassMutation.isPending}
+                data-testid="button-confirm-delete-class"
+              >
+                {deleteClassMutation.isPending ? "Deleting..." : "Delete Class"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
