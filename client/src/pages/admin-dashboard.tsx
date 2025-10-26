@@ -5914,10 +5914,36 @@ export default function AdminDashboard() {
                       <input
                         id="batch-file-input"
                         type="file"
-                        accept=".xlsx,.xls"
                         onChange={(e) => {
                           const file = e.target.files?.[0] || null;
                           console.log('File selected:', file);
+                          
+                          if (file) {
+                            const fileName = file.name.toLowerCase();
+                            const validExtensions = ['.xlsx', '.xls'];
+                            const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+                            
+                            if (!isValid) {
+                              toast({
+                                title: "Invalid File Type",
+                                description: "Please select an Excel file (.xlsx or .xls)",
+                                variant: "destructive",
+                              });
+                              e.target.value = '';
+                              return;
+                            }
+                            
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast({
+                                title: "File Too Large",
+                                description: "Please select a file under 10MB",
+                                variant: "destructive",
+                              });
+                              e.target.value = '';
+                              return;
+                            }
+                          }
+                          
                           setBatchUploadFile(file);
                         }}
                         className="block w-full text-sm text-gray-900 dark:text-gray-100
