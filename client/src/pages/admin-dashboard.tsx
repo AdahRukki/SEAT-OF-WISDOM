@@ -994,11 +994,39 @@ export default function AdminDashboard() {
   };
 
   // Batch student upload handlers
-  const handleDownloadBatchStudentTemplate = () => {
+  const handleDownloadBatchStudentTemplate = async () => {
     if (!selectedClassForStudents) return;
     
-    const url = `/api/admin/students/batch-template/${selectedClassForStudents}`;
-    window.open(url, '_blank');
+    try {
+      const url = `/api/admin/students/batch-template/${selectedClassForStudents}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download template');
+      }
+
+      // Get the blob and create download
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `student_upload_template_${classes.find(c => c.id === selectedClassForStudents)?.name || 'class'}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Could not download the template. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleBatchStudentUpload = () => {
@@ -1977,6 +2005,13 @@ export default function AdminDashboard() {
       setStudentCreationForm(prev => ({ ...prev, studentId: '' }));
     }
   };
+
+  // Initialize form classId with selectedClassForStudents when dialog opens
+  useEffect(() => {
+    if (isStudentDialogOpen && selectedClassForStudents && !studentCreationForm.classId) {
+      handleStudentFormChange('classId', selectedClassForStudents);
+    }
+  }, [isStudentDialogOpen, selectedClassForStudents]);
 
   // Auto-generate student ID when dialog opens or class changes
   useEffect(() => {
