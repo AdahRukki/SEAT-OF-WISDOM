@@ -25,7 +25,7 @@ Preferred communication style: Simple, everyday language.
 -   **Storage Interface**: Abstracted storage layer
 -   **Session Management**: Express sessions with PostgreSQL store
 -   **Development**: Hot reloading with tsx and Vite middleware
--   **Technical Implementations**: Intelligent student ID generation using school.sortOrder (stable, rename-proof), gap-filling for deleted IDs, score publication control, comprehensive security features including auto-logout and JWT invalidation, Excel-based bulk student and score uploads.
+-   **Technical Implementations**: Intelligent student ID reuse, score publication control, comprehensive security features including auto-logout and JWT invalidation, Excel-based bulk student and score uploads.
 
 ### Authentication & Authorization
 -   **Authentication**: Firebase Authentication with JWT and local fallback.

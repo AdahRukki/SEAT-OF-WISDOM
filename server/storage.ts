@@ -68,7 +68,7 @@ import {
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql, inArray, ne, isNotNull, like } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray, ne, isNotNull } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -349,55 +349,61 @@ export class DatabaseStorage implements IStorage {
   async createStudent(studentData: InsertStudent): Promise<Student> {
     // Auto-generate student ID if not provided
     if (!studentData.studentId) {
-      // Get the class to find the school
-      const [classData] = await db
+      // Get the school through the class to determine the school number
+      const classData = await db
         .select({ schoolId: classes.schoolId })
         .from(classes)
         .where(eq(classes.id, studentData.classId!))
         .limit(1);
       
-      if (!classData) {
+      if (classData.length === 0) {
         throw new Error('Class not found');
       }
       
-      // Get the school's sortOrder (stable branch number)
-      const [school] = await db
-        .select({ sortOrder: schools.sortOrder })
-        .from(schools)
-        .where(eq(schools.id, classData.schoolId))
-        .limit(1);
+      const schoolId = classData[0].schoolId;
       
-      if (!school || school.sortOrder == null) {
-        throw new Error('School sortOrder not configured');
-      }
+      // Use the authoritative getSchoolNumber function
+      const schoolNumber = await this.getSchoolNumber(schoolId);
       
-      const branchNumber = school.sortOrder;
-      const prefix = `SOWA/${branchNumber}`;
-      
-      // Get all student IDs for this branch (simple LIKE query)
+      // Get existing students for this school to determine next number
       const existingStudents = await db
-        .select({ studentId: students.studentId })
+        .select()
         .from(students)
-        .where(like(students.studentId, `${prefix}%`));
+        .leftJoin(classes, eq(students.classId, classes.id))
+        .where(eq(classes.schoolId, schoolId));
       
-      // Extract numbers into a Set for fast lookup
-      const usedNumbers = new Set<number>();
-      for (const { studentId } of existingStudents) {
-        const numberPart = studentId.substring(prefix.length);
-        const num = parseInt(numberPart, 10);
-        if (!isNaN(num)) {
-          usedNumbers.add(num);
+      // Extract existing numbers for this school to find gaps
+      const existingNumbers: number[] = [];
+      const schoolPrefix = `SOWA/${schoolNumber}`;
+      
+      existingStudents.forEach((row) => {
+        const studentId = row.students?.studentId;
+        if (studentId && studentId.startsWith(schoolPrefix)) {
+          // Extract number from format SOWA/1001 (school number + sequence)
+          const numberPart = studentId.substring(schoolPrefix.length);
+          const num = parseInt(numberPart, 10);
+          if (!isNaN(num)) {
+            existingNumbers.push(num);
+          }
+        }
+      });
+      
+      // Sort numbers to find gaps
+      existingNumbers.sort((a, b) => a - b);
+      
+      // Find the lowest available number (fill gaps first)
+      let nextNumber = 1;
+      for (const num of existingNumbers) {
+        if (num === nextNumber) {
+          nextNumber++;
+        } else if (num > nextNumber) {
+          // Found a gap, use it
+          break;
         }
       }
       
-      // Find first available number (fills gaps)
-      let nextNumber = 1;
-      while (usedNumbers.has(nextNumber)) {
-        nextNumber++;
-      }
-      
-      // Format: SOWA/1001, SOWA/2001, etc.
-      studentData.studentId = `${prefix}${nextNumber.toString().padStart(3, '0')}`;
+      // Format as 3-digit number (e.g., 001, 002, 123)
+      studentData.studentId = `SOWA/${schoolNumber}${nextNumber.toString().padStart(3, '0')}`;
     }
     
     const [student] = await db
