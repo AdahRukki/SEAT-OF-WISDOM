@@ -1195,7 +1195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           'First Name': 'John',
           'Last Name': 'Doe',
           'Middle Name': 'Michael',
-          'Email': 'john.doe@example.com',
+          'Email (Optional)': 'john.doe@example.com',
           'Date of Birth (DD/MM/YYYY)': '15/01/2010',
           'Gender (M/F)': 'M',
           'Parent WhatsApp': '08012345678',
@@ -1292,17 +1292,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const firstName = row['First Name']?.toString().trim();
           const lastName = row['Last Name']?.toString().trim();
           const middleName = row['Middle Name']?.toString().trim() || '';
-          const email = row['Email']?.toString().trim();
+          const emailInput = row['Email (Optional)']?.toString().trim() || row['Email']?.toString().trim(); // Support both column names
           const dateOfBirthStr = row['Date of Birth (DD/MM/YYYY)']?.toString().trim();
           const gender = row['Gender (M/F)']?.toString().trim();
           const parentWhatsApp = row['Parent WhatsApp']?.toString().trim();
           const address = row['Address']?.toString().trim() || '';
 
-          // Validate required fields
-          if (!firstName || !lastName || !email || !parentWhatsApp) {
+          // Validate required fields (email is now optional)
+          if (!firstName || !lastName || !parentWhatsApp) {
             results.failed.push({
               row,
-              error: "Missing required fields (First Name, Last Name, Email, Parent WhatsApp)"
+              error: "Missing required fields (First Name, Last Name, Parent WhatsApp)"
             });
             continue;
           }
@@ -1342,6 +1342,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Auto-generate student ID
           studentCount++;
           const autoStudentId = `SOWA/${schoolNumber}${studentCount.toString().padStart(3, '0')}`;
+
+          // Generate placeholder email if not provided
+          const email = emailInput || `${autoStudentId.replace('/', '')}@student.local`;
 
           // Create user with default password
           const userData = insertUserSchema.parse({
