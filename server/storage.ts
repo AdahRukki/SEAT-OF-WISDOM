@@ -100,6 +100,7 @@ export interface IStorage {
   updateStudentProfileImage(studentId: string, profileImagePath: string): Promise<Student>;
   getStudent(studentId: string): Promise<Student | undefined>;
   createClass(classData: InsertClass): Promise<Class>;
+  deleteClass(classId: string): Promise<void>;
   createSubject(subjectData: InsertSubject): Promise<Subject>;
   assignSubjectToClass(classId: string, subjectId: string): Promise<void>;
   removeSubjectFromClass(classId: string, subjectId: string): Promise<void>;
@@ -492,6 +493,10 @@ export class DatabaseStorage implements IStorage {
       .values(classData)
       .returning();
     return classRecord;
+  }
+
+  async deleteClass(classId: string): Promise<void> {
+    await db.delete(classes).where(eq(classes.id, classId));
   }
 
   async createSubject(subjectData: InsertSubject): Promise<Subject> {
