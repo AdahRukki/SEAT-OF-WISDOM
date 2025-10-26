@@ -1005,9 +1005,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         schoolId: requestSchoolId
       } = req.body;
       
-      // Required fields validation
-      if (!firstName || !lastName || !email || !password || !classId || !parentWhatsApp) {
-        return res.status(400).json({ error: "Required fields: firstName, lastName, email, password, classId, parentWhatsApp" });
+      // Required fields validation (email is now optional)
+      if (!firstName || !lastName || !password || !classId || !parentWhatsApp) {
+        return res.status(400).json({ error: "Required fields: firstName, lastName, password, classId, parentWhatsApp" });
       }
 
       // Get the school ID - for sub-admins use their schoolId, for main admin get it from request or class
@@ -1040,11 +1040,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const studentCount = await storage.getStudentCountForSchool(schoolId);
       const autoStudentId = `SOWA/${schoolNumber}${(studentCount + 1).toString().padStart(3, '0')}`;
 
+      // Generate placeholder email if not provided
+      const finalEmail = email || `${autoStudentId.replace('/', '')}@student.local`;
+
       // First create the user account
       const userData = insertUserSchema.parse({
         firstName,
         lastName,
-        email,
+        email: finalEmail,
         password,
         role: 'student',
         schoolId: schoolId
