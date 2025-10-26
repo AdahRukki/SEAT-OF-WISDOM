@@ -355,34 +355,54 @@ export class DatabaseStorage implements IStorage {
         .where(eq(classes.id, studentData.classId!))
         .limit(1);
       
-      let schoolNumber = '1'; // Default to school 1
-      
-      if (classData.length > 0) {
-        const school = await db
-          .select()
-          .from(schools)
-          .where(eq(schools.id, classData[0].schoolId))
-          .limit(1);
-        
-        if (school.length > 0) {
-          // Extract school number from school name (e.g., "School 1" -> "1")
-          const schoolName = school[0].name;
-          const match = schoolName.match(/School (\d+)/i);
-          if (match) {
-            schoolNumber = match[1];
-          }
-        }
+      if (classData.length === 0) {
+        throw new Error('Class not found');
       }
+      
+      const schoolId = classData[0].schoolId;
+      
+      // Use the authoritative getSchoolNumber function
+      const schoolNumber = await this.getSchoolNumber(schoolId);
       
       // Get existing students for this school to determine next number
       const existingStudents = await db
         .select()
         .from(students)
         .leftJoin(classes, eq(students.classId, classes.id))
-        .where(eq(classes.schoolId, classData.length > 0 ? classData[0].schoolId : ''));
+        .where(eq(classes.schoolId, schoolId));
       
-      const nextNumber = (existingStudents.length + 1).toString().padStart(3, '0');
-      studentData.studentId = `SOWA/${schoolNumber}${nextNumber}`;
+      // Extract existing numbers for this school to find gaps
+      const existingNumbers: number[] = [];
+      const schoolPrefix = `SOWA/${schoolNumber}`;
+      
+      existingStudents.forEach((row) => {
+        const studentId = row.students?.studentId;
+        if (studentId && studentId.startsWith(schoolPrefix)) {
+          // Extract number from format SOWA/1001 (school number + sequence)
+          const numberPart = studentId.substring(schoolPrefix.length);
+          const num = parseInt(numberPart, 10);
+          if (!isNaN(num)) {
+            existingNumbers.push(num);
+          }
+        }
+      });
+      
+      // Sort numbers to find gaps
+      existingNumbers.sort((a, b) => a - b);
+      
+      // Find the lowest available number (fill gaps first)
+      let nextNumber = 1;
+      for (const num of existingNumbers) {
+        if (num === nextNumber) {
+          nextNumber++;
+        } else if (num > nextNumber) {
+          // Found a gap, use it
+          break;
+        }
+      }
+      
+      // Format as 3-digit number (e.g., 001, 002, 123)
+      studentData.studentId = `SOWA/${schoolNumber}${nextNumber.toString().padStart(3, '0')}`;
     }
     
     const [student] = await db

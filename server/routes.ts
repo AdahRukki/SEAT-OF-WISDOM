@@ -1285,10 +1285,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         failed: [] as any[]
       };
 
-      // Get school number for student ID generation
-      const schoolNumber = await storage.getSchoolNumber(schoolId);
-      let studentCount = await storage.getStudentCountForSchool(schoolId);
-
       // Process each row
       for (const row of data as any[]) {
         try {
@@ -1342,18 +1338,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          // Auto-generate student ID
-          studentCount++;
-          const autoStudentId = `SOWA/${schoolNumber}${studentCount.toString().padStart(3, '0')}`;
-
-          // Generate placeholder email if not provided
-          const email = emailInput || `${autoStudentId.replace('/', '')}@student.local`;
-
-          // Create user with default password
+          // Create user with default password (using temp email for now)
+          const tempEmail = emailInput || `temp_${Date.now()}_${Math.random()}@student.local`;
           const userData = insertUserSchema.parse({
             firstName,
             lastName,
-            email,
+            email: tempEmail,
             password: 'password@123', // Default password
             role: 'student',
             schoolId: schoolId
@@ -1361,11 +1351,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const newUser = await storage.createUser(userData);
 
-          // Create student record
+          // Create student record (studentId will be auto-generated with gap-filling logic)
           const studentData = insertStudentSchema.parse({
             userId: newUser.id,
             classId,
-            studentId: autoStudentId,
+            // studentId is NOT provided - let createStudent auto-generate with gap-filling
             dateOfBirth: dateOfBirth,
             age: age,
             profileImage: null,
@@ -1376,10 +1366,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const student = await storage.createStudent(studentData);
 
+          // Update user email with actual student ID if no email was provided
+          if (!emailInput) {
+            const actualEmail = `${student.studentId.replace('/', '')}@student.local`;
+            await storage.updateUser(newUser.id, { email: actualEmail });
+          }
+
           results.successful.push({
-            studentId: autoStudentId,
+            studentId: student.studentId,
             name: `${firstName} ${lastName}`,
-            email
+            email: emailInput || `${student.studentId.replace('/', '')}@student.local`
           });
 
         } catch (error: any) {
