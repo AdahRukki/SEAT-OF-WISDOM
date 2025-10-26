@@ -605,6 +605,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/admin/classes/:classId', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { classId } = req.params;
+      await storage.deleteClass(classId);
+      res.json({ message: "Class deleted successfully" });
+    } catch (error) {
+      console.error("Delete class error:", error);
+      res.status(400).json({ error: "Failed to delete class" });
+    }
+  });
+
   // Admin routes - Subject management
   app.get('/api/admin/subjects', authenticate, requireAdmin, async (req, res) => {
     try {
