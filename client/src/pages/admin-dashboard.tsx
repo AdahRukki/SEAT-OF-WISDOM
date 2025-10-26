@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -166,6 +166,7 @@ export default function AdminDashboard() {
   const [isBatchUploadDialogOpen, setIsBatchUploadDialogOpen] = useState(false);
   const [batchUploadFile, setBatchUploadFile] = useState<File | null>(null);
   const [batchUploadResults, setBatchUploadResults] = useState<any>(null);
+  const batchUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
   const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
   const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false);
@@ -5884,21 +5885,45 @@ export default function AdminDashboard() {
                     </Button>
                   </div>
 
-                  <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                    <Input
+                  <div className="border-2 border-dashed rounded-lg p-6 text-center space-y-3">
+                    <input
+                      ref={batchUploadInputRef}
                       type="file"
                       accept=".xlsx,.xls"
                       onChange={(e) => setBatchUploadFile(e.target.files?.[0] || null)}
-                      className="hidden"
-                      id="batch-upload-file"
+                      style={{ display: 'none' }}
                       data-testid="input-batch-upload-file"
                     />
-                    <label htmlFor="batch-upload-file" className="cursor-pointer">
-                      <Upload className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                        {batchUploadFile ? batchUploadFile.name : 'Click to select Excel file'}
-                      </p>
-                    </label>
+                    <Upload className="h-12 w-12 mx-auto text-gray-400" />
+                    {batchUploadFile ? (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {batchUploadFile.name}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => batchUploadInputRef.current?.click()}
+                          data-testid="button-change-file"
+                        >
+                          Change File
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                          No file selected
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={() => batchUploadInputRef.current?.click()}
+                          data-testid="button-select-file"
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          Select Excel File
+                        </Button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-2 pt-4">
