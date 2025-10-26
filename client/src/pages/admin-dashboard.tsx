@@ -5965,29 +5965,29 @@ export default function AdminDashboard() {
               ) : (
                 <>
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                      <div className="bg-green-50 dark:bg-green-900/20 p-3 sm:p-4 rounded-lg border border-green-200 dark:border-green-800">
                         <div className="flex items-center gap-2 mb-1">
                           <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                          <h4 className="font-medium text-green-900 dark:text-green-100">Successful</h4>
+                          <h4 className="font-medium text-sm sm:text-base text-green-900 dark:text-green-100">Successful</h4>
                         </div>
-                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">{batchUploadResults.successful.length}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">{batchUploadResults.successful.length}</p>
                       </div>
-                      <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
+                      <div className="bg-red-50 dark:bg-red-900/20 p-3 sm:p-4 rounded-lg border border-red-200 dark:border-red-800">
                         <div className="flex items-center gap-2 mb-1">
                           <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                          <h4 className="font-medium text-red-900 dark:text-red-100">Failed</h4>
+                          <h4 className="font-medium text-sm sm:text-base text-red-900 dark:text-red-100">Failed</h4>
                         </div>
-                        <p className="text-2xl font-bold text-red-600 dark:text-red-400">{batchUploadResults.failed.length}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">{batchUploadResults.failed.length}</p>
                       </div>
                     </div>
 
                     {batchUploadResults.successful.length > 0 && (
-                      <div className="border rounded-lg p-4 max-h-60 overflow-y-auto">
-                        <h4 className="font-medium mb-2 text-green-900 dark:text-green-100">Successfully Created Students:</h4>
+                      <div className="border rounded-lg p-3 sm:p-4 max-h-48 sm:max-h-60 overflow-y-auto">
+                        <h4 className="font-medium mb-2 text-sm sm:text-base text-green-900 dark:text-green-100">Successfully Created Students:</h4>
                         <div className="space-y-1">
                           {batchUploadResults.successful.map((student: any, index: number) => (
-                            <div key={index} className="text-sm text-gray-700 dark:text-gray-300">
+                            <div key={index} className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 break-words">
                               ✓ {student.name} ({student.studentId}) - {student.email}
                             </div>
                           ))}
@@ -5996,13 +5996,13 @@ export default function AdminDashboard() {
                     )}
 
                     {batchUploadResults.failed.length > 0 && (
-                      <div className="border border-red-200 dark:border-red-800 rounded-lg p-4 max-h-60 overflow-y-auto">
-                        <h4 className="font-medium mb-2 text-red-900 dark:text-red-100">Failed Uploads:</h4>
+                      <div className="border border-red-200 dark:border-red-800 rounded-lg p-3 sm:p-4 max-h-48 sm:max-h-60 overflow-y-auto">
+                        <h4 className="font-medium mb-2 text-sm sm:text-base text-red-900 dark:text-red-100">Failed Uploads:</h4>
                         <div className="space-y-2">
                           {batchUploadResults.failed.map((failure: any, index: number) => (
-                            <div key={index} className="text-sm">
+                            <div key={index} className="text-xs sm:text-sm break-words">
                               <p className="font-medium text-red-700 dark:text-red-300">Error: {failure.error}</p>
-                              <p className="text-gray-600 dark:text-gray-400 text-xs">Row data: {JSON.stringify(failure.row)}</p>
+                              <p className="text-gray-600 dark:text-gray-400 text-xs mt-1">Row data: {JSON.stringify(failure.row)}</p>
                             </div>
                           ))}
                         </div>
