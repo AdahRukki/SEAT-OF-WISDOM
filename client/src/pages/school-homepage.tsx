@@ -391,10 +391,8 @@ export default function SchoolHomepage() {
                   and social interaction in a nurturing environment.
                 </p>
                 <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
-                  <li>• Play Class (Ages 2-3)</li>
-                  <li>• Kindergarten 1 (Ages 3-4)</li>
-                  <li>• Kindergarten 2 (Ages 4-5)</li>
-                  <li>• Kindergarten 3 (Ages 5-6)</li>
+                  <li>• Play Class</li>
+                  <li>• Kindergarten 1-3</li>
                 </ul>
               </CardContent>
             </Card>
@@ -423,11 +421,7 @@ export default function SchoolHomepage() {
                   through engaging and interactive learning methods.
                 </p>
                 <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
-                  <li>• Basic 1 (Ages 6-7)</li>
-                  <li>• Basic 2 (Ages 7-8)</li>
-                  <li>• Basic 3 (Ages 8-9)</li>
-                  <li>• Basic 4 (Ages 9-10)</li>
-                  <li>• Basic 5 (Ages 10-11)</li>
+                  <li>• Basic 1-5</li>
                 </ul>
               </CardContent>
             </Card>
@@ -456,10 +450,9 @@ export default function SchoolHomepage() {
                   critical thinking development, and university readiness.
                 </p>
                 <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
-                  <li>• Junior Secondary (JSS1-3)</li>
-                  <li>• Senior Secondary (SS1-3)</li>
+                  <li>• Junior Secondary (JSS 1-3)</li>
+                  <li>• Senior Secondary (SS 1-3)</li>
                   <li>• Science & Arts Combinations</li>
-                  <li>• University Preparation</li>
                 </ul>
               </CardContent>
             </Card>
