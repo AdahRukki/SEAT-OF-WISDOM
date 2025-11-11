@@ -3759,16 +3759,16 @@ export default function AdminDashboard() {
 
                 {scoresClassId && scoresSubjectId ? (
                   <div className="border rounded-lg overflow-x-auto">
-                    <table className="w-full min-w-[600px]">
+                    <table className="w-full min-w-[600px] text-[11px]">
                       <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <th className="px-2 md:px-4 py-2 md:py-3 text-left text-xs md:text-sm font-medium text-gray-900 dark:text-white">Student</th>
-                          <th className="px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
-                          <th className="px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-sm font-medium text-gray-900 dark:text-white">1st CA (20)</th>
-                          <th className="px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-sm font-medium text-gray-900 dark:text-white">2nd CA (20)</th>
-                          <th className="px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-sm font-medium text-gray-900 dark:text-white">Exam (60)</th>
-                          <th className="px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-sm font-medium text-gray-900 dark:text-white">Total (100)</th>
-                          <th className="px-2 md:px-4 py-2 md:py-3 text-center text-xs md:text-sm font-medium text-gray-900 dark:text-white">Grade</th>
+                          <th className="px-1.5 py-1.5 text-left text-[10px] font-medium text-gray-900 dark:text-white">Student</th>
+                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">ID</th>
+                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">CA1</th>
+                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">CA2</th>
+                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Exam</th>
+                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Total</th>
+                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Grade</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -3788,18 +3788,18 @@ export default function AdminDashboard() {
                             
                             return (
                               <tr key={student.id}>
-                                <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs md:text-sm font-medium text-gray-900 dark:text-white">
+                                <td className="px-1.5 py-0.5 text-[11px] font-medium text-gray-900 dark:text-white">
                                   {student.user.firstName} {student.user.lastName}
                                 </td>
-                                <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs md:text-sm text-center text-gray-900 dark:text-white">
+                                <td className="px-1.5 py-0.5 text-[11px] text-center text-gray-900 dark:text-white">
                                   {student.studentId}
                                 </td>
-                                <td className="px-2 md:px-4 py-1.5 md:py-3 text-center">
+                                <td className="px-1.5 py-0.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="20"
-                                    className="w-14 md:w-16 h-7 md:h-8 text-center text-xs"
+                                    className="w-12 h-6 text-center text-[11px] px-1"
                                     value={currentScores.firstCA || assessment?.firstCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
@@ -3808,12 +3808,12 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-2 md:px-4 py-1.5 md:py-3 text-center">
+                                <td className="px-1.5 py-0.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="20"
-                                    className="w-14 md:w-16 h-7 md:h-8 text-center text-xs"
+                                    className="w-12 h-6 text-center text-[11px] px-1"
                                     value={currentScores.secondCA || assessment?.secondCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
@@ -3822,12 +3822,12 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-2 md:px-4 py-1.5 md:py-3 text-center">
+                                <td className="px-1.5 py-0.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="60"
-                                    className="w-14 md:w-16 h-7 md:h-8 text-center text-xs"
+                                    className="w-12 h-6 text-center text-[11px] px-1"
                                     value={currentScores.exam || assessment?.exam || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
@@ -3836,11 +3836,11 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-2 md:px-4 py-1.5 md:py-3 text-xs md:text-sm text-center font-semibold text-gray-900 dark:text-white">
+                                <td className="px-1.5 py-0.5 text-[11px] text-center font-semibold text-gray-900 dark:text-white">
                                   {total}
                                 </td>
-                                <td className="px-2 md:px-4 py-1.5 md:py-3 text-center">
-                                  <span className={`inline-block px-1.5 md:px-2 py-0.5 md:py-1 rounded text-xs font-medium ${
+                                <td className="px-1.5 py-0.5 text-center">
+                                  <span className={`inline-block px-1 py-0.5 rounded text-[10px] font-medium ${
                                     grade === 'A' ? 'bg-green-500' : 
                                     grade === 'B' ? 'bg-blue-500' : 
                                     grade === 'C' ? 'bg-yellow-500' : 
@@ -3855,11 +3855,11 @@ export default function AdminDashboard() {
                         }
                       </tbody>
                     </table>
-                    <div className="p-2 md:p-4 bg-gray-50 dark:bg-gray-800">
+                    <div className="p-1.5 bg-gray-50 dark:bg-gray-800">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button 
-                            className="w-full h-8 md:h-10 text-xs md:text-sm"
+                            className="w-full h-7 text-[11px]"
                             onClick={handleSaveAllScores}
                             disabled={updateScoresMutation.isPending}
                           >
