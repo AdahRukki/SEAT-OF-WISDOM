@@ -3794,7 +3794,7 @@ export default function AdminDashboard() {
                                 <td className="px-2 py-1.5 text-xs text-center text-gray-900 dark:text-white">
                                   {student.studentId}
                                 </td>
-                                <td className="px-2 py-1.5 text-center">
+                                <td className="px-2 py-1.5 text-center pt-[3px] pb-[3px] pl-[4px] pr-[4px]">
                                   <Input
                                     type="number"
                                     min="0"
