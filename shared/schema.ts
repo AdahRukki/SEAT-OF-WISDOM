@@ -95,6 +95,7 @@ export const users = pgTable("users", {
   password: varchar("password", { length: 255 }).notNull(),
   firstName: varchar("first_name", { length: 100 }).notNull(),
   lastName: varchar("last_name", { length: 100 }).notNull(),
+  middleName: varchar("middle_name", { length: 100 }),
   role: varchar("role", { length: 20 }).notNull().default("student"), // admin, sub-admin, student
   schoolId: uuid("school_id").references(() => schools.id), // sub-admins and students are tied to specific schools
   isActive: boolean("is_active").default(true),
