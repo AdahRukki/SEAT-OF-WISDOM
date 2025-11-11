@@ -1120,7 +1120,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Handle date conversion properly and filter out non-student fields
-      const { firstName, lastName, middleName, email, ...studentOnlyData } = updateData;
+      const { firstName, lastName, middleName, email, parentWhatsApp, ...studentOnlyData } = updateData;
+      
+      // Map parentWhatsApp to parentWhatsapp (fix field name casing)
+      if (parentWhatsApp !== undefined) {
+        studentOnlyData.parentWhatsapp = parentWhatsApp;
+      }
       
       // Convert date string to Date object if provided
       if (studentOnlyData.dateOfBirth && typeof studentOnlyData.dateOfBirth === 'string') {
