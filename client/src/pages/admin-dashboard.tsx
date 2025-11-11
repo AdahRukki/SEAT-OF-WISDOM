@@ -3547,7 +3547,7 @@ export default function AdminDashboard() {
                   Enter and manage student assessment scores (1st CA: 20 marks, 2nd CA: 20 marks, Exam: 60 marks)
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-1 md:p-6 pt-0">
                 {/* Filters - Responsive Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   <div>
