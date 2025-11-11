@@ -3471,6 +3471,7 @@ export default function AdminDashboard() {
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {allStudents
                           .filter(student => student.classId === selectedClassForStudents)
+                          .sort((a, b) => a.studentId.localeCompare(b.studentId))
                           .map((student) => (
                             <tr key={student.id}>
                               <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
@@ -3771,6 +3772,7 @@ export default function AdminDashboard() {
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {allStudents
                           .filter(student => student.classId === scoresClassId)
+                          .sort((a, b) => a.studentId.localeCompare(b.studentId))
                           .map((student) => {
                             const assessment = classAssessments.find(a => a.studentId === student.id);
                             const currentScores = scoreInputs[student.id] || {};
