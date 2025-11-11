@@ -2166,7 +2166,9 @@ export default function AdminDashboard() {
     if (e.key === 'Enter') {
       e.preventDefault();
       
-      const studentsInClass = allStudents.filter(student => student.classId === scoresClassId);
+      const studentsInClass = allStudents
+        .filter(student => student.classId === scoresClassId)
+        .sort((a, b) => a.studentId.localeCompare(b.studentId));
       const currentIndex = studentsInClass.findIndex(student => student.id === currentStudentId);
       
       // Navigate based on current field and position
