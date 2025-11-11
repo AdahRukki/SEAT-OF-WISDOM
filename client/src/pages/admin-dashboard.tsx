@@ -3762,13 +3762,13 @@ export default function AdminDashboard() {
                     <table className="w-full min-w-[600px]">
                       <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">1st CA (20)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">2nd CA (20)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Exam (60)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Total (100)</th>
-                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-white">Grade</th>
+                          <th className="px-2 py-2 text-left text-xs font-medium text-gray-900 dark:text-white">Student</th>
+                          <th className="px-2 py-2 text-center text-xs font-medium text-gray-900 dark:text-white">Student ID</th>
+                          <th className="px-2 py-2 text-center text-xs font-medium text-gray-900 dark:text-white">1st CA (20)</th>
+                          <th className="px-2 py-2 text-center text-xs font-medium text-gray-900 dark:text-white">2nd CA (20)</th>
+                          <th className="px-2 py-2 text-center text-xs font-medium text-gray-900 dark:text-white">Exam (60)</th>
+                          <th className="px-2 py-2 text-center text-xs font-medium text-gray-900 dark:text-white">Total (100)</th>
+                          <th className="px-2 py-2 text-center text-xs font-medium text-gray-900 dark:text-white">Grade</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -3788,18 +3788,18 @@ export default function AdminDashboard() {
                             
                             return (
                               <tr key={student.id}>
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                                <td className="px-2 py-1.5 text-xs font-medium text-gray-900 dark:text-white">
                                   {student.user.firstName} {student.user.lastName}
                                 </td>
-                                <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-white">
+                                <td className="px-2 py-1.5 text-xs text-center text-gray-900 dark:text-white">
                                   {student.studentId}
                                 </td>
-                                <td className="px-4 py-3 text-center">
+                                <td className="px-2 py-1.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="20"
-                                    className="w-16 h-8 text-center"
+                                    className="w-14 h-7 text-center text-xs"
                                     value={currentScores.firstCA || assessment?.firstCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
@@ -3808,12 +3808,12 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-4 py-3 text-center">
+                                <td className="px-2 py-1.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="20"
-                                    className="w-16 h-8 text-center"
+                                    className="w-14 h-7 text-center text-xs"
                                     value={currentScores.secondCA || assessment?.secondCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
@@ -3822,12 +3822,12 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-4 py-3 text-center">
+                                <td className="px-2 py-1.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="60"
-                                    className="w-16 h-8 text-center"
+                                    className="w-14 h-7 text-center text-xs"
                                     value={currentScores.exam || assessment?.exam || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
@@ -3836,11 +3836,11 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-4 py-3 text-sm text-center font-semibold text-gray-900 dark:text-white">
+                                <td className="px-2 py-1.5 text-xs text-center font-semibold text-gray-900 dark:text-white">
                                   {total}
                                 </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                                <td className="px-2 py-1.5 text-center">
+                                  <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
                                     grade === 'A' ? 'bg-green-500' : 
                                     grade === 'B' ? 'bg-blue-500' : 
                                     grade === 'C' ? 'bg-yellow-500' : 
@@ -3855,11 +3855,11 @@ export default function AdminDashboard() {
                         }
                       </tbody>
                     </table>
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800">
+                    <div className="p-2 bg-gray-50 dark:bg-gray-800">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button 
-                            className="w-full"
+                            className="w-full h-8 text-xs"
                             onClick={handleSaveAllScores}
                             disabled={updateScoresMutation.isPending}
                           >
