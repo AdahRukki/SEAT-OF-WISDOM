@@ -1120,12 +1120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Handle date conversion properly and filter out non-student fields
-      const { firstName, lastName, middleName, email, parentWhatsApp, ...studentOnlyData } = updateData;
-      
-      // Map parentWhatsApp to parentWhatsapp (fix field name casing)
-      if (parentWhatsApp !== undefined) {
-        studentOnlyData.parentWhatsapp = parentWhatsApp;
-      }
+      const { firstName, lastName, middleName, email, ...studentOnlyData } = updateData;
       
       // Convert date string to Date object if provided
       if (studentOnlyData.dateOfBirth && typeof studentOnlyData.dateOfBirth === 'string') {
@@ -1147,18 +1142,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Update user fields if provided
-      if (firstName || lastName || middleName !== undefined || email) {
+      if (firstName || lastName || middleName || email) {
         const student = await storage.getStudent(id);
         if (student && student.userId) {
-          const userUpdates: any = {};
-          if (firstName) userUpdates.firstName = firstName;
-          if (lastName) userUpdates.lastName = lastName;
-          if (middleName !== undefined) userUpdates.middleName = middleName;
-          if (email) userUpdates.email = email;
-          
           // Update the user record directly in database
           await db.update(users)
-            .set(userUpdates)
+            .set({
+              firstName: firstName || undefined,
+              lastName: lastName || undefined, 
+              email: email || undefined
+            })
             .where(eq(users.id, student.userId));
         }
       }
