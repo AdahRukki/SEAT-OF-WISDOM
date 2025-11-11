@@ -50,14 +50,14 @@ function NewsExcerptSection() {
     queryKey: ["/api/news"],
   });
 
-  const latestNews = newsItems.slice(0, 3);
+  const latestNews = newsItems.slice(0, 6);
 
   if (latestNews.length === 0) return null;
 
   return (
     <section className="py-20 bg-gray-50 dark:bg-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
+        <div className="text-center mb-16">
           <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-news-section-title">
             Latest News & Updates
           </h2>
@@ -66,43 +66,44 @@ function NewsExcerptSection() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {latestNews.map((item) => (
-            <Card key={item.id} className="hover:shadow-lg transition-shadow flex flex-col" data-testid={`card-news-preview-${item.id}`}>
-              {item.imageUrl && (
-                <div className="h-48 overflow-hidden rounded-t-lg">
-                  <img
-                    src={item.imageUrl}
-                    alt={item.title}
-                    className="w-full h-full object-cover"
-                  />
+            <Link key={item.id} href={`/news/${item.id}`}>
+              <div className="relative group overflow-hidden rounded-lg shadow-lg cursor-pointer h-80" data-testid={`card-news-preview-${item.id}`}>
+                <img 
+                  src={item.imageUrl || classroomImage3}
+                  alt={item.title}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent opacity-60 group-hover:opacity-90 transition-opacity duration-300"></div>
+                
+                <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                  <div className="transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+                    {item.tag && (
+                      <Badge className="mb-3 bg-blue-600 text-white border-0">
+                        {item.tag}
+                      </Badge>
+                    )}
+                    <h3 className="text-xl font-bold mb-2 line-clamp-2" data-testid={`text-news-preview-title-${item.id}`}>
+                      {item.title}
+                    </h3>
+                    <p className="text-sm text-gray-200 mb-2">
+                      {format(new Date(item.publishedAt), "MMM dd, yyyy")}
+                    </p>
+                    <p className="text-sm text-gray-300 line-clamp-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      {item.content}
+                    </p>
+                  </div>
                 </div>
-              )}
-              <CardHeader>
-                {item.tag && (
-                  <Badge variant="secondary" className="mb-2 w-fit">
-                    {item.tag}
-                  </Badge>
-                )}
-                <CardTitle className="line-clamp-2" data-testid={`text-news-preview-title-${item.id}`}>
-                  {item.title}
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {format(new Date(item.publishedAt), "MMM dd, yyyy")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col">
-                <p className="text-gray-600 dark:text-gray-400 line-clamp-3 mb-4 flex-1">
-                  {item.content}
-                </p>
-                <Link href={`/news/${item.id}`}>
-                  <Button variant="outline" className="w-full" data-testid={`button-read-more-${item.id}`}>
-                    Read More
-                    <ChevronRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
+
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-6 py-3 rounded-full font-semibold flex items-center gap-2 shadow-lg">
+                    Read Article
+                    <ChevronRight className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
 
