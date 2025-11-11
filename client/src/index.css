@@ -118,8 +118,8 @@
   
   /* Fix table scrolling in tabs */
   .table-container {
-    max-height: 60vh !important;
-    overflow: auto !important;
+    /* Removed max-height to allow full table visibility */
+    overflow: visible !important;
   }
   
   /* Ensure horizontal scrolling for student table */
