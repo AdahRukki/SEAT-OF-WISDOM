@@ -1142,16 +1142,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Update user fields if provided
-      if (firstName || lastName || middleName || email) {
+      if (firstName || lastName || middleName !== undefined || email) {
         const student = await storage.getStudent(id);
         if (student && student.userId) {
+          const userUpdates: any = {};
+          if (firstName) userUpdates.firstName = firstName;
+          if (lastName) userUpdates.lastName = lastName;
+          if (middleName !== undefined) userUpdates.middleName = middleName;
+          if (email) userUpdates.email = email;
+          
           // Update the user record directly in database
           await db.update(users)
-            .set({
-              firstName: firstName || undefined,
-              lastName: lastName || undefined, 
-              email: email || undefined
-            })
+            .set(userUpdates)
             .where(eq(users.id, student.userId));
         }
       }
