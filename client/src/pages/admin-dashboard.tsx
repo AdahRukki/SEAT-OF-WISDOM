@@ -3758,24 +3758,36 @@ export default function AdminDashboard() {
                 )}
 
                 {scoresClassId && scoresSubjectId ? (
-                  <div className="border rounded-lg overflow-x-auto">
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden shadow-sm">
                     <table className="w-full min-w-[600px] text-[11px]">
-                      <thead className="bg-gray-50 dark:bg-gray-800">
+                      <thead className="bg-gradient-to-b from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 border-b-2 border-gray-300 dark:border-gray-600">
                         <tr>
-                          <th className="px-1.5 py-1.5 text-left text-[10px] font-medium text-gray-900 dark:text-white">Student</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">ID</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">CA1</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">CA2</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Exam</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Total</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Grade</th>
+                          <th className="px-1 py-1.5 text-left text-[10px] font-semibold text-gray-700 dark:text-gray-200">Student</th>
+                          <th className="px-0.5 py-1.5 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-200">ID</th>
+                          <th className="px-0.5 py-1.5 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-200">
+                            <div>CA1</div>
+                            <div className="text-[9px] text-gray-500 dark:text-gray-400">(20)</div>
+                          </th>
+                          <th className="px-0.5 py-1.5 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-200">
+                            <div>CA2</div>
+                            <div className="text-[9px] text-gray-500 dark:text-gray-400">(20)</div>
+                          </th>
+                          <th className="px-0.5 py-1.5 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-200">
+                            <div>Exam</div>
+                            <div className="text-[9px] text-gray-500 dark:text-gray-400">(60)</div>
+                          </th>
+                          <th className="px-0.5 py-1.5 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-200">
+                            <div>Total</div>
+                            <div className="text-[9px] text-gray-500 dark:text-gray-400">(100)</div>
+                          </th>
+                          <th className="px-0.5 py-1.5 text-center text-[10px] font-semibold text-gray-700 dark:text-gray-200">Grade</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tbody className="bg-white dark:bg-gray-900">
                         {allStudents
                           .filter(student => student.classId === scoresClassId)
                           .sort((a, b) => a.studentId.localeCompare(b.studentId))
-                          .map((student) => {
+                          .map((student, index) => {
                             const assessment = classAssessments.find(a => a.studentId === student.id);
                             const currentScores = scoreInputs[student.id] || {};
                             
@@ -3787,19 +3799,23 @@ export default function AdminDashboard() {
                             const grade = calculateGrade(total);
                             
                             return (
-                              <tr key={student.id}>
-                                <td className="px-1.5 py-0.5 text-[11px] font-medium text-gray-900 dark:text-white">
+                              <tr key={student.id} className={`border-b border-gray-200 dark:border-gray-700 ${
+                                index % 2 === 0 
+                                  ? 'bg-white dark:bg-gray-900' 
+                                  : 'bg-gray-50 dark:bg-gray-800/50'
+                              } hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors`}>
+                                <td className="px-1 py-0.5 text-[11px] font-medium text-gray-900 dark:text-white">
                                   {student.user.firstName} {student.user.lastName}
                                 </td>
-                                <td className="px-1.5 py-0.5 text-[11px] text-center text-gray-900 dark:text-white">
+                                <td className="px-0.5 py-0.5 text-[11px] text-center text-gray-700 dark:text-gray-300">
                                   {student.studentId}
                                 </td>
-                                <td className="px-1.5 py-0.5 text-center">
+                                <td className="px-0.5 py-0.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="20"
-                                    className="w-12 h-6 text-center text-[11px] px-1"
+                                    className="w-12 h-6 text-center text-[11px] px-1 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500"
                                     value={currentScores.firstCA || assessment?.firstCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
@@ -3808,12 +3824,12 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-1.5 py-0.5 text-center">
+                                <td className="px-0.5 py-0.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="20"
-                                    className="w-12 h-6 text-center text-[11px] px-1"
+                                    className="w-12 h-6 text-center text-[11px] px-1 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500"
                                     value={currentScores.secondCA || assessment?.secondCA || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
@@ -3822,12 +3838,12 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-1.5 py-0.5 text-center">
+                                <td className="px-0.5 py-0.5 text-center">
                                   <Input
                                     type="number"
                                     min="0"
                                     max="60"
-                                    className="w-12 h-6 text-center text-[11px] px-1"
+                                    className="w-12 h-6 text-center text-[11px] px-1 border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500"
                                     value={currentScores.exam || assessment?.exam || ''}
                                     onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
                                     onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
@@ -3836,16 +3852,16 @@ export default function AdminDashboard() {
                                     placeholder="0"
                                   />
                                 </td>
-                                <td className="px-1.5 py-0.5 text-[11px] text-center font-semibold text-gray-900 dark:text-white">
+                                <td className="px-0.5 py-0.5 text-[11px] text-center font-bold text-gray-900 dark:text-white">
                                   {total}
                                 </td>
-                                <td className="px-1.5 py-0.5 text-center">
-                                  <span className={`inline-block px-1 py-0.5 rounded text-[10px] font-medium ${
-                                    grade === 'A' ? 'bg-green-500' : 
-                                    grade === 'B' ? 'bg-blue-500' : 
-                                    grade === 'C' ? 'bg-yellow-500' : 
-                                    grade === 'D' ? 'bg-orange-500' : 'bg-red-500'
-                                  } text-white`}>
+                                <td className="px-0.5 py-0.5 text-center">
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-md text-[10px] font-semibold shadow-sm ${
+                                    grade === 'A' ? 'bg-green-500 text-white' : 
+                                    grade === 'B' ? 'bg-blue-500 text-white' : 
+                                    grade === 'C' ? 'bg-yellow-500 text-white' : 
+                                    grade === 'D' ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
+                                  }`}>
                                     {grade}
                                   </span>
                                 </td>
@@ -3855,11 +3871,11 @@ export default function AdminDashboard() {
                         }
                       </tbody>
                     </table>
-                    <div className="p-1.5 bg-gray-50 dark:bg-gray-800">
+                    <div className="p-2 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 border-t border-gray-300 dark:border-gray-600">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button 
-                            className="w-full h-7 text-[11px]"
+                            className="w-full h-7 text-[11px] font-semibold shadow-sm hover:shadow-md transition-shadow"
                             onClick={handleSaveAllScores}
                             disabled={updateScoresMutation.isPending}
                           >
