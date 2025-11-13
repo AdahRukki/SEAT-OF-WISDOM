@@ -732,6 +732,7 @@ export default function SchoolHomepage() {
               </CardContent>
             </Card>
 
+            {/* Hidden: Computer Lab - Uncomment when ready to display
             <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-facility-3">
               <div className="relative h-48">
                 <img 
@@ -752,7 +753,9 @@ export default function SchoolHomepage() {
                 </p>
               </CardContent>
             </Card>
+            */}
 
+            {/* Hidden: Multi-Purpose Hall - Uncomment when ready to display
             <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-facility-4">
               <div className="relative h-48">
                 <img 
@@ -773,6 +776,7 @@ export default function SchoolHomepage() {
                 </p>
               </CardContent>
             </Card>
+            */}
           </div>
         </div>
       </section>
