@@ -3855,21 +3855,23 @@ export default function AdminDashboard() {
                         }
                       </tbody>
                     </table>
-                    <div className="p-1.5 bg-gray-50 dark:bg-gray-800">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button 
-                            className="w-full h-7 text-[11px]"
-                            onClick={handleSaveAllScores}
-                            disabled={updateScoresMutation.isPending}
-                          >
-                            {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Save all entered scores to the database</p>
-                        </TooltipContent>
-                      </Tooltip>
+                    <div className="bg-gray-50 dark:bg-gray-800" style={{ minWidth: '600px' }}>
+                      <div className="p-1.5">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              className="w-full h-7 text-[11px]"
+                              onClick={handleSaveAllScores}
+                              disabled={updateScoresMutation.isPending}
+                            >
+                              {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Save all entered scores to the database</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
                   </div>
                 ) : (
