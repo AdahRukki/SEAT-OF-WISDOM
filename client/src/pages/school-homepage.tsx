@@ -35,6 +35,8 @@ import libraryCardImage from "@assets/library.jpeg";
 
 import images__4_ from "@assets/images (4).jpeg";
 
+import ChatGPT_Image_Nov_13__2025__08_01_22_PM from "@assets/ChatGPT Image Nov 13, 2025, 08_01_22 PM.png";
+
 interface NewsItem {
   id: string;
   title: string;
@@ -373,7 +375,7 @@ export default function SchoolHomepage() {
             <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-nursery">
               <div className="relative h-48">
                 <img 
-                  src={classroomImage1} 
+                  src={ChatGPT_Image_Nov_13__2025__08_01_22_PM} 
                   alt="Nursery students learning" 
                   className="w-full h-full object-cover object-top"
                 />
