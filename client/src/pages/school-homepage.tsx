@@ -375,11 +375,11 @@ export default function SchoolHomepage() {
 
           <div className="grid md:grid-cols-3 gap-8">
             <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-nursery">
-              <div className="relative h-48">
+              <div className="relative h-64 md:h-48">
                 <img 
                   src={ChatGPT_Image_Nov_13__2025__08_01_22_PM} 
                   alt="Nursery students learning" 
-                  className="w-full h-full object-cover object-top"
+                  className="w-full h-full object-cover object-center md:object-top"
                 />
                 <div className="absolute top-4 left-4">
                   <Badge className="bg-blue-600 text-white">Nursery</Badge>
@@ -405,11 +405,11 @@ export default function SchoolHomepage() {
             </Card>
 
             <Card className="hover:shadow-lg transition-shadow overflow-hidden" data-testid="card-primary">
-              <div className="relative h-48">
+              <div className="relative h-64 md:h-48">
                 <img 
                   src={ChatGPT_Image_Nov_13__2025__08_01_18_PM} 
                   alt="Primary students in classroom" 
-                  className="w-full h-full object-cover object-top"
+                  className="w-full h-full object-cover object-center md:object-top"
                 />
                 <div className="absolute top-4 left-4">
                   <Badge className="bg-green-600 text-white">Primary</Badge>
