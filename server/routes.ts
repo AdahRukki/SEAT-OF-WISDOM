@@ -1120,7 +1120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Handle date conversion properly and filter out non-student fields
-      const { firstName, lastName, middleName, email, ...studentOnlyData } = updateData;
+      const { firstName, lastName, middleName, email, isActive, ...studentOnlyData } = updateData;
       
       // Convert date string to Date object if provided
       if (studentOnlyData.dateOfBirth && typeof studentOnlyData.dateOfBirth === 'string') {
@@ -1142,16 +1142,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Update user fields if provided
-      if (firstName || lastName || middleName || email) {
+      if (firstName !== undefined || lastName !== undefined || middleName !== undefined || email !== undefined || isActive !== undefined) {
         const student = await storage.getStudent(id);
         if (student && student.userId) {
+          const userUpdateData: any = {};
+          if (firstName !== undefined) userUpdateData.firstName = firstName;
+          if (lastName !== undefined) userUpdateData.lastName = lastName;
+          if (middleName !== undefined) userUpdateData.middleName = middleName;
+          if (email !== undefined) userUpdateData.email = email;
+          if (isActive !== undefined) userUpdateData.isActive = isActive;
+          
           // Update the user record directly in database
           await db.update(users)
-            .set({
-              firstName: firstName || undefined,
-              lastName: lastName || undefined, 
-              email: email || undefined
-            })
+            .set(userUpdateData)
             .where(eq(users.id, student.userId));
         }
       }
