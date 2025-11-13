@@ -2165,6 +2165,7 @@ export default function AdminDashboard() {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentStudentId: string, currentField: 'firstCA' | 'secondCA' | 'exam') => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       
       const studentsInClass = allStudents
         .filter(student => student.classId === scoresClassId)
@@ -2196,6 +2197,30 @@ export default function AdminDashboard() {
           nextField?.focus();
           nextField?.select();
         }
+      }
+    }
+    // Prevent Tab key from moving horizontally
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const studentsInClass = allStudents
+        .filter(student => student.classId === scoresClassId)
+        .sort((a, b) => a.studentId.localeCompare(b.studentId));
+      const currentIndex = studentsInClass.findIndex(student => student.id === currentStudentId);
+      
+      // Tab moves to next student in same column
+      if (!e.shiftKey && currentIndex < studentsInClass.length - 1) {
+        const nextStudentId = studentsInClass[currentIndex + 1].id;
+        const nextField = document.querySelector(`input[data-student-id="${nextStudentId}"][data-field="${currentField}"]`) as HTMLInputElement;
+        nextField?.focus();
+        nextField?.select();
+      } else if (e.shiftKey && currentIndex > 0) {
+        // Shift+Tab moves to previous student in same column
+        const prevStudentId = studentsInClass[currentIndex - 1].id;
+        const prevField = document.querySelector(`input[data-student-id="${prevStudentId}"][data-field="${currentField}"]`) as HTMLInputElement;
+        prevField?.focus();
+        prevField?.select();
       }
     }
   };
@@ -3797,6 +3822,7 @@ export default function AdminDashboard() {
                                 <td className="px-1.5 py-0.5 text-center">
                                   <Input
                                     type="number"
+                                    inputMode="numeric"
                                     min="0"
                                     max="20"
                                     className="w-12 h-6 text-center text-[11px] px-1"
@@ -3806,11 +3832,13 @@ export default function AdminDashboard() {
                                     data-student-id={student.id}
                                     data-field="firstCA"
                                     placeholder="0"
+                                    tabIndex={0}
                                   />
                                 </td>
                                 <td className="px-1.5 py-0.5 text-center">
                                   <Input
                                     type="number"
+                                    inputMode="numeric"
                                     min="0"
                                     max="20"
                                     className="w-12 h-6 text-center text-[11px] px-1"
@@ -3820,11 +3848,13 @@ export default function AdminDashboard() {
                                     data-student-id={student.id}
                                     data-field="secondCA"
                                     placeholder="0"
+                                    tabIndex={0}
                                   />
                                 </td>
                                 <td className="px-1.5 py-0.5 text-center">
                                   <Input
                                     type="number"
+                                    inputMode="numeric"
                                     min="0"
                                     max="60"
                                     className="w-12 h-6 text-center text-[11px] px-1"
@@ -3834,6 +3864,7 @@ export default function AdminDashboard() {
                                     data-student-id={student.id}
                                     data-field="exam"
                                     placeholder="0"
+                                    tabIndex={0}
                                   />
                                 </td>
                                 <td className="px-1.5 py-0.5 text-[11px] text-center font-semibold text-gray-900 dark:text-white">
