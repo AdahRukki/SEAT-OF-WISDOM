@@ -375,7 +375,7 @@ export default function SchoolHomepage() {
                 <img 
                   src={classroomImage1} 
                   alt="Nursery students learning" 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-top"
                 />
                 <div className="absolute top-4 left-4">
                   <Badge className="bg-blue-600 text-white">Nursery</Badge>
@@ -405,7 +405,7 @@ export default function SchoolHomepage() {
                 <img 
                   src={classroomImage2} 
                   alt="Primary students in classroom" 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-top"
                 />
                 <div className="absolute top-4 left-4">
                   <Badge className="bg-green-600 text-white">Primary</Badge>
@@ -434,7 +434,7 @@ export default function SchoolHomepage() {
                 <img 
                   src={image_2} 
                   alt="Secondary students studying" 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-top"
                 />
                 <div className="absolute top-4 left-4">
                   <Badge className="bg-purple-600 text-white">Secondary</Badge>
