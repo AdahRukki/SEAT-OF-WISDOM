@@ -1770,9 +1770,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             // Map Excel columns to our data structure
             const studentId = row['Student ID'] || row['student_id'] || row['studentId'];
-            const firstCA = parseFloat(row['First CA'] || row['first_ca'] || row['firstCA'] || '0');
-            const secondCA = parseFloat(row['Second CA'] || row['second_ca'] || row['secondCA'] || '0');
-            const exam = parseFloat(row['Exam'] || row['exam'] || '0');
+            const firstCAValue = row['First CA'] || row['first_ca'] || row['firstCA'];
+            const secondCAValue = row['Second CA'] || row['second_ca'] || row['secondCA'];
+            const examValue = row['Exam'] || row['exam'];
 
             if (!studentId) {
               sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Missing student ID`);
@@ -1786,18 +1786,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
               continue;
             }
 
-            // Validate scores
-            if (firstCA < 0 || firstCA > 20) {
-              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: First CA must be between 0-20`);
-              continue;
+            // Get existing assessment to preserve scores when cells are empty
+            const existingAssessments = await db
+              .select()
+              .from(assessments)
+              .where(
+                and(
+                  eq(assessments.studentId, student.id),
+                  eq(assessments.subjectId, currentSubjectId),
+                  eq(assessments.classId, classId),
+                  eq(assessments.term, term),
+                  eq(assessments.session, session)
+                )
+              );
+            
+            const existing = existingAssessments[0];
+            
+            // Only update scores if values are provided (not empty/null/undefined)
+            // Empty cells preserve existing values
+            const firstCA = (firstCAValue !== '' && firstCAValue !== null && firstCAValue !== undefined) 
+              ? parseFloat(String(firstCAValue)) 
+              : (existing?.firstCA ?? 0);
+            const secondCA = (secondCAValue !== '' && secondCAValue !== null && secondCAValue !== undefined) 
+              ? parseFloat(String(secondCAValue)) 
+              : (existing?.secondCA ?? 0);
+            const exam = (examValue !== '' && examValue !== null && examValue !== undefined) 
+              ? parseFloat(String(examValue)) 
+              : (existing?.exam ?? 0);
+
+            // Validate scores only if they're being updated
+            if (firstCAValue !== '' && firstCAValue !== null && firstCAValue !== undefined) {
+              if (firstCA < 0 || firstCA > 20) {
+                sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: First CA must be between 0-20`);
+                continue;
+              }
             }
-            if (secondCA < 0 || secondCA > 20) {
-              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Second CA must be between 0-20`);
-              continue;
+            if (secondCAValue !== '' && secondCAValue !== null && secondCAValue !== undefined) {
+              if (secondCA < 0 || secondCA > 20) {
+                sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Second CA must be between 0-20`);
+                continue;
+              }
             }
-            if (exam < 0 || exam > 60) {
-              sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Exam must be between 0-60`);
-              continue;
+            if (examValue !== '' && examValue !== null && examValue !== undefined) {
+              if (exam < 0 || exam > 60) {
+                sheetErrors.push(`Sheet "${sheetName}", Row ${i + 2}: Exam must be between 0-60`);
+                continue;
+              }
             }
 
             // Create or update assessment
@@ -1984,6 +2018,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("❌ Single subject template download error:", error);
       console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
       res.status(500).json({ error: "Failed to generate template", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // Download single subject Excel template WITH EXISTING SCORES pre-filled
+  app.get('/api/assessments/template-single-with-scores/:classId/:subjectId/:term/:session', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { classId, subjectId, term, session } = req.params;
+      
+      // Get class info for filename
+      const classInfo = await storage.getClassById(classId);
+      
+      // Get subject info
+      const allSubjects = await storage.getAllSubjects();
+      const subjectInfo = allSubjects.find(s => s.id === subjectId);
+      
+      if (!classInfo || !subjectInfo) {
+        return res.status(404).json({ error: "Class or subject not found" });
+      }
+      
+      // Get students from the class
+      const studentsInClass = await storage.getStudentsByClass(classId);
+      
+      // Get existing scores for this class, subject, term, and session
+      const existingAssessments = await db
+        .select()
+        .from(assessments)
+        .where(
+          and(
+            eq(assessments.classId, classId),
+            eq(assessments.subjectId, subjectId),
+            eq(assessments.term, term),
+            eq(assessments.session, session)
+          )
+        );
+      
+      // Create a map of studentId to assessment scores
+      const scoresMap = new Map();
+      existingAssessments.forEach(assessment => {
+        scoresMap.set(assessment.studentId, {
+          firstCA: assessment.firstCA ?? '',
+          secondCA: assessment.secondCA ?? '',
+          exam: assessment.exam ?? ''
+        });
+      });
+      
+      // Create Excel template with student IDs and existing scores
+      const templateData = studentsInClass.map(student => {
+        const scores = scoresMap.get(student.id) || { firstCA: '', secondCA: '', exam: '' };
+        return {
+          'Student ID': student.studentId,
+          'Student Name': `${student.user.firstName} ${student.user.lastName}`,
+          'First CA': scores.firstCA,
+          'Second CA': scores.secondCA,
+          'Exam': scores.exam
+        };
+      });
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      
+      // Set column widths
+      ws['!cols'] = [
+        { width: 15 }, // Student ID
+        { width: 25 }, // Student Name
+        { width: 12 }, // First CA
+        { width: 12 }, // Second CA
+        { width: 12 }  // Exam
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, subjectInfo.name);
+
+      // Generate buffer
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      // Create filename with existing scores indicator
+      const filename = `${subjectInfo.name.replace(/\s+/g, '-')}-${classInfo.name.replace(/\s+/g, '-')}-with-scores.xlsx`;
+
+      // Set headers for download
+      res.set({
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': buffer.length
+      });
+
+      res.send(buffer);
+
+    } catch (error) {
+      console.error("❌ Template with scores download error:", error);
+      res.status(500).json({ error: "Failed to generate template with scores" });
     }
   });
 
