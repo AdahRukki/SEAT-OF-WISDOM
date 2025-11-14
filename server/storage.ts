@@ -1611,7 +1611,8 @@ export class DatabaseStorage implements IStorage {
     .where(and(
       eq(attendance.classId, classId),
       eq(attendance.term, term),
-      eq(attendance.session, session)
+      eq(attendance.session, session),
+      eq(users.isActive, true)
     ));
     
     return result as (Attendance & { student: StudentWithDetails })[];
