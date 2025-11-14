@@ -2105,14 +2105,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ['Student ID', 'Student Name', 'First CA', 'Second CA', 'Exam'] // Column headers
       ];
       
-      // Add student data rows
+      // Add student data rows with proper type conversion
       templateData.forEach(row => {
         sheetData.push([
-          row['Student ID'],
-          row['Student Name'],
-          row['First CA'],
-          row['Second CA'],
-          row['Exam']
+          String(row['Student ID']),
+          String(row['Student Name']),
+          row['First CA'] === '' ? '' : Number(row['First CA']),
+          row['Second CA'] === '' ? '' : Number(row['Second CA']),
+          row['Exam'] === '' ? '' : Number(row['Exam'])
         ]);
       });
       
