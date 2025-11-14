@@ -27,10 +27,11 @@ import {
   insertNotificationSchema,
   users,
   students,
-  classes
+  classes,
+  assessments
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
@@ -1734,7 +1735,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`\n📋 Processing sheet: "${sheetName}"`);
         
         const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Check if this sheet has title rows (Class:, Subject:, etc.)
+        // Title format has 4 title rows + 1 blank + 1 header row = starts at row 6 (index 5)
+        const firstCell = worksheet['A1'];
+        const hasTitleRows = firstCell && 
+          (String(firstCell.v).toLowerCase().includes('class') || 
+           String(firstCell.v).toLowerCase().includes('subject'));
+        
+        // If title rows exist, skip first 5 rows and use row 6 as header
+        const data = hasTitleRows 
+          ? XLSX.utils.sheet_to_json(worksheet, { range: 5 }) // Start from row 6 (0-indexed)
+          : XLSX.utils.sheet_to_json(worksheet); // Use default (row 1 as header)
 
         if (data.length === 0) {
           console.log(`⚠️  Sheet "${sheetName}" is empty, skipping...`);
@@ -2080,9 +2092,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      // Create workbook
+      // Create workbook with title section
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(templateData);
+      
+      // Build sheet data with title rows
+      const sheetData: any[] = [
+        ['Class:', classInfo.name],
+        ['Subject:', subjectInfo.name],
+        ['Term:', term],
+        ['Session:', session],
+        [], // Blank row
+        ['Student ID', 'Student Name', 'First CA', 'Second CA', 'Exam'] // Column headers
+      ];
+      
+      // Add student data rows
+      templateData.forEach(row => {
+        sheetData.push([
+          row['Student ID'],
+          row['Student Name'],
+          row['First CA'],
+          row['Second CA'],
+          row['Exam']
+        ]);
+      });
+      
+      // Create worksheet from array of arrays
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
       
       // Set column widths
       ws['!cols'] = [
@@ -2093,7 +2128,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { width: 12 }  // Exam
       ];
 
-      XLSX.utils.book_append_sheet(wb, ws, subjectInfo.name);
+      // Create descriptive sheet name (max 31 chars for Excel)
+      const sheetName = `${subjectInfo.name} - ${term}`.substring(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
       // Generate buffer
       const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
