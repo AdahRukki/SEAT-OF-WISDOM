@@ -25,7 +25,7 @@ Preferred communication style: Simple, everyday language.
 -   **Storage Interface**: Abstracted storage layer
 -   **Session Management**: Express sessions with PostgreSQL store
 -   **Development**: Hot reloading with tsx and Vite middleware
--   **Technical Implementations**: Intelligent student ID reuse, score publication control, comprehensive security features including auto-logout and JWT invalidation, Excel-based bulk student and score uploads.
+-   **Technical Implementations**: Intelligent student ID reuse, score publication control, comprehensive security features including auto-logout and JWT invalidation, Excel-based bulk student and score uploads, system-wide inactive student filtering.
 
 ### Authentication & Authorization
 -   **Authentication**: Firebase Authentication with JWT and local fallback.
@@ -35,9 +35,9 @@ Preferred communication style: Simple, everyday language.
 -   **Security**: Password hashing, token validation, secure session management, auto-logout on inactivity/offline, critical bug fixes for session invalidation.
 
 ### Data Schema
--   **User Management**: Roles for admin, sub-admin, and student.
+-   **User Management**: Roles for admin, sub-admin, and student with isActive flag for soft deletion.
 -   **Multi-Branch Structure**: Schools, classes, subjects, with branch isolation (e.g., School 1 Ikpoto, School 2 Bonsaac).
--   **Student Records**: Profiles linked to users, classes, and school branches (SOWA/#### ID), including parent WhatsApp as primary contact.
+-   **Student Records**: Profiles linked to users, classes, and school branches (SOWA/#### ID), including parent WhatsApp as primary contact. Inactive students (isActive = false) are automatically filtered from all system queries while preserving historical data.
 -   **Assessment System**: 20+20+60 scoring with automatic grading and subject filtering.
 -   **Report Cards**: Professional, printable academic summaries with school header, statistics, and behavioral assessment.
 -   **News System**: Public news articles with title, content, images, tags, and publication dates, transformed into a blog format with individual article pages.
