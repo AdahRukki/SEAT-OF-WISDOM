@@ -645,10 +645,7 @@ export class DatabaseStorage implements IStorage {
       .from(students)
       .leftJoin(users, eq(students.userId, users.id))
       .leftJoin(classes, eq(students.classId, classes.id))
-      .where(and(
-        eq(students.classId, classId),
-        eq(users.isActive, true)
-      ));
+      .where(eq(students.classId, classId));
 
     return studentsData.map(({ students: student, users: user, classes: classData }) => ({
       ...student,
@@ -836,12 +833,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(classes, eq(students.classId, classes.id));
 
     if (schoolId) {
-      query = query.where(and(
-        eq(classes.schoolId, schoolId),
-        eq(users.isActive, true)
-      ));
-    } else {
-      query = query.where(eq(users.isActive, true));
+      query = query.where(eq(classes.schoolId, schoolId));
     }
 
     const studentsData = await query;
@@ -876,8 +868,7 @@ export class DatabaseStorage implements IStorage {
           eq(assessments.classId, classId),
           eq(assessments.subjectId, subjectId),
           eq(assessments.term, term),
-          eq(assessments.session, session),
-          eq(users.isActive, true)
+          eq(assessments.session, session)
         )
       );
 
@@ -1611,8 +1602,7 @@ export class DatabaseStorage implements IStorage {
     .where(and(
       eq(attendance.classId, classId),
       eq(attendance.term, term),
-      eq(attendance.session, session),
-      eq(users.isActive, true)
+      eq(attendance.session, session)
     ));
     
     return result as (Attendance & { student: StudentWithDetails })[];

@@ -80,7 +80,6 @@ import {
   Plus, 
   Save,
   Download,
-  FileDown,
   Users, 
   UserPlus,
   GraduationCap, 
@@ -2341,66 +2340,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Handle download single subject template WITH EXISTING SCORES
-  const handleDownloadTemplateWithScores = async () => {
-    if (!scoresClassId || !scoresSubjectId || !scoresTerm || !scoresSession) {
-      toast({
-        title: "Error",
-        description: "Please select class, subject, term, and session",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('auth_token');
-      
-      const response = await fetch(`/api/assessments/template-single-with-scores/${scoresClassId}/${scoresSubjectId}/${scoresTerm}/${scoresSession}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to download template with scores');
-      }
-
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = 'template-with-scores.xlsx';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      toast({
-        title: "Template Downloaded",
-        description: `Downloaded ${filename} with existing scores`,
-      });
-
-    } catch (error) {
-      console.error("Template with scores download error:", error);
-      toast({
-        title: "Download Error",
-        description: "Failed to download template with scores",
-        variant: "destructive"
-      });
-    }
-  };
-
   // Handle download multi-subject template
   const handleDownloadMultiSubjectTemplate = async () => {
     if (!scoresClassId) {
@@ -3730,8 +3669,8 @@ export default function AdminDashboard() {
                     </Button>
                   </div>
                   
-                  {/* Download Buttons - Stack on Mobile, Grid on Desktop */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Download Buttons - Stack on Mobile, Side by Side on Desktop */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -3742,7 +3681,7 @@ export default function AdminDashboard() {
                           data-testid="button-download-single-subject"
                         >
                           <Download className="h-4 w-4 mr-2" />
-                          <span className="hidden sm:inline">Blank Template</span>
+                          <span className="hidden sm:inline">Download Template (Single)</span>
                           <span className="sm:hidden">Template (1)</span>
                         </Button>
                       </TooltipTrigger>
@@ -3754,33 +3693,14 @@ export default function AdminDashboard() {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
-                          onClick={handleDownloadTemplateWithScores}
-                          disabled={!scoresClassId || !scoresSubjectId || !scoresTerm || !scoresSession}
-                          variant="default"
-                          className="w-full h-11"
-                          data-testid="button-download-with-scores"
-                        >
-                          <FileDown className="h-4 w-4 mr-2" />
-                          <span className="hidden sm:inline">With Existing Scores</span>
-                          <span className="sm:hidden">With Scores</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Download template pre-filled with current scores</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
                           onClick={handleDownloadMultiSubjectTemplate}
                           disabled={!scoresClassId}
-                          variant="secondary"
+                          variant="default"
                           className="w-full h-11"
                           data-testid="button-download-all-subjects"
                         >
                           <Download className="h-4 w-4 mr-2" />
-                          <span className="hidden sm:inline">All Subjects</span>
+                          <span className="hidden sm:inline">Download Template (All Subjects)</span>
                           <span className="sm:hidden">Template (All)</span>
                         </Button>
                       </TooltipTrigger>
