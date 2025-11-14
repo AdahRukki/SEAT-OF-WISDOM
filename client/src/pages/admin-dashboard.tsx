@@ -1592,6 +1592,12 @@ export default function AdminDashboard() {
         processedData.dateOfBirth = new Date(processedData.dateOfBirth);
       }
       
+      // Transform parentWhatsApp to parentWhatsapp for database compatibility
+      if (processedData.parentWhatsApp !== undefined) {
+        processedData.parentWhatsapp = processedData.parentWhatsApp;
+        delete processedData.parentWhatsApp;
+      }
+      
       // Handle password update separately if provided
       const response = await apiRequest(`/api/admin/students/${studentData.id}`, {
         method: 'PATCH',
