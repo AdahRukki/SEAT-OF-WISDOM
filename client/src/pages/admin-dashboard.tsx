@@ -1371,11 +1371,18 @@ export default function AdminDashboard() {
       });
 
       sortedClasses.forEach(([className, students]) => {
+        // Sort students by Student ID within each class
+        const sortedStudents = students.sort((a, b) => {
+          const idA = a.studentId || '';
+          const idB = b.studentId || '';
+          return idA.localeCompare(idB);
+        });
+
         const worksheetData = [
           ['Name', 'Age', 'Gender', 'Parent Number', 'Student ID', 'Class']
         ];
 
-        students.forEach(student => {
+        sortedStudents.forEach(student => {
           // Calculate age from date of birth
           let age = 'N/A';
           if (student.dateOfBirth) {
