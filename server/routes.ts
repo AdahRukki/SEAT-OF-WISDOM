@@ -2021,6 +2021,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "No students in this class" });
       }
       
+      // Sort students by Student ID numerically
+      const sortedStudents = [...studentsInClass].sort((a, b) => {
+        const numA = parseInt((a.studentId || '').replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt((b.studentId || '').replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+      });
+      
       // Get subjects and deduplicate by NAME (not ID) for Excel compatibility
       const allSubjects = await storage.getClassSubjects(classId);
       const nameMap = new Map<string, typeof allSubjects[0]>();
@@ -2038,7 +2045,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const workbook = XLSX.utils.book_new();
       
       for (const subject of uniqueSubjects) {
-        const studentRows = studentsInClass.map(student => ({
+        const studentRows = sortedStudents.map(student => ({
           'Student ID': student.studentId,
           'Student Name': `${student.user.firstName} ${student.user.lastName}`,
           'First CA': '',
