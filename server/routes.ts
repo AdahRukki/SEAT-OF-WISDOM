@@ -1948,8 +1948,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const studentsInClass = await storage.getStudentsByClass(classId);
       console.log(`👥 Students count: ${studentsInClass.length}`);
       
+      // Sort students by Student ID numerically
+      const sortedStudents = [...studentsInClass].sort((a, b) => {
+        const numA = parseInt((a.studentId || '').replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt((b.studentId || '').replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+      });
+      
       // Create Excel template with student IDs
-      const templateData = studentsInClass.map(student => ({
+      const templateData = sortedStudents.map(student => ({
         'Student ID': student.studentId,
         'Student Name': `${student.user.firstName} ${student.user.lastName}`,
         'First CA': '',
