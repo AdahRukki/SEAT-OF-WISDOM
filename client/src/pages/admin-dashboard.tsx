@@ -1371,11 +1371,14 @@ export default function AdminDashboard() {
       });
 
       sortedClasses.forEach(([className, students]) => {
-        // Sort students by Student ID within each class
-        const sortedStudents = students.sort((a, b) => {
+        // Sort students by Student ID numerically within each class
+        const sortedStudents = [...students].sort((a, b) => {
           const idA = a.studentId || '';
           const idB = b.studentId || '';
-          return idA.localeCompare(idB);
+          // Extract numeric part from student ID (e.g., "SOWA/1001" -> 1001)
+          const numA = parseInt(idA.replace(/\D/g, ''), 10) || 0;
+          const numB = parseInt(idB.replace(/\D/g, ''), 10) || 0;
+          return numA - numB;
         });
 
         const worksheetData = [
