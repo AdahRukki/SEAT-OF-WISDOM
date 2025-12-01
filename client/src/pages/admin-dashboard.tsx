@@ -2075,16 +2075,35 @@ export default function AdminDashboard() {
   };
 
   const handleSaveAllScores = () => {
-    const scoresData = Object.entries(scoreInputs).map(([studentId, scores]) => ({
-      studentId,
-      subjectId: scoresSubjectId,
-      classId: scoresClassId,
-      term: scoresTerm,
-      session: scoresSession,
-      firstCA: parseInt(scores.firstCA) || 0,
-      secondCA: parseInt(scores.secondCA) || 0,
-      exam: parseInt(scores.exam) || 0
-    }));
+    // Collect scores for all students in the class, merging edited values with existing values
+    const studentsInClass = allStudents.filter(student => student.classId === scoresClassId);
+    
+    const scoresData = studentsInClass.map(student => {
+      const assessment = classAssessments.find(a => a.studentId === student.id);
+      const editedScores = scoreInputs[student.id] || {};
+      
+      // Use edited values if available, otherwise fall back to existing assessment values
+      return {
+        studentId: student.id,
+        subjectId: scoresSubjectId,
+        classId: scoresClassId,
+        term: scoresTerm,
+        session: scoresSession,
+        firstCA: editedScores.firstCA !== undefined && editedScores.firstCA !== '' 
+          ? parseInt(editedScores.firstCA) || 0 
+          : (assessment?.firstCA || 0),
+        secondCA: editedScores.secondCA !== undefined && editedScores.secondCA !== '' 
+          ? parseInt(editedScores.secondCA) || 0 
+          : (assessment?.secondCA || 0),
+        exam: editedScores.exam !== undefined && editedScores.exam !== '' 
+          ? parseInt(editedScores.exam) || 0 
+          : (assessment?.exam || 0)
+      };
+    }).filter(score => 
+      // Only include students that have at least one score value
+      score.firstCA > 0 || score.secondCA > 0 || score.exam > 0 || 
+      scoreInputs[score.studentId] !== undefined
+    );
 
     updateScoresMutation.mutate(scoresData);
   };
