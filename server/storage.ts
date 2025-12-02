@@ -711,25 +711,48 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    const total = Number(assessmentData.firstCA || 0) + 
-                  Number(assessmentData.secondCA || 0) + 
-                  Number(assessmentData.exam || 0);
-    const grade = total >= 75 ? 'A' : total >= 50 ? 'C' : total >= 40 ? 'P' : 'F';
-
     if (existing) {
-      // Update existing assessment
+      // MERGE new values with existing values - only update fields that have real values
+      // This fixes the bug where editing one field (e.g., CA2) would clear others (CA1, Exam)
+      const mergedFirstCA = (assessmentData.firstCA !== undefined && assessmentData.firstCA !== null && Number(assessmentData.firstCA) > 0) 
+        ? Number(assessmentData.firstCA) 
+        : existing.firstCA;
+      const mergedSecondCA = (assessmentData.secondCA !== undefined && assessmentData.secondCA !== null && Number(assessmentData.secondCA) > 0) 
+        ? Number(assessmentData.secondCA) 
+        : existing.secondCA;
+      const mergedExam = (assessmentData.exam !== undefined && assessmentData.exam !== null && Number(assessmentData.exam) > 0) 
+        ? Number(assessmentData.exam) 
+        : existing.exam;
+      
+      const total = Number(mergedFirstCA || 0) + Number(mergedSecondCA || 0) + Number(mergedExam || 0);
+      const grade = total >= 75 ? 'A' : total >= 50 ? 'C' : total >= 40 ? 'P' : 'F';
+
+      // Update existing assessment with merged values
       const [updated] = await db
         .update(assessments)
         .set({
-          ...assessmentData,
+          classId: assessmentData.classId,
+          firstCA: mergedFirstCA,
+          secondCA: mergedSecondCA,
+          exam: mergedExam,
           total,
           grade,
           updatedAt: new Date()
         })
         .where(eq(assessments.id, existing.id))
         .returning();
+      
+      console.log("[DEBUG] Merged update - existing:", { firstCA: existing.firstCA, secondCA: existing.secondCA, exam: existing.exam });
+      console.log("[DEBUG] Merged update - incoming:", { firstCA: assessmentData.firstCA, secondCA: assessmentData.secondCA, exam: assessmentData.exam });
+      console.log("[DEBUG] Merged update - result:", { firstCA: mergedFirstCA, secondCA: mergedSecondCA, exam: mergedExam });
+      
       return updated;
     } else {
+      // For new assessments, use the provided values
+      const total = Number(assessmentData.firstCA || 0) + 
+                    Number(assessmentData.secondCA || 0) + 
+                    Number(assessmentData.exam || 0);
+      const grade = total >= 75 ? 'A' : total >= 50 ? 'C' : total >= 40 ? 'P' : 'F';
       // Create new assessment
       const [assessment] = await db
         .insert(assessments)
