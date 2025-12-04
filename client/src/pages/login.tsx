@@ -209,14 +209,6 @@ export default function Login() {
               </form>
               
               <div className="mt-4 text-center space-y-2">
-                <Button
-                  variant="link"
-                  onClick={() => setShowForgotPassword(true)}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Forgot your password?
-                </Button>
-                
                 <div className="flex items-center justify-center gap-1 text-sm text-gray-600 dark:text-gray-400">
                   <Key className="h-3 w-3" />
                   <span>Default password: <strong className="text-gray-800 dark:text-gray-200">password@123</strong></span>
@@ -270,6 +262,14 @@ export default function Login() {
                     </div>
                   </DialogContent>
                 </Dialog>
+                
+                <Button
+                  variant="link"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Forgot your password?
+                </Button>
               </div>
               
             </>
