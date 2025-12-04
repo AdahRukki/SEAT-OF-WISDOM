@@ -5,9 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home, Shield } from "lucide-react";
+import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home, Shield, HelpCircle, Key } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { SEO } from "@/components/SEO";
@@ -200,7 +208,7 @@ export default function Login() {
                 </Button>
               </form>
               
-              <div className="mt-4 text-center">
+              <div className="mt-4 text-center space-y-2">
                 <Button
                   variant="link"
                   onClick={() => setShowForgotPassword(true)}
@@ -208,6 +216,60 @@ export default function Login() {
                 >
                   Forgot your password?
                 </Button>
+                
+                <div className="flex items-center justify-center gap-1 text-sm text-gray-600 dark:text-gray-400">
+                  <Key className="h-3 w-3" />
+                  <span>Default password: <strong className="text-gray-800 dark:text-gray-200">password@123</strong></span>
+                </div>
+                
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="link"
+                      className="text-sm text-green-600 hover:text-green-800 flex items-center gap-1"
+                      data-testid="button-change-password-help"
+                    >
+                      <HelpCircle className="h-4 w-4" />
+                      How to change your password
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Key className="h-5 w-5 text-blue-600" />
+                        How to Change Your Password
+                      </DialogTitle>
+                      <DialogDescription>
+                        Follow these simple steps after logging in
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">1</div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">Log in using your Student ID (e.g., SOWA/1001) and the default password <strong>password@123</strong></p>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">2</div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">Once logged in, click on <strong>"Settings"</strong> in the sidebar menu</p>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">3</div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">Find the <strong>"Change Password"</strong> section</p>
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">4</div>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">Enter your new password and confirm it, then click <strong>"Update Password"</strong></p>
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3 border border-yellow-200 dark:border-yellow-800">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                          <strong>Tip:</strong> Choose a strong password that you can remember. We recommend using a mix of letters, numbers, and symbols.
+                        </p>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
               
             </>
