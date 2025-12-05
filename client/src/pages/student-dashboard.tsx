@@ -401,7 +401,7 @@ export default function StudentDashboard() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Report Card - ${user?.firstName} ${user?.lastName}</title>
+          <title>Report Card - ${user?.firstName} ${user?.middleName ? user.middleName + ' ' : ''}${user?.lastName}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             @page { size: A4 portrait; margin: 10mm; }
@@ -750,7 +750,7 @@ padding: 15px;
             <div class="student-info">
               <div class="info-item">
                 <span class="info-label">Name:</span>
-                <span class="info-value">${user?.firstName} ${user?.lastName}</span>
+                <span class="info-value">${user?.firstName} ${user?.middleName ? user.middleName + ' ' : ''}${user?.lastName}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">ID:</span>
@@ -943,7 +943,7 @@ padding: 15px;
                     href="/profile"
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
                   >
-                    {user?.firstName} {user?.lastName}
+                    {user?.firstName} {user?.middleName ? `${user.middleName} ` : ''}{user?.lastName}
                   </a>
                 </p>
               </div>
@@ -1399,7 +1399,7 @@ padding: 15px;
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium text-gray-500">Full Name</label>
-                      <p className="text-lg font-semibold">{user?.firstName} {user?.lastName}</p>
+                      <p className="text-lg font-semibold">{user?.firstName} {user?.middleName ? `${user.middleName} ` : ''}{user?.lastName}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-500">Email</label>
