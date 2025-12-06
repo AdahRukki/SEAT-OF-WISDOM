@@ -569,11 +569,11 @@ export default function AdminDashboard() {
     enabled: !!scoresClassId 
   });
 
-  // Class assessments query
-  const { data: classAssessments = [] } = useQuery<any[]>({ 
+  // Class assessments query - MUST include term and session to prevent data loss when saving
+  const { data: classAssessments = [], isLoading: isLoadingAssessments } = useQuery<any[]>({ 
     queryKey: ['/api/admin/assessments', scoresClassId, scoresSubjectId, scoresTerm, scoresSession],
     queryFn: () => apiRequest(`/api/admin/assessments?classId=${scoresClassId}&subjectId=${scoresSubjectId}&term=${scoresTerm}&session=${scoresSession}`),
-    enabled: !!scoresClassId && !!scoresSubjectId
+    enabled: !!scoresClassId && !!scoresSubjectId && !!scoresTerm && !!scoresSession
   });
 
   // Check if scores are published for selected class/term/session
@@ -2075,6 +2075,26 @@ export default function AdminDashboard() {
   };
 
   const handleSaveAllScores = () => {
+    // SAFETY CHECK: Prevent saving if term/session are not set
+    if (!scoresTerm || !scoresSession) {
+      toast({
+        title: "Cannot Save",
+        description: "Please select term and session before saving scores",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // SAFETY CHECK: Prevent saving while assessments are still loading
+    if (isLoadingAssessments) {
+      toast({
+        title: "Please Wait",
+        description: "Loading existing scores, please wait before saving",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     // Collect scores for all students in the class, merging edited values with existing values
     const studentsInClass = allStudents.filter(student => student.classId === scoresClassId);
     
@@ -3928,13 +3948,14 @@ export default function AdminDashboard() {
                             <Button 
                               className="w-full h-7 text-[11px]"
                               onClick={handleSaveAllScores}
-                              disabled={updateScoresMutation.isPending}
+                              disabled={updateScoresMutation.isPending || isLoadingAssessments || !scoresTerm || !scoresSession}
                             >
-                              {updateScoresMutation.isPending ? "Saving..." : "Save All Scores"}
+                              {updateScoresMutation.isPending ? "Saving..." : 
+                               isLoadingAssessments ? "Loading scores..." : "Save All Scores"}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Save all entered scores to the database</p>
+                            <p>{isLoadingAssessments ? "Please wait while existing scores load" : "Save all entered scores to the database"}</p>
                           </TooltipContent>
                         </Tooltip>
                       </div>

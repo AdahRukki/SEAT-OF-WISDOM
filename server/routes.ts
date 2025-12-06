@@ -1460,9 +1460,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < scores.length; i++) {
         const scoreData = scores[i];
         try {
-          // Validate required fields
+          // Validate required fields including term and session (critical for finding existing records)
           if (!scoreData.studentId || !scoreData.subjectId || !scoreData.classId) {
             throw new Error(`Missing required fields for score ${i}: studentId, subjectId, or classId`);
+          }
+          
+          // CRITICAL: Validate term and session are not empty to prevent data loss
+          if (!scoreData.term || !scoreData.session || scoreData.term === '' || scoreData.session === '') {
+            throw new Error(`Missing term or session for score ${i} - cannot save without term/session to prevent data loss`);
           }
           
           const total = (scoreData.firstCA || 0) + (scoreData.secondCA || 0) + (scoreData.exam || 0);
