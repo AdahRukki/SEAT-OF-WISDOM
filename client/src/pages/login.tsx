@@ -71,8 +71,18 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
 
+    // Auto-prepend SOWA/ if user entered just numbers (student ID)
+    let loginId = email.trim();
+    if (/^\d+$/.test(loginId)) {
+      // User entered only digits, prepend SOWA/
+      loginId = `SOWA/${loginId}`;
+    } else if (!loginId.includes('@') && !loginId.startsWith('SOWA/')) {
+      // If it's not an email and doesn't have SOWA/, add it
+      loginId = `SOWA/${loginId}`;
+    }
+
     try {
-      await login({ email, password });
+      await login({ email: loginId, password });
       toast({
         title: "Login Successful",
         description: "Welcome back!",
@@ -162,15 +172,22 @@ export default function Login() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email or Student ID</Label>
-                  <Input
-                    id="email"
-                    type="text"
-                    placeholder="Enter your email or student ID (e.g., SOWA/1001)"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    disabled={isLoading}
-                  />
+                  <div className="flex">
+                    <span className="inline-flex items-center px-3 text-sm text-gray-600 bg-gray-100 border border-r-0 border-gray-300 rounded-l-md dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 font-medium">
+                      SOWA/
+                    </span>
+                    <Input
+                      id="email"
+                      type="text"
+                      placeholder="0001 or email@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className="rounded-l-none"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">For students: just type your number (e.g., 0001). For staff: enter your full email.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
@@ -239,7 +256,7 @@ export default function Login() {
                       <div className="space-y-3">
                         <div className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">1</div>
-                          <p className="text-sm text-gray-700 dark:text-gray-300">Log in using your Student ID (e.g., SOWA/1001) and the default password <strong>password@123</strong></p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">Log in using your Student ID number (e.g., just type <strong>0001</strong>) and the default password <strong>password@123</strong></p>
                         </div>
                         <div className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">2</div>
