@@ -179,7 +179,7 @@ export default function Login() {
                     <Input
                       id="email"
                       type="text"
-                      placeholder="0001 or email@example.com"
+                      placeholder="0001"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -187,7 +187,7 @@ export default function Login() {
                       className="rounded-l-none"
                     />
                   </div>
-                  <p className="text-xs text-gray-500">For students: just type your number (e.g., 0001). For staff: enter your full email.</p>
+                  <p className="text-xs text-gray-500">Just type your number (e.g., 0001)</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
