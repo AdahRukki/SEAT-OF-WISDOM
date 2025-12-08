@@ -382,6 +382,8 @@ export default function AdminDashboard() {
   const [scoresTerm, setScoresTerm] = useState("");
   const [scoresSession, setScoresSession] = useState("");
   const [scoreInputs, setScoreInputs] = useState<{[key: string]: {firstCA: string, secondCA: string, exam: string}}>({});
+  const [nextTermResumesDate, setNextTermResumesDate] = useState("");
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   
   // Class-based student viewing
   const [selectedClassForStudents, setSelectedClassForStudents] = useState("");
@@ -942,7 +944,12 @@ export default function AdminDashboard() {
     mutationFn: async () => {
       return await apiRequest('/api/admin/publish-scores', {
         method: 'POST',
-        body: { classId: scoresClassId, term: scoresTerm, session: scoresSession }
+        body: { 
+          classId: scoresClassId, 
+          term: scoresTerm, 
+          session: scoresSession,
+          nextTermResumes: nextTermResumesDate
+        }
       });
     },
     onSuccess: () => {
@@ -953,6 +960,8 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ 
         queryKey: ['/api/scores/published-status', scoresClassId, scoresTerm, scoresSession] 
       });
+      setPublishDialogOpen(false);
+      setNextTermResumesDate("");
     },
     onError: (error: any) => {
       toast({ 
@@ -3809,29 +3818,60 @@ export default function AdminDashboard() {
                           </AlertDialogContent>
                         </AlertDialog>
                       ) : (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
+                        <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+                          <DialogTrigger asChild>
                             <Button variant="default" size="sm" className="w-full sm:w-auto" data-testid="button-publish-scores">
                               <CheckCircle className="h-4 w-4 mr-2" />
                               Publish Scores
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Publish Scores?</AlertDialogTitle>
-                              <AlertDialogDescription>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Publish Scores</DialogTitle>
+                              <DialogDescription>
                                 This will make scores and report cards visible to students for {classes.find(c => c.id === scoresClassId)?.name} - {scoresTerm} {scoresSession}. 
                                 Make sure all scores have been entered and verified before publishing.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => publishScoresMutation.mutate()}>
-                                Publish
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="nextTermResumes" className="text-sm font-medium">
+                                  Next Term Resumes Date <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="nextTermResumes"
+                                  type="date"
+                                  value={nextTermResumesDate}
+                                  onChange={(e) => setNextTermResumesDate(e.target.value)}
+                                  className="w-full"
+                                  data-testid="input-next-term-date"
+                                />
+                                <p className="text-xs text-gray-500">
+                                  This date will appear on report cards. Students cannot view report cards until this is set.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                              <Button variant="outline" onClick={() => setPublishDialogOpen(false)}>
+                                Cancel
+                              </Button>
+                              <Button 
+                                onClick={() => publishScoresMutation.mutate()}
+                                disabled={!nextTermResumesDate || publishScoresMutation.isPending}
+                                data-testid="button-confirm-publish"
+                              >
+                                {publishScoresMutation.isPending ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Publishing...
+                                  </>
+                                ) : (
+                                  "Publish Scores"
+                                )}
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       )}
                     </div>
                   </div>
