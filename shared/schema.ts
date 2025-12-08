@@ -160,6 +160,7 @@ export const publishedScores = pgTable("published_scores", {
   session: varchar("session", { length: 20 }).notNull(), // "2024/2025"
   publishedBy: uuid("published_by").notNull().references(() => users.id),
   publishedAt: timestamp("published_at").defaultNow(),
+  nextTermResumes: timestamp("next_term_resumes"), // Date when next term starts - required for report cards
 });
 
 // Attendance table (total attendance scores per student per term/session)
@@ -611,6 +612,7 @@ export const createPublishedScoresSchema = z.object({
   classId: z.string().min(1, "Class is required"),
   term: z.string().min(1, "Term is required"),
   session: z.string().min(1, "Session is required"),
+  nextTermResumes: z.string().min(1, "Next term resume date is required"),
 });
 
 // Updated grading utility functions
