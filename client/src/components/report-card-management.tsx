@@ -487,10 +487,26 @@ export function ReportCardManagement({
       let totalReports = validatedStudentIds.size;
       let generatedReports = 0;
 
-      // Generate reports only for validated students
+      // Publish scores and generate reports for validated students
       for (const classId in schoolValidationResults) {
         const classResult = schoolValidationResults[classId];
         if (classResult.validatedStudents > 0) {
+          // Publish scores for this class with next term resume date
+          try {
+            await apiRequest('/api/admin/publish-scores', {
+              method: 'POST',
+              body: {
+                classId: classId,
+                term: currentTerm,
+                session: currentSession,
+                nextTermResumes: format(resumptionDate, 'yyyy-MM-dd')
+              }
+            });
+          } catch (publishError) {
+            console.error(`Failed to publish scores for class ${classId}:`, publishError);
+            throw publishError;
+          }
+
           // Get students for this class
           const classStudents = await apiRequest(
             `/api/admin/students/class/${classId}`,
