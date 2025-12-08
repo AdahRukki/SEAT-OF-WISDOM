@@ -437,21 +437,22 @@ export function ReportCardManagement({
 
   // Generate all report cards for the entire school with date selection
   const handleGenerateAllReports = async () => {
-    // Hard validation gating - double check that all students are validated
-    if (!isAllStudentsValidated) {
+    // Validate date is set
+    if (!resumptionDate) {
       toast({
-        title: "Validation Required",
-        description:
-          "All students must be validated before generating reports.",
+        title: "Date Required",
+        description: "Please select the next term resumption date before generating reports.",
         variant: "destructive",
       });
       return;
     }
 
-    if (!resumptionDate) {
+    // Validate all students have been checked
+    if (!isAllStudentsValidated) {
       toast({
-        title: "Date Required",
-        description: "Please select the next term resumption date.",
+        title: "Validation Required",
+        description:
+          "All students must be validated before generating reports.",
         variant: "destructive",
       });
       return;
