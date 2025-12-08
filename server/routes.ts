@@ -2937,14 +2937,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).json({ error: "Only administrators can publish scores" });
     }
 
-    const { classId, term, session } = req.body;
+    const { classId, term, session, nextTermResumes } = req.body;
 
-    if (!classId || !term || !session) {
-      return res.status(400).json({ error: "Missing required fields: classId, term, session" });
+    if (!classId || !term || !session || !nextTermResumes) {
+      return res.status(400).json({ error: "Missing required fields: classId, term, session, nextTermResumes" });
     }
 
     try {
-      await storage.publishScores(classId, term, session, user.id);
+      const nextTermDate = new Date(nextTermResumes);
+      await storage.publishScores(classId, term, session, user.id, nextTermDate);
       res.json({ success: true, message: "Scores published successfully" });
     } catch (error) {
       console.error("Error publishing scores:", error);
@@ -2994,6 +2995,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error checking publication status:", error);
       res.status(500).json({ error: "Failed to check publication status" });
+    }
+  });
+
+  // Get full published score info including next term resume date
+  app.get("/api/scores/published-info", authenticate, async (req: Request, res: Response) => {
+    const { classId, term, session } = req.query;
+
+    if (!classId || !term || !session) {
+      return res.status(400).json({ error: "Missing required query parameters: classId, term, session" });
+    }
+
+    try {
+      const publishedInfo = await storage.getPublishedScoreInfo(
+        classId as string, 
+        term as string, 
+        session as string
+      );
+      res.json(publishedInfo || null);
+    } catch (error) {
+      console.error("Error fetching published score info:", error);
+      res.status(500).json({ error: "Failed to fetch published score info" });
     }
   });
 
