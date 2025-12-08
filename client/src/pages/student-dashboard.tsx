@@ -107,6 +107,21 @@ export default function StudentDashboard() {
     enabled: !!selectedClass && !!selectedTerm && !!selectedSession
   });
 
+  // Get full published score info including next term resume date
+  const { data: publishedScoreInfo } = useQuery<{
+    id: string;
+    classId: string;
+    term: string;
+    session: string;
+    publishedBy: string;
+    publishedAt: string;
+    nextTermResumes: string | null;
+  } | null>({ 
+    queryKey: ['/api/scores/published-info', selectedClass, selectedTerm, selectedSession],
+    queryFn: () => apiRequest(`/api/scores/published-info?classId=${selectedClass}&term=${selectedTerm}&session=${selectedSession}`),
+    enabled: !!selectedClass && !!selectedTerm && !!selectedSession && scoresPublicationStatus?.published === true
+  });
+
   // Student financial data
   const { data: studentFees = [] } = useQuery<any[]>({ 
     queryKey: ['/api/student/fees', selectedTerm, selectedClass, selectedSession],
@@ -388,6 +403,26 @@ export default function StudentDashboard() {
       if (rating === 2) return 'Fair';
       if (rating === 1) return 'Poor';
       return 'Not Rated';
+    };
+
+    const formatNextTermDate = (dateString: string | null | undefined): string => {
+      if (!dateString) return 'TBA';
+      const date = new Date(dateString);
+      const day = date.getDate();
+      const month = date.toLocaleString('en-US', { month: 'long' }).toUpperCase();
+      const year = date.getFullYear();
+      
+      const getOrdinalSuffix = (n: number): string => {
+        if (n > 3 && n < 21) return 'TH';
+        switch (n % 10) {
+          case 1: return 'ST';
+          case 2: return 'ND';
+          case 3: return 'RD';
+          default: return 'TH';
+        }
+      };
+      
+      return `${day}${getOrdinalSuffix(day)} ${month}, ${year}`;
     };
 
     const principalComment = getPrincipalComment(averagePercentage);
@@ -919,6 +954,9 @@ padding: 15px;
             </div>
 
             <div class="footer">
+              <div style="text-align: center; margin-bottom: 8px; padding: 8px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); border-radius: 6px;">
+                <span style="font-size: 11px; font-weight: bold; color: white;">NEXT TERM RESUMES: ${formatNextTermDate(publishedScoreInfo?.nextTermResumes)}</span>
+              </div>
               <div class="signature-section">
                 <div class="signature">
                   <div style="border-top: 2px solid rgba(255,255,255,0.5); padding-top: 5px; min-height: 30px;"></div>
@@ -1225,6 +1263,17 @@ padding: 15px;
                     <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
                       Your scores for {selectedTerm}, {selectedSession} have not been published yet. 
                       Your report card will be available once your scores are published. 
+                      Please check back later or contact your school administrator.
+                    </p>
+                  </div>
+                ) : scoresPublicationStatus?.published && !publishedScoreInfo?.nextTermResumes ? (
+                  <div className="text-center py-12 px-4">
+                    <AlertCircle className="mx-auto h-16 w-16 text-orange-500 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      Report Card Not Ready
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                      Your report card for {selectedTerm}, {selectedSession} is being prepared. 
                       Please check back later or contact your school administrator.
                     </p>
                   </div>
