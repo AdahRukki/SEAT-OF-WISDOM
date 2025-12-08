@@ -141,9 +141,10 @@ export interface IStorage {
   markNotificationAsRead(notificationId: string): Promise<Notification>;
   
   // Published Scores operations
-  publishScores(classId: string, term: string, session: string, publishedBy: string): Promise<void>;
+  publishScores(classId: string, term: string, session: string, publishedBy: string, nextTermResumes: Date): Promise<void>;
   unpublishScores(classId: string, term: string, session: string): Promise<void>;
   checkIfScoresPublished(classId: string, term: string, session: string): Promise<boolean>;
+  getPublishedScoreInfo(classId: string, term: string, session: string): Promise<PublishedScore | undefined>;
   getPublishedScoresByClass(classId: string): Promise<any[]>;
   
   // Report card templates
@@ -2111,7 +2112,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Published Scores operations
-  async publishScores(classId: string, term: string, session: string, publishedBy: string): Promise<void> {
+  async publishScores(classId: string, term: string, session: string, publishedBy: string, nextTermResumes: Date): Promise<void> {
     // Check if already published
     const existing = await db
       .select()
@@ -2125,10 +2126,10 @@ export class DatabaseStorage implements IStorage {
       );
 
     if (existing.length > 0) {
-      // Already published, update the publishedAt time
+      // Already published, update the publishedAt time and nextTermResumes
       await db
         .update(publishedScores)
-        .set({ publishedAt: new Date(), publishedBy })
+        .set({ publishedAt: new Date(), publishedBy, nextTermResumes })
         .where(
           and(
             eq(publishedScores.classId, classId),
@@ -2143,6 +2144,7 @@ export class DatabaseStorage implements IStorage {
         term,
         session,
         publishedBy,
+        nextTermResumes,
       });
     }
   }
@@ -2172,6 +2174,21 @@ export class DatabaseStorage implements IStorage {
       );
 
     return result.length > 0;
+  }
+
+  async getPublishedScoreInfo(classId: string, term: string, session: string): Promise<PublishedScore | undefined> {
+    const result = await db
+      .select()
+      .from(publishedScores)
+      .where(
+        and(
+          eq(publishedScores.classId, classId),
+          eq(publishedScores.term, term),
+          eq(publishedScores.session, session)
+        )
+      );
+
+    return result[0];
   }
 
   async getPublishedScoresByClass(classId: string): Promise<any[]> {
