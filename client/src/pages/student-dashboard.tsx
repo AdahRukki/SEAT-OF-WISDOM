@@ -769,8 +769,16 @@ padding: 15px;
                 <span class="info-value">${calculateAge(profile.dateOfBirth)} years</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Next Term:</span>
-                <span class="info-value">TBA</span>
+                <span class="info-label">Days School Opened:</span>
+                <span class="info-value">---</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Days Present:</span>
+                <span class="info-value">---</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Days Absent:</span>
+                <span class="info-value">---</span>
               </div>
             </div>
 
@@ -782,6 +790,8 @@ padding: 15px;
                   <th>2ND CA<br>(20)</th>
                   <th>EXAM<br>(60)</th>
                   <th>TOTAL<br>(100)</th>
+                  <th>CLASS<br>AVG</th>
+                  <th>SUBJ.<br>POS.</th>
                   <th>GRADE</th>
                   <th>REMARK</th>
                 </tr>
@@ -802,6 +812,8 @@ padding: 15px;
                       <td>${secondCA}</td>
                       <td>${exam}</td>
                       <td><strong>${total}</strong></td>
+                      <td>---</td>
+                      <td>---</td>
                       <td class="grade">${grade}</td>
                       <td>${remark}</td>
                     </tr>
@@ -810,19 +822,43 @@ padding: 15px;
               </tbody>
             </table>
 
-            <div class="stats-section">
-              <div class="stats-grid">
-                <div class="stat-card">
-                  <div class="stat-label">TOTAL SCORE</div>
-                  <div class="stat-value">${totalMarks}</div>
+            <div class="cumulative-section">
+              <h3 style="text-align: center; margin-bottom: 10px; color: #1e3a5f; font-size: 12px; font-weight: bold;">CUMULATIVE REPORT</h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 10px;">
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">1st Test Total:</span>
+                  <span>${assessments.reduce((sum, a) => sum + Number(a.firstCA || 0), 0)}</span>
                 </div>
-                <div class="stat-card">
-                  <div class="stat-label">AVERAGE</div>
-                  <div class="stat-value">${assessments.length ? ((totalMarks / (assessments.length * 100)) * 100).toFixed(1) : "0"}%</div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">No. of Subjects:</span>
+                  <span>${assessments.length}</span>
                 </div>
-                <div class="stat-card">
-                  <div class="stat-label">ATTENDANCE</div>
-                  <div class="stat-value">N/A</div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">2nd Test Total:</span>
+                  <span>${assessments.reduce((sum, a) => sum + Number(a.secondCA || 0), 0)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">Total Obtained:</span>
+                  <span>${totalMarks}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">Exam Total:</span>
+                  <span>${assessments.reduce((sum, a) => sum + Number(a.exam || 0), 0)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">Total Obtainable:</span>
+                  <span>${assessments.length * 100}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">Total Score:</span>
+                  <span style="font-weight: bold;">${totalMarks}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: #f8fafc; border-radius: 4px;">
+                  <span style="font-weight: 600;">Average Mark:</span>
+                  <span style="font-weight: bold;">${assessments.length ? ((totalMarks / (assessments.length * 100)) * 100).toFixed(1) : "0"}%</span>
+                </div>
+                <div style="grid-column: span 2; display: flex; justify-content: center; padding: 6px 8px; background: ${averagePercentage >= 50 ? '#dcfce7' : '#fee2e2'}; border-radius: 4px; margin-top: 4px;">
+                  <span style="font-weight: bold; color: ${averagePercentage >= 50 ? '#166534' : '#991b1b'};">Result Status: ${averagePercentage >= 50 ? 'PASSED' : 'NEEDS IMPROVEMENT'}</span>
                 </div>
               </div>
             </div>
@@ -1174,7 +1210,7 @@ padding: 15px;
             {/* Report Card Display */}
             <Card>
               <CardHeader>
-                <CardTitle>My Report Card - {selectedTerm}, {selectedSession}</CardTitle>
+                <CardTitle>Termly Performance Report - {selectedTerm}, {selectedSession}</CardTitle>
                 <CardDescription>
                   Your comprehensive academic report with detailed scores and grades
                 </CardDescription>
@@ -1226,14 +1262,14 @@ padding: 15px;
                         data-testid="button-view-report-content"
                       >
                         <Eye className="h-4 w-4 mr-2" />
-                        View Report Card
+                        View Report
                       </Button>
                       <Button
                         onClick={handlePrintDetailedReport}
                         data-testid="button-print-report-content"
                       >
                         <Printer className="h-4 w-4 mr-2" />
-                        Print Report Card
+                        Print Report
                       </Button>
                     </div>
                   </>
