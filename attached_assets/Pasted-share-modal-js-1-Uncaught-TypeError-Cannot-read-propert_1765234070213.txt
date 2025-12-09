@@ -1,0 +1,60 @@
+share-modal.js:1 Uncaught TypeError: Cannot read properties of null (reading 'addEventListener')
+    at share-modal.js:1:135
+(anonymous) @ share-modal.js:1
+setTimeout
+(anonymous) @ share-modal.js:1
+share-modal.js:1 Uncaught TypeError: Cannot read properties of null (reading 'addEventListener')
+    at share-modal.js:1:135
+(anonymous) @ share-modal.js:1
+setTimeout
+(anonymous) @ share-modal.js:1
+index-DMBam-6G.js:48  POST https://seatofwisdomacademy.com/api/admin/publish-scores 500 (Internal Server Error)
+mt @ index-DMBam-6G.js:48
+at @ index-DMBam-6G.js:3872
+Xee @ index-DMBam-6G.js:37
+Zee @ index-DMBam-6G.js:37
+ete @ index-DMBam-6G.js:37
+PR @ index-DMBam-6G.js:37
+VV @ index-DMBam-6G.js:37
+(anonymous) @ index-DMBam-6G.js:37
+Ak @ index-DMBam-6G.js:40
+cV @ index-DMBam-6G.js:37
+dE @ index-DMBam-6G.js:37
+tk @ index-DMBam-6G.js:37
+gte @ index-DMBam-6G.js:37
+installHook.js:1 Failed to publish scores for class SCH1-SS3: Error: 500: {"error":"Failed to publish scores"}
+    at gU (index-DMBam-6G.js:48:42915)
+    at async mt (index-DMBam-6G.js:48:43577)
+    at async at (index-DMBam-6G.js:3872:183225)
+overrideMethod @ installHook.js:1
+at @ index-DMBam-6G.js:3872
+await in at
+Xee @ index-DMBam-6G.js:37
+Zee @ index-DMBam-6G.js:37
+ete @ index-DMBam-6G.js:37
+PR @ index-DMBam-6G.js:37
+VV @ index-DMBam-6G.js:37
+(anonymous) @ index-DMBam-6G.js:37
+Ak @ index-DMBam-6G.js:40
+cV @ index-DMBam-6G.js:37
+dE @ index-DMBam-6G.js:37
+tk @ index-DMBam-6G.js:37
+gte @ index-DMBam-6G.js:37
+installHook.js:1 Report generation process failed: Error: 500: {"error":"Failed to publish scores"}
+    at gU (index-DMBam-6G.js:48:42915)
+    at async mt (index-DMBam-6G.js:48:43577)
+    at async at (index-DMBam-6G.js:3872:183225)
+overrideMethod @ installHook.js:1
+at @ index-DMBam-6G.js:3872
+await in at
+Xee @ index-DMBam-6G.js:37
+Zee @ index-DMBam-6G.js:37
+ete @ index-DMBam-6G.js:37
+PR @ index-DMBam-6G.js:37
+VV @ index-DMBam-6G.js:37
+(anonymous) @ index-DMBam-6G.js:37
+Ak @ index-DMBam-6G.js:40
+cV @ index-DMBam-6G.js:37
+dE @ index-DMBam-6G.js:37
+tk @ index-DMBam-6G.js:37
+gte @ index-DMBam-6G.js:37
