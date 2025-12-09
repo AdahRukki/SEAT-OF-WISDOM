@@ -778,7 +778,7 @@ padding: 15px;
                 <div class="school-info">ASABA, DELTA STATE</div>
                 <div class="education-levels">PRE NURSERY, NURSERY, PRIMARY & SECONDARY</div>
                 <div class="school-motto">GOVERNMENT, WAEC AND NECO APPROVED</div>
-                <div class="report-title">${selectedTerm} ASSESSMENT REPORT - ${selectedSession} SESSION</div>
+                <div class="report-title">${selectedTerm} TERMLY PERFORMANCE REPORT - ${selectedSession} SESSION</div>
               </div>
             </div>
             
@@ -1142,9 +1142,12 @@ padding: 15px;
               </Card>
             </div>
 
-            {/* Term and Session Selection - Compact */}
+            {/* View Termly Performance */}
+            <div className="mb-2">
+              <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">View Termly Performance</h3>
+            </div>
             <Card className="p-3 sm:p-4">
-              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
                 <div>
                   <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Class</label>
                   <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
