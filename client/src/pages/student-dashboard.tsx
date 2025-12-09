@@ -1102,14 +1102,14 @@ padding: 15px;
 
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-3 gap-1 h-auto p-1">
             <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto">Overview</TabsTrigger>
             <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-2 h-auto">Fees</TabsTrigger>
-            <TabsTrigger value="report" className="text-xs sm:text-sm px-2 py-2 h-auto">Report</TabsTrigger>
             <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-2 h-auto">Profile</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
+            {/* Student Info Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1143,59 +1143,12 @@ padding: 15px;
               </Card>
             </div>
 
-            {/* Recent Academic Activity */}
+            {/* Term and Session Selection */}
             <Card>
               <CardHeader>
-                <CardTitle>Recent Academic Activity</CardTitle>
-                <CardDescription>Your latest subject performances</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {!scoresPublicationStatus?.published && selectedClass && selectedTerm && selectedSession ? (
-                    <div className="text-center py-12 px-4">
-                      <AlertCircle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                        Scores Not Yet Published
-                      </h3>
-                      <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-                        Your scores for {selectedTerm}, {selectedSession} have not been published yet. 
-                        Please check back later or contact your school administrator.
-                      </p>
-                    </div>
-                  ) : assessments.length > 0 ? (
-                    assessments.slice(0, 5).map((assessment) => {
-                      const total = Number(assessment.total);
-                      const { grade, color } = calculateGrade(total);
-                      return (
-                        <div key={assessment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-sm">{assessment.subject.name}</span>
-                            <span className="text-xs text-gray-500">{assessment.term} - {assessment.session}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-lg font-bold">{total}%</span>
-                            <Badge className={`${color} text-white`}>
-                              {grade}
-                            </Badge>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-center text-gray-500 py-4">No assessment records found</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="report" className="space-y-6">
-            {/* Term and Session Selection for Report Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Report Card Settings</CardTitle>
+                <CardTitle>Academic Term Selection</CardTitle>
                 <CardDescription>
-                  Select your class and term to view your detailed report card
+                  Select your class, session and term to view your scores and report card
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1245,12 +1198,12 @@ padding: 15px;
               </CardContent>
             </Card>
 
-            {/* Report Card Display */}
+            {/* Academic Performance & Report Card */}
             <Card>
               <CardHeader>
-                <CardTitle>Termly Performance Report - {selectedTerm}, {selectedSession}</CardTitle>
+                <CardTitle>Academic Performance - {selectedTerm}, {selectedSession}</CardTitle>
                 <CardDescription>
-                  Your comprehensive academic report with detailed scores and grades
+                  Your subject scores and report card
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1262,7 +1215,6 @@ padding: 15px;
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
                       Your scores for {selectedTerm}, {selectedSession} have not been published yet. 
-                      Your report card will be available once your scores are published. 
                       Please check back later or contact your school administrator.
                     </p>
                   </div>
@@ -1295,30 +1247,68 @@ padding: 15px;
                       </svg>
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                      Report Card Not Available
+                      No Scores Available
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-                      Your report card for {selectedTerm}, {selectedSession} has not been generated yet. 
+                      No scores have been recorded for {selectedTerm}, {selectedSession} yet. 
                       Please check back later or contact your school administrator.
                     </p>
                   </div>
                 ) : (
                   <>
-                    <div className="flex gap-2 mb-4">
+                    {/* Subject Scores List */}
+                    <div className="space-y-3 mb-6">
+                      {assessments.map((assessment) => {
+                        const total = Number(assessment.total);
+                        const { grade, color } = calculateGrade(total);
+                        return (
+                          <div key={assessment.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-sm">{assessment.subject.name}</span>
+                              <span className="text-xs text-gray-500">
+                                CA1: {assessment.firstCA} | CA2: {assessment.secondCA} | Exam: {assessment.exam}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg font-bold">{total}%</span>
+                              <Badge className={`${color} text-white`}>
+                                {grade}
+                              </Badge>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Overall Performance Summary */}
+                    <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-4">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Overall Average</span>
+                          <div className="text-2xl font-bold">{overallAverage}%</div>
+                        </div>
+                        <Badge className={`${overallGrade.color} text-white text-lg px-4 py-2`}>
+                          {overallGrade.grade} - {overallGrade.remark}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Print Report Button */}
+                    <div className="flex gap-2">
                       <Button
                         onClick={handlePrintDetailedReport}
                         variant="outline"
                         data-testid="button-view-report-content"
                       >
                         <Eye className="h-4 w-4 mr-2" />
-                        View Report
+                        View Full Report
                       </Button>
                       <Button
                         onClick={handlePrintDetailedReport}
                         data-testid="button-print-report-content"
                       >
                         <Printer className="h-4 w-4 mr-2" />
-                        Print Report
+                        Print Report Card
                       </Button>
                     </div>
                   </>
