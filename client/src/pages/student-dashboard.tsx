@@ -1108,105 +1108,96 @@ padding: 15px;
             <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-2 h-auto">Profile</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Student Info Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Subjects</CardTitle>
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{assessments.filter(a => a.total > 0).length}</div>
-                  <p className="text-xs text-gray-500 mt-1">Subjects with scores</p>
-                </CardContent>
+          <TabsContent value="overview" className="space-y-4">
+            {/* Student Info Cards - Compact */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              <Card className="p-2 sm:p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Subjects</p>
+                    <p className="text-lg sm:text-xl font-bold">{assessments.filter(a => a.total > 0).length}</p>
+                  </div>
+                  <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                </div>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Class</CardTitle>
-                  <User className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{profile?.class?.name || 'N/A'}</div>
-                </CardContent>
+              <Card className="p-2 sm:p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Class</p>
+                    <p className="text-sm sm:text-lg font-bold truncate">{profile?.class?.name || 'N/A'}</p>
+                  </div>
+                  <User className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
+                </div>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Student ID</CardTitle>
-                  <GraduationCap className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-lg font-bold">{profile?.studentId || 'N/A'}</div>
-                </CardContent>
+              <Card className="p-2 sm:p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">ID</p>
+                    <p className="text-xs sm:text-base font-bold truncate">{profile?.studentId || 'N/A'}</p>
+                  </div>
+                  <GraduationCap className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground flex-shrink-0" />
+                </div>
               </Card>
             </div>
 
-            {/* Term and Session Selection */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Academic Term Selection</CardTitle>
-                <CardDescription>
-                  Select your class, session and term to view your scores and report card
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Class</label>
-                    <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
-                      <SelectTrigger data-testid="select-class">
-                        <SelectValue placeholder={enrolledClasses.length > 0 ? "Select class" : "Loading..."} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {enrolledClasses.map((classItem) => (
-                          <SelectItem key={classItem.id} value={classItem.id}>
-                            {classItem.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Session</label>
-                    <Select value={selectedSession} onValueChange={setSelectedSession}>
-                      <SelectTrigger data-testid="select-session">
-                        <SelectValue placeholder="Select session" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2024/2025">2024/2025</SelectItem>
-                        <SelectItem value="2025/2026">2025/2026</SelectItem>
-                        <SelectItem value="2026/2027">2026/2027</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Term</label>
-                    <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-                      <SelectTrigger data-testid="select-term">
-                        <SelectValue placeholder="Select term" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="First Term">First Term</SelectItem>
-                        <SelectItem value="Second Term">Second Term</SelectItem>
-                        <SelectItem value="Third Term">Third Term</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+            {/* Term and Session Selection - Compact */}
+            <Card className="p-3 sm:p-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                <div>
+                  <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Class</label>
+                  <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
+                    <SelectTrigger data-testid="select-class" className="h-8 sm:h-9 text-xs sm:text-sm">
+                      <SelectValue placeholder={enrolledClasses.length > 0 ? "Select" : "..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {enrolledClasses.map((classItem) => (
+                        <SelectItem key={classItem.id} value={classItem.id}>
+                          {classItem.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </CardContent>
+                <div>
+                  <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Session</label>
+                  <Select value={selectedSession} onValueChange={setSelectedSession}>
+                    <SelectTrigger data-testid="select-session" className="h-8 sm:h-9 text-xs sm:text-sm">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2024/2025">2024/2025</SelectItem>
+                      <SelectItem value="2025/2026">2025/2026</SelectItem>
+                      <SelectItem value="2026/2027">2026/2027</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Term</label>
+                  <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+                    <SelectTrigger data-testid="select-term" className="h-8 sm:h-9 text-xs sm:text-sm">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="First Term">First Term</SelectItem>
+                      <SelectItem value="Second Term">Second Term</SelectItem>
+                      <SelectItem value="Third Term">Third Term</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </Card>
 
             {/* Academic Performance & Report Card */}
             <Card>
-              <CardHeader>
-                <CardTitle>Academic Performance - {selectedTerm}, {selectedSession}</CardTitle>
-                <CardDescription>
-                  Your subject scores and report card
+              <CardHeader className="pb-2 sm:pb-4">
+                <CardTitle className="text-base sm:text-lg">Performance - {selectedTerm}</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  {selectedSession}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 {!scoresPublicationStatus?.published && selectedClass && selectedTerm && selectedSession ? (
                   <div className="text-center py-12 px-4">
                     <AlertCircle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
@@ -1256,22 +1247,22 @@ padding: 15px;
                   </div>
                 ) : (
                   <>
-                    {/* Subject Scores List */}
-                    <div className="space-y-3 mb-6">
+                    {/* Subject Scores List - Compact */}
+                    <div className="space-y-2 mb-4">
                       {assessments.map((assessment) => {
                         const total = Number(assessment.total);
                         const { grade, color } = calculateGrade(total);
                         return (
-                          <div key={assessment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div className="flex flex-col">
-                              <span className="font-medium text-sm">{assessment.subject.name}</span>
-                              <span className="text-xs text-gray-500">
-                                CA1: {assessment.firstCA} | CA2: {assessment.secondCA} | Exam: {assessment.exam}
+                          <div key={assessment.id} className="flex items-center justify-between p-2 sm:p-3 border rounded-lg">
+                            <div className="flex flex-col min-w-0 flex-1 mr-2">
+                              <span className="font-medium text-xs sm:text-sm truncate">{assessment.subject.name}</span>
+                              <span className="text-[10px] sm:text-xs text-gray-500">
+                                CA1:{assessment.firstCA} CA2:{assessment.secondCA} Ex:{assessment.exam}
                               </span>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg font-bold">{total}%</span>
-                              <Badge className={`${color} text-white`}>
+                            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                              <span className="text-sm sm:text-lg font-bold">{total}%</span>
+                              <Badge className={`${color} text-white text-[10px] sm:text-xs px-1 sm:px-2`}>
                                 {grade}
                               </Badge>
                             </div>
@@ -1280,35 +1271,41 @@ padding: 15px;
                       })}
                     </div>
 
-                    {/* Overall Performance Summary */}
-                    <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-4">
+                    {/* Overall Performance Summary - Compact */}
+                    <div className="bg-gray-50 dark:bg-gray-800 p-3 sm:p-4 rounded-lg mb-3">
                       <div className="flex justify-between items-center">
                         <div>
-                          <span className="text-sm text-gray-600 dark:text-gray-400">Overall Average</span>
-                          <div className="text-2xl font-bold">{overallAverage}%</div>
+                          <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Average</span>
+                          <div className="text-xl sm:text-2xl font-bold">{overallAverage}%</div>
                         </div>
-                        <Badge className={`${overallGrade.color} text-white text-lg px-4 py-2`}>
+                        <Badge className={`${overallGrade.color} text-white text-xs sm:text-sm px-2 sm:px-4 py-1 sm:py-2`}>
                           {overallGrade.grade} - {overallGrade.remark}
                         </Badge>
                       </div>
                     </div>
 
-                    {/* Print Report Button */}
+                    {/* Print Report Buttons - Responsive */}
                     <div className="flex gap-2">
                       <Button
                         onClick={handlePrintDetailedReport}
                         variant="outline"
+                        size="sm"
+                        className="flex-1 sm:flex-none text-xs sm:text-sm"
                         data-testid="button-view-report-content"
                       >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Full Report
+                        <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">View Full Report</span>
+                        <span className="sm:hidden">View</span>
                       </Button>
                       <Button
                         onClick={handlePrintDetailedReport}
+                        size="sm"
+                        className="flex-1 sm:flex-none text-xs sm:text-sm"
                         data-testid="button-print-report-content"
                       >
-                        <Printer className="h-4 w-4 mr-2" />
-                        Print Report Card
+                        <Printer className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Print Report Card</span>
+                        <span className="sm:hidden">Print</span>
                       </Button>
                     </div>
                   </>
