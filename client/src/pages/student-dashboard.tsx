@@ -439,7 +439,26 @@ export default function StudentDashboard() {
           <title>Report Card - ${user?.firstName} ${user?.middleName ? user.middleName + ' ' : ''}${user?.lastName}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            @page { size: A4 portrait; margin: 10mm; }
+            @page { size: A4 portrait; margin: 5mm; }
+            @media print {
+              html, body {
+                width: 210mm;
+                height: 297mm;
+                margin: 0;
+                padding: 0;
+              }
+              .report-card {
+                width: 100% !important;
+                max-width: none !important;
+                min-height: 287mm !important;
+                margin: 0 !important;
+                padding: 8mm !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                page-break-inside: avoid;
+              }
+              .print-button { display: none !important; }
+            }
             body { 
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
               margin: 0; 
@@ -448,16 +467,17 @@ export default function StudentDashboard() {
               color: #1e3a8a;
               background: #eff6ff;
             }
-           .report-card {
-width: 90%;
-max-width: 750px;
-margin: 20px auto;
-background: #f8faff;
-box-shadow: 0 4px 6px rgba(37, 99, 235, 0.15);
-border-radius: 8px;
-overflow: hidden;
-padding: 15px;
-}
+            .report-card {
+              width: 210mm;
+              max-width: 210mm;
+              min-height: 287mm;
+              margin: 10px auto;
+              background: #f8faff;
+              box-shadow: 0 4px 6px rgba(37, 99, 235, 0.15);
+              border-radius: 8px;
+              overflow: hidden;
+              padding: 15px;
+            }
             .header {
               background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
               padding: 12px;
@@ -1297,8 +1317,7 @@ padding: 15px;
                         data-testid="button-view-report-content"
                       >
                         <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                        <span className="hidden sm:inline">View Full Report</span>
-                        <span className="sm:hidden">View</span>
+                        View Full Report
                       </Button>
                       <Button
                         onClick={handlePrintDetailedReport}
