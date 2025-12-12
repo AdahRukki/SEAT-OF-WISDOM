@@ -216,6 +216,56 @@ export default function StudentDashboard() {
     enabled: !!user
   });
 
+  // Fetch attendance data
+  const { data: attendanceData } = useQuery<{ presentDays: number; absentDays: number; totalDays: number }>({ 
+    queryKey: ['/api/student/attendance', selectedTerm, selectedClass, selectedSession],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedTerm) params.append('term', selectedTerm);
+      if (selectedClass) params.append('classId', selectedClass);
+      if (selectedSession) params.append('session', selectedSession);
+      
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`/api/student/attendance?${params}`, {
+        headers,
+        credentials: 'include'
+      });
+      if (!response.ok) return { presentDays: 0, absentDays: 0, totalDays: 0 };
+      return response.json();
+    },
+    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
+  });
+
+  // Fetch class statistics (averages and positions)
+  const { data: classStats = {} } = useQuery<Record<string, { classAverage: number; position: number; totalStudents: number }>>({ 
+    queryKey: ['/api/student/class-stats', selectedTerm, selectedClass, selectedSession],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedTerm) params.append('term', selectedTerm);
+      if (selectedClass) params.append('classId', selectedClass);
+      if (selectedSession) params.append('session', selectedSession);
+      
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`/api/student/class-stats?${params}`, {
+        headers,
+        credentials: 'include'
+      });
+      if (!response.ok) return {};
+      return response.json();
+    },
+    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
+  });
+
   const calculateGrade = (total: number) => {
     if (total >= 75) return { grade: 'A1', color: 'bg-green-600', remark: 'Excellent' };
     if (total >= 70) return { grade: 'B2', color: 'bg-green-500', remark: 'Very Good' };
@@ -825,15 +875,15 @@ export default function StudentDashboard() {
               </div>
               <div class="info-item">
                 <span class="info-label">Days School Opened:</span>
-                <span class="info-value">---</span>
+                <span class="info-value">${attendanceData?.totalDays || '---'}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Days Present:</span>
-                <span class="info-value">---</span>
+                <span class="info-value">${attendanceData?.presentDays || '---'}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Days Absent:</span>
-                <span class="info-value">---</span>
+                <span class="info-value">${attendanceData?.absentDays || '---'}</span>
               </div>
             </div>
 
@@ -859,6 +909,17 @@ export default function StudentDashboard() {
                   const total = firstCA + secondCA + exam;
                   
                   const { grade, remark } = calculateGrade(total);
+                  const subjectStat = classStats[assessment.subjectId] || { classAverage: 0, position: 0, totalStudents: 0 };
+                  const positionSuffix = (pos: number) => {
+                    if (pos === 0) return '---';
+                    if (pos % 100 >= 11 && pos % 100 <= 13) return pos + 'th';
+                    switch (pos % 10) {
+                      case 1: return pos + 'st';
+                      case 2: return pos + 'nd';
+                      case 3: return pos + 'rd';
+                      default: return pos + 'th';
+                    }
+                  };
                   
                   return `
                     <tr>
@@ -867,8 +928,8 @@ export default function StudentDashboard() {
                       <td>${secondCA}</td>
                       <td>${exam}</td>
                       <td><strong>${total}</strong></td>
-                      <td>---</td>
-                      <td>---</td>
+                      <td>${subjectStat.classAverage || '---'}</td>
+                      <td>${positionSuffix(subjectStat.position)}</td>
                       <td class="grade">${grade}</td>
                       <td>${remark}</td>
                     </tr>

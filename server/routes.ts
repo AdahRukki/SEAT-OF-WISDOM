@@ -1614,6 +1614,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get student attendance (for student portal)
+  app.get('/api/student/attendance', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const { term, session, classId } = req.query;
+      const student = await storage.getStudentByUserId(user.id);
+      
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+
+      const useClassId = classId as string || student.classId;
+
+      const attendanceData = await storage.getAttendanceByStudent(
+        student.id,
+        term as string,
+        session as string
+      );
+      
+      res.json(attendanceData || { presentDays: 0, absentDays: 0, totalDays: 0 });
+    } catch (error) {
+      console.error("Get student attendance error:", error);
+      res.status(500).json({ error: "Failed to fetch attendance" });
+    }
+  });
+
+  // Get class statistics (class average and position for each subject)
+  app.get('/api/student/class-stats', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const { term, session, classId } = req.query;
+      const student = await storage.getStudentByUserId(user.id);
+      
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+
+      const useClassId = classId as string || student.classId;
+
+      // Get all assessments for this class/term/session
+      const allAssessments = await storage.getAssessmentsByClassTermSession(
+        useClassId,
+        term as string,
+        session as string
+      );
+
+      // Calculate class averages and positions for each subject
+      const subjectStats: Record<string, { classAverage: number; position: number; totalStudents: number }> = {};
+      
+      // Group assessments by subject
+      const subjectGroups: Record<string, { studentId: string; total: number }[]> = {};
+      for (const assessment of allAssessments) {
+        if (!subjectGroups[assessment.subjectId]) {
+          subjectGroups[assessment.subjectId] = [];
+        }
+        subjectGroups[assessment.subjectId].push({
+          studentId: assessment.studentId,
+          total: Number(assessment.total) || 0
+        });
+      }
+
+      // Calculate stats for each subject
+      for (const [subjectId, scores] of Object.entries(subjectGroups)) {
+        const totalStudents = scores.length;
+        const sum = scores.reduce((acc, s) => acc + s.total, 0);
+        const classAverage = totalStudents > 0 ? Math.round(sum / totalStudents) : 0;
+        
+        // Sort by total descending to find position
+        const sorted = [...scores].sort((a, b) => b.total - a.total);
+        const studentScore = scores.find(s => s.studentId === student.id);
+        const position = studentScore 
+          ? sorted.findIndex(s => s.studentId === student.id) + 1 
+          : 0;
+        
+        subjectStats[subjectId] = { classAverage, position, totalStudents };
+      }
+      
+      res.json(subjectStats);
+    } catch (error) {
+      console.error("Get class stats error:", error);
+      res.status(500).json({ error: "Failed to fetch class statistics" });
+    }
+  });
+
   // Get students by class (for teacher interface)
   app.get('/api/admin/students/by-class/:classId', authenticate, requireAdmin, async (req, res) => {
     try {
