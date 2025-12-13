@@ -25,10 +25,13 @@ import {
   assignFeeSchema,
   insertNewsSchema,
   insertNotificationSchema,
+  insertContactSubmissionSchema,
   users,
   students,
-  classes
+  classes,
+  contactSubmissions
 } from "@shared/schema";
+import { sendContactFormNotification } from "./resend";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 import jwt from "jsonwebtoken";
@@ -3108,6 +3111,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching published score info:", error);
       res.status(500).json({ error: "Failed to fetch published score info" });
+    }
+  });
+
+  // ==================== PUBLIC ROUTES (no auth required) ====================
+  
+  // Public contact form submission
+  app.post("/api/public/contact", async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertContactSubmissionSchema.parse(req.body);
+      
+      // Save to database
+      const [submission] = await db.insert(contactSubmissions).values(validatedData).returning();
+      
+      // Send email notification to admins
+      try {
+        await sendContactFormNotification({
+          fullName: validatedData.fullName,
+          email: validatedData.email,
+          phone: validatedData.phone || undefined,
+          inquiryType: validatedData.inquiryType,
+          message: validatedData.message,
+          preferredContact: validatedData.preferredContact || undefined,
+        });
+        console.log("Contact form email notification sent successfully");
+      } catch (emailError) {
+        console.error("Failed to send contact form email notification:", emailError);
+        // Don't fail the request if email fails - submission is still saved
+      }
+      
+      res.json({ success: true, message: "Your message has been received. We'll get back to you shortly." });
+    } catch (error: any) {
+      console.error("Contact form submission error:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid form data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to submit contact form" });
     }
   });
 

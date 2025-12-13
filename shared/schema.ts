@@ -304,6 +304,19 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Contact Form Submissions table (public website inquiries)
+export const contactSubmissions = pgTable("contact_submissions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  fullName: varchar("full_name", { length: 200 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 20 }),
+  inquiryType: varchar("inquiry_type", { length: 50 }).notNull(),
+  message: text("message").notNull(),
+  preferredContact: varchar("preferred_contact", { length: 20 }),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const schoolsRelations = relations(schools, ({ many }) => ({
   classes: many(classes),
@@ -757,3 +770,13 @@ export type StudentWithFullDetails = StudentWithDetails & {
   nonAcademicRating?: NonAcademicRating;
   attendance?: Attendance;
 };
+
+// Contact submission schema and types
+export const insertContactSubmissionSchema = createInsertSchema(contactSubmissions).omit({
+  id: true,
+  isRead: true,
+  createdAt: true,
+});
+
+export type ContactSubmission = typeof contactSubmissions.$inferSelect;
+export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSchema>;
