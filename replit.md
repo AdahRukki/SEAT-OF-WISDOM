@@ -78,4 +78,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Other Integrations
 -   **Google Search Console**: Robots.txt, dynamic sitemap.xml, image sitemap for SEO.
+-   **Google Analytics**: G-2TBCEHSG1L tracking for site traffic and analytics.
+-   **Resend**: Email integration for sending contact form notifications to admin emails (adahrukki@gmail.com, admin@seatofwisdomacademy.com).
 -   **ObjectUploader**: For image uploads in news management.
+-   **Contact Form**: Public contact form on /contact page saves submissions to database and sends email notifications.
