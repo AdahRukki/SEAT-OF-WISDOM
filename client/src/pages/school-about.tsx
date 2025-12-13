@@ -340,7 +340,7 @@ export default function SchoolAbout() {
             <div>
               <h3 className="font-semibold mb-4">Connect With Us</h3>
               <p className="text-gray-400 mb-2">info@seatofwisdomasaba.org</p>
-              <p className="text-gray-400 mb-2">+256 123 456 789</p>
+              <p className="text-gray-400 mb-2">07062492861, 09112024868</p>
               <p className="text-gray-400">Asaba, Delta State, Nigeria</p>
             </div>
           </div>

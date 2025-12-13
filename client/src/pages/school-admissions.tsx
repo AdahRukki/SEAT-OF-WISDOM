@@ -528,7 +528,7 @@ export default function SchoolAdmissions() {
               <p className="text-gray-600 dark:text-gray-300 mb-4">
                 Speak directly with our admissions officers
               </p>
-              <p className="text-blue-600 dark:text-blue-400 font-semibold">+256 123 456 789</p>
+              <p className="text-blue-600 dark:text-blue-400 font-semibold">07062492861, 09112024868</p>
             </Card>
 
             <Card className="text-center p-8" data-testid="card-contact-email">
@@ -594,7 +594,7 @@ export default function SchoolAdmissions() {
             <div>
               <h3 className="font-semibold mb-4">Connect With Us</h3>
               <p className="text-gray-400 mb-2">admissions@seatofwisdomasaba.org</p>
-              <p className="text-gray-400 mb-2">+256 123 456 789</p>
+              <p className="text-gray-400 mb-2">07062492861, 09112024868</p>
               <p className="text-gray-400">Asaba, Delta State, Nigeria</p>
             </div>
           </div>

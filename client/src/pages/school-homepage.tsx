@@ -967,7 +967,7 @@ export default function SchoolHomepage() {
               <ul className="space-y-2 text-gray-400">
                 <li className="flex items-center" data-testid="text-footer-phone">
                   <Phone className="h-4 w-4 mr-2" />
-                  +256 123 456 789
+                  07062492861, 09112024868
                 </li>
                 <li className="flex items-center" data-testid="text-footer-email">
                   <Mail className="h-4 w-4 mr-2" />

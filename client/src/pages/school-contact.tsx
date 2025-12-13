@@ -178,7 +178,7 @@ export default function SchoolContact() {
               </div>
               <CardTitle className="text-xl mb-2">Call Us</CardTitle>
               <CardDescription className="text-lg">
-                +234 816 330 9192<br />
+                07062492861, 09112024868<br />
                 Mon-Fri, 8AM-5PM
               </CardDescription>
             </Card>
@@ -200,7 +200,7 @@ export default function SchoolContact() {
               </div>
               <CardTitle className="text-xl mb-2">WhatsApp</CardTitle>
               <CardDescription className="text-lg">
-                +234 816 330 9192<br />
+                07062492861, 09112024868<br />
                 Quick responses
               </CardDescription>
             </Card>
@@ -445,7 +445,7 @@ export default function SchoolContact() {
                 Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>+234 816 330 9192</p>
+                <p>07062492861, 09112024868</p>
                 <a 
                   href="https://maps.google.com/?q=Bonsaac,+Asaba,+Delta+State,+Nigeria" 
                   target="_blank" 
@@ -471,7 +471,7 @@ export default function SchoolContact() {
                 Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>+234 816 330 9192</p>
+                <p>07062492861, 09112024868</p>
                 <a 
                   href="https://maps.google.com/?q=Ikpoto+Powerline,+Asaba,+Delta+State,+Nigeria" 
                   target="_blank" 
@@ -497,7 +497,7 @@ export default function SchoolContact() {
                 Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>+234 816 330 9192</p>
+                <p>07062492861, 09112024868</p>
                 <a 
                   href="https://maps.google.com/?q=Cable+Point,+Asaba,+Delta+State,+Nigeria" 
                   target="_blank" 
@@ -523,7 +523,7 @@ export default function SchoolContact() {
                 Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                <p>+234 816 330 9192</p>
+                <p>07062492861, 09112024868</p>
                 <a 
                   href="https://maps.google.com/?q=Okpanam,+Asaba,+Delta+State,+Nigeria" 
                   target="_blank" 
@@ -565,7 +565,7 @@ export default function SchoolContact() {
             <div>
               <h4 className="font-semibold mb-4">Contact</h4>
               <ul className="space-y-2 text-gray-400">
-                <li>+234 816 330 9192</li>
+                <li>07062492861, 09112024868</li>
                 <li>admin@seatofwisdomacademy.com</li>
                 <li>Asaba, Delta State, Nigeria</li>
               </ul>
