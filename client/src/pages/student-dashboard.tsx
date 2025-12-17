@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { GraduationCap, LogOut, BookOpen, Trophy, User, Printer, Lock, Eye, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle, Bell } from "lucide-react";
+import { GraduationCap, LogOut, BookOpen, Trophy, User, Lock, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle, Bell, Download, Eye } from "lucide-react";
+import html2pdf from "html2pdf.js";
 // Logo is now loaded dynamically via useLogo hook
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject, Class } from "@shared/schema";
@@ -1053,28 +1054,50 @@ export default function StudentDashboard() {
               </div>
             </div>
             
-            <div style="text-align: center; margin-top: 10px;">
-              <button class="print-button" onclick="window.print()">
-                🖨️ Print Report Card
-              </button>
-              <button class="print-button" onclick="window.print()">
-                ⬇️ Download Report Card
-              </button>
-            </div>
-
           </div>
-          
-          <script>
-            function downloadReport() {
-              window.print();
-            }
-          </script>
         </body>
       </html>
     `;
 
-    reportWindow.document.write(reportHTML);
-    reportWindow.document.close();
+    // Create a temporary container to render the HTML
+    const container = document.createElement('div');
+    container.innerHTML = reportHTML;
+    document.body.appendChild(container);
+
+    // Find the report card element
+    const element = container.querySelector('.report-card');
+    if (!element) {
+      document.body.removeChild(container);
+      return;
+    }
+
+    // Generate PDF filename
+    const studentName = `${user?.firstName || ''}_${user?.lastName || ''}`.replace(/\s+/g, '_');
+    const filename = `Report_Card_${studentName}_${selectedTerm}_${selectedSession}.pdf`;
+
+    // Generate and download PDF
+    const opt = {
+      margin: 5,
+      filename: filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+      document.body.removeChild(container);
+      toast({
+        title: "Success",
+        description: "Report card downloaded successfully!",
+      });
+    }).catch(() => {
+      document.body.removeChild(container);
+      toast({
+        title: "Error",
+        description: "Failed to download report card. Please try again.",
+        variant: "destructive",
+      });
+    });
   };
 
   return (
@@ -1368,27 +1391,17 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    {/* Print Report Buttons - Responsive */}
+                    {/* Download Report Button */}
                     <div className="flex gap-2">
                       <Button
                         onClick={handlePrintDetailedReport}
-                        variant="outline"
                         size="sm"
-                        className="flex-1 sm:flex-none text-xs sm:text-sm"
-                        data-testid="button-view-report-content"
+                        className="flex-1 text-xs sm:text-sm"
+                        data-testid="button-download-report-card"
                       >
-                        <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                        View Full Report
-                      </Button>
-                      <Button
-                        onClick={handlePrintDetailedReport}
-                        size="sm"
-                        className="flex-1 sm:flex-none text-xs sm:text-sm"
-                        data-testid="button-print-report-content"
-                      >
-                        <Printer className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                        <span className="hidden sm:inline">Print Report Card</span>
-                        <span className="sm:hidden">Print</span>
+                        <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Download Report Card</span>
+                        <span className="sm:hidden">Download PDF</span>
                       </Button>
                     </div>
                   </>
