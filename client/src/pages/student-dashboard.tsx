@@ -46,7 +46,6 @@ export default function StudentDashboard() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
-  const [reportPreviewHtml, setReportPreviewHtml] = useState<string>("");
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
@@ -382,8 +381,8 @@ export default function StudentDashboard() {
     },
   });
 
-  const generateReportHTML = () => {
-    if (!profile) return "";
+  const handlePrintDetailedReport = async () => {
+    if (!profile) return;
     
     // Get the selected class details
     const selectedClassObj = enrolledClasses.find(c => c.id === selectedClass);
@@ -1062,21 +1061,6 @@ export default function StudentDashboard() {
       </html>
     `;
 
-    return reportHTML;
-  };
-
-  const handleViewReport = () => {
-    const html = generateReportHTML();
-    if (html) {
-      setReportPreviewHtml(html);
-      setShowReportDialog(true);
-    }
-  };
-
-  const handlePrintDetailedReport = async () => {
-    const reportHTML = generateReportHTML();
-    if (!reportHTML) return;
-
     // Create a temporary container to render the HTML
     const container = document.createElement('div');
     container.innerHTML = reportHTML;
@@ -1412,7 +1396,7 @@ export default function StudentDashboard() {
                     {/* Report Buttons */}
                     <div className="flex gap-2">
                       <Button
-                        onClick={handleViewReport}
+                        onClick={() => setShowReportDialog(true)}
                         size="sm"
                         variant="outline"
                         className="flex-1 text-xs sm:text-sm"
