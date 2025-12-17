@@ -801,6 +801,23 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(subjects, eq(assessments.subjectId, subjects.id))
       .where(and(...conditions));
 
+    // Filter to only include subjects currently assigned to the class
+    if (classId) {
+      const assignedSubjects = await db
+        .select({ subjectId: classSubjects.subjectId })
+        .from(classSubjects)
+        .where(eq(classSubjects.classId, classId));
+      
+      const assignedSubjectIds = new Set(assignedSubjects.map(s => s.subjectId));
+      
+      return assessmentData
+        .filter(({ assessments: assessment }) => assignedSubjectIds.has(assessment.subjectId))
+        .map(({ assessments: assessment, subjects: subject }) => ({
+          ...assessment,
+          subject: subject!
+        }));
+    }
+
     return assessmentData.map(({ assessments: assessment, subjects: subject }) => ({
       ...assessment,
       subject: subject!
