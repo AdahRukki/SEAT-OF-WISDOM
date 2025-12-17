@@ -1564,7 +1564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         student.id, 
         term as string, 
         session as string,
-        classId as string | undefined
+        useClassId
       );
       
       res.json(assessments);
