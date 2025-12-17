@@ -46,6 +46,7 @@ export default function StudentDashboard() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
+  const [reportHtml, setReportHtml] = useState("");
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
@@ -381,111 +382,103 @@ export default function StudentDashboard() {
     },
   });
 
-  const handlePrintDetailedReport = async () => {
-    if (!profile) return;
+  // Helper functions for report generation
+  const getPrincipalComment = (avgPercentage: number): string => {
+    if (avgPercentage >= 90) {
+      return "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
+    } else if (avgPercentage >= 80) {
+      return "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
+    } else if (avgPercentage >= 75) {
+      return "Good performance! With a bit more effort and consistency, you can achieve excellence.";
+    } else if (avgPercentage >= 70) {
+      return "Fairly good performance. Continue to work hard and stay focused on your goals.";
+    } else if (avgPercentage >= 65) {
+      return "Average performance. You need to put in more effort to improve your grades.";
+    } else if (avgPercentage >= 60) {
+      return "Below average performance. Please dedicate more time to your studies.";
+    } else if (avgPercentage >= 50) {
+      return "You passed, but there is significant room for improvement. Work harder next term.";
+    } else if (avgPercentage >= 45) {
+      return "Weak performance. You need to be more serious with your studies.";
+    } else if (avgPercentage >= 40) {
+      return "Poor performance. Extra attention and effort are urgently needed.";
+    } else {
+      return "Very poor performance. Immediate action is required to improve your results.";
+    }
+  };
+
+  const getBehavioralInterpretation = (rating: any): { averageRating: number; interpretation: string } | null => {
+    if (!rating) return null;
     
-    // Get the selected class details
+    const ratings = [
+      rating.attendancePunctuality || 3,
+      rating.neatnessOrganization || 3,
+      rating.respectPoliteness || 3,
+      rating.participationTeamwork || 3,
+      rating.responsibility || 3
+    ];
+    
+    const averageRating = ratings.reduce((sum, r) => sum + r, 0) / ratings.length;
+    
+    let interpretation = '';
+    if (averageRating >= 4.5) {
+      interpretation = 'Excellent Behavior';
+    } else if (averageRating >= 3.5) {
+      interpretation = 'Very Good Behavior';
+    } else if (averageRating >= 2.5) {
+      interpretation = 'Good Behavior';
+    } else if (averageRating >= 1.5) {
+      interpretation = 'Fair Behavior - Needs Improvement';
+    } else {
+      interpretation = 'Poor Behavior - Urgent Attention Required';
+    }
+    
+    return { averageRating: Math.round(averageRating * 10) / 10, interpretation };
+  };
+
+  const getRatingText = (rating: number | null | undefined): string => {
+    if (!rating) return 'Not Rated';
+    if (rating === 5) return 'Excellent';
+    if (rating === 4) return 'Very Good';
+    if (rating === 3) return 'Good';
+    if (rating === 2) return 'Fair';
+    if (rating === 1) return 'Poor';
+    return 'Not Rated';
+  };
+
+  const formatNextTermDate = (dateString: string | null | undefined): string => {
+    if (!dateString) return 'TBA';
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const month = date.toLocaleString('en-US', { month: 'long' }).toUpperCase();
+    const year = date.getFullYear();
+    
+    const getOrdinalSuffix = (n: number): string => {
+      if (n > 3 && n < 21) return 'TH';
+      switch (n % 10) {
+        case 1: return 'ST';
+        case 2: return 'ND';
+        case 3: return 'RD';
+        default: return 'TH';
+      }
+    };
+    
+    return `${day}${getOrdinalSuffix(day)} ${month}, ${year}`;
+  };
+
+  // Generate report HTML - reusable for both view and download
+  const generateReportHtml = (): string | null => {
+    if (!profile) return null;
+    
     const selectedClassObj = enrolledClasses.find(c => c.id === selectedClass);
-    
-    // Calculate totals
     const totalMarks = assessments.reduce((sum, assessment) => {
       return sum + (Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0));
     }, 0);
-
     const averagePercentage = assessments.length ? (totalMarks / (assessments.length * 100) * 100) : 0;
-
-    // Helper functions
-    const getPrincipalComment = (avgPercentage: number): string => {
-      if (avgPercentage >= 90) {
-        return "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
-      } else if (avgPercentage >= 80) {
-        return "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
-      } else if (avgPercentage >= 75) {
-        return "Good performance! With a bit more effort and consistency, you can achieve excellence.";
-      } else if (avgPercentage >= 70) {
-        return "Fairly good performance. Continue to work hard and stay focused on your goals.";
-      } else if (avgPercentage >= 65) {
-        return "Average performance. You need to put in more effort to improve your grades.";
-      } else if (avgPercentage >= 60) {
-        return "Below average performance. Please dedicate more time to your studies.";
-      } else if (avgPercentage >= 50) {
-        return "You passed, but there is significant room for improvement. Work harder next term.";
-      } else if (avgPercentage >= 45) {
-        return "Weak performance. You need to be more serious with your studies.";
-      } else if (avgPercentage >= 40) {
-        return "Poor performance. Extra attention and effort are urgently needed.";
-      } else {
-        return "Very poor performance. Immediate action is required to improve your results.";
-      }
-    };
-
-    const getBehavioralInterpretation = (behavioralRating: any): { averageRating: number; interpretation: string } | null => {
-      if (!behavioralRating) return null;
-      
-      const ratings = [
-        behavioralRating.attendancePunctuality || 3,
-        behavioralRating.neatnessOrganization || 3,
-        behavioralRating.respectPoliteness || 3,
-        behavioralRating.participationTeamwork || 3,
-        behavioralRating.responsibility || 3
-      ];
-      
-      const averageRating = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length;
-      
-      let interpretation = '';
-      if (averageRating >= 4.5) {
-        interpretation = 'Excellent Behavior';
-      } else if (averageRating >= 3.5) {
-        interpretation = 'Very Good Behavior';
-      } else if (averageRating >= 2.5) {
-        interpretation = 'Good Behavior';
-      } else if (averageRating >= 1.5) {
-        interpretation = 'Fair Behavior - Needs Improvement';
-      } else {
-        interpretation = 'Poor Behavior - Urgent Attention Required';
-      }
-      
-      return { averageRating: Math.round(averageRating * 10) / 10, interpretation };
-    };
-
-    const getRatingText = (rating: number | null | undefined): string => {
-      if (!rating) return 'Not Rated';
-      if (rating === 5) return 'Excellent';
-      if (rating === 4) return 'Very Good';
-      if (rating === 3) return 'Good';
-      if (rating === 2) return 'Fair';
-      if (rating === 1) return 'Poor';
-      return 'Not Rated';
-    };
-
-    const formatNextTermDate = (dateString: string | null | undefined): string => {
-      if (!dateString) return 'TBA';
-      const date = new Date(dateString);
-      const day = date.getDate();
-      const month = date.toLocaleString('en-US', { month: 'long' }).toUpperCase();
-      const year = date.getFullYear();
-      
-      const getOrdinalSuffix = (n: number): string => {
-        if (n > 3 && n < 21) return 'TH';
-        switch (n % 10) {
-          case 1: return 'ST';
-          case 2: return 'ND';
-          case 3: return 'RD';
-          default: return 'TH';
-        }
-      };
-      
-      return `${day}${getOrdinalSuffix(day)} ${month}, ${year}`;
-    };
-
     const principalComment = getPrincipalComment(averagePercentage);
     const behavioralInterpretation = behavioralRating ? getBehavioralInterpretation(behavioralRating) : null;
 
-    // Generate the detailed report card
-    const reportWindow = window.open('', '_blank');
-    if (!reportWindow) return;
-
-    const reportHTML = `
+    return `
       <!DOCTYPE html>
       <html>
         <head>
@@ -1060,6 +1053,11 @@ export default function StudentDashboard() {
         </body>
       </html>
     `;
+  };
+
+  const handlePrintDetailedReport = async () => {
+    const reportHTML = generateReportHtml();
+    if (!reportHTML) return;
 
     // Create a temporary container to render the HTML
     const container = document.createElement('div');
@@ -1396,7 +1394,13 @@ export default function StudentDashboard() {
                     {/* Report Buttons */}
                     <div className="flex gap-2">
                       <Button
-                        onClick={() => setShowReportDialog(true)}
+                        onClick={() => {
+                          const html = generateReportHtml();
+                          if (html) {
+                            setReportHtml(html);
+                            setShowReportDialog(true);
+                          }
+                        }}
                         size="sm"
                         variant="outline"
                         className="flex-1 text-xs sm:text-sm"
@@ -1741,9 +1745,9 @@ export default function StudentDashboard() {
         </Tabs>
       </div>
 
-      {/* Full Report Card Dialog - A4 Format */}
+      {/* Full Report Card Dialog - Shows exact same report as PDF */}
       <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
-        <DialogContent className="max-w-[850px] w-[95vw] max-h-[95vh] overflow-y-auto p-0">
+        <DialogContent className="max-w-[900px] w-[95vw] max-h-[95vh] overflow-hidden p-0">
           <DialogHeader className="p-4 border-b sticky top-0 bg-white z-10">
             <DialogTitle className="flex items-center justify-between">
               <span>Report Card Preview</span>
@@ -1754,152 +1758,18 @@ export default function StudentDashboard() {
             </DialogTitle>
           </DialogHeader>
           
-          {profile && assessments.length > 0 && (
-            <div className="flex justify-center p-4 bg-gray-100">
-              {/* A4 Paper Container */}
-              <div 
-                className="bg-white shadow-lg border"
+          {reportHtml && (
+            <div className="flex-1 overflow-auto bg-gray-100 p-4">
+              <iframe
+                srcDoc={reportHtml}
+                className="w-full bg-white shadow-lg mx-auto"
                 style={{ 
-                  width: '210mm', 
-                  minHeight: '297mm', 
-                  padding: '15mm',
-                  boxSizing: 'border-box'
+                  width: '100%',
+                  height: 'calc(95vh - 80px)',
+                  border: 'none'
                 }}
-              >
-                {/* School Header */}
-                <div className="text-center mb-6 border-b-2 border-blue-900 pb-4">
-                  <div className="flex items-center justify-center gap-4 mb-2">
-                    {currentLogoUrl && (
-                      <img src={currentLogoUrl} alt="School Logo" className="h-20 w-20" />
-                    )}
-                    <div>
-                      <h1 className="text-2xl font-bold text-blue-900 uppercase tracking-wide">SEAT OF WISDOM ACADEMY</h1>
-                      <p className="text-sm text-gray-600 italic">...Pursuing Excellence Through Wisdom</p>
-                      <p className="text-xs text-gray-500 mt-1">Asaba, Delta State, Nigeria</p>
-                    </div>
-                  </div>
-                  <div className="bg-blue-900 text-white py-2 px-4 mt-3 rounded">
-                    <h2 className="text-lg font-bold uppercase tracking-widest">Student Report Card</h2>
-                  </div>
-                </div>
-
-                {/* Student Info */}
-                <div className="grid grid-cols-2 gap-6 mb-6 text-sm border rounded-lg p-4 bg-gray-50">
-                  <div className="space-y-2">
-                    <p><span className="font-bold text-gray-700">Student Name:</span> <span className="uppercase">{user?.firstName} {user?.middleName ? user.middleName + ' ' : ''}{user?.lastName}</span></p>
-                    <p><span className="font-bold text-gray-700">Student ID:</span> {profile.studentId}</p>
-                    <p><span className="font-bold text-gray-700">Class:</span> {enrolledClasses.find(c => c.id === selectedClass)?.name}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <p><span className="font-bold text-gray-700">Term:</span> {selectedTerm}</p>
-                    <p><span className="font-bold text-gray-700">Session:</span> {selectedSession}</p>
-                    {publishedScoreInfo?.nextTermResumes && (
-                      <p><span className="font-bold text-gray-700">Next Term Resumes:</span> {new Date(publishedScoreInfo.nextTermResumes).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Academic Performance Title */}
-                <div className="bg-blue-900 text-white text-center py-2 mb-4 rounded">
-                  <h3 className="font-bold uppercase text-sm tracking-wide">Academic Performance</h3>
-                </div>
-
-                {/* Scores Table */}
-                <table className="w-full border-collapse mb-6 text-sm">
-                  <thead>
-                    <tr className="bg-blue-900 text-white">
-                      <th className="border border-blue-800 p-2 text-left font-bold">Subject</th>
-                      <th className="border border-blue-800 p-2 text-center font-bold w-16">CA1<br/><span className="text-xs font-normal">(20)</span></th>
-                      <th className="border border-blue-800 p-2 text-center font-bold w-16">CA2<br/><span className="text-xs font-normal">(20)</span></th>
-                      <th className="border border-blue-800 p-2 text-center font-bold w-16">Exam<br/><span className="text-xs font-normal">(60)</span></th>
-                      <th className="border border-blue-800 p-2 text-center font-bold w-16">Total<br/><span className="text-xs font-normal">(100)</span></th>
-                      <th className="border border-blue-800 p-2 text-center font-bold w-16">Grade</th>
-                      <th className="border border-blue-800 p-2 text-center font-bold">Remark</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assessments.map((assessment, index) => {
-                      const total = Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0);
-                      const gradeInfo = calculateGrade(total);
-                      return (
-                        <tr key={assessment.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="border border-gray-300 p-2 font-medium">{assessment.subject.name}</td>
-                          <td className="border border-gray-300 p-2 text-center">{assessment.firstCA || '-'}</td>
-                          <td className="border border-gray-300 p-2 text-center">{assessment.secondCA || '-'}</td>
-                          <td className="border border-gray-300 p-2 text-center">{assessment.exam || '-'}</td>
-                          <td className="border border-gray-300 p-2 text-center font-bold">{total}</td>
-                          <td className="border border-gray-300 p-2 text-center font-bold">{gradeInfo.grade}</td>
-                          <td className="border border-gray-300 p-2 text-center text-xs">{gradeInfo.remark}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Summary Section */}
-                <div className="grid grid-cols-2 gap-6 mb-6">
-                  {/* Performance Summary */}
-                  <div className="border rounded-lg p-4">
-                    <h4 className="font-bold text-blue-900 mb-3 uppercase text-sm border-b pb-2">Performance Summary</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Total Obtainable Marks:</span>
-                        <span className="font-bold">{assessments.length * 100}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Total Marks Obtained:</span>
-                        <span className="font-bold">{assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0)}</span>
-                      </div>
-                      <div className="flex justify-between border-t pt-2 mt-2">
-                        <span className="text-gray-600">Average Score:</span>
-                        <span className="font-bold text-lg">{overallAverage}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Overall Grade:</span>
-                        <span className="font-bold text-lg">{overallGrade.grade}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Grading Key */}
-                  <div className="border rounded-lg p-4">
-                    <h4 className="font-bold text-blue-900 mb-3 uppercase text-sm border-b pb-2">Grading Key</h4>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      <div className="flex justify-between"><span>A (Excellent)</span><span>75-100</span></div>
-                      <div className="flex justify-between"><span>B (Very Good)</span><span>70-74</span></div>
-                      <div className="flex justify-between"><span>C (Good)</span><span>65-69</span></div>
-                      <div className="flex justify-between"><span>D (Credit)</span><span>60-64</span></div>
-                      <div className="flex justify-between"><span>E (Pass)</span><span>50-59</span></div>
-                      <div className="flex justify-between"><span>F (Fail)</span><span>0-49</span></div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Principal's Comment */}
-                {(() => {
-                  const avgPercentage = assessments.length ? (assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0) / (assessments.length * 100) * 100) : 0;
-                  let comment = "";
-                  if (avgPercentage >= 90) comment = "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
-                  else if (avgPercentage >= 80) comment = "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
-                  else if (avgPercentage >= 70) comment = "Good performance! With a bit more effort and consistency, you can achieve excellence.";
-                  else if (avgPercentage >= 60) comment = "Fairly good performance. Continue to work hard and stay focused on your goals.";
-                  else if (avgPercentage >= 50) comment = "You passed, but there is significant room for improvement. Work harder next term.";
-                  else comment = "Needs improvement. Please dedicate more time and effort to your studies.";
-                  
-                  return (
-                    <div className="border rounded-lg p-4 mb-6">
-                      <h4 className="font-bold text-blue-900 mb-2 uppercase text-sm">Principal's Comment</h4>
-                      <p className="text-sm italic text-gray-700 bg-gray-50 p-3 rounded">{comment}</p>
-                    </div>
-                  );
-                })()}
-
-                {/* Footer */}
-                <div className="mt-auto pt-6 border-t text-center text-xs text-gray-500">
-                  <p>This is an official document of Seat of Wisdom Academy</p>
-                  <p className="mt-1">Generated on {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                </div>
-              </div>
+                title="Report Card Preview"
+              />
             </div>
           )}
         </DialogContent>
