@@ -1741,115 +1741,164 @@ export default function StudentDashboard() {
         </Tabs>
       </div>
 
-      {/* Full Report Card Dialog */}
+      {/* Full Report Card Dialog - A4 Format */}
       <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Report Card - {selectedTerm} {selectedSession}</DialogTitle>
+        <DialogContent className="max-w-[850px] w-[95vw] max-h-[95vh] overflow-y-auto p-0">
+          <DialogHeader className="p-4 border-b sticky top-0 bg-white z-10">
+            <DialogTitle className="flex items-center justify-between">
+              <span>Report Card Preview</span>
+              <Button size="sm" onClick={() => { setShowReportDialog(false); handlePrintDetailedReport(); }}>
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </Button>
+            </DialogTitle>
           </DialogHeader>
           
           {profile && assessments.length > 0 && (
-            <div className="p-4 bg-white rounded-lg">
-              {/* School Header */}
-              <div className="text-center mb-6 border-b pb-4">
-                {currentLogoUrl && (
-                  <img src={currentLogoUrl} alt="School Logo" className="mx-auto h-16 w-16 mb-2" />
-                )}
-                <h1 className="text-xl font-bold text-blue-900">SEAT OF WISDOM ACADEMY</h1>
-                <p className="text-sm text-gray-600">Academic Excellence Through Wisdom</p>
-              </div>
-
-              {/* Student Info */}
-              <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
-                <div>
-                  <p><span className="font-semibold">Name:</span> {user?.firstName} {user?.middleName ? user.middleName + ' ' : ''}{user?.lastName}</p>
-                  <p><span className="font-semibold">Student ID:</span> {profile.studentId}</p>
-                  <p><span className="font-semibold">Class:</span> {enrolledClasses.find(c => c.id === selectedClass)?.name}</p>
-                </div>
-                <div>
-                  <p><span className="font-semibold">Term:</span> {selectedTerm}</p>
-                  <p><span className="font-semibold">Session:</span> {selectedSession}</p>
-                  {publishedScoreInfo?.nextTermResumes && (
-                    <p><span className="font-semibold">Next Term:</span> {new Date(publishedScoreInfo.nextTermResumes).toLocaleDateString()}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Scores Table */}
-              <table className="w-full border-collapse mb-6">
-                <thead>
-                  <tr className="bg-blue-900 text-white">
-                    <th className="border p-2 text-left">Subject</th>
-                    <th className="border p-2 text-center">CA1 (20)</th>
-                    <th className="border p-2 text-center">CA2 (20)</th>
-                    <th className="border p-2 text-center">Exam (60)</th>
-                    <th className="border p-2 text-center">Total (100)</th>
-                    <th className="border p-2 text-center">Grade</th>
-                    <th className="border p-2 text-center">Remark</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assessments.map((assessment) => {
-                    const total = Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0);
-                    const gradeInfo = calculateGrade(total);
-                    return (
-                      <tr key={assessment.id} className="border-b">
-                        <td className="border p-2">{assessment.subject.name}</td>
-                        <td className="border p-2 text-center">{assessment.firstCA || '-'}</td>
-                        <td className="border p-2 text-center">{assessment.secondCA || '-'}</td>
-                        <td className="border p-2 text-center">{assessment.exam || '-'}</td>
-                        <td className="border p-2 text-center font-bold">{total}</td>
-                        <td className="border p-2 text-center">{gradeInfo.grade}</td>
-                        <td className="border p-2 text-center">{gradeInfo.remark}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {/* Summary */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-sm text-gray-600">Total Marks</p>
-                    <p className="text-xl font-bold">{assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0)}</p>
+            <div className="flex justify-center p-4 bg-gray-100">
+              {/* A4 Paper Container */}
+              <div 
+                className="bg-white shadow-lg border"
+                style={{ 
+                  width: '210mm', 
+                  minHeight: '297mm', 
+                  padding: '15mm',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {/* School Header */}
+                <div className="text-center mb-6 border-b-2 border-blue-900 pb-4">
+                  <div className="flex items-center justify-center gap-4 mb-2">
+                    {currentLogoUrl && (
+                      <img src={currentLogoUrl} alt="School Logo" className="h-20 w-20" />
+                    )}
+                    <div>
+                      <h1 className="text-2xl font-bold text-blue-900 uppercase tracking-wide">SEAT OF WISDOM ACADEMY</h1>
+                      <p className="text-sm text-gray-600 italic">...Pursuing Excellence Through Wisdom</p>
+                      <p className="text-xs text-gray-500 mt-1">Asaba, Delta State, Nigeria</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Average</p>
-                    <p className="text-xl font-bold">{overallAverage}%</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Overall Grade</p>
-                    <p className="text-xl font-bold">{overallGrade.grade}</p>
+                  <div className="bg-blue-900 text-white py-2 px-4 mt-3 rounded">
+                    <h2 className="text-lg font-bold uppercase tracking-widest">Student Report Card</h2>
                   </div>
                 </div>
-              </div>
 
-              {/* Principal's Comment */}
-              {(() => {
-                const avgPercentage = assessments.length ? (assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0) / (assessments.length * 100) * 100) : 0;
-                let comment = "";
-                if (avgPercentage >= 90) comment = "Outstanding performance! Keep up this remarkable standard.";
-                else if (avgPercentage >= 80) comment = "A very good result! Maintain this level of commitment.";
-                else if (avgPercentage >= 70) comment = "Good performance! With a bit more effort, you can achieve excellence.";
-                else if (avgPercentage >= 60) comment = "Fairly good. Continue to work hard and stay focused.";
-                else if (avgPercentage >= 50) comment = "You passed, but there is room for improvement.";
-                else comment = "Needs improvement. Please dedicate more time to your studies.";
-                
-                return (
-                  <div className="mt-4 p-4 border rounded-lg">
-                    <p className="font-semibold mb-2">Principal's Comment:</p>
-                    <p className="text-sm italic">{comment}</p>
+                {/* Student Info */}
+                <div className="grid grid-cols-2 gap-6 mb-6 text-sm border rounded-lg p-4 bg-gray-50">
+                  <div className="space-y-2">
+                    <p><span className="font-bold text-gray-700">Student Name:</span> <span className="uppercase">{user?.firstName} {user?.middleName ? user.middleName + ' ' : ''}{user?.lastName}</span></p>
+                    <p><span className="font-bold text-gray-700">Student ID:</span> {profile.studentId}</p>
+                    <p><span className="font-bold text-gray-700">Class:</span> {enrolledClasses.find(c => c.id === selectedClass)?.name}</p>
                   </div>
-                );
-              })()}
+                  <div className="space-y-2">
+                    <p><span className="font-bold text-gray-700">Term:</span> {selectedTerm}</p>
+                    <p><span className="font-bold text-gray-700">Session:</span> {selectedSession}</p>
+                    {publishedScoreInfo?.nextTermResumes && (
+                      <p><span className="font-bold text-gray-700">Next Term Resumes:</span> {new Date(publishedScoreInfo.nextTermResumes).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                    )}
+                  </div>
+                </div>
 
-              {/* Download Button in Dialog */}
-              <div className="mt-6 flex justify-center">
-                <Button onClick={() => { setShowReportDialog(false); handlePrintDetailedReport(); }}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download PDF
-                </Button>
+                {/* Academic Performance Title */}
+                <div className="bg-blue-900 text-white text-center py-2 mb-4 rounded">
+                  <h3 className="font-bold uppercase text-sm tracking-wide">Academic Performance</h3>
+                </div>
+
+                {/* Scores Table */}
+                <table className="w-full border-collapse mb-6 text-sm">
+                  <thead>
+                    <tr className="bg-blue-900 text-white">
+                      <th className="border border-blue-800 p-2 text-left font-bold">Subject</th>
+                      <th className="border border-blue-800 p-2 text-center font-bold w-16">CA1<br/><span className="text-xs font-normal">(20)</span></th>
+                      <th className="border border-blue-800 p-2 text-center font-bold w-16">CA2<br/><span className="text-xs font-normal">(20)</span></th>
+                      <th className="border border-blue-800 p-2 text-center font-bold w-16">Exam<br/><span className="text-xs font-normal">(60)</span></th>
+                      <th className="border border-blue-800 p-2 text-center font-bold w-16">Total<br/><span className="text-xs font-normal">(100)</span></th>
+                      <th className="border border-blue-800 p-2 text-center font-bold w-16">Grade</th>
+                      <th className="border border-blue-800 p-2 text-center font-bold">Remark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assessments.map((assessment, index) => {
+                      const total = Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0);
+                      const gradeInfo = calculateGrade(total);
+                      return (
+                        <tr key={assessment.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="border border-gray-300 p-2 font-medium">{assessment.subject.name}</td>
+                          <td className="border border-gray-300 p-2 text-center">{assessment.firstCA || '-'}</td>
+                          <td className="border border-gray-300 p-2 text-center">{assessment.secondCA || '-'}</td>
+                          <td className="border border-gray-300 p-2 text-center">{assessment.exam || '-'}</td>
+                          <td className="border border-gray-300 p-2 text-center font-bold">{total}</td>
+                          <td className="border border-gray-300 p-2 text-center font-bold">{gradeInfo.grade}</td>
+                          <td className="border border-gray-300 p-2 text-center text-xs">{gradeInfo.remark}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Summary Section */}
+                <div className="grid grid-cols-2 gap-6 mb-6">
+                  {/* Performance Summary */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-bold text-blue-900 mb-3 uppercase text-sm border-b pb-2">Performance Summary</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total Obtainable Marks:</span>
+                        <span className="font-bold">{assessments.length * 100}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total Marks Obtained:</span>
+                        <span className="font-bold">{assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0)}</span>
+                      </div>
+                      <div className="flex justify-between border-t pt-2 mt-2">
+                        <span className="text-gray-600">Average Score:</span>
+                        <span className="font-bold text-lg">{overallAverage}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Overall Grade:</span>
+                        <span className="font-bold text-lg">{overallGrade.grade}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Grading Key */}
+                  <div className="border rounded-lg p-4">
+                    <h4 className="font-bold text-blue-900 mb-3 uppercase text-sm border-b pb-2">Grading Key</h4>
+                    <div className="grid grid-cols-2 gap-1 text-xs">
+                      <div className="flex justify-between"><span>A (Excellent)</span><span>75-100</span></div>
+                      <div className="flex justify-between"><span>B (Very Good)</span><span>70-74</span></div>
+                      <div className="flex justify-between"><span>C (Good)</span><span>65-69</span></div>
+                      <div className="flex justify-between"><span>D (Credit)</span><span>60-64</span></div>
+                      <div className="flex justify-between"><span>E (Pass)</span><span>50-59</span></div>
+                      <div className="flex justify-between"><span>F (Fail)</span><span>0-49</span></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Principal's Comment */}
+                {(() => {
+                  const avgPercentage = assessments.length ? (assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0) / (assessments.length * 100) * 100) : 0;
+                  let comment = "";
+                  if (avgPercentage >= 90) comment = "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
+                  else if (avgPercentage >= 80) comment = "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
+                  else if (avgPercentage >= 70) comment = "Good performance! With a bit more effort and consistency, you can achieve excellence.";
+                  else if (avgPercentage >= 60) comment = "Fairly good performance. Continue to work hard and stay focused on your goals.";
+                  else if (avgPercentage >= 50) comment = "You passed, but there is significant room for improvement. Work harder next term.";
+                  else comment = "Needs improvement. Please dedicate more time and effort to your studies.";
+                  
+                  return (
+                    <div className="border rounded-lg p-4 mb-6">
+                      <h4 className="font-bold text-blue-900 mb-2 uppercase text-sm">Principal's Comment</h4>
+                      <p className="text-sm italic text-gray-700 bg-gray-50 p-3 rounded">{comment}</p>
+                    </div>
+                  );
+                })()}
+
+                {/* Footer */}
+                <div className="mt-auto pt-6 border-t text-center text-xs text-gray-500">
+                  <p>This is an official document of Seat of Wisdom Academy</p>
+                  <p className="mt-1">Generated on {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                </div>
               </div>
             </div>
           )}
