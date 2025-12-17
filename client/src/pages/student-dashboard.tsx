@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { GraduationCap, LogOut, BookOpen, Trophy, User, Lock, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle, Bell, Download, Eye } from "lucide-react";
 import html2pdf from "html2pdf.js";
 // Logo is now loaded dynamically via useLogo hook
@@ -44,6 +45,7 @@ export default function StudentDashboard() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
@@ -1391,8 +1393,19 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    {/* Download Report Button */}
+                    {/* Report Buttons */}
                     <div className="flex gap-2">
+                      <Button
+                        onClick={() => setShowReportDialog(true)}
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs sm:text-sm"
+                        data-testid="button-view-full-report"
+                      >
+                        <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">View Full Report</span>
+                        <span className="sm:hidden">View</span>
+                      </Button>
                       <Button
                         onClick={handlePrintDetailedReport}
                         size="sm"
@@ -1401,7 +1414,7 @@ export default function StudentDashboard() {
                       >
                         <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                         <span className="hidden sm:inline">Download Report Card</span>
-                        <span className="sm:hidden">Download PDF</span>
+                        <span className="sm:hidden">Download</span>
                       </Button>
                     </div>
                   </>
@@ -1727,6 +1740,121 @@ export default function StudentDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Full Report Card Dialog */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Report Card - {selectedTerm} {selectedSession}</DialogTitle>
+          </DialogHeader>
+          
+          {profile && assessments.length > 0 && (
+            <div className="p-4 bg-white rounded-lg">
+              {/* School Header */}
+              <div className="text-center mb-6 border-b pb-4">
+                {currentLogoUrl && (
+                  <img src={currentLogoUrl} alt="School Logo" className="mx-auto h-16 w-16 mb-2" />
+                )}
+                <h1 className="text-xl font-bold text-blue-900">SEAT OF WISDOM ACADEMY</h1>
+                <p className="text-sm text-gray-600">Academic Excellence Through Wisdom</p>
+              </div>
+
+              {/* Student Info */}
+              <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+                <div>
+                  <p><span className="font-semibold">Name:</span> {user?.firstName} {user?.middleName ? user.middleName + ' ' : ''}{user?.lastName}</p>
+                  <p><span className="font-semibold">Student ID:</span> {profile.studentId}</p>
+                  <p><span className="font-semibold">Class:</span> {enrolledClasses.find(c => c.id === selectedClass)?.name}</p>
+                </div>
+                <div>
+                  <p><span className="font-semibold">Term:</span> {selectedTerm}</p>
+                  <p><span className="font-semibold">Session:</span> {selectedSession}</p>
+                  {publishedScoreInfo?.nextTermResumes && (
+                    <p><span className="font-semibold">Next Term:</span> {new Date(publishedScoreInfo.nextTermResumes).toLocaleDateString()}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Scores Table */}
+              <table className="w-full border-collapse mb-6">
+                <thead>
+                  <tr className="bg-blue-900 text-white">
+                    <th className="border p-2 text-left">Subject</th>
+                    <th className="border p-2 text-center">CA1 (20)</th>
+                    <th className="border p-2 text-center">CA2 (20)</th>
+                    <th className="border p-2 text-center">Exam (60)</th>
+                    <th className="border p-2 text-center">Total (100)</th>
+                    <th className="border p-2 text-center">Grade</th>
+                    <th className="border p-2 text-center">Remark</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assessments.map((assessment) => {
+                    const total = Number(assessment.firstCA || 0) + Number(assessment.secondCA || 0) + Number(assessment.exam || 0);
+                    const gradeInfo = calculateGrade(total);
+                    return (
+                      <tr key={assessment.id} className="border-b">
+                        <td className="border p-2">{assessment.subject.name}</td>
+                        <td className="border p-2 text-center">{assessment.firstCA || '-'}</td>
+                        <td className="border p-2 text-center">{assessment.secondCA || '-'}</td>
+                        <td className="border p-2 text-center">{assessment.exam || '-'}</td>
+                        <td className="border p-2 text-center font-bold">{total}</td>
+                        <td className="border p-2 text-center">{gradeInfo.grade}</td>
+                        <td className="border p-2 text-center">{gradeInfo.remark}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Summary */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Marks</p>
+                    <p className="text-xl font-bold">{assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Average</p>
+                    <p className="text-xl font-bold">{overallAverage}%</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Overall Grade</p>
+                    <p className="text-xl font-bold">{overallGrade.grade}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Principal's Comment */}
+              {(() => {
+                const avgPercentage = assessments.length ? (assessments.reduce((sum, a) => sum + Number(a.firstCA || 0) + Number(a.secondCA || 0) + Number(a.exam || 0), 0) / (assessments.length * 100) * 100) : 0;
+                let comment = "";
+                if (avgPercentage >= 90) comment = "Outstanding performance! Keep up this remarkable standard.";
+                else if (avgPercentage >= 80) comment = "A very good result! Maintain this level of commitment.";
+                else if (avgPercentage >= 70) comment = "Good performance! With a bit more effort, you can achieve excellence.";
+                else if (avgPercentage >= 60) comment = "Fairly good. Continue to work hard and stay focused.";
+                else if (avgPercentage >= 50) comment = "You passed, but there is room for improvement.";
+                else comment = "Needs improvement. Please dedicate more time to your studies.";
+                
+                return (
+                  <div className="mt-4 p-4 border rounded-lg">
+                    <p className="font-semibold mb-2">Principal's Comment:</p>
+                    <p className="text-sm italic">{comment}</p>
+                  </div>
+                );
+              })()}
+
+              {/* Download Button in Dialog */}
+              <div className="mt-6 flex justify-center">
+                <Button onClick={() => { setShowReportDialog(false); handlePrintDetailedReport(); }}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
