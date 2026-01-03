@@ -2891,8 +2891,20 @@ export default function AdminDashboard() {
             ">
               <div style="margin-bottom: 4px;"><strong>Academic Term:</strong> ${term}</div>
               <div style="margin-bottom: 4px;"><strong>Academic Session:</strong> ${session}</div>
-              ${nextTermDate ? `<div><strong>Next Term Resumes:</strong> ${new Date(nextTermDate).toLocaleDateString('en-GB')}</div>` : ''}
             </div>
+
+            ${nextTermDate ? `
+            <div style="
+              text-align: center;
+              margin: 12px 0;
+              padding: 10px;
+              background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+              border-radius: 6px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            ">
+              <span style="font-size: 11px; font-weight: bold; color: white;">NEXT TERM RESUMES: ${new Date(nextTermDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            </div>
+            ` : ''}
 
             <div class="signature-section">
               <div class="signature">CLASS TEACHER</div>
