@@ -27,6 +27,7 @@ import {
   insertNotificationSchema,
   insertContactSubmissionSchema,
   recordFeePaymentSchema,
+  multiStudentAllocationSchema,
   users,
   students,
   classes,
@@ -3578,6 +3579,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[POST /api/admin/payments/:id/reverse] Error:", error);
       res.status(500).json({ error: error.message || "Failed to reverse payment" });
+    }
+  });
+
+  // Allocate single bank transaction to multiple students
+  app.post("/api/admin/bank-transactions/:id/allocate", authenticate, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const bankTransactionId = req.params.id;
+      
+      console.log('[POST /api/admin/bank-transactions/:id/allocate] User:', user.id, 'BankTransaction:', bankTransactionId);
+      
+      // Validate request body
+      const validatedData = multiStudentAllocationSchema.parse({
+        bankTransactionId,
+        allocations: req.body.allocations,
+      });
+
+      // Validate that bank transaction exists and is unmatched
+      const bankTransaction = await storage.getBankTransactions({ 
+        status: 'unmatched'
+      }).then(txns => txns.find(t => t.id === bankTransactionId));
+
+      if (!bankTransaction) {
+        return res.status(404).json({ error: "Bank transaction not found or already matched" });
+      }
+
+      // Calculate total allocated amount
+      const totalAllocated = validatedData.allocations.reduce((sum, alloc) => sum + alloc.amount, 0);
+      
+      // Validate that total allocated amount equals bank transaction amount
+      const transactionAmount = parseFloat(bankTransaction.amount.toString());
+      if (Math.abs(totalAllocated - transactionAmount) > 0.01) { // Allow small rounding differences
+        return res.status(400).json({ 
+          error: `Total allocated amount (${totalAllocated}) does not match bank transaction amount (${transactionAmount})`
+        });
+      }
+
+      // Validate all student IDs exist
+      for (const allocation of validatedData.allocations) {
+        const student = await storage.getStudent(allocation.studentId);
+        if (!student) {
+          return res.status(404).json({ error: `Student not found: ${allocation.studentId}` });
+        }
+      }
+
+      console.log('[POST /api/admin/bank-transactions/:id/allocate] Creating allocations for', validatedData.allocations.length, 'students');
+
+      // Call storage method to create allocations
+      const result = await storage.createMultiStudentAllocation(
+        bankTransactionId,
+        validatedData.allocations,
+        user.id
+      );
+
+      // Create audit log entry
+      await storage.createPaymentAuditLog({
+        action: 'allocate',
+        entityType: 'bank_transaction',
+        entityId: bankTransactionId,
+        userId: user.id,
+        schoolId: bankTransaction.schoolId || undefined,
+        previousData: { 
+          status: bankTransaction.status,
+          totalAmount: bankTransaction.amount,
+        },
+        newData: { 
+          status: 'confirmed',
+          allocations: validatedData.allocations.length,
+          totalAmount: bankTransaction.amount,
+        },
+      });
+
+      console.log('[POST /api/admin/bank-transactions/:id/allocate] Allocation completed successfully');
+      res.json({
+        success: true,
+        paymentRecords: result.paymentRecords,
+        allocations: result.allocations,
+        message: `Successfully allocated bank transaction to ${result.paymentRecords.length} students`,
+      });
+    } catch (error: any) {
+      console.error("[POST /api/admin/bank-transactions/:id/allocate] Error:", error);
+      
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ error: "Invalid request data", details: error.errors });
+      }
+      
+      res.status(500).json({ error: error.message || "Failed to allocate payment" });
     }
   });
 

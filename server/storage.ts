@@ -246,6 +246,7 @@ export interface IStorage {
   getFeePaymentRecordById(id: string): Promise<FeePaymentRecordWithDetails | undefined>;
   confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord>;
   reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<FeePaymentRecord>;
+  createMultiStudentAllocation(bankTransactionId: string, allocations: Array<{ studentId: string; amount: number; term?: string; session?: string; notes?: string; }>, allocatedBy: string): Promise<{ paymentRecords: FeePaymentRecord[]; allocations: any[] }>;
   
   // Audit logging
   createPaymentAuditLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog>;
@@ -2430,6 +2431,85 @@ export class DatabaseStorage implements IStorage {
 
     console.log('[reverseFeePayment] Payment reversed:', paymentId);
     return record;
+  }
+
+  async createMultiStudentAllocation(bankTransactionId: string, allocations: Array<{ studentId: string; amount: number; term?: string; session?: string; notes?: string; }>, allocatedBy: string): Promise<{ paymentRecords: FeePaymentRecord[]; allocations: any[] }> {
+    console.log('[createMultiStudentAllocation] Creating allocations for bank transaction:', bankTransactionId);
+    
+    const createdPaymentRecords: FeePaymentRecord[] = [];
+    const createdAllocations: any[] = [];
+
+    try {
+      // Create a fee_payment_record for each student
+      for (const allocation of allocations) {
+        console.log('[createMultiStudentAllocation] Processing allocation for student:', allocation.studentId, 'Amount:', allocation.amount);
+        
+        const [paymentRecord] = await db
+          .insert(feePaymentRecords)
+          .values({
+            studentId: allocation.studentId,
+            amount: allocation.amount.toString(),
+            paymentMethod: 'bank_transfer',
+            paymentDate: new Date(),
+            term: allocation.term,
+            session: allocation.session,
+            status: 'confirmed',
+            notes: allocation.notes,
+            recordedBy: allocatedBy,
+            confirmedBy: allocatedBy,
+            confirmedAt: new Date(),
+          })
+          .returning();
+
+        if (!paymentRecord) {
+          throw new Error(`Failed to create payment record for student ${allocation.studentId}`);
+        }
+
+        createdPaymentRecords.push(paymentRecord);
+
+        // Create a payment_allocation linking the payment to the bank transaction
+        const [allocationRecord] = await db
+          .insert(paymentAllocations)
+          .values({
+            paymentRecordId: paymentRecord.id,
+            bankTransactionId,
+            allocatedAmount: allocation.amount.toString(),
+            allocatedBy,
+          })
+          .returning();
+
+        if (!allocationRecord) {
+          throw new Error(`Failed to create payment allocation for student ${allocation.studentId}`);
+        }
+
+        createdAllocations.push(allocationRecord);
+        console.log('[createMultiStudentAllocation] Allocation created for student:', allocation.studentId);
+      }
+
+      // Update the bank transaction status to 'matched'
+      const [updatedTransaction] = await db
+        .update(bankTransactions)
+        .set({
+          status: 'confirmed',
+          updatedAt: new Date(),
+        })
+        .where(eq(bankTransactions.id, bankTransactionId))
+        .returning();
+
+      if (!updatedTransaction) {
+        throw new Error('Bank transaction not found');
+      }
+
+      console.log('[createMultiStudentAllocation] Bank transaction status updated to matched:', bankTransactionId);
+      
+      return {
+        paymentRecords: createdPaymentRecords,
+        allocations: createdAllocations,
+      };
+    } catch (error) {
+      console.error('[createMultiStudentAllocation] Error:', error);
+      throw error;
+    }
   }
 
   async createPaymentAuditLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog> {

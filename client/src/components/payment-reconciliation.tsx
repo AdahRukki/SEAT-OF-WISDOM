@@ -56,6 +56,7 @@ import {
   RefreshCw,
   ArrowRight,
   RotateCcw,
+  Plus,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails, BankTransactionWithDetails } from "@shared/schema";
 
@@ -87,6 +88,22 @@ interface PaymentReconciliationProps {
   schoolId?: string;
 }
 
+interface Student {
+  id: string;
+  studentId: string;
+  user: {
+    firstName: string;
+    lastName: string;
+  };
+}
+
+interface Allocation {
+  studentId: string;
+  amount: number;
+  term?: string;
+  session?: string;
+}
+
 export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -95,6 +112,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [isReverseDialogOpen, setIsReverseDialogOpen] = useState(false);
   const [reversalReason, setReversalReason] = useState("");
+  const [isAllocateDialogOpen, setIsAllocateDialogOpen] = useState(false);
+  const [transactionToAllocate, setTransactionToAllocate] = useState<BankTransaction | null>(null);
+  const [allocations, setAllocations] = useState<Allocation[]>([{ studentId: "", amount: 0 }]);
+  const [studentSearch, setStudentSearch] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -130,6 +151,18 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       if (!res.ok) throw new Error("Failed to fetch pending payments");
       return res.json();
     },
+  });
+
+  const { data: students = [] } = useQuery<Student[]>({
+    queryKey: ["/api/admin/students", schoolId],
+    queryFn: async () => {
+      let url = "/api/admin/students";
+      if (schoolId) url += `?schoolId=${schoolId}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch students");
+      return res.json();
+    },
+    enabled: isAllocateDialogOpen,
   });
 
   const uploadMutation = useMutation({
@@ -217,6 +250,34 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     },
   });
 
+  const allocationMutation = useMutation({
+    mutationFn: async ({ transactionId, allocations }: { transactionId: string; allocations: Allocation[] }) => {
+      const res = await apiRequest(`/api/admin/bank-transactions/${transactionId}/allocate`, {
+        method: "POST",
+        body: { allocations },
+      });
+      return res;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Allocation Complete",
+        description: "The transaction has been allocated to multiple students.",
+      });
+      setIsAllocateDialogOpen(false);
+      setTransactionToAllocate(null);
+      setAllocations([{ studentId: "", amount: 0 }]);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Allocation Failed",
+        description: error.message || "Failed to allocate transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -273,6 +334,55 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       return Math.abs(txAmount - paymentAmount) < 0.01;
     });
   };
+
+  const handleOpenAllocateDialog = (tx: BankTransaction) => {
+    setTransactionToAllocate(tx);
+    setAllocations([{ studentId: "", amount: 0 }]);
+    setIsAllocateDialogOpen(true);
+  };
+
+  const addAllocation = () => {
+    setAllocations([...allocations, { studentId: "", amount: 0 }]);
+  };
+
+  const removeAllocation = (index: number) => {
+    if (allocations.length > 1) {
+      setAllocations(allocations.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateAllocation = (index: number, field: keyof Allocation, value: string | number) => {
+    const newAllocations = [...allocations];
+    newAllocations[index] = { ...newAllocations[index], [field]: value };
+    setAllocations(newAllocations);
+  };
+
+  const getTotalAllocated = () => {
+    return allocations.reduce((sum, a) => sum + (a.amount || 0), 0);
+  };
+
+  const handleSubmitAllocation = () => {
+    if (!transactionToAllocate) return;
+    const validAllocations = allocations.filter(a => a.studentId && a.amount > 0);
+    if (validAllocations.length === 0) {
+      toast({
+        title: "Invalid Allocation",
+        description: "Add at least one valid allocation with student and amount",
+        variant: "destructive",
+      });
+      return;
+    }
+    allocationMutation.mutate({
+      transactionId: transactionToAllocate.id,
+      allocations: validAllocations,
+    });
+  };
+
+  const filteredStudents = students.filter(s =>
+    s.user?.lastName?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+    s.user?.firstName?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+    s.studentId?.toLowerCase().includes(studentSearch.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -568,6 +678,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       <TableHead>Description</TableHead>
                       <TableHead>Reference</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -587,6 +698,15 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
                             Unmatched
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenAllocateDialog(tx)}
+                          >
+                            Allocate
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -729,6 +849,155 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <>
                   <XCircle className="h-4 w-4 mr-2" />
                   Reverse Payment
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAllocateDialogOpen} onOpenChange={setIsAllocateDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Allocate Transaction to Students</DialogTitle>
+            <DialogDescription>
+              Split this bank transaction across multiple students
+            </DialogDescription>
+          </DialogHeader>
+
+          {transactionToAllocate && (
+            <div className="space-y-4">
+              <div className="p-4 border rounded-lg bg-muted/50">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">
+                      ₦{parseFloat(transactionToAllocate.amount).toLocaleString()}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(transactionToAllocate.transactionDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">Allocated: ₦{getTotalAllocated().toLocaleString()}</p>
+                    <p className={`text-xs ${
+                      Math.abs(getTotalAllocated() - parseFloat(transactionToAllocate.amount)) < 0.01
+                        ? "text-green-600"
+                        : "text-orange-600"
+                    }`}>
+                      {Math.abs(getTotalAllocated() - parseFloat(transactionToAllocate.amount)) < 0.01
+                        ? "Fully allocated"
+                        : `Remaining: ₦${(parseFloat(transactionToAllocate.amount) - getTotalAllocated()).toLocaleString()}`
+                      }
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2 truncate">
+                  {transactionToAllocate.rawDescription}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Allocations</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addAllocation}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Student
+                  </Button>
+                </div>
+
+                {allocations.map((allocation, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-end p-3 border rounded-lg">
+                    <div className="col-span-6">
+                      <Label className="text-xs">Student</Label>
+                      <Select
+                        value={allocation.studentId}
+                        onValueChange={(val) => updateAllocation(index, "studentId", val)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select student..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <div className="p-2">
+                            <Input
+                              placeholder="Search students..."
+                              value={studentSearch}
+                              onChange={(e) => setStudentSearch(e.target.value)}
+                              className="mb-2"
+                            />
+                          </div>
+                          {filteredStudents.slice(0, 20).map((student) => (
+                            <SelectItem key={student.id} value={student.id}>
+                              {student.user?.lastName} {student.user?.firstName} ({student.studentId})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-3">
+                      <Label className="text-xs">Amount (₦)</Label>
+                      <Input
+                        type="number"
+                        value={allocation.amount || ""}
+                        onChange={(e) => updateAllocation(index, "amount", parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">Term</Label>
+                      <Select
+                        value={allocation.term || ""}
+                        onValueChange={(val) => updateAllocation(index, "term", val)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Term" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="First Term">First</SelectItem>
+                          <SelectItem value="Second Term">Second</SelectItem>
+                          <SelectItem value="Third Term">Third</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-1">
+                      {allocations.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeAllocation(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAllocateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitAllocation}
+              disabled={
+                allocationMutation.isPending ||
+                !transactionToAllocate ||
+                Math.abs(getTotalAllocated() - parseFloat(transactionToAllocate?.amount || "0")) > 0.01
+              }
+            >
+              {allocationMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Allocating...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Confirm Allocation
                 </>
               )}
             </Button>
