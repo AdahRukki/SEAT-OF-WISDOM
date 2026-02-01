@@ -123,6 +123,7 @@ import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { NewsManagement } from "@/components/news-management";
 import { NotificationsManagement } from "@/components/notifications-management";
+import { PaymentRecording } from "@/components/payment-recording";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
@@ -4183,6 +4184,24 @@ export default function AdminDashboard() {
                     </tbody>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment Recording & Reconciliation */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Recording & Reconciliation</CardTitle>
+                <CardDescription>
+                  Record, track, and verify student fee payments
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PaymentRecording
+                  schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                  currentTerm={selectedFinanceTerm}
+                  currentSession={selectedFinanceSession}
+                  userRole={user?.role as "admin" | "sub-admin" | "bursar"}
+                />
               </CardContent>
             </Card>
           </TabsContent>
