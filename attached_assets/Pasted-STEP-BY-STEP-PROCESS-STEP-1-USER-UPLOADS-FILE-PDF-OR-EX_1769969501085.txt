@@ -1,0 +1,159 @@
+STEP-BY-STEP PROCESS
+STEP 1: USER UPLOADS FILE (PDF OR EXCEL)
+
+On the upload screen:
+
+Accept:
+
+.xlsx, .csv
+
+.pdf
+
+System detects file type immediately.
+
+STEP 2: FILE TYPE ROUTING
+If Excel / CSV
+
+→ Send directly to existing Replit Excel feature
+
+If PDF
+
+→ Route to PDF extraction pipeline
+
+No branching elsewhere.
+
+STEP 3: PDF TEXT EXTRACTION (SERVER SIDE)
+
+For PDF files:
+
+Check if text-based PDF
+
+If yes → extract text directly
+
+If scanned → reject (Phase 1)
+
+Output:
+
+Raw text block (exact bank text)
+
+STEP 4: PARSE PDF TEXT INTO TRANSACTIONS
+
+From the raw text:
+
+Identify transaction rows
+
+Extract:
+
+Date
+
+Credit amount
+
+Debit amount
+
+Raw description
+
+Reference
+
+Balance (optional)
+
+Ignore debits.
+
+At this stage, you now have structured data.
+
+STEP 5: CONVERT PARSED DATA → EXCEL FORMAT
+
+Now the key step.
+
+You programmatically generate an Excel file with columns matching what Replit already expects.
+
+Example Excel Columns
+
+Date
+
+Description
+
+Credit
+
+Debit
+
+Balance
+
+Reference
+
+This Excel file is created:
+
+In memory
+
+Or temporarily on disk
+
+STEP 6: FEED GENERATED EXCEL INTO EXISTING PIPELINE
+
+This generated Excel file is passed into:
+
+The same Excel import logic
+
+Same duplicate detection
+
+Same matching
+
+Same confirmation workflows
+
+From this point onward:
+
+The system does not care that the data came from a PDF.
+
+STEP 7: CONTINUE NORMAL FLOW
+
+Duplicate detection runs
+
+Transactions are stored
+
+Upload summary shown
+
+No confirmations triggered
+
+Everything behaves exactly the same.
+
+WHY THIS IS THE CORRECT DESIGN
+
+Zero rewrite of your Excel logic
+
+One source of truth for ingestion
+
+PDF handling is isolated and replaceable
+
+Easy to add OCR later
+
+Replit limitation becomes irrelevant
+
+WHAT NOT TO DO
+
+❌ Try to parse PDFs inside the Excel importer
+❌ Maintain two different transaction pipelines
+❌ Ask users to convert PDFs themselves
+❌ Mix PDF parsing logic with confirmation logic
+
+EDGE CASES HANDLED
+Overlapping PDFs
+
+Handled by the same duplicate fingerprint logic.
+
+Same PDF uploaded twice
+
+Generated Excel produces same fingerprints → skipped.
+
+Bank format change
+
+Only PDF parser is updated. Excel pipeline untouched.
+
+UX TRANSPARENCY (IMPORTANT)
+
+User sees:
+
+“PDF converted successfully”
+
+“24 transactions found”
+
+“18 duplicates skipped”
+
+They never see Excel unless they choose to.
