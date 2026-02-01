@@ -42,6 +42,15 @@ Preferred communication style: Simple, everyday language.
 -   **Report Cards**: Professional, printable academic summaries with school header, statistics, and behavioral assessment.
 -   **News System**: Public news articles with title, content, images, tags, and publication dates, transformed into a blog format with individual article pages.
 -   **Notifications**: In-app student notifications with real-time inbox, unread counts, and broadcast messaging.
+-   **Payment Tracking & Reconciliation System**: Comprehensive fee payment management with:
+    -   **Fee Payment Records**: Student payments recorded by bursars/sub-admins with status tracking (recorded, confirmed, reversed).
+    -   **Bank Statement Processing**: CSV/Excel upload with duplicate detection using SHA256 fingerprinting.
+    -   **Bank Transactions**: Imported transactions with matching, confidence scoring, and status tracking.
+    -   **Payment Allocations**: Many-to-many linking between payments and bank transactions for reconciliation.
+    -   **Multi-Student Allocation**: Single bank transaction can be split across multiple students.
+    -   **Audit Logs**: Full audit trail for all payment actions (recording, confirmation, reversal, allocation).
+    -   **Role-based Access**: Bursars and sub-admins can record payments; only admins can upload statements, confirm, and reverse.
+    -   **Offline-First Recording**: Bursars can record payments offline with automatic sync when online.
 -   **Database Relations**: Normalized PostgreSQL schema with Firebase sync, including database-level validation for duplicate subjects.
 
 ### Development Environment
