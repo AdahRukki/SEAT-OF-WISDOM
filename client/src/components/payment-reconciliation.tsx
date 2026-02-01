@@ -57,6 +57,8 @@ import {
   ArrowRight,
   RotateCcw,
   Plus,
+  Sparkles,
+  Calendar,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails, BankTransactionWithDetails } from "@shared/schema";
 
@@ -345,6 +347,67 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     });
   };
 
+  // Auto-suggest matching: find best matches based on amount and date
+  const findSuggestedMatch = (payment: FeePaymentRecordWithDetails): { transaction: BankTransaction | null; confidence: number; reasons: string[] } => {
+    const paymentAmount = parseFloat(payment.amount);
+    const paymentDate = new Date(payment.paymentDate);
+    
+    let bestMatch: BankTransaction | null = null;
+    let bestScore = 0;
+    let matchReasons: string[] = [];
+
+    for (const tx of unmatchedTransactions) {
+      const txAmount = parseFloat(tx.amount);
+      const txDate = new Date(tx.transactionDate);
+      let score = 0;
+      const reasons: string[] = [];
+
+      // Exact amount match (50 points)
+      if (Math.abs(txAmount - paymentAmount) < 0.01) {
+        score += 50;
+        reasons.push("Exact amount");
+      }
+
+      // Same day match (30 points)
+      const dayDiff = Math.abs((txDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (dayDiff < 1) {
+        score += 30;
+        reasons.push("Same day");
+      } else if (dayDiff <= 3) {
+        score += 15;
+        reasons.push("Within 3 days");
+      } else if (dayDiff <= 7) {
+        score += 5;
+        reasons.push("Within a week");
+      }
+
+      // Reference match (20 points)
+      if (payment.reference && tx.rawDescription?.toLowerCase().includes(payment.reference.toLowerCase())) {
+        score += 20;
+        reasons.push("Reference found");
+      }
+
+      // Student name in description (10 points)
+      const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
+      if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
+        score += 10;
+        reasons.push("Name match");
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = tx;
+        matchReasons = reasons;
+      }
+    }
+
+    return { 
+      transaction: bestMatch, 
+      confidence: Math.min(bestScore, 100),
+      reasons: matchReasons 
+    };
+  };
+
   const handleOpenAllocateDialog = (tx: BankTransaction) => {
     setTransactionToAllocate(tx);
     setAllocations([{ studentId: "", amount: 0 }]);
@@ -544,113 +607,250 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </TabsContent>
 
         <TabsContent value="reconcile" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-lg font-medium">Pending Payments</h4>
+              <h4 className="text-lg font-medium">Payment Reconciliation</h4>
               <p className="text-sm text-muted-foreground">
-                Match recorded payments with bank transactions to confirm
+                Match recorded payments with bank transactions side by side
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetchPayments()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { refetchPayments(); refetchTransactions(); }}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh All
+              </Button>
+            </div>
           </div>
 
-          {paymentsLoading ? (
+          {(paymentsLoading || transactionsLoading) ? (
             <div className="text-center py-8">
               <Loader2 className="h-6 w-6 animate-spin mx-auto" />
             </div>
-          ) : pendingPayments.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-8 text-muted-foreground">
-                <CheckCircle className="h-10 w-10 mx-auto mb-4 text-green-500" />
-                <p>No pending payments to reconcile</p>
-              </CardContent>
-            </Card>
           ) : (
-            <div className="space-y-4">
-              {pendingPayments.map((payment) => {
-                const matchingTxs = findMatchingTransactions(payment);
-                return (
-                  <Card key={payment.id} className="overflow-hidden">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-medium">
-                              {payment.student?.user?.lastName} {payment.student?.user?.firstName}
-                            </span>
-                            <Badge variant="outline">{payment.student?.studentId}</Badge>
-                            <Badge variant="secondary">{payment.paymentMethod}</Badge>
-                          </div>
-                          <div className="text-2xl font-bold text-green-600 mb-2">
-                            ₦{parseFloat(payment.amount).toLocaleString()}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            <span>Date: {new Date(payment.paymentDate).toLocaleDateString()}</span>
-                            {payment.reference && <span> | Ref: {payment.reference}</span>}
-                            {payment.term && <span> | {payment.term}</span>}
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleConfirmClick(payment)}
-                            disabled={matchingTxs.length === 0}
-                          >
-                            <Link className="h-4 w-4 mr-2" />
-                            Match & Confirm
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleReverseClick(payment)}
-                          >
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                            Reverse
-                          </Button>
-                        </div>
-                      </div>
-                      {matchingTxs.length > 0 && (
-                        <div className="mt-4 pt-4 border-t">
-                          <p className="text-sm font-medium mb-2">
-                            Potential Matches ({matchingTxs.length}):
-                          </p>
-                          <div className="space-y-2">
-                            {matchingTxs.slice(0, 3).map((tx) => (
-                              <div
-                                key={tx.id}
-                                className="flex items-center justify-between p-2 bg-muted rounded text-sm"
-                              >
-                                <div>
-                                  <span className="font-medium">
-                                    ₦{parseFloat(tx.amount).toLocaleString()}
-                                  </span>
-                                  <span className="text-muted-foreground ml-2">
-                                    {new Date(tx.transactionDate).toLocaleDateString()}
-                                  </span>
-                                </div>
-                                <span className="text-muted-foreground truncate max-w-[200px]">
-                                  {tx.rawDescription}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {matchingTxs.length === 0 && (
-                        <div className="mt-4 pt-4 border-t">
-                          <p className="text-sm text-orange-600 flex items-center gap-2">
-                            <AlertTriangle className="h-4 w-4" />
-                            No matching bank transactions found for this amount
-                          </p>
-                        </div>
-                      )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Recorded Payments */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <h5 className="font-semibold text-blue-700">Recorded Payments</h5>
+                  <Badge variant="secondary">{pendingPayments.length}</Badge>
+                </div>
+                
+                {pendingPayments.length === 0 ? (
+                  <Card>
+                    <CardContent className="text-center py-6 text-muted-foreground">
+                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                      <p className="text-sm">No pending payments</p>
                     </CardContent>
                   </Card>
-                );
-              })}
+                ) : (
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                    {pendingPayments.map((payment) => {
+                      const suggestion = findSuggestedMatch(payment);
+                      const matchingTxs = findMatchingTransactions(payment);
+                      
+                      return (
+                        <Card 
+                          key={payment.id} 
+                          className={`overflow-hidden transition-all ${
+                            suggestion.confidence >= 80 
+                              ? "border-green-300 bg-green-50/50" 
+                              : suggestion.confidence >= 50 
+                                ? "border-yellow-300 bg-yellow-50/50"
+                                : ""
+                          }`}
+                        >
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1 flex-wrap mb-1">
+                                  <span className="font-medium text-sm truncate">
+                                    {payment.student?.user?.lastName || 'Unknown'} {payment.student?.user?.firstName || ''}
+                                  </span>
+                                  <Badge variant="outline" className="text-xs">{payment.student?.studentId || 'N/A'}</Badge>
+                                </div>
+                                <div className="text-xl font-bold text-green-600">
+                                  ₦{parseFloat(payment.amount).toLocaleString()}
+                                </div>
+                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(payment.paymentDate).toLocaleDateString()}
+                                  <Badge variant="secondary" className="text-xs ml-1">{payment.paymentMethod}</Badge>
+                                </div>
+                                {payment.reference && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Ref: {payment.reference}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <Button
+                                  size="sm"
+                                  className="text-xs h-7"
+                                  onClick={() => handleConfirmClick(payment)}
+                                  disabled={matchingTxs.length === 0}
+                                >
+                                  <Link className="h-3 w-3 mr-1" />
+                                  Match
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-xs h-7 text-red-600 hover:text-red-700"
+                                  onClick={() => handleReverseClick(payment)}
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1" />
+                                  Reverse
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {/* Auto-suggest section */}
+                            {suggestion.transaction && suggestion.confidence >= 50 && (
+                              <div className="mt-2 pt-2 border-t border-dashed">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <Sparkles className="h-3 w-3 text-yellow-500" />
+                                  <span className="text-xs font-medium text-yellow-700">
+                                    Suggested Match ({suggestion.confidence}% confidence)
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-xs bg-white/80 p-2 rounded border">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-green-600">
+                                      ₦{parseFloat(suggestion.transaction.amount).toLocaleString()}
+                                    </div>
+                                    <div className="text-muted-foreground truncate">
+                                      {suggestion.transaction.rawDescription?.substring(0, 40)}...
+                                    </div>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    className="text-xs h-6 bg-green-600 hover:bg-green-700"
+                                    onClick={() => {
+                                      setSelectedPayment(payment);
+                                      setSelectedTransaction(suggestion.transaction);
+                                      setIsConfirmDialogOpen(true);
+                                    }}
+                                  >
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Confirm
+                                  </Button>
+                                </div>
+                                <div className="flex gap-1 mt-1 flex-wrap">
+                                  {suggestion.reasons.map((reason, i) => (
+                                    <Badge key={i} variant="outline" className="text-xs bg-white">
+                                      {reason}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {matchingTxs.length === 0 && (
+                              <div className="mt-2 pt-2 border-t">
+                                <p className="text-xs text-orange-600 flex items-center gap-1">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  No matching transactions found
+                                </p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Bank Transactions */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <h5 className="font-semibold text-purple-700">Bank Transactions</h5>
+                  <Badge variant="secondary">{unmatchedTransactions.length}</Badge>
+                </div>
+                
+                {unmatchedTransactions.length === 0 ? (
+                  <Card>
+                    <CardContent className="text-center py-6 text-muted-foreground">
+                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                      <p className="text-sm">All transactions matched</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                    {unmatchedTransactions.map((tx) => {
+                      // Check if any payment matches this transaction
+                      const matchingPayments = pendingPayments.filter(p => 
+                        Math.abs(parseFloat(p.amount) - parseFloat(tx.amount)) < 0.01
+                      );
+                      
+                      return (
+                        <Card 
+                          key={tx.id} 
+                          className={`overflow-hidden ${
+                            matchingPayments.length > 0 
+                              ? "border-blue-300 bg-blue-50/50" 
+                              : ""
+                          }`}
+                        >
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xl font-bold text-green-600">
+                                  ₦{parseFloat(tx.amount).toLocaleString()}
+                                </div>
+                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(tx.transactionDate).toLocaleDateString()}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                  {tx.rawDescription}
+                                </div>
+                                {tx.reference && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Ref: {tx.reference}
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-7"
+                                  onClick={() => handleOpenAllocateDialog(tx)}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Allocate
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {matchingPayments.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-dashed">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <Sparkles className="h-3 w-3 text-blue-500" />
+                                  <span className="text-xs font-medium text-blue-700">
+                                    {matchingPayments.length} matching payment{matchingPayments.length > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                {matchingPayments.slice(0, 2).map(p => (
+                                  <div key={p.id} className="text-xs bg-white/80 p-1 rounded border mb-1">
+                                    <span className="font-medium">
+                                      {p.student?.user?.lastName || 'Unknown'} {p.student?.user?.firstName || ''}
+                                    </span>
+                                    <span className="text-muted-foreground ml-1">
+                                      ({p.student?.studentId || 'N/A'})
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </TabsContent>
