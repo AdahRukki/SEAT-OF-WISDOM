@@ -124,6 +124,7 @@ import { ObjectUploader } from "@/components/ObjectUploader";
 import { NewsManagement } from "@/components/news-management";
 import { NotificationsManagement } from "@/components/notifications-management";
 import { PaymentRecording } from "@/components/payment-recording";
+import { PaymentReconciliation } from "@/components/payment-reconciliation";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
@@ -4190,9 +4191,9 @@ export default function AdminDashboard() {
             {/* Payment Recording & Reconciliation */}
             <Card>
               <CardHeader>
-                <CardTitle>Payment Recording & Reconciliation</CardTitle>
+                <CardTitle>Payment Recording</CardTitle>
                 <CardDescription>
-                  Record, track, and verify student fee payments
+                  Record student fee payments for verification
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -4204,6 +4205,23 @@ export default function AdminDashboard() {
                 />
               </CardContent>
             </Card>
+
+            {/* Bank Statement Upload & Reconciliation (Admin Only) */}
+            {user?.role === 'admin' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Bank Statement Reconciliation</CardTitle>
+                  <CardDescription>
+                    Upload bank statements and verify payments (Owner/Admin only)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PaymentReconciliation
+                    schoolId={selectedSchoolId}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Report Cards Tab */}
