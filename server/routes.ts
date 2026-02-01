@@ -707,7 +707,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const adminOnly = req.query.adminOnly === 'true';
       const users = await storage.getAllUsers(adminOnly);
-      res.json(users);
+      const sanitizedUsers = users.map(({ password, passwordUpdatedAt, ...user }) => user);
+      res.json(sanitizedUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ error: "Failed to fetch users" });
@@ -1402,7 +1403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Update user email with actual student ID if no email was provided
           if (!emailInput) {
             const actualEmail = `${student.studentId.replace('/', '')}@student.local`;
-            await storage.updateUser(newUser.id, { email: actualEmail });
+            await storage.updateUserProfile(newUser.id, { email: actualEmail });
           }
 
           results.successful.push({

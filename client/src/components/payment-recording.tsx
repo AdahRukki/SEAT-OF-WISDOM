@@ -135,7 +135,12 @@ export function PaymentRecording({
       let url = "/api/payments/records?";
       if (schoolId) url += `schoolId=${schoolId}&`;
       if (statusFilter && statusFilter !== "all") url += `status=${statusFilter}&`;
-      const res = await fetch(url);
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(url, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch payment records");
       return res.json();
     },

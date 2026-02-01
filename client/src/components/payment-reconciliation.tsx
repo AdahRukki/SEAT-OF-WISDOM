@@ -120,12 +120,21 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('auth_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  };
+
   const { data: statements = [], isLoading: statementsLoading, refetch: refetchStatements } = useQuery<BankStatement[]>({
     queryKey: ["/api/admin/bank-statements", schoolId],
     queryFn: async () => {
       let url = "/api/admin/bank-statements";
       if (schoolId) url += `?schoolId=${schoolId}`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch bank statements");
       return res.json();
     },
@@ -136,7 +145,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     queryFn: async () => {
       let url = "/api/admin/bank-transactions/unmatched";
       if (schoolId) url += `?schoolId=${schoolId}`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
@@ -147,7 +156,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     queryFn: async () => {
       let url = "/api/payments/records?status=recorded";
       if (schoolId) url += `&schoolId=${schoolId}`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch pending payments");
       return res.json();
     },
@@ -158,7 +167,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     queryFn: async () => {
       let url = "/api/admin/students";
       if (schoolId) url += `?schoolId=${schoolId}`;
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch students");
       return res.json();
     },

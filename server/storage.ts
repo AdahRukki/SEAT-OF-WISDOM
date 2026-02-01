@@ -137,6 +137,7 @@ export interface IStorage {
   // Non-academic rating operations
   createOrUpdateNonAcademicRating(ratingData: InsertNonAcademicRating): Promise<NonAcademicRating>;
   getNonAcademicRatingsByClass(classId: string, term: string, session: string): Promise<NonAcademicRating[]>;
+  getNonAcademicRatingByStudent(studentId: string, classId: string, term: string, session: string): Promise<NonAcademicRating | undefined>;
   
   // Calendar operations
   createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent>;
@@ -144,8 +145,8 @@ export interface IStorage {
   
   // News operations
   createNews(newsData: InsertNews): Promise<News>;
-  getAllNews(): Promise<(News & { author: User })[]>;
-  getAllPublishedNews(): Promise<(News & { author: User })[]>;
+  getAllNews(): Promise<(News & { author: Omit<User, 'password' | 'passwordUpdatedAt'> })[]>;
+  getAllPublishedNews(): Promise<(News & { author: Omit<User, 'password' | 'passwordUpdatedAt'> })[]>;
   deleteNews(newsId: string): Promise<void>;
   
   // Notification operations
@@ -2009,6 +2010,21 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
+  async getNonAcademicRatingByStudent(studentId: string, classId: string, term: string, session: string): Promise<NonAcademicRating | undefined> {
+    const [rating] = await db
+      .select()
+      .from(nonAcademicRatings)
+      .where(
+        and(
+          eq(nonAcademicRatings.studentId, studentId),
+          eq(nonAcademicRatings.classId, classId),
+          eq(nonAcademicRatings.term, term),
+          eq(nonAcademicRatings.session, session)
+        )
+      );
+    return rating;
+  }
+
   async createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent> {
     const [event] = await db
       .insert(calendarEvents)
@@ -2043,7 +2059,7 @@ export class DatabaseStorage implements IStorage {
     return newsItem;
   }
 
-  async getAllNews(): Promise<(News & { author: User })[]> {
+  async getAllNews(): Promise<(News & { author: Omit<User, 'password' | 'passwordUpdatedAt'> })[]> {
     const result = await db
       .select({
         id: news.id,
@@ -2062,9 +2078,7 @@ export class DatabaseStorage implements IStorage {
           lastName: users.lastName,
           role: users.role,
           schoolId: users.schoolId,
-          password: users.password,
           isActive: users.isActive,
-          passwordUpdatedAt: users.passwordUpdatedAt,
           createdAt: users.createdAt,
           updatedAt: users.updatedAt,
         }
@@ -2075,11 +2089,11 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(row => ({
       ...row,
-      author: row.author as User
+      author: row.author as Omit<User, 'password' | 'passwordUpdatedAt'>
     }));
   }
 
-  async getAllPublishedNews(): Promise<(News & { author: User })[]> {
+  async getAllPublishedNews(): Promise<(News & { author: Omit<User, 'password' | 'passwordUpdatedAt'> })[]> {
     const result = await db
       .select({
         id: news.id,
@@ -2098,9 +2112,7 @@ export class DatabaseStorage implements IStorage {
           lastName: users.lastName,
           role: users.role,
           schoolId: users.schoolId,
-          password: users.password,
           isActive: users.isActive,
-          passwordUpdatedAt: users.passwordUpdatedAt,
           createdAt: users.createdAt,
           updatedAt: users.updatedAt,
         }
@@ -2112,7 +2124,7 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(row => ({
       ...row,
-      author: row.author as User
+      author: row.author as Omit<User, 'password' | 'passwordUpdatedAt'>
     }));
   }
 
