@@ -317,6 +317,104 @@ export const contactSubmissions = pgTable("contact_submissions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ============================================
+// PAYMENT TRACKING & RECONCILIATION SYSTEM
+// ============================================
+
+// Bank Statements table (uploaded statement files)
+export const bankStatements = pgTable("bank_statements", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileType: varchar("file_type", { length: 20 }).notNull(), // pdf, csv, excel
+  uploadedBy: uuid("uploaded_by").notNull().references(() => users.id),
+  schoolId: uuid("school_id").references(() => schools.id),
+  dateRangeStart: timestamp("date_range_start"),
+  dateRangeEnd: timestamp("date_range_end"),
+  totalTransactions: integer("total_transactions").default(0),
+  newTransactions: integer("new_transactions").default(0),
+  duplicatesSkipped: integer("duplicates_skipped").default(0),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Bank Transactions table (individual transactions from statements)
+export const bankTransactions = pgTable("bank_transactions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  statementId: uuid("statement_id").references(() => bankStatements.id, { onDelete: "set null" }),
+  schoolId: uuid("school_id").references(() => schools.id),
+  transactionDate: timestamp("transaction_date").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  transactionType: varchar("transaction_type", { length: 10 }).notNull().default("credit"), // credit, debit
+  rawDescription: text("raw_description").notNull(), // Original bank description (never modified)
+  normalizedDescription: text("normalized_description"), // Cleaned for matching
+  reference: varchar("reference", { length: 255 }), // Bank reference code
+  fingerprint: varchar("fingerprint", { length: 64 }).notNull().unique(), // Hash for duplicate detection
+  status: varchar("status", { length: 30 }).notNull().default("unmatched"), // unmatched, suggested, confirmed, partially_reconciled
+  classification: varchar("classification", { length: 30 }).default("unknown"), // named, code_only, unknown
+  matchConfidence: integer("match_confidence").default(0), // 0-100
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Fee Payment Records table (payments recorded by bursar/admin)
+export const feePaymentRecords = pgTable("fee_payment_records", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  schoolId: uuid("school_id").references(() => schools.id),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  paymentMethod: varchar("payment_method", { length: 30 }).notNull(), // transfer, pos, cash
+  paymentDate: timestamp("payment_date").notNull(),
+  reference: varchar("reference", { length: 255 }), // Optional POS slip code, etc.
+  term: varchar("term", { length: 30 }),
+  session: varchar("session", { length: 20 }),
+  status: varchar("status", { length: 30 }).notNull().default("recorded"), // recorded, confirmed, reversed
+  notes: text("notes"),
+  recordedBy: uuid("recorded_by").notNull().references(() => users.id),
+  confirmedBy: uuid("confirmed_by").references(() => users.id),
+  confirmedAt: timestamp("confirmed_at"),
+  reversedBy: uuid("reversed_by").references(() => users.id),
+  reversedAt: timestamp("reversed_at"),
+  reversalReason: text("reversal_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Payment Allocations table (links payments to bank transactions)
+export const paymentAllocations = pgTable("payment_allocations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentRecordId: uuid("payment_record_id").notNull().references(() => feePaymentRecords.id, { onDelete: "cascade" }),
+  bankTransactionId: uuid("bank_transaction_id").notNull().references(() => bankTransactions.id, { onDelete: "cascade" }),
+  allocatedAmount: decimal("allocated_amount", { precision: 12, scale: 2 }).notNull(),
+  allocatedBy: uuid("allocated_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Payment Pattern History table (for smart matching)
+export const paymentPatternHistory = pgTable("payment_pattern_history", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  descriptionPattern: text("description_pattern").notNull(), // Pattern that matched this student
+  amount: decimal("amount", { precision: 12, scale: 2 }),
+  paymentMethod: varchar("payment_method", { length: 30 }),
+  matchCount: integer("match_count").default(1), // How many times this pattern was confirmed
+  lastConfirmedAt: timestamp("last_confirmed_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Audit Logs table (tracks all payment-related actions)
+export const paymentAuditLogs = pgTable("payment_audit_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  action: varchar("action", { length: 50 }).notNull(), // record_payment, confirm_payment, reverse_payment, allocate, upload_statement
+  entityType: varchar("entity_type", { length: 50 }).notNull(), // payment_record, bank_transaction, allocation
+  entityId: uuid("entity_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  schoolId: uuid("school_id").references(() => schools.id),
+  previousData: jsonb("previous_data"), // State before change
+  newData: jsonb("new_data"), // State after change
+  ipAddress: varchar("ip_address", { length: 45 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const schoolsRelations = relations(schools, ({ many }) => ({
   classes: many(classes),
@@ -483,6 +581,84 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
     references: [users.id],
+  }),
+}));
+
+// Payment Tracking Relations
+export const bankStatementsRelations = relations(bankStatements, ({ one, many }) => ({
+  uploadedBy: one(users, {
+    fields: [bankStatements.uploadedBy],
+    references: [users.id],
+  }),
+  school: one(schools, {
+    fields: [bankStatements.schoolId],
+    references: [schools.id],
+  }),
+  transactions: many(bankTransactions),
+}));
+
+export const bankTransactionsRelations = relations(bankTransactions, ({ one, many }) => ({
+  statement: one(bankStatements, {
+    fields: [bankTransactions.statementId],
+    references: [bankStatements.id],
+  }),
+  school: one(schools, {
+    fields: [bankTransactions.schoolId],
+    references: [schools.id],
+  }),
+  allocations: many(paymentAllocations),
+}));
+
+export const feePaymentRecordsRelations = relations(feePaymentRecords, ({ one, many }) => ({
+  student: one(students, {
+    fields: [feePaymentRecords.studentId],
+    references: [students.id],
+  }),
+  school: one(schools, {
+    fields: [feePaymentRecords.schoolId],
+    references: [schools.id],
+  }),
+  recordedByUser: one(users, {
+    fields: [feePaymentRecords.recordedBy],
+    references: [users.id],
+  }),
+  confirmedByUser: one(users, {
+    fields: [feePaymentRecords.confirmedBy],
+    references: [users.id],
+  }),
+  allocations: many(paymentAllocations),
+}));
+
+export const paymentAllocationsRelations = relations(paymentAllocations, ({ one }) => ({
+  paymentRecord: one(feePaymentRecords, {
+    fields: [paymentAllocations.paymentRecordId],
+    references: [feePaymentRecords.id],
+  }),
+  bankTransaction: one(bankTransactions, {
+    fields: [paymentAllocations.bankTransactionId],
+    references: [bankTransactions.id],
+  }),
+  allocatedByUser: one(users, {
+    fields: [paymentAllocations.allocatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const paymentPatternHistoryRelations = relations(paymentPatternHistory, ({ one }) => ({
+  student: one(students, {
+    fields: [paymentPatternHistory.studentId],
+    references: [students.id],
+  }),
+}));
+
+export const paymentAuditLogsRelations = relations(paymentAuditLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [paymentAuditLogs.userId],
+    references: [users.id],
+  }),
+  school: one(schools, {
+    fields: [paymentAuditLogs.schoolId],
+    references: [schools.id],
   }),
 }));
 
@@ -780,3 +956,144 @@ export const insertContactSubmissionSchema = createInsertSchema(contactSubmissio
 
 export type ContactSubmission = typeof contactSubmissions.$inferSelect;
 export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSchema>;
+
+// ============================================
+// PAYMENT TRACKING SCHEMAS & TYPES
+// ============================================
+
+// Bank Statement schemas
+export const insertBankStatementSchema = createInsertSchema(bankStatements).omit({ 
+  id: true, 
+  createdAt: true,
+  processedAt: true,
+  totalTransactions: true,
+  newTransactions: true,
+  duplicatesSkipped: true,
+});
+
+// Bank Transaction schemas
+export const insertBankTransactionSchema = createInsertSchema(bankTransactions).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+// Fee Payment Record schemas (for bursar recording)
+export const insertFeePaymentRecordSchema = createInsertSchema(feePaymentRecords).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  confirmedBy: true,
+  confirmedAt: true,
+  reversedBy: true,
+  reversedAt: true,
+  reversalReason: true,
+});
+
+export const recordFeePaymentSchema = z.object({
+  studentId: z.string().min(1, "Student is required"),
+  amount: z.coerce.number().positive("Amount must be positive"),
+  paymentMethod: z.enum(["transfer", "pos", "cash"], { 
+    required_error: "Payment method is required" 
+  }),
+  paymentDate: z.string().min(1, "Payment date is required"),
+  reference: z.string().optional(),
+  term: z.string().optional(),
+  session: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+// Payment Allocation schemas
+export const insertPaymentAllocationSchema = createInsertSchema(paymentAllocations).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const allocatePaymentSchema = z.object({
+  paymentRecordId: z.string().min(1, "Payment record is required"),
+  bankTransactionId: z.string().min(1, "Bank transaction is required"),
+  allocatedAmount: z.coerce.number().positive("Amount must be positive"),
+});
+
+// Multi-student allocation schema (for one bank transaction to many students)
+export const multiStudentAllocationSchema = z.object({
+  bankTransactionId: z.string().min(1, "Bank transaction is required"),
+  allocations: z.array(z.object({
+    studentId: z.string().min(1, "Student is required"),
+    amount: z.coerce.number().positive("Amount must be positive"),
+    term: z.string().optional(),
+    session: z.string().optional(),
+    notes: z.string().optional(),
+  })).min(1, "At least one allocation is required"),
+});
+
+// Payment confirmation schema
+export const confirmPaymentSchema = z.object({
+  paymentRecordId: z.string().min(1, "Payment record is required"),
+  bankTransactionId: z.string().min(1, "Bank transaction is required"),
+});
+
+// Payment reversal schema
+export const reversePaymentSchema = z.object({
+  paymentRecordId: z.string().min(1, "Payment record is required"),
+  reason: z.string().min(1, "Reversal reason is required"),
+});
+
+// Payment Audit Log schemas
+export const insertPaymentAuditLogSchema = createInsertSchema(paymentAuditLogs).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+// Bank Statement types
+export type BankStatement = typeof bankStatements.$inferSelect;
+export type InsertBankStatement = z.infer<typeof insertBankStatementSchema>;
+
+// Bank Transaction types
+export type BankTransaction = typeof bankTransactions.$inferSelect;
+export type InsertBankTransaction = z.infer<typeof insertBankTransactionSchema>;
+
+// Fee Payment Record types
+export type FeePaymentRecord = typeof feePaymentRecords.$inferSelect;
+export type InsertFeePaymentRecord = z.infer<typeof insertFeePaymentRecordSchema>;
+export type RecordFeePayment = z.infer<typeof recordFeePaymentSchema>;
+
+// Payment Allocation types
+export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
+export type InsertPaymentAllocation = z.infer<typeof insertPaymentAllocationSchema>;
+export type AllocatePayment = z.infer<typeof allocatePaymentSchema>;
+export type MultiStudentAllocation = z.infer<typeof multiStudentAllocationSchema>;
+
+// Payment Pattern History types
+export type PaymentPatternHistory = typeof paymentPatternHistory.$inferSelect;
+
+// Payment Audit Log types
+export type PaymentAuditLog = typeof paymentAuditLogs.$inferSelect;
+export type InsertPaymentAuditLog = z.infer<typeof insertPaymentAuditLogSchema>;
+
+// Confirm and Reverse types
+export type ConfirmPayment = z.infer<typeof confirmPaymentSchema>;
+export type ReversePayment = z.infer<typeof reversePaymentSchema>;
+
+// Fee Payment Record with relations
+export type FeePaymentRecordWithDetails = FeePaymentRecord & {
+  student: Student & {
+    user: User;
+    class: Class;
+  };
+  recordedByUser?: User;
+  confirmedByUser?: User;
+  allocations?: PaymentAllocation[];
+};
+
+// Bank Transaction with relations
+export type BankTransactionWithDetails = BankTransaction & {
+  statement?: BankStatement;
+  allocations?: (PaymentAllocation & {
+    paymentRecord: FeePaymentRecord & {
+      student: Student & {
+        user: User;
+      };
+    };
+  })[];
+};
