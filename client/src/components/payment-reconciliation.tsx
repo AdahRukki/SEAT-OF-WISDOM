@@ -424,7 +424,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 Upload Bank Statement
               </CardTitle>
               <CardDescription>
-                Upload CSV or Excel files from your bank to import transactions for matching
+                Upload PDF, CSV, or Excel bank statements to import transactions for matching
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -432,10 +432,13 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <FileSpreadsheet className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
                 <Input
                   type="file"
-                  accept=".csv,.xlsx,.xls"
+                  accept=".csv,.xlsx,.xls,.pdf"
                   onChange={handleFileSelect}
                   className="max-w-xs mx-auto"
                 />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Accepts: PDF, Excel (.xlsx, .xls), CSV
+                </p>
                 {selectedFile && (
                   <div className="mt-4">
                     <p className="text-sm font-medium">{selectedFile.name}</p>

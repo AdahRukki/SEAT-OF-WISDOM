@@ -3281,7 +3281,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { schoolId } = req.body;
       const file = req.file;
-      const fileType = file.originalname.endsWith('.csv') ? 'csv' : 'excel';
+      const fileName = file.originalname.toLowerCase();
+      
+      // Detect file type
+      let fileType: 'csv' | 'excel' | 'pdf';
+      if (fileName.endsWith('.csv')) {
+        fileType = 'csv';
+      } else if (fileName.endsWith('.pdf')) {
+        fileType = 'pdf';
+      } else {
+        fileType = 'excel';
+      }
       
       // Create bank statement record first
       const statement = await storage.uploadBankStatement({
@@ -3294,7 +3304,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let rows: any[] = [];
       
       // Parse file based on type
-      if (fileType === 'csv') {
+      if (fileType === 'pdf') {
+        // Import and use PDF parser
+        const { parsePDFBankStatement, convertTransactionsToRows } = await import('./pdf-parser');
+        const pdfResult = await parsePDFBankStatement(file.buffer);
+        
+        if (!pdfResult.success) {
+          return res.status(400).json({ 
+            error: pdfResult.error || "Failed to parse PDF",
+            hint: "Please ensure the PDF is text-based (not scanned) and contains transaction data."
+          });
+        }
+        
+        // Convert PDF transactions to Excel-like rows format
+        rows = convertTransactionsToRows(pdfResult.transactions);
+        console.log(`[PDF Parse] Extracted ${rows.length} transactions from PDF`);
+        
+      } else if (fileType === 'csv') {
         const csvContent = file.buffer.toString('utf-8');
         const workbook = XLSX.read(csvContent, { type: 'string' });
         const sheetName = workbook.SheetNames[0];
