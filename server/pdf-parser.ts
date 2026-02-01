@@ -1,5 +1,3 @@
-const pdfParse = require('pdf-parse');
-
 interface ParsedTransaction {
   date: string;
   description: string;
@@ -20,6 +18,7 @@ interface PDFParseResult {
 
 export async function parsePDFBankStatement(buffer: Buffer): Promise<PDFParseResult> {
   try {
+    const pdfParse = (await import('pdf-parse')).default;
     const data = await pdfParse(buffer);
     
     if (!data.text || data.text.trim().length === 0) {
