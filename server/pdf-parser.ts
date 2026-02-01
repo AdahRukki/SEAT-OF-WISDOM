@@ -4,9 +4,7 @@ import { createRequire } from "module";
 
 // Use createRequire for pdf-parse (CommonJS module in ESM context)
 const require = createRequire(import.meta.url);
-const pdfParseModule = require("pdf-parse");
-// pdf-parse exports PDFParse as the main function
-const pdfParse = pdfParseModule.PDFParse ?? pdfParseModule.default ?? pdfParseModule;
+const { PDFParse } = require("pdf-parse");
 
 export interface ParsedTransaction {
   date: string;
@@ -16,11 +14,14 @@ export interface ParsedTransaction {
 }
 
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const data = await pdfParse(buffer);
-  if (!data.text || data.text.trim().length === 0) {
+  // pdf-parse v2 uses class-based API
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
+  
+  if (!result.text || result.text.trim().length === 0) {
     throw new Error("Scanned PDF detected - cannot extract text. Please use a text-based PDF or convert to Excel.");
   }
-  return data.text;
+  return result.text;
 }
 
 export function normalizeForFingerprint(text: string): string {
