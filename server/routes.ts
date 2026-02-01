@@ -6,6 +6,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import path from "path";
 import express from "express";
+import { extractTextFromPDF, parseTransactions, parseExcelTransactions, generateFingerprint, ParsedTransaction } from "./pdf-parser";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
@@ -3270,7 +3271,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== BANK STATEMENT & PAYMENT CONFIRMATION (ADMIN ONLY) ====================
   
-  // TODO: Bank statement upload endpoint - to be reimplemented
+  // Upload bank statement (PDF or Excel) - admin only
+  app.post("/api/admin/bank-statements/upload", authenticate, requireMainAdmin, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const file = req.file;
+      const { schoolId } = req.body;
+
+      console.log('[POST /api/admin/bank-statements/upload] User:', user.id, 'File:', file?.originalname, 'School:', schoolId);
+
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      let transactions: ParsedTransaction[] = [];
+      let fileType = "excel";
+
+      // Handle PDF files - convert to transactions
+      if (file.mimetype === "application/pdf") {
+        console.log('[Upload] Processing PDF file...');
+        fileType = "pdf";
+        try {
+          const text = await extractTextFromPDF(file.buffer);
+          transactions = parseTransactions(text);
+          console.log('[Upload] Extracted', transactions.length, 'transactions from PDF');
+        } catch (pdfError: any) {
+          console.error('[Upload] PDF extraction error:', pdfError.message);
+          return res.status(400).json({ 
+            error: pdfError.message || "Failed to parse PDF. Please ensure it's a text-based PDF, not a scanned image."
+          });
+        }
+      }
+      // Handle Excel/CSV files
+      else if (file.mimetype.includes("spreadsheet") || file.mimetype.includes("excel") || file.mimetype === "text/csv") {
+        console.log('[Upload] Processing Excel/CSV file...');
+        fileType = file.mimetype === "text/csv" ? "csv" : "excel";
+        try {
+          transactions = parseExcelTransactions(file.buffer);
+          console.log('[Upload] Extracted', transactions.length, 'transactions from Excel/CSV');
+        } catch (excelError: any) {
+          console.error('[Upload] Excel parsing error:', excelError.message);
+          return res.status(400).json({ 
+            error: "Failed to parse Excel file. Please check the format."
+          });
+        }
+      }
+      else {
+        return res.status(400).json({ error: "Unsupported file type. Please upload PDF, Excel, or CSV." });
+      }
+
+      if (transactions.length === 0) {
+        return res.status(400).json({ 
+          error: "No transactions found in the file. Please check the format."
+        });
+      }
+
+      // Create bank statement record
+      const dateRangeStart = transactions.length > 0 ? new Date(transactions[0].date.split('/').reverse().join('-')) : undefined;
+      const dateRangeEnd = transactions.length > 0 ? new Date(transactions[transactions.length - 1].date.split('/').reverse().join('-')) : undefined;
+
+      const statement = await storage.uploadBankStatement({
+        fileName: file.originalname,
+        fileType,
+        uploadedBy: user.id,
+        schoolId: schoolId || undefined,
+        dateRangeStart,
+        dateRangeEnd,
+      });
+
+      // Insert transactions with duplicate detection
+      let newCount = 0;
+      let duplicateCount = 0;
+
+      for (const tx of transactions) {
+        try {
+          // Parse date from DD/MM/YYYY format
+          const dateParts = tx.date.split('/');
+          const transactionDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
+
+          await storage.createBankTransaction({
+            statementId: statement.id,
+            schoolId: schoolId || undefined,
+            transactionDate,
+            amount: tx.credit.toString(),
+            transactionType: "credit",
+            rawDescription: tx.rawDescription,
+            normalizedDescription: tx.rawDescription.toLowerCase().trim(),
+            fingerprint: tx.fingerprint,
+            status: "unmatched",
+            classification: tx.rawDescription.length < 20 ? "code_only" : "named",
+          });
+          newCount++;
+        } catch (insertError: any) {
+          // Duplicate fingerprint - skip
+          if (insertError.message?.includes('unique') || insertError.code === '23505') {
+            duplicateCount++;
+            console.log('[Upload] Duplicate transaction skipped:', tx.fingerprint.substring(0, 8));
+          } else {
+            console.error('[Upload] Transaction insert error:', insertError);
+          }
+        }
+      }
+
+      // Update statement counts
+      await storage.updateBankStatementCounts(
+        statement.id,
+        transactions.length,
+        newCount,
+        duplicateCount
+      );
+
+      // Create audit log
+      await storage.createPaymentAuditLog({
+        action: 'upload_statement',
+        entityType: 'bank_statement',
+        entityId: statement.id,
+        userId: user.id,
+        schoolId: schoolId || undefined,
+        newData: {
+          fileName: file.originalname,
+          fileType,
+          totalTransactions: transactions.length,
+          newTransactions: newCount,
+          duplicatesSkipped: duplicateCount,
+        },
+      });
+
+      console.log('[Upload] Complete - Total:', transactions.length, 'New:', newCount, 'Duplicates:', duplicateCount);
+
+      res.json({
+        success: true,
+        statementId: statement.id,
+        message: `Successfully processed ${transactions.length} transactions`,
+        summary: {
+          totalTransactions: transactions.length,
+          newTransactions: newCount,
+          duplicatesSkipped: duplicateCount,
+        }
+      });
+    } catch (error: any) {
+      console.error("[POST /api/admin/bank-statements/upload] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to upload bank statement" });
+    }
+  });
 
   // Get bank statements (admin only)
   app.get("/api/admin/bank-statements", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
