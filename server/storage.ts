@@ -21,6 +21,9 @@ import {
   news,
   notifications,
   publishedScores,
+  feePaymentRecords,
+  paymentAuditLogs,
+  paymentAllocations,
   type School,
   type User,
   type Student,
@@ -65,6 +68,11 @@ import {
   type StudentWithDetails,
   type StudentFeeWithDetails,
   type PaymentWithDetails,
+  type FeePaymentRecord,
+  type InsertFeePaymentRecord,
+  type FeePaymentRecordWithDetails,
+  type PaymentAuditLog,
+  type InsertPaymentAuditLog,
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
@@ -225,6 +233,16 @@ export interface IStorage {
   getClassById(classId: string): Promise<Class | undefined>;
   updateSchool(schoolId: string, data: Partial<School>): Promise<School>;
   updateUserProfile(userId: string, data: Partial<User>): Promise<User>;
+
+  // Fee Payment Records (Payment Tracking & Reconciliation)
+  recordFeePayment(data: InsertFeePaymentRecord): Promise<FeePaymentRecord>;
+  getFeePaymentRecords(filters: { schoolId?: string; studentId?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<FeePaymentRecordWithDetails[]>;
+  getFeePaymentRecordById(id: string): Promise<FeePaymentRecordWithDetails | undefined>;
+  confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord>;
+  reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<FeePaymentRecord>;
+  
+  // Audit logging
+  createPaymentAuditLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2231,6 +2249,181 @@ export class DatabaseStorage implements IStorage {
       .from(publishedScores)
       .where(eq(publishedScores.classId, classId))
       .orderBy(desc(publishedScores.publishedAt));
+  }
+
+  // Fee Payment Records (Payment Tracking & Reconciliation)
+  async recordFeePayment(data: InsertFeePaymentRecord): Promise<FeePaymentRecord> {
+    console.log('[recordFeePayment] Recording new payment:', data);
+    const [record] = await db
+      .insert(feePaymentRecords)
+      .values({
+        ...data,
+        status: 'recorded',
+      })
+      .returning();
+    
+    console.log('[recordFeePayment] Created payment record:', record.id);
+    return record;
+  }
+
+  async getFeePaymentRecords(filters: { 
+    schoolId?: string; 
+    studentId?: string; 
+    status?: string; 
+    startDate?: Date; 
+    endDate?: Date 
+  }): Promise<FeePaymentRecordWithDetails[]> {
+    console.log('[getFeePaymentRecords] Fetching with filters:', filters);
+    
+    const conditions: any[] = [];
+    
+    if (filters.schoolId) {
+      conditions.push(eq(feePaymentRecords.schoolId, filters.schoolId));
+    }
+    if (filters.studentId) {
+      conditions.push(eq(feePaymentRecords.studentId, filters.studentId));
+    }
+    if (filters.status) {
+      conditions.push(eq(feePaymentRecords.status, filters.status));
+    }
+    if (filters.startDate) {
+      conditions.push(sql`${feePaymentRecords.paymentDate} >= ${filters.startDate}`);
+    }
+    if (filters.endDate) {
+      conditions.push(sql`${feePaymentRecords.paymentDate} <= ${filters.endDate}`);
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const records = await db
+      .select({
+        record: feePaymentRecords,
+        student: students,
+        user: users,
+        class: classes,
+        recordedByUser: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+        },
+      })
+      .from(feePaymentRecords)
+      .leftJoin(students, eq(feePaymentRecords.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(whereClause)
+      .orderBy(desc(feePaymentRecords.createdAt));
+
+    const result: FeePaymentRecordWithDetails[] = records.map(row => ({
+      ...row.record,
+      student: {
+        ...row.student!,
+        user: row.user!,
+        class: row.class!,
+      },
+      recordedByUser: row.recordedByUser as User | undefined,
+    }));
+
+    console.log('[getFeePaymentRecords] Found', result.length, 'records');
+    return result;
+  }
+
+  async getFeePaymentRecordById(id: string): Promise<FeePaymentRecordWithDetails | undefined> {
+    console.log('[getFeePaymentRecordById] Fetching record:', id);
+    
+    const [row] = await db
+      .select({
+        record: feePaymentRecords,
+        student: students,
+        user: users,
+        class: classes,
+      })
+      .from(feePaymentRecords)
+      .leftJoin(students, eq(feePaymentRecords.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(eq(feePaymentRecords.id, id));
+
+    if (!row || !row.record) {
+      console.log('[getFeePaymentRecordById] Record not found');
+      return undefined;
+    }
+
+    const allocations = await db
+      .select()
+      .from(paymentAllocations)
+      .where(eq(paymentAllocations.paymentRecordId, id));
+
+    const result: FeePaymentRecordWithDetails = {
+      ...row.record,
+      student: {
+        ...row.student!,
+        user: row.user!,
+        class: row.class!,
+      },
+      allocations,
+    };
+
+    console.log('[getFeePaymentRecordById] Found record:', id);
+    return result;
+  }
+
+  async confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord> {
+    console.log('[confirmFeePayment] Confirming payment:', paymentId);
+    
+    const [record] = await db
+      .update(feePaymentRecords)
+      .set({
+        status: 'confirmed',
+        confirmedBy,
+        confirmedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(feePaymentRecords.id, paymentId))
+      .returning();
+
+    if (!record) {
+      throw new Error('Payment record not found');
+    }
+
+    console.log('[confirmFeePayment] Payment confirmed:', paymentId);
+    return record;
+  }
+
+  async reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<FeePaymentRecord> {
+    console.log('[reverseFeePayment] Reversing payment:', paymentId, 'Reason:', reason);
+    
+    const [record] = await db
+      .update(feePaymentRecords)
+      .set({
+        status: 'reversed',
+        reversedBy,
+        reversedAt: new Date(),
+        reversalReason: reason,
+        updatedAt: new Date(),
+      })
+      .where(eq(feePaymentRecords.id, paymentId))
+      .returning();
+
+    if (!record) {
+      throw new Error('Payment record not found');
+    }
+
+    console.log('[reverseFeePayment] Payment reversed:', paymentId);
+    return record;
+  }
+
+  async createPaymentAuditLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog> {
+    console.log('[createPaymentAuditLog] Creating audit log:', data.action, data.entityType);
+    
+    const [log] = await db
+      .insert(paymentAuditLogs)
+      .values(data)
+      .returning();
+
+    console.log('[createPaymentAuditLog] Audit log created:', log.id);
+    return log;
   }
 }
 

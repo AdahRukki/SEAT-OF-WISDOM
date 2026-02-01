@@ -26,6 +26,7 @@ import {
   insertNewsSchema,
   insertNotificationSchema,
   insertContactSubmissionSchema,
+  recordFeePaymentSchema,
   users,
   students,
   classes,
@@ -145,6 +146,15 @@ const requireMainAdmin = (req: Request, res: Response, next: NextFunction) => {
   const user = (req as any).user;
   if (user.role !== 'admin') {
     return res.status(403).json({ error: "Main admin access required" });
+  }
+  next();
+};
+
+// Middleware for bursar, sub-admin, or admin (payment access)
+const requireBursarOrAdmin = (req: Request, res: Response, next: NextFunction) => {
+  const user = (req as any).user;
+  if (user.role !== 'admin' && user.role !== 'sub-admin' && user.role !== 'bursar') {
+    return res.status(403).json({ error: "Bursar or admin access required" });
   }
   next();
 };
@@ -3113,6 +3123,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching published score info:", error);
       res.status(500).json({ error: "Failed to fetch published score info" });
+    }
+  });
+
+  // ==================== PAYMENT TRACKING & RECONCILIATION ====================
+
+  // Record a new fee payment (bursar, sub-admin, or admin)
+  app.post("/api/payments/record", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      console.log('[POST /api/payments/record] User:', user.id, 'Role:', user.role);
+      
+      const validatedData = recordFeePaymentSchema.parse(req.body);
+      console.log('[POST /api/payments/record] Validated data:', validatedData);
+      
+      // Get student to determine school
+      const student = await storage.getStudent(validatedData.studentId);
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      // Get school ID from student's class
+      const studentClass = await storage.getClassById(student.classId);
+      const schoolId = studentClass?.schoolId;
+      
+      // Sub-admins and bursars can only record payments for their school
+      if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "You can only record payments for your school's students" });
+      }
+
+      // Create the payment record
+      const paymentRecord = await storage.recordFeePayment({
+        studentId: validatedData.studentId,
+        schoolId: schoolId || undefined,
+        amount: validatedData.amount.toString(),
+        paymentMethod: validatedData.paymentMethod,
+        paymentDate: new Date(validatedData.paymentDate),
+        reference: validatedData.reference,
+        term: validatedData.term,
+        session: validatedData.session,
+        notes: validatedData.notes,
+        recordedBy: user.id,
+        status: 'recorded',
+      });
+
+      // Create audit log entry
+      await storage.createPaymentAuditLog({
+        action: 'record_payment',
+        entityType: 'payment_record',
+        entityId: paymentRecord.id,
+        userId: user.id,
+        schoolId: schoolId || undefined,
+        newData: paymentRecord,
+        ipAddress: req.ip || req.socket.remoteAddress,
+      });
+
+      console.log('[POST /api/payments/record] Payment recorded successfully:', paymentRecord.id);
+      res.status(201).json(paymentRecord);
+    } catch (error: any) {
+      console.error("[POST /api/payments/record] Error:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid payment data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record payment" });
+    }
+  });
+
+  // Get payment records with filters
+  app.get("/api/payments/records", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    
+    try {
+      console.log('[GET /api/payments/records] User:', user.id, 'Role:', user.role);
+      
+      const { schoolId, studentId, status, startDate, endDate } = req.query;
+
+      // Build filters
+      const filters: {
+        schoolId?: string;
+        studentId?: string;
+        status?: string;
+        startDate?: Date;
+        endDate?: Date;
+      } = {};
+
+      // Sub-admins and bursars can only see their school's records
+      if (user.role === 'sub-admin' || user.role === 'bursar') {
+        if (user.schoolId) {
+          filters.schoolId = user.schoolId;
+        }
+        // If they try to access another school, deny
+        if (schoolId && schoolId !== user.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+      } else if (schoolId) {
+        filters.schoolId = schoolId as string;
+      }
+
+      if (studentId) filters.studentId = studentId as string;
+      if (status) filters.status = status as string;
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+
+      console.log('[GET /api/payments/records] Filters:', filters);
+      
+      const records = await storage.getFeePaymentRecords(filters);
+      
+      console.log('[GET /api/payments/records] Found', records.length, 'records');
+      res.json(records);
+    } catch (error) {
+      console.error("[GET /api/payments/records] Error:", error);
+      res.status(500).json({ error: "Failed to fetch payment records" });
+    }
+  });
+
+  // Get single payment record
+  app.get("/api/payments/records/:id", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const { id } = req.params;
+    
+    try {
+      console.log('[GET /api/payments/records/:id] User:', user.id, 'Role:', user.role, 'Record:', id);
+      
+      const record = await storage.getFeePaymentRecordById(id);
+      
+      if (!record) {
+        return res.status(404).json({ error: "Payment record not found" });
+      }
+
+      // Sub-admins and bursars can only view their school's records
+      if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && record.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied to this payment record" });
+      }
+
+      console.log('[GET /api/payments/records/:id] Found record:', id);
+      res.json(record);
+    } catch (error) {
+      console.error("[GET /api/payments/records/:id] Error:", error);
+      res.status(500).json({ error: "Failed to fetch payment record" });
     }
   });
 
