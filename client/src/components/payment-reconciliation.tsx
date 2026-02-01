@@ -708,9 +708,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             {suggestion.transaction && suggestion.confidence >= 50 && (
                               <div className="mt-2 pt-2 border-t border-dashed">
                                 <div className="flex items-center gap-1 mb-1">
-                                  <Sparkles className="h-3 w-3 text-yellow-500" />
-                                  <span className="text-xs font-medium text-yellow-700">
-                                    Suggested Match ({suggestion.confidence}% confidence)
+                                  <Sparkles className={`h-3 w-3 ${suggestion.confidence >= 80 ? 'text-green-500' : 'text-yellow-500'}`} />
+                                  <span className={`text-xs font-medium ${suggestion.confidence >= 80 ? 'text-green-700' : 'text-yellow-700'}`}>
+                                    {suggestion.confidence >= 80 ? 'High Confidence Match' : 'Suggested Match'} ({suggestion.confidence}%)
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 text-xs bg-white/80 p-2 rounded border">
@@ -722,18 +722,21 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                       {suggestion.transaction.rawDescription?.substring(0, 40)}...
                                     </div>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    className="text-xs h-6 bg-green-600 hover:bg-green-700"
-                                    onClick={() => {
-                                      setSelectedPayment(payment);
-                                      setSelectedTransaction(suggestion.transaction);
-                                      setIsConfirmDialogOpen(true);
-                                    }}
-                                  >
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Confirm
-                                  </Button>
+                                  {/* Quick confirm only for high confidence matches (80%+) */}
+                                  {suggestion.confidence >= 80 && (
+                                    <Button
+                                      size="sm"
+                                      className="text-xs h-6 bg-green-600 hover:bg-green-700"
+                                      onClick={() => {
+                                        setSelectedPayment(payment);
+                                        setSelectedTransaction(suggestion.transaction);
+                                        setIsConfirmDialogOpen(true);
+                                      }}
+                                    >
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Confirm
+                                    </Button>
+                                  )}
                                 </div>
                                 <div className="flex gap-1 mt-1 flex-wrap">
                                   {suggestion.reasons.map((reason, i) => (
