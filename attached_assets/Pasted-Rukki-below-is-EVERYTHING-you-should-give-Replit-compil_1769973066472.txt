@@ -1,0 +1,376 @@
+Rukki, below is **EVERYTHING you should give Replit**, compiled into **one clean instruction package**.
+
+You can copy-paste this **exactly as is** into Replit.
+This removes ambiguity and prevents wrong architectural decisions.
+
+---
+
+# 📌 REPLIT BUILD INSTRUCTIONS
+
+## School Fee Recording, Bank Statement Reconciliation System
+
+---
+
+## 1️⃣ CONTEXT (READ FIRST – VERY IMPORTANT)
+
+You are building an **internal school finance web app**, NOT a payment gateway.
+
+The system must:
+
+* Record school fee payments
+* Upload bank statements (Excel + PDF)
+* Convert PDFs → Excel internally
+* Match recorded payments to bank transactions
+* Allow manual confirmation with full visibility
+* Handle POS, transfer, cash, and code-only transactions
+* Support **one payment paying for multiple students**
+* Never auto-confirm without human approval
+
+❗ **DO NOT redesign the flow**
+❗ **DO NOT remove manual confirmation**
+❗ **DO NOT auto-confirm payments silently**
+
+---
+
+## 2️⃣ CORE PRINCIPLES (NON-NEGOTIABLE)
+
+1. Recording ≠ Confirmation
+2. Bank statements are evidence, not decisions
+3. Automation may suggest, never decide
+4. Raw bank data must always be visible
+5. Every action must be reversible (owner only)
+6. UX must reduce thinking, typing, and memory
+
+---
+
+## 3️⃣ USER ROLES
+
+### Admin / Bursary
+
+* Can record payments
+* Cannot see bank statements
+* Cannot confirm payments
+
+### Owner (Super Admin)
+
+* Uploads bank statements
+* Confirms or rejects payments
+* Allocates payments across multiple students
+* Can reverse confirmations
+
+---
+
+## 4️⃣ STUDENT SELECTION (RECORD PAYMENT)
+
+When recording a payment:
+
+UI must include:
+
+* Class selector (dropdown)
+* Search bar (name or student ID)
+* Scrollable student list
+
+Rules:
+
+* No free-text student entry
+* One student per recorded payment
+* Multi-student payments handled later during reconciliation
+
+---
+
+## 5️⃣ FEE RECORDING WORKFLOW
+
+1. Admin clicks **Record Payment**
+2. Selects student (via class + search + scroll)
+3. Enters:
+
+   * Amount
+   * Payment method (Transfer / POS / Cash)
+   * Date (default today)
+   * Optional reference (POS slip code)
+4. Saves payment
+
+System result:
+
+* Status = **Recorded**
+* Not confirmed
+* Locked from editing (owner only)
+
+---
+
+## 6️⃣ BANK STATEMENT UPLOAD (EXCEL + PDF)
+
+### IMPORTANT
+
+Replit’s ingestion feature only supports Excel.
+PDFs **must be converted to Excel internally first**.
+
+---
+
+## 7️⃣ PDF → EXCEL INGESTION (MANDATORY)
+
+### Flow
+
+```
+User uploads PDF
+→ Extract text (text-based PDFs only)
+→ Parse transactions
+→ Generate Excel in memory
+→ Feed Excel into existing Excel pipeline
+```
+
+❗ Excel remains the **single ingestion format internally**
+
+---
+
+## 8️⃣ FOUNDATION CODE (DO NOT REMOVE)
+
+Use the following code as the **base ingestion layer**.
+You must **extend it**, not replace it.
+
+### Dependencies
+
+```bash
+npm install express multer pdf-parse xlsx crypto
+```
+
+### Server Setup
+
+```js
+const express = require("express");
+const multer = require("multer");
+const app = express();
+const upload = multer({ storage: multer.memoryStorage() });
+app.use(express.json());
+```
+
+### PDF Text Extraction
+
+```js
+const pdfParse = require("pdf-parse");
+
+async function extractTextFromPDF(buffer) {
+  const data = await pdfParse(buffer);
+  if (!data.text || data.text.trim().length === 0) {
+    throw new Error("Scanned PDF detected");
+  }
+  return data.text;
+}
+```
+
+### Transaction Parsing (Foundation)
+
+```js
+function parseTransactions(rawText) {
+  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  const transactions = [];
+
+  for (const line of lines) {
+    const dateMatch = line.match(/\d{2}\/\d{2}\/\d{4}/);
+    const amounts = line.match(/[\d,]+\.\d{2}/g);
+
+    if (!dateMatch || !amounts || amounts.length < 2) continue;
+
+    const credit = parseFloat(amounts[1].replace(/,/g, ""));
+    if (credit <= 0) continue;
+
+    transactions.push({
+      date: dateMatch[0],
+      credit,
+      raw_description: line
+    });
+  }
+  return transactions;
+}
+```
+
+### Generate Excel
+
+```js
+const XLSX = require("xlsx");
+
+function generateExcel(transactions) {
+  const data = [["Date", "Description", "Credit"]];
+  transactions.forEach(t =>
+    data.push([t.date, t.raw_description, t.credit])
+  );
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, "Transactions");
+
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+}
+```
+
+### Upload Endpoint
+
+```js
+app.post("/upload-statement", upload.single("file"), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+    if (file.mimetype === "application/pdf") {
+      const text = await extractTextFromPDF(file.buffer);
+      const txs = parseTransactions(text);
+      const excel = generateExcel(txs);
+      return res.json({ message: "PDF converted", count: txs.length });
+    }
+
+    if (file.mimetype.includes("spreadsheet")) {
+      return res.json({ message: "Excel received" });
+    }
+
+    res.status(400).json({ error: "Unsupported file type" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+```
+
+---
+
+## 9️⃣ DUPLICATE TRANSACTION HANDLING (MANDATORY)
+
+Uploads may overlap (e.g. 1–5, then 3–6).
+
+### Rule
+
+Transactions must be **transaction-centric**, not file-centric.
+
+### Fingerprint Logic
+
+```
+fingerprint = hash(date + amount + reference OR raw_description)
+```
+
+If fingerprint exists → skip
+If not → insert
+
+Add DB unique constraint on fingerprint.
+
+Uploads must be **idempotent**.
+
+---
+
+## 🔟 BANK TRANSACTION RULES
+
+* Store **raw_description** (never edited)
+* Store **normalized_description** (for matching only)
+* Code-only transactions are expected
+* Code-only transactions are **never auto-suggested first time**
+
+Filtered views must **never hide raw data**.
+
+---
+
+## 1️⃣1️⃣ CONFIRMATION RULES
+
+A suggestion is shown ONLY if:
+
+1. Exact amount match
+2. Same calendar day
+3. Credit transaction
+4. Description or history pattern matches
+
+Even then:
+➡ Show popup
+➡ Owner must confirm
+
+No silent confirmation.
+
+---
+
+## 1️⃣2️⃣ MULTI-STUDENT PAYMENT HANDLING
+
+One bank transaction may pay for multiple students.
+
+### Required UI
+
+* “Allocate to Students”
+* Show:
+
+  * Total amount
+  * Allocated
+  * Remaining
+
+Owner manually enters amount per student.
+Totals must balance before confirmation.
+
+---
+
+## 1️⃣3️⃣ REVERSALS
+
+* Owner only
+* Reversal must undo:
+
+  * Student balances
+  * Allocations
+  * History impact
+* All reversals logged
+
+---
+
+## 1️⃣4️⃣ PAGES TO BUILD
+
+1. Login
+2. Dashboard
+3. Record Payment
+4. Recorded Payments (Unconfirmed)
+5. Upload Bank Statement
+6. Transactions Table
+7. Confirmation / Allocation Screen
+8. Audit Logs
+
+---
+
+## 1️⃣5️⃣ TECH STACK
+
+* Web app (responsive)
+* Node.js (Express)
+* SQLite or Firestore
+* Replit hosting
+* Email + password auth
+
+❌ No mobile app
+❌ No payment gateway
+
+---
+
+## 1️⃣6️⃣ WHAT NOT TO DO
+
+❌ Auto-confirm payments
+❌ Remove raw bank text
+❌ Combine recording & confirmation
+❌ Ask users to convert PDFs manually
+❌ Duplicate transactions on re-upload
+
+---
+
+## 1️⃣7️⃣ SUCCESS CRITERIA
+
+* Admin records payment < 30 seconds
+* Owner can reconcile confidently
+* POS/code-only payments traceable
+* Overlapping uploads cause no issues
+* Manual books become unnecessary
+
+---
+
+## FINAL INSTRUCTION TO REPLIT
+
+> **Build exactly to this spec.
+> Extend the foundation code, do not replace it.
+> Manual confirmation and transparency are mandatory.**
+
+---
+
+If you want, next I can:
+
+* Review Replit’s first build
+* Test edge cases
+* Write acceptance tests
+* Help you onboard staff
+
+Just tell me.
