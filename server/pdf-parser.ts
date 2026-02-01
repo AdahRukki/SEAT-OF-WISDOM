@@ -5,8 +5,8 @@ import { createRequire } from "module";
 // Use createRequire for pdf-parse (CommonJS module in ESM context)
 const require = createRequire(import.meta.url);
 const pdfParseModule = require("pdf-parse");
-// Handle both module.exports = fn and { default: fn } patterns
-const pdfParse = pdfParseModule.default ?? pdfParseModule;
+// pdf-parse exports PDFParse as the main function
+const pdfParse = pdfParseModule.PDFParse ?? pdfParseModule.default ?? pdfParseModule;
 
 export interface ParsedTransaction {
   date: string;
