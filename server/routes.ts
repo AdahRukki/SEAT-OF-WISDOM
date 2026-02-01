@@ -3265,6 +3265,322 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== BANK STATEMENT & PAYMENT CONFIRMATION (ADMIN ONLY) ====================
+  
+  // Upload bank statement (admin only - owners)
+  app.post("/api/admin/bank-statements/upload", authenticate, requireMainAdmin, upload.single('file'), async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      console.log('[POST /api/admin/bank-statements/upload] User:', user.id);
+      
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const { schoolId } = req.body;
+      const file = req.file;
+      const fileType = file.originalname.endsWith('.csv') ? 'csv' : 'excel';
+      
+      // Create bank statement record first
+      const statement = await storage.uploadBankStatement({
+        fileName: file.originalname,
+        fileType,
+        uploadedBy: user.id,
+        schoolId: schoolId || undefined,
+      });
+
+      let rows: any[] = [];
+      
+      // Parse file based on type
+      if (fileType === 'csv') {
+        const csvContent = file.buffer.toString('utf-8');
+        const workbook = XLSX.read(csvContent, { type: 'string' });
+        const sheetName = workbook.SheetNames[0];
+        rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      } else {
+        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      }
+
+      let newTransactions = 0;
+      let duplicatesSkipped = 0;
+      let dateRangeStart: Date | undefined;
+      let dateRangeEnd: Date | undefined;
+
+      const cryptoModule = await import('crypto');
+
+      for (const row of rows) {
+        try {
+          // Normalize column names (handle various formats)
+          const normalizedRow: Record<string, any> = {};
+          for (const key of Object.keys(row)) {
+            normalizedRow[key.toLowerCase().trim().replace(/\s+/g, '_')] = row[key];
+          }
+
+          // Extract fields (handle various column naming conventions)
+          const dateValue = normalizedRow.date || normalizedRow.transaction_date || normalizedRow.value_date || normalizedRow.posting_date;
+          const description = normalizedRow.description || normalizedRow.narration || normalizedRow.particulars || normalizedRow.details || '';
+          const reference = normalizedRow.reference || normalizedRow.ref || normalizedRow.reference_number || normalizedRow.tran_id || '';
+          
+          // Handle amount - could be single amount column or credit/debit columns
+          let amount: number = 0;
+          let transactionType: 'credit' | 'debit' = 'credit';
+          
+          if (normalizedRow.amount !== undefined) {
+            amount = parseFloat(String(normalizedRow.amount).replace(/[,\s]/g, '')) || 0;
+            // Determine type based on sign or separate column
+            if (amount < 0) {
+              amount = Math.abs(amount);
+              transactionType = 'debit';
+            }
+          } else if (normalizedRow.credit !== undefined || normalizedRow.debit !== undefined) {
+            const credit = parseFloat(String(normalizedRow.credit || '0').replace(/[,\s]/g, '')) || 0;
+            const debit = parseFloat(String(normalizedRow.debit || '0').replace(/[,\s]/g, '')) || 0;
+            if (credit > 0) {
+              amount = credit;
+              transactionType = 'credit';
+            } else if (debit > 0) {
+              amount = debit;
+              transactionType = 'debit';
+            }
+          }
+
+          // Skip rows without valid amount
+          if (amount <= 0) continue;
+
+          // Parse date
+          let transactionDate: Date;
+          if (dateValue instanceof Date) {
+            transactionDate = dateValue;
+          } else if (typeof dateValue === 'number') {
+            // Excel serial date
+            transactionDate = new Date((dateValue - 25569) * 86400 * 1000);
+          } else if (typeof dateValue === 'string') {
+            transactionDate = new Date(dateValue);
+          } else {
+            continue; // Skip rows without valid date
+          }
+
+          if (isNaN(transactionDate.getTime())) continue;
+
+          // Track date range
+          if (!dateRangeStart || transactionDate < dateRangeStart) {
+            dateRangeStart = transactionDate;
+          }
+          if (!dateRangeEnd || transactionDate > dateRangeEnd) {
+            dateRangeEnd = transactionDate;
+          }
+
+          // Create fingerprint: SHA256 hash of normalized(date + amount + reference)
+          const normalizedDate = transactionDate.toISOString().split('T')[0];
+          const fingerprintData = `${normalizedDate}|${amount.toFixed(2)}|${String(reference).trim().toLowerCase()}`;
+          const fingerprint = cryptoModule.createHash('sha256').update(fingerprintData).digest('hex');
+
+          // Check for duplicate
+          const exists = await storage.checkTransactionFingerprint(fingerprint);
+          if (exists) {
+            duplicatesSkipped++;
+            continue;
+          }
+
+          // Create bank transaction
+          await storage.createBankTransaction({
+            statementId: statement.id,
+            schoolId: schoolId || undefined,
+            transactionDate,
+            amount: String(amount),
+            transactionType,
+            rawDescription: String(description),
+            normalizedDescription: String(description).toLowerCase().replace(/\s+/g, ' ').trim(),
+            reference: String(reference) || undefined,
+            fingerprint,
+            status: 'unmatched',
+            classification: 'unknown',
+            matchConfidence: 0,
+          });
+
+          newTransactions++;
+        } catch (rowError) {
+          console.error('[POST /api/admin/bank-statements/upload] Error processing row:', rowError);
+          // Continue processing other rows
+        }
+      }
+
+      // Update statement with counts
+      await storage.updateBankStatementCounts(
+        statement.id,
+        rows.length,
+        newTransactions,
+        duplicatesSkipped
+      );
+
+      // Create audit log
+      await storage.createPaymentAuditLog({
+        action: 'upload_statement',
+        entityType: 'bank_statement',
+        entityId: statement.id,
+        userId: user.id,
+        schoolId: schoolId || undefined,
+        newData: {
+          fileName: file.originalname,
+          totalRows: rows.length,
+          newTransactions,
+          duplicatesSkipped,
+        },
+      });
+
+      console.log('[POST /api/admin/bank-statements/upload] Upload complete:', {
+        statementId: statement.id,
+        newTransactions,
+        duplicatesSkipped,
+      });
+
+      res.json({
+        statementId: statement.id,
+        newTransactions,
+        duplicatesSkipped,
+        totalRows: rows.length,
+        dateRangeStart,
+        dateRangeEnd,
+      });
+    } catch (error: any) {
+      console.error("[POST /api/admin/bank-statements/upload] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to upload bank statement" });
+    }
+  });
+
+  // Get bank statements (admin only)
+  app.get("/api/admin/bank-statements", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { schoolId } = req.query;
+      
+      console.log('[GET /api/admin/bank-statements] User:', user.id, 'School:', schoolId);
+      
+      const statements = await storage.getBankStatements(schoolId as string | undefined);
+      
+      console.log('[GET /api/admin/bank-statements] Found', statements.length, 'statements');
+      res.json(statements);
+    } catch (error) {
+      console.error("[GET /api/admin/bank-statements] Error:", error);
+      res.status(500).json({ error: "Failed to fetch bank statements" });
+    }
+  });
+
+  // Get unmatched bank transactions (admin only)
+  app.get("/api/admin/bank-transactions/unmatched", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { schoolId } = req.query;
+      
+      console.log('[GET /api/admin/bank-transactions/unmatched] User:', user.id, 'School:', schoolId);
+      
+      const transactions = await storage.getUnmatchedBankTransactions(schoolId as string | undefined);
+      
+      console.log('[GET /api/admin/bank-transactions/unmatched] Found', transactions.length, 'transactions');
+      res.json(transactions);
+    } catch (error) {
+      console.error("[GET /api/admin/bank-transactions/unmatched] Error:", error);
+      res.status(500).json({ error: "Failed to fetch unmatched transactions" });
+    }
+  });
+
+  // Confirm payment (admin only - link to bank transaction)
+  app.post("/api/admin/payments/:id/confirm", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const paymentId = req.params.id;
+      const { bankTransactionId } = req.body;
+      
+      console.log('[POST /api/admin/payments/:id/confirm] User:', user.id, 'Payment:', paymentId, 'BankTransaction:', bankTransactionId);
+      
+      if (!bankTransactionId) {
+        return res.status(400).json({ error: "Bank transaction ID is required" });
+      }
+
+      // Get the payment record first for audit log
+      const paymentBefore = await storage.getFeePaymentRecordById(paymentId);
+      if (!paymentBefore) {
+        return res.status(404).json({ error: "Payment record not found" });
+      }
+
+      // Confirm the payment
+      const payment = await storage.confirmFeePayment(paymentId, bankTransactionId, user.id);
+
+      // Update bank transaction status to confirmed
+      await storage.updateBankTransactionStatus(bankTransactionId, 'confirmed', 100);
+
+      // Create audit log
+      await storage.createPaymentAuditLog({
+        action: 'confirm_payment',
+        entityType: 'payment_record',
+        entityId: paymentId,
+        userId: user.id,
+        schoolId: payment.schoolId || undefined,
+        previousData: { status: paymentBefore.status },
+        newData: { 
+          status: 'confirmed',
+          bankTransactionId,
+          confirmedBy: user.id,
+          confirmedAt: new Date().toISOString(),
+        },
+      });
+
+      console.log('[POST /api/admin/payments/:id/confirm] Payment confirmed:', paymentId);
+      res.json(payment);
+    } catch (error: any) {
+      console.error("[POST /api/admin/payments/:id/confirm] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to confirm payment" });
+    }
+  });
+
+  // Reverse payment (admin only)
+  app.post("/api/admin/payments/:id/reverse", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const paymentId = req.params.id;
+      const { reason } = req.body;
+      
+      console.log('[POST /api/admin/payments/:id/reverse] User:', user.id, 'Payment:', paymentId, 'Reason:', reason);
+      
+      if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+        return res.status(400).json({ error: "Reversal reason is required" });
+      }
+
+      // Get the payment record first for audit log
+      const paymentBefore = await storage.getFeePaymentRecordById(paymentId);
+      if (!paymentBefore) {
+        return res.status(404).json({ error: "Payment record not found" });
+      }
+
+      // Reverse the payment
+      const payment = await storage.reverseFeePayment(paymentId, user.id, reason.trim());
+
+      // Create audit log
+      await storage.createPaymentAuditLog({
+        action: 'reverse_payment',
+        entityType: 'payment_record',
+        entityId: paymentId,
+        userId: user.id,
+        schoolId: payment.schoolId || undefined,
+        previousData: { status: paymentBefore.status },
+        newData: { 
+          status: 'reversed',
+          reversedBy: user.id,
+          reversedAt: new Date().toISOString(),
+          reversalReason: reason.trim(),
+        },
+      });
+
+      console.log('[POST /api/admin/payments/:id/reverse] Payment reversed:', paymentId);
+      res.json(payment);
+    } catch (error: any) {
+      console.error("[POST /api/admin/payments/:id/reverse] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to reverse payment" });
+    }
+  });
+
   // ==================== PUBLIC ROUTES (no auth required) ====================
   
   // Public contact form submission

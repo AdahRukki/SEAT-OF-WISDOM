@@ -24,6 +24,8 @@ import {
   feePaymentRecords,
   paymentAuditLogs,
   paymentAllocations,
+  bankStatements,
+  bankTransactions,
   type School,
   type User,
   type Student,
@@ -73,6 +75,10 @@ import {
   type FeePaymentRecordWithDetails,
   type PaymentAuditLog,
   type InsertPaymentAuditLog,
+  type BankStatement,
+  type InsertBankStatement,
+  type BankTransaction,
+  type InsertBankTransaction,
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
@@ -243,6 +249,18 @@ export interface IStorage {
   
   // Audit logging
   createPaymentAuditLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog>;
+
+  // Bank Statement Upload & Management
+  uploadBankStatement(data: { fileName: string; fileType: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement>;
+  getBankStatements(schoolId?: string): Promise<BankStatement[]>;
+  updateBankStatementCounts(id: string, totalTransactions: number, newTransactions: number, duplicatesSkipped: number): Promise<BankStatement>;
+
+  // Bank Transactions
+  createBankTransaction(data: InsertBankTransaction): Promise<BankTransaction>;
+  getBankTransactions(filters: { schoolId?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<BankTransaction[]>;
+  getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]>;
+  updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction>;
+  checkTransactionFingerprint(fingerprint: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2424,6 +2442,164 @@ export class DatabaseStorage implements IStorage {
 
     console.log('[createPaymentAuditLog] Audit log created:', log.id);
     return log;
+  }
+
+  async uploadBankStatement(data: { fileName: string; fileType: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement> {
+    console.log('[uploadBankStatement] Creating bank statement record:', data.fileName);
+    
+    const [statement] = await db
+      .insert(bankStatements)
+      .values({
+        fileName: data.fileName,
+        fileType: data.fileType,
+        uploadedBy: data.uploadedBy,
+        schoolId: data.schoolId,
+        dateRangeStart: data.dateRangeStart,
+        dateRangeEnd: data.dateRangeEnd,
+        totalTransactions: 0,
+        newTransactions: 0,
+        duplicatesSkipped: 0,
+      })
+      .returning();
+
+    console.log('[uploadBankStatement] Bank statement created:', statement.id);
+    return statement;
+  }
+
+  async getBankStatements(schoolId?: string): Promise<BankStatement[]> {
+    console.log('[getBankStatements] Fetching statements for school:', schoolId || 'all');
+    
+    const whereClause = schoolId ? eq(bankStatements.schoolId, schoolId) : undefined;
+    
+    const statements = await db
+      .select()
+      .from(bankStatements)
+      .where(whereClause)
+      .orderBy(desc(bankStatements.createdAt));
+
+    console.log('[getBankStatements] Found', statements.length, 'statements');
+    return statements;
+  }
+
+  async updateBankStatementCounts(id: string, totalTransactions: number, newTransactions: number, duplicatesSkipped: number): Promise<BankStatement> {
+    console.log('[updateBankStatementCounts] Updating statement:', id);
+    
+    const [statement] = await db
+      .update(bankStatements)
+      .set({
+        totalTransactions,
+        newTransactions,
+        duplicatesSkipped,
+        processedAt: new Date(),
+      })
+      .where(eq(bankStatements.id, id))
+      .returning();
+
+    if (!statement) {
+      throw new Error('Bank statement not found');
+    }
+
+    console.log('[updateBankStatementCounts] Statement updated:', id);
+    return statement;
+  }
+
+  async createBankTransaction(data: InsertBankTransaction): Promise<BankTransaction> {
+    console.log('[createBankTransaction] Creating transaction with fingerprint:', data.fingerprint);
+    
+    const [transaction] = await db
+      .insert(bankTransactions)
+      .values(data)
+      .returning();
+
+    console.log('[createBankTransaction] Transaction created:', transaction.id);
+    return transaction;
+  }
+
+  async getBankTransactions(filters: { schoolId?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<BankTransaction[]> {
+    console.log('[getBankTransactions] Fetching with filters:', filters);
+    
+    const conditions = [];
+    if (filters.schoolId) {
+      conditions.push(eq(bankTransactions.schoolId, filters.schoolId));
+    }
+    if (filters.status) {
+      conditions.push(eq(bankTransactions.status, filters.status));
+    }
+    if (filters.startDate) {
+      conditions.push(sql`${bankTransactions.transactionDate} >= ${filters.startDate}`);
+    }
+    if (filters.endDate) {
+      conditions.push(sql`${bankTransactions.transactionDate} <= ${filters.endDate}`);
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    const transactions = await db
+      .select()
+      .from(bankTransactions)
+      .where(whereClause)
+      .orderBy(desc(bankTransactions.transactionDate));
+
+    console.log('[getBankTransactions] Found', transactions.length, 'transactions');
+    return transactions;
+  }
+
+  async getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]> {
+    console.log('[getUnmatchedBankTransactions] Fetching unmatched for school:', schoolId || 'all');
+    
+    const conditions = [eq(bankTransactions.status, 'unmatched')];
+    if (schoolId) {
+      conditions.push(eq(bankTransactions.schoolId, schoolId));
+    }
+    
+    const transactions = await db
+      .select()
+      .from(bankTransactions)
+      .where(and(...conditions))
+      .orderBy(desc(bankTransactions.transactionDate));
+
+    console.log('[getUnmatchedBankTransactions] Found', transactions.length, 'unmatched transactions');
+    return transactions;
+  }
+
+  async updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction> {
+    console.log('[updateBankTransactionStatus] Updating transaction:', id, 'to status:', status);
+    
+    const updateData: any = {
+      status,
+      updatedAt: new Date(),
+    };
+    
+    if (matchConfidence !== undefined) {
+      updateData.matchConfidence = matchConfidence;
+    }
+    
+    const [transaction] = await db
+      .update(bankTransactions)
+      .set(updateData)
+      .where(eq(bankTransactions.id, id))
+      .returning();
+
+    if (!transaction) {
+      throw new Error('Bank transaction not found');
+    }
+
+    console.log('[updateBankTransactionStatus] Transaction updated:', id);
+    return transaction;
+  }
+
+  async checkTransactionFingerprint(fingerprint: string): Promise<boolean> {
+    console.log('[checkTransactionFingerprint] Checking fingerprint:', fingerprint.substring(0, 16) + '...');
+    
+    const [existing] = await db
+      .select({ id: bankTransactions.id })
+      .from(bankTransactions)
+      .where(eq(bankTransactions.fingerprint, fingerprint))
+      .limit(1);
+
+    const exists = !!existing;
+    console.log('[checkTransactionFingerprint] Fingerprint exists:', exists);
+    return exists;
   }
 }
 
