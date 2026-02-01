@@ -290,10 +290,11 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.name.endsWith(".csv") && !file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+      const fileName = file.name.toLowerCase();
+      if (!fileName.endsWith(".csv") && !fileName.endsWith(".xlsx") && !fileName.endsWith(".xls") && !fileName.endsWith(".pdf")) {
         toast({
           title: "Invalid File",
-          description: "Please select a CSV or Excel file",
+          description: "Please select a PDF, CSV, or Excel file",
           variant: "destructive",
         });
         return;
