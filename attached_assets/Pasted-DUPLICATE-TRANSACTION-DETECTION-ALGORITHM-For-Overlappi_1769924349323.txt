@@ -1,0 +1,184 @@
+DUPLICATE TRANSACTION DETECTION ALGORITHM
+(For Overlapping Bank Statement Uploads)
+OBJECTIVE
+
+Ensure that:
+
+Uploading overlapping statements (e.g. 1–5, then 3–6)
+
+Never creates duplicate bank transactions
+
+Never breaks existing confirmations
+
+Uploads are idempotent (safe to repeat)
+
+CORE IDEA
+
+Each bank transaction must have a unique fingerprint.
+If the fingerprint already exists → skip insertion.
+
+STEP 1: EXTRACT RAW TRANSACTIONS
+
+From the uploaded statement file, extract for each row:
+
+date
+
+amount
+
+credit_or_debit
+
+raw_description
+
+reference (if available)
+
+Ignore all debit transactions.
+
+STEP 2: NORMALIZE FIELDS (SILENT)
+
+Before comparison, normalize:
+
+Trim whitespace
+
+Convert text to uppercase
+
+Remove duplicate spaces
+
+Do NOT remove characters from raw_description.
+This is only for hashing consistency.
+
+STEP 3: GENERATE TRANSACTION FINGERPRINT
+Preferred Fingerprint (Best Case)
+
+If reference exists:
+
+fingerprint = hash(
+  date +
+  amount +
+  reference
+)
+
+Fallback Fingerprint (Code-Only / No Reference)
+
+If reference is missing:
+
+fingerprint = hash(
+  date +
+  amount +
+  raw_description
+)
+
+Why This Works
+
+Same transaction → same fingerprint
+
+Different transactions (even same amount/day) → different hash
+
+Overlapping uploads safely collide
+
+STEP 4: DUPLICATE CHECK
+
+For each extracted transaction:
+
+IF fingerprint EXISTS in bank_transactions_table
+  → mark as DUPLICATE
+  → do NOT insert
+ELSE
+  → insert as NEW transaction
+
+
+This check must be done before any matching or confirmation logic.
+
+STEP 5: INSERT NEW TRANSACTIONS ONLY
+
+For new transactions:
+
+Save full details
+
+Set status = UNMATCHED
+
+Link to the uploaded statement file (for audit only)
+
+Duplicates:
+
+Are skipped silently
+
+Do not change existing records
+
+STEP 6: UPLOAD SUMMARY (USER FEEDBACK)
+
+After processing the file, show:
+
+Total rows read
+
+New transactions added
+
+Duplicate transactions skipped
+
+Statement date range
+
+Example:
+
+Statement processed successfully
+• New transactions added: 6
+• Duplicates skipped: 18
+• Date range: 3rd – 6th May
+
+IMPORTANT SAFETY RULES
+
+Never delete existing transactions on upload
+
+Never re-process confirmed transactions
+
+Never overwrite transaction status
+
+Never re-link payments automatically
+
+Uploads do not trigger confirmations
+
+Uploads only add missing data.
+
+EDGE CASE HANDLING
+Same Amount + Same Day + Same Description
+
+Reference or raw description hash still differentiates
+
+If truly identical → duplicate (correct)
+
+Bank Reversals / Corrections
+
+Appear as new transactions
+
+Different amount or description → different fingerprint
+
+Inserted normally
+
+DATABASE CONSTRAINT (RECOMMENDED)
+
+Add a unique index:
+
+UNIQUE(fingerprint)
+
+
+This guarantees safety even if logic fails.
+
+FINAL GUARANTEE
+
+With this algorithm:
+
+You can upload overlapping statements freely
+
+You can re-upload the same file safely
+
+No duplicates are possible
+
+No confirmations are ever broken
+
+TL;DR FOR DEVELOPER
+
+Extract → normalize → hash
+
+If hash exists → skip
+
+If not → insert
+
+Never touch existing data

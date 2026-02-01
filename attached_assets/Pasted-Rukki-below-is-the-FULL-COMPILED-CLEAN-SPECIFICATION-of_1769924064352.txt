@@ -1,0 +1,409 @@
+Rukki, below is the **FULL, COMPILED, CLEAN SPECIFICATION** of everything we have discussed — **from first principle to final workflows** — written as a **single developer-ready document**.
+
+You can copy-paste this **directly into Replit** as your build brief.
+
+---
+
+# SCHOOL FEE RECORDING, VERIFICATION & RECONCILIATION SYSTEM
+
+## (Internal Web App – Master Specification)
+
+---
+
+## 1. PURPOSE
+
+Build a **simple, internal web application** that allows a school to:
+
+* Record school fee payments quickly
+* Upload bank statements and convert them to tables
+* Match recorded payments to real bank transactions
+* Handle POS, transfer, cash, and code-only transactions
+* Confirm payments safely (no blind automation)
+* Support single and multi-student payments
+* Maintain a clear audit trail
+
+The system prioritizes **clarity, control, and speed** over heavy automation.
+
+---
+
+## 2. USERS & ROLES
+
+### Admin / Bursary
+
+* Records payments only
+* Does NOT confirm payments
+* Does NOT see bank statements
+
+### Owner (Super Admin)
+
+* Uploads bank statements
+* Confirms or rejects matches
+* Allocates payments across multiple students
+* Can reverse confirmations
+
+---
+
+## 3. CORE PRINCIPLES (NON-NEGOTIABLE)
+
+1. Recording ≠ Confirmation
+2. No blind auto-confirmation
+3. Bank data must always be visible in full
+4. Automation may suggest, never decide
+5. Every action must be reversible (owner only)
+6. UX must reduce thinking, typing, and memory
+
+---
+
+## 4. PAYMENT METHODS SUPPORTED
+
+* Bank Transfer / USSD
+* POS (with or without description)
+* Cash (optional, controlled)
+
+---
+
+## 5. STUDENT SELECTION (RECORDING STAGE)
+
+### UI REQUIREMENTS
+
+* Class selector (dropdown)
+* Search bar (name or student ID)
+* Scrollable student list
+
+### RULES
+
+* No free-text student entry
+* Student must be selected from system
+* One student per payment record
+* Multi-student payments are handled later during reconciliation
+
+---
+
+## 6. FEE RECORDING WORKFLOW
+
+### Step 1: Admin clicks “Record Payment”
+
+### Step 2: Select Student
+
+* Filter by class
+* Search or scroll
+* Click to select one student
+
+### Step 3: Enter Payment Details
+
+* Amount (required)
+* Payment method (Transfer / POS / Cash)
+* Date (default = today)
+* Optional reference (POS slip code, etc.)
+
+### Step 4: Save Payment
+
+System:
+
+* Creates payment with status = **Recorded**
+* Locks editing (owner only)
+* Prepares data for matching
+
+Admin’s job ends here.
+
+---
+
+## 7. BANK STATEMENT UPLOAD
+
+### Supported Formats (Phase 1)
+
+* PDF (text-based)
+* CSV / Excel
+
+### Upload Flow
+
+* Owner uploads statement
+* System extracts transactions into a table
+* Debits are hidden
+* Credits are shown
+
+---
+
+## 8. BANK TRANSACTION DATA HANDLING
+
+### Store TWO versions:
+
+* `raw_description` (never modified)
+* `normalized_description` (for matching)
+
+### UI RULE
+
+Filtering must **never hide raw data**.
+Every transaction must be clickable to view full details.
+
+---
+
+## 9. TRANSACTION CLASSIFICATION
+
+Each bank credit is classified as:
+
+* Named transaction
+* Code-only transaction
+* Unmatched
+* Suggested
+* Confirmed
+* Partially reconciled
+
+---
+
+## 10. MATCHING RULES (LOCKED)
+
+A transaction is **eligible for suggestion ONLY if ALL apply**:
+
+1. Exact amount match
+2. Same calendar day
+3. Credit transaction
+4. Description contains:
+
+   * Student name OR
+   * Student ID OR
+   * Previously confirmed pattern (history)
+
+If any fails → **manual only**
+
+---
+
+## 11. CODE-ONLY TRANSACTIONS
+
+Example:
+
+```
+09FG250519100533730CY7K1A:AT124_TRF|2 MPT955lq|1924390830214565888
+```
+
+### RULES
+
+* Never auto-suggest on first occurrence
+* Always visible
+* Must be manually confirmed once
+* After confirmation, pattern is stored for history
+
+---
+
+## 12. HISTORY-AWARE MATCHING
+
+System learns ONLY from **confirmed decisions**:
+
+Stored:
+
+* Student ID
+* Amount
+* Description pattern
+* Payment method
+
+Used to:
+
+* Increase confidence
+* Trigger suggestion popup
+
+History never bypasses confirmation.
+
+---
+
+## 13. CONFIRMATION POPUP (MANDATORY)
+
+### Shown only when confidence threshold is met
+
+#### LEFT: RECORDED PAYMENT
+
+* Student
+* Class
+* Amount
+* Date
+* Method
+* Optional reference
+
+#### RIGHT: BANK TRANSACTION
+
+* Date
+* Amount
+* FULL raw description (highlight matched text)
+* Reference code
+* Statement source
+
+#### Actions
+
+* Confirm & Link
+* Reject
+* Review Later
+
+No silent confirmation.
+
+---
+
+## 14. MULTI-STUDENT PAYMENT HANDLING
+
+### Scenario
+
+One bank transaction pays for multiple students.
+
+### Workflow
+
+1. Owner opens unmatched transaction
+
+2. Clicks **Allocate to Students**
+
+3. System shows:
+
+   * Total amount
+   * Allocated
+   * Remaining
+
+4. Owner:
+
+   * Adds students
+   * Enters exact amount per student
+
+5. Validation:
+
+   * Total allocations must equal transaction amount
+
+6. Confirm:
+
+   * Creates separate payment records
+   * Links all to same bank transaction
+   * Marks transaction as fully reconciled
+
+---
+
+## 15. PARTIAL & OVERPAYMENTS
+
+### Underpayment
+
+* Allow partial allocation
+* Remaining stays unmatched
+
+### Overpayment
+
+* Allow credit balance
+* Or flag for refund
+
+---
+
+## 16. REVERSALS
+
+* Owner only
+* Reversal undoes:
+
+  * Student balances
+  * Transaction linkage
+  * History impact
+* All reversals are logged
+
+---
+
+## 17. UI PAGES REQUIRED
+
+1. Login (Admin / Owner)
+2. Dashboard
+3. Record Payment
+4. Recorded Payments (Unconfirmed)
+5. Bank Statement Upload
+6. Transactions Table
+7. Confirmation & Allocation Screen
+8. Audit / Logs
+
+---
+
+## 18. UX REQUIREMENTS
+
+* One primary action per screen
+* Numbers (amount/date) visually dominant
+* Side-by-side comparison for confirmation
+* No required typing during confirmation
+* Filters: Today, Unmatched, Suggested, Code-Only
+* Fast load, no page reloads
+
+---
+
+## 19. DATA MODELS (MINIMUM)
+
+### Student
+
+* id
+* name
+* class
+* student_id
+* total_fees
+* balance
+
+### Payment
+
+* id
+* student_id
+* amount
+* method
+* date
+* status
+* recorded_by
+
+### BankTransaction
+
+* id
+* date
+* amount
+* raw_description
+* normalized_description
+* reference
+* status
+
+### Allocation
+
+* payment_id
+* bank_transaction_id
+* amount
+
+### History
+
+* student_id
+* amount
+* description_pattern
+* confirmed_at
+
+---
+
+## 20. TECH STACK (RECOMMENDED)
+
+* Web App (responsive)
+* Replit hosting
+* Backend: Node.js (Express)
+* DB: SQLite / Firestore
+* Auth: Email + Password
+* No mobile app (yet)
+
+---
+
+## 21. SUCCESS CRITERIA
+
+System is successful if:
+
+* Admin records payment in < 30 seconds
+* Owner confirms with confidence
+* POS/code-only payments are traceable
+* No disputes over “who paid”
+* Manual books are no longer needed
+
+---
+
+## FINAL NOTE (IMPORTANT)
+
+This system is **not a payment gateway**.
+It is a **financial control and reconciliation tool**.
+
+Build simple. Build correct. Build safe.
+
+---
+
+If you want next, I can:
+
+* Turn this into **Replit step-by-step tasks**
+* Convert to **API endpoints**
+* Create **DB schema SQL**
+* Write **pseudo-code for matching logic**
+
+Say what you want next.
