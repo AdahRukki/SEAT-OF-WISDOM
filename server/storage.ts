@@ -1183,20 +1183,36 @@ export class DatabaseStorage implements IStorage {
     if (schoolId) conditions.push(eq(feeTypes.schoolId, schoolId));
     // Note: classId not used for payments filtering as payments follow the student regardless of class
 
-    let query = db
+    const results = await db
       .select()
       .from(payments)
       .leftJoin(studentFees, eq(payments.studentFeeId, studentFees.id))
       .leftJoin(feeTypes, eq(studentFees.feeTypeId, feeTypes.id))
       .leftJoin(students, eq(payments.studentId, students.id))
       .leftJoin(users, eq(students.userId, users.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(payments.paymentDate));
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
+    const recordedByUserIds = results.map(r => r.payments.recordedBy).filter(Boolean) as string[];
+    const uniqueRecordedByIds = Array.from(new Set(recordedByUserIds));
+    
+    const recordedByUsers: Record<string, any> = {};
+    if (uniqueRecordedByIds.length > 0) {
+      const recordedByUsersData = await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+          role: users.role,
+        })
+        .from(users)
+        .where(sql`${users.id} IN ${uniqueRecordedByIds}`);
+      
+      recordedByUsersData.forEach(u => {
+        recordedByUsers[u.id] = u;
+      });
     }
-
-    const results = await query;
 
     return results.map(({ payments: payment, student_fees: studentFee, fee_types: feeType, students: student, users: user }) => ({
       ...payment,
@@ -1207,7 +1223,8 @@ export class DatabaseStorage implements IStorage {
       student: student ? {
         ...student,
         user: user
-      } : null
+      } : null,
+      recordedBy: payment.recordedBy ? recordedByUsers[payment.recordedBy] : null
     }));
   }
 

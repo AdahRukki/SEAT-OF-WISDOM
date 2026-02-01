@@ -133,7 +133,7 @@ import type {
   StudentWithDetails,
   FeeType,
   StudentFee,
-  Payment,
+  PaymentWithDetails,
   School as SchoolType 
 } from "@shared/schema";
 import { 
@@ -620,7 +620,7 @@ export default function AdminDashboard() {
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
 
-  const { data: payments = [] } = useQuery<Payment[]>({ 
+  const { data: payments = [] } = useQuery<PaymentWithDetails[]>({ 
     queryKey: ['/api/admin/payments', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
     queryFn: () => {
       let url = '/api/admin/payments?';
@@ -4159,25 +4159,25 @@ export default function AdminDashboard() {
                         payments.map((payment) => (
                           <tr key={payment.id}>
                             <td className="px-4 py-3">
-                              {new Date(payment.paymentDate).toLocaleDateString()}
+                              {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString() : 'N/A'}
                             </td>
                             <td className="px-4 py-3 font-medium">
                               {payment.student?.user?.firstName} {payment.student?.user?.lastName}
                             </td>
                             <td className="px-4 py-3">
-                              {payment.studentFee?.feeType?.name}
+                              {payment.studentFee?.feeType?.name || 'N/A'}
                             </td>
                             <td className="px-4 py-3">
                               ₦{parseFloat(payment.amount).toLocaleString()}
                             </td>
                             <td className="px-4 py-3 capitalize">
-                              {payment.paymentMethod}
+                              {payment.paymentMethod || 'N/A'}
                             </td>
                             <td className="px-4 py-3">
                               {payment.reference || 'N/A'}
                             </td>
                             <td className="px-4 py-3">
-                              {payment.recordedBy?.firstName} {payment.recordedBy?.lastName}
+                              {payment.recordedBy?.firstName || ''} {payment.recordedBy?.lastName || ''}
                             </td>
                           </tr>
                         ))
