@@ -242,9 +242,9 @@ export function PaymentRecording({
 
   const filteredStudents = students.filter(
     (s) =>
-      (s.user?.firstName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (s.user?.lastName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (s.studentId?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+      s.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.studentId.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getStatusBadge = (status: string) => {
@@ -333,10 +333,10 @@ export function PaymentRecording({
                               onClick={() => handleStudentSelect(student)}
                             >
                               <div className="font-medium">
-                                {student.user?.lastName} {student.user?.firstName}
+                                {student.lastName} {student.firstName}
                               </div>
                               <div className="text-sm text-muted-foreground">
-                                ID: {student.studentId} | {student.class?.name || "N/A"}
+                                ID: {student.studentId} | {student.className || "N/A"}
                               </div>
                             </div>
                           ))
@@ -350,10 +350,10 @@ export function PaymentRecording({
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="font-medium">
-                                {selectedStudent.user?.lastName} {selectedStudent.user?.firstName}
+                                {selectedStudent.lastName} {selectedStudent.firstName}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                ID: {selectedStudent.studentId} | {selectedStudent.class?.name || "N/A"}
+                                ID: {selectedStudent.studentId} | {selectedStudent.className || "N/A"}
                               </p>
                             </div>
                             <Button
