@@ -240,12 +240,13 @@ export function PaymentRecording({
     form.setValue("studentId", student.id);
   };
 
-  const filteredStudents = students.filter(
-    (s) =>
-      s.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.studentId.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredStudents = students.filter((s) => {
+    const query = searchQuery.toLowerCase();
+    const firstName = (s.firstName || '').toLowerCase();
+    const lastName = (s.lastName || '').toLowerCase();
+    const studentId = (s.studentId || '').toLowerCase();
+    return firstName.includes(query) || lastName.includes(query) || studentId.includes(query);
+  });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
