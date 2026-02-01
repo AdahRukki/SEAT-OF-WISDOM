@@ -82,16 +82,17 @@ const upload = multer({
     const allowedMimes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
       'application/vnd.ms-excel', // .xls
-      'text/csv' // .csv
+      'text/csv', // .csv
+      'application/pdf' // .pdf
     ];
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only Excel (.xlsx, .xls) and CSV files are allowed'));
+      cb(new Error('Only PDF, Excel (.xlsx, .xls) and CSV files are allowed'));
     }
   },
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+    fileSize: 10 * 1024 * 1024 // 10MB limit for PDFs
   }
 });
 
