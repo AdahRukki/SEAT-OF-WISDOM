@@ -3255,10 +3255,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Scores
             </TabsTrigger>
-            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">Ratings</TabsTrigger>
-            <TabsTrigger value="attendance" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Attendance
-            </TabsTrigger>
+            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">Ratings & Attendance</TabsTrigger>
             <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
               Finance
             </TabsTrigger>
@@ -3266,16 +3263,11 @@ export default function AdminDashboard() {
               Reports
             </TabsTrigger>
             <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Users
+              Users & Settings
             </TabsTrigger>
             {user.role === 'admin' && (
               <TabsTrigger value="news" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
                 News & Alerts
-              </TabsTrigger>
-            )}
-            {user.role === 'admin' && (
-              <TabsTrigger value="settings" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-                Settings
               </TabsTrigger>
             )}
           </TabsList>
@@ -3907,11 +3899,7 @@ export default function AdminDashboard() {
               currentSession="2024/2025"
               userSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
             />
-          </TabsContent>
-
-          {/* Financial Management Tab */}
-          {/* Attendance Tab */}
-          <TabsContent value="attendance" className="space-y-6 table-container">
+            <Separator className="my-6" />
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -4773,10 +4761,7 @@ export default function AdminDashboard() {
                 </div>
               </DialogContent>
             </Dialog>
-          </TabsContent>
-
-          {/* Settings Tab */}
-          <TabsContent value="settings" className="space-y-6 table-container">
+            <Separator className="my-6" />
             <Card>
               <CardHeader>
                 <CardTitle>Academy Settings</CardTitle>
