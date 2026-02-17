@@ -289,6 +289,8 @@ export default function AdminDashboard() {
   const [editFeeTypeAmount, setEditFeeTypeAmount] = useState("");
   const [editFeeTypeCategory, setEditFeeTypeCategory] = useState("");
   const [editFeeTypeDescription, setEditFeeTypeDescription] = useState("");
+  const [isDeleteFeeTypeDialogOpen, setIsDeleteFeeTypeDialogOpen] = useState(false);
+  const [feeTypeToDelete, setFeeTypeToDelete] = useState<FeeType | null>(null);
   const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
   const [isPaymentHistoryDialogOpen, setIsPaymentHistoryDialogOpen] = useState(false);
@@ -1703,6 +1705,8 @@ export default function AdminDashboard() {
     },
     onSuccess: () => {
       toast({ title: "Success", description: "Fee type deleted successfully" });
+      setIsDeleteFeeTypeDialogOpen(false);
+      setFeeTypeToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
     },
     onError: () => {
@@ -4066,9 +4070,8 @@ export default function AdminDashboard() {
                               variant="ghost"
                               className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                               onClick={() => {
-                                if (confirm(`Are you sure you want to delete "${feeType.name}"? This will deactivate the fee type.`)) {
-                                  deleteFeeTypeMutation.mutate(feeType.id);
-                                }
+                                setFeeTypeToDelete(feeType);
+                                setIsDeleteFeeTypeDialogOpen(true);
                               }}
                             >
                               <Trash2 className="h-3 w-3" />
@@ -6529,6 +6532,62 @@ export default function AdminDashboard() {
                   {updateFeeTypeMutation.isPending ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Fee Type Confirmation Dialog */}
+        <Dialog open={isDeleteFeeTypeDialogOpen} onOpenChange={setIsDeleteFeeTypeDialogOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Trash2 className="h-5 w-5" />
+                Delete Fee Type
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this fee type? This action will deactivate it.
+              </DialogDescription>
+            </DialogHeader>
+            {feeTypeToDelete && (
+              <div className="p-4 border rounded-lg bg-red-50 dark:bg-red-950/20">
+                <p className="font-semibold text-gray-900 dark:text-white">{feeTypeToDelete.name}</p>
+                <p className="text-lg font-bold text-green-600 mt-1">
+                  ₦{parseFloat(feeTypeToDelete.amount).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground capitalize mt-1">{feeTypeToDelete.category}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteFeeTypeDialogOpen(false);
+                  setFeeTypeToDelete(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleteFeeTypeMutation.isPending}
+                onClick={() => {
+                  if (feeTypeToDelete) {
+                    deleteFeeTypeMutation.mutate(feeTypeToDelete.id);
+                  }
+                }}
+              >
+                {deleteFeeTypeMutation.isPending ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </>
+                )}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
