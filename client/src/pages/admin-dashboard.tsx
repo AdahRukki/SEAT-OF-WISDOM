@@ -283,6 +283,12 @@ export default function AdminDashboard() {
 
   // Fee type management states
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
+  const [isEditFeeTypeDialogOpen, setIsEditFeeTypeDialogOpen] = useState(false);
+  const [editingFeeType, setEditingFeeType] = useState<FeeType | null>(null);
+  const [editFeeTypeName, setEditFeeTypeName] = useState("");
+  const [editFeeTypeAmount, setEditFeeTypeAmount] = useState("");
+  const [editFeeTypeCategory, setEditFeeTypeCategory] = useState("");
+  const [editFeeTypeDescription, setEditFeeTypeDescription] = useState("");
   const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
   const [isPaymentHistoryDialogOpen, setIsPaymentHistoryDialogOpen] = useState(false);
@@ -1670,6 +1676,37 @@ export default function AdminDashboard() {
         description: "Failed to create fee type", 
         variant: "destructive" 
       });
+    }
+  });
+
+  const updateFeeTypeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { name?: string; amount?: string; category?: string; description?: string } }) => {
+      return await apiRequest(`/api/admin/fee-types/${id}`, {
+        method: 'PUT',
+        body: data
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Fee type updated successfully" });
+      setIsEditFeeTypeDialogOpen(false);
+      setEditingFeeType(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update fee type", variant: "destructive" });
+    }
+  });
+
+  const deleteFeeTypeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest(`/api/admin/fee-types/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Fee type deleted successfully" });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete fee type", variant: "destructive" });
     }
   });
 
@@ -4003,17 +4040,45 @@ export default function AdminDashboard() {
                               </span>
                             </td>
                             <td className="px-4 py-3">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  assignFeeForm.setValue('feeTypeId', feeType.id);
-                                  setIsAssignFeeDialogOpen(true);
-                                }}
-                              >
-                                <Plus className="h-3 w-3 mr-1" />
-                                Assign to Class
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    assignFeeForm.setValue('feeTypeId', feeType.id);
+                                    setIsAssignFeeDialogOpen(true);
+                                  }}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Assign
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditingFeeType(feeType);
+                                    setEditFeeTypeName(feeType.name);
+                                    setEditFeeTypeAmount(feeType.amount);
+                                    setEditFeeTypeCategory(feeType.category);
+                                    setEditFeeTypeDescription(feeType.description || "");
+                                    setIsEditFeeTypeDialogOpen(true);
+                                  }}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to delete "${feeType.name}"? This will deactivate the fee type.`)) {
+                                      deleteFeeTypeMutation.mutate(feeType.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -6381,6 +6446,97 @@ export default function AdminDashboard() {
                 </div>
               </form>
             </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Fee Type Dialog */}
+        <Dialog open={isEditFeeTypeDialogOpen} onOpenChange={setIsEditFeeTypeDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Fee Type</DialogTitle>
+              <DialogDescription>
+                Update the fee type details
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="edit-fee-name">Fee Name *</Label>
+                <Input
+                  id="edit-fee-name"
+                  value={editFeeTypeName}
+                  onChange={(e) => setEditFeeTypeName(e.target.value)}
+                  placeholder="e.g. Tuition Fee"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-fee-amount">Amount (₦) *</Label>
+                <Input
+                  id="edit-fee-amount"
+                  value={editFeeTypeAmount}
+                  onChange={(e) => setEditFeeTypeAmount(e.target.value)}
+                  placeholder="e.g. 50000"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-fee-category">Category</Label>
+                <Select value={editFeeTypeCategory} onValueChange={setEditFeeTypeCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tuition">Tuition</SelectItem>
+                    <SelectItem value="registration">Registration</SelectItem>
+                    <SelectItem value="uniform">Uniform</SelectItem>
+                    <SelectItem value="books">Books</SelectItem>
+                    <SelectItem value="transport">Transport</SelectItem>
+                    <SelectItem value="feeding">Feeding</SelectItem>
+                    <SelectItem value="exam">Exam</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-fee-description">Description</Label>
+                <Input
+                  id="edit-fee-description"
+                  value={editFeeTypeDescription}
+                  onChange={(e) => setEditFeeTypeDescription(e.target.value)}
+                  placeholder="Optional description"
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditFeeTypeDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!editingFeeType || !editFeeTypeName.trim() || !editFeeTypeAmount.trim()) return;
+                    updateFeeTypeMutation.mutate({
+                      id: editingFeeType.id,
+                      data: {
+                        name: editFeeTypeName,
+                        amount: editFeeTypeAmount.replace(/,/g, ''),
+                        category: editFeeTypeCategory,
+                        description: editFeeTypeDescription,
+                      }
+                    });
+                  }}
+                  disabled={updateFeeTypeMutation.isPending || !editFeeTypeName.trim() || !editFeeTypeAmount.trim()}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {updateFeeTypeMutation.isPending ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Edit className="h-4 w-4 mr-2" />
+                  )}
+                  {updateFeeTypeMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 

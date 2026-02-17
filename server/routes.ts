@@ -2384,6 +2384,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/admin/fee-types/:id', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { id } = req.params;
+      const { name, amount, category, description } = req.body;
+      
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (amount !== undefined) updateData.amount = String(amount).replace(/,/g, '');
+      if (category !== undefined) updateData.category = category;
+      if (description !== undefined) updateData.description = description;
+
+      const updated = await storage.updateFeeType(id, updateData);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update fee type error:", error);
+      res.status(500).json({ error: "Failed to update fee type" });
+    }
+  });
+
+  app.delete('/api/admin/fee-types/:id', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteFeeType(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete fee type error:", error);
+      res.status(500).json({ error: "Failed to delete fee type" });
+    }
+  });
+
   app.get('/api/admin/fee-types', authenticate, requireAdmin, async (req, res) => {
     try {
       const user = (req as any).user;
