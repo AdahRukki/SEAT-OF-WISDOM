@@ -4006,86 +4006,79 @@ export default function AdminDashboard() {
                 </Tooltip>
               </CardHeader>
               <CardContent>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Category</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {feeTypes.length === 0 ? (
-                        <tr>
-                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
-                            No fee types created yet. Click "Create Fee Type" to add one.
-                          </td>
-                        </tr>
-                      ) : (
-                        feeTypes.map((feeType) => (
-                          <tr key={feeType.id}>
-                            <td className="px-4 py-3 font-medium">{feeType.name}</td>
-                            <td className="px-4 py-3">₦{parseFloat(feeType.amount).toLocaleString()}</td>
-                            <td className="px-4 py-3 capitalize">{feeType.category}</td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-1 text-xs rounded-full ${
+                {feeTypes.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-4 text-center">
+                    No fee types created yet. Click "Create Fee Type" to add one.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {feeTypes.map((feeType) => (
+                      <div key={feeType.id} className="border rounded-lg p-3 sm:p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="font-semibold text-gray-900 dark:text-white">{feeType.name}</span>
+                              <span className={`px-2 py-0.5 text-xs rounded-full ${
                                 feeType.isActive 
                                   ? 'bg-green-100 text-green-800' 
                                   : 'bg-red-100 text-red-800'
                               }`}>
                                 {feeType.isActive ? 'Active' : 'Inactive'}
                               </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    assignFeeForm.setValue('feeTypeId', feeType.id);
-                                    setIsAssignFeeDialogOpen(true);
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Assign
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setEditingFeeType(feeType);
-                                    setEditFeeTypeName(feeType.name);
-                                    setEditFeeTypeAmount(feeType.amount);
-                                    setEditFeeTypeCategory(feeType.category);
-                                    setEditFeeTypeDescription(feeType.description || "");
-                                    setIsEditFeeTypeDialogOpen(true);
-                                  }}
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => {
-                                    if (confirm(`Are you sure you want to delete "${feeType.name}"? This will deactivate the fee type.`)) {
-                                      deleteFeeTypeMutation.mutate(feeType.id);
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                            </div>
+                            <div className="text-xl font-bold text-green-600">
+                              ₦{parseFloat(feeType.amount).toLocaleString()}
+                            </div>
+                            <div className="text-xs text-muted-foreground capitalize mt-1">
+                              {feeType.category}{feeType.description ? ` - ${feeType.description}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs"
+                              onClick={() => {
+                                assignFeeForm.setValue('feeTypeId', feeType.id);
+                                setIsAssignFeeDialogOpen(true);
+                              }}
+                            >
+                              <Plus className="h-3 w-3 sm:mr-1" />
+                              <span className="hidden sm:inline">Assign</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => {
+                                setEditingFeeType(feeType);
+                                setEditFeeTypeName(feeType.name);
+                                setEditFeeTypeAmount(feeType.amount);
+                                setEditFeeTypeCategory(feeType.category);
+                                setEditFeeTypeDescription(feeType.description || "");
+                                setIsEditFeeTypeDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete "${feeType.name}"? This will deactivate the fee type.`)) {
+                                  deleteFeeTypeMutation.mutate(feeType.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
