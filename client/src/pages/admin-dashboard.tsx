@@ -326,11 +326,13 @@ export default function AdminDashboard() {
     },
   });
 
-  const assignFeeForm = useForm<Pick<AssignFeeForm, 'feeTypeId' | 'classId'>>({
-    resolver: zodResolver(assignFeeSchema.pick({ feeTypeId: true, classId: true })),
+  const assignFeeForm = useForm<Pick<AssignFeeForm, 'feeTypeId' | 'classId' | 'term' | 'session'>>({
+    resolver: zodResolver(assignFeeSchema.pick({ feeTypeId: true, classId: true, term: true, session: true })),
     defaultValues: {
       feeTypeId: "",
       classId: "",
+      term: "First Term",
+      session: "2024/2025",
     },
   });
 
@@ -1848,13 +1850,11 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleAssignFeeSubmit = (data: Pick<AssignFeeForm, 'feeTypeId' | 'classId'>) => {
+  const handleAssignFeeSubmit = (data: Pick<AssignFeeForm, 'feeTypeId' | 'classId' | 'term' | 'session'>) => {
     const fullData: AssignFeeForm = {
       ...data,
-      term: selectedFinanceTerm,
-      session: selectedFinanceSession,
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-      notes: `Assigned for ${selectedFinanceTerm} ${selectedFinanceSession}`,
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      notes: `Assigned for ${data.term} ${data.session}`,
     };
     assignFeeMutation.mutate(fullData);
   };
@@ -3993,7 +3993,6 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 font-medium">{feeType.name}</td>
                             <td className="px-4 py-3">₦{parseFloat(feeType.amount).toLocaleString()}</td>
                             <td className="px-4 py-3 capitalize">{feeType.category}</td>
-                            <td className="px-4 py-3">{feeType.description || 'N/A'}</td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-1 text-xs rounded-full ${
                                 feeType.isActive 
@@ -4002,6 +4001,19 @@ export default function AdminDashboard() {
                               }`}>
                                 {feeType.isActive ? 'Active' : 'Inactive'}
                               </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  assignFeeForm.setValue('feeTypeId', feeType.id);
+                                  setIsAssignFeeDialogOpen(true);
+                                }}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Assign to Class
+                              </Button>
                             </td>
                           </tr>
                         ))
@@ -4012,106 +4024,6 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {/* Student Fee Assignments */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Student Fee Assignments</CardTitle>
-                  <CardDescription>
-                    Assign fees to students for {selectedFinanceTerm} {selectedFinanceSession} (set globally)
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button onClick={() => setIsAssignFeeDialogOpen(true)}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Assign Fees
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Assign fees to all students in a class</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {classes.length > 0 ? (
-                    <div className="space-y-3">
-                      {classes.map((classItem) => {
-                        const classStudents = allStudents.filter(student => student.classId === classItem.id);
-                        const classStudentFees = studentFees.filter(sf => 
-                          classStudents.some(student => student.id === sf.studentId)
-                        );
-                        
-                        // Group fees by fee type for this class
-                        const feesByType = classStudentFees.reduce((acc, sf) => {
-                          const feeType = feeTypes.find(ft => ft.id === sf.feeTypeId);
-                          if (feeType) {
-                            if (!acc[feeType.id]) {
-                              acc[feeType.id] = {
-                                feeType,
-                                totalAmount: 0
-                              };
-                            }
-                            acc[feeType.id].totalAmount += parseFloat(sf.amount);
-                          }
-                          return acc;
-                        }, {} as Record<string, { feeType: FeeType; totalAmount: number }>);
-
-                        return (
-                          <div key={classItem.id} className="border rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-semibold text-lg text-gray-900 dark:text-white">
-                                {classItem.name}
-                              </h4>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedPaymentClass(classItem.id);
-                                  setIsAssignFeeDialogOpen(true);
-                                }}
-                              >
-                                <Plus className="h-3 w-3 mr-1" />
-                                Assign Fee
-                              </Button>
-                            </div>
-
-                            {/* Display assigned fees for this class */}
-                            {Object.keys(feesByType).length > 0 ? (
-                              <div className="space-y-2">
-                                {Object.values(feesByType).map(({ feeType, totalAmount }) => (
-                                  <div key={feeType.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
-                                    <span className="font-medium text-gray-900 dark:text-white">
-                                      {feeType.name}
-                                    </span>
-                                    <span className="font-semibold text-blue-600">
-                                      ₦{totalAmount.toLocaleString()}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-center py-3 text-gray-500">
-                                <p className="text-sm">No fees assigned</p>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Classes Available</h3>
-                      <p className="text-gray-500 mb-4">Create classes first to assign fees</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Payment Records */}
             <Card>
@@ -6342,7 +6254,7 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle>Assign Fee to Class</DialogTitle>
               <DialogDescription>
-                Assign a specific fee type to all students in a selected class
+                Assign a fee type to all students in a class for a specific term and session
               </DialogDescription>
             </DialogHeader>
             <Form {...assignFeeForm}>
@@ -6396,16 +6308,54 @@ export default function AdminDashboard() {
                     </FormItem>
                   )}
                 />
-                
-                <div className="bg-gray-50 p-3 rounded-lg text-sm">
-                  <p className="font-medium">Term & Session Settings</p>
-                  <p className="text-gray-600 mt-1">
-                    Current Term: <span className="font-medium">{selectedFinanceTerm}</span><br/>
-                    Current Session: <span className="font-medium">{selectedFinanceSession}</span>
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Term and session are set globally by the school admin
-                  </p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={assignFeeForm.control}
+                    name="term"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Term *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select term" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="First Term">First Term</SelectItem>
+                            <SelectItem value="Second Term">Second Term</SelectItem>
+                            <SelectItem value="Third Term">Third Term</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={assignFeeForm.control}
+                    name="session"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Session *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select session" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="2023/2024">2023/2024</SelectItem>
+                            <SelectItem value="2024/2025">2024/2025</SelectItem>
+                            <SelectItem value="2025/2026">2025/2026</SelectItem>
+                            <SelectItem value="2026/2027">2026/2027</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
                 
                 <div className="flex justify-end space-x-2 pt-4">
