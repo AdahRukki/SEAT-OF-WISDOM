@@ -66,6 +66,7 @@ import {
   TooltipTrigger 
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -3269,12 +3270,7 @@ export default function AdminDashboard() {
             </TabsTrigger>
             {user.role === 'admin' && (
               <TabsTrigger value="news" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-                News
-              </TabsTrigger>
-            )}
-            {user.role === 'admin' && (
-              <TabsTrigger value="notifications" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-                Notifications
+                News & Alerts
               </TabsTrigger>
             )}
             {user.role === 'admin' && (
@@ -4970,16 +4966,11 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* News Tab - Main Admin Only */}
+          {/* News & Notifications Tab - Main Admin Only */}
           {user.role === 'admin' && (
             <TabsContent value="news" className="space-y-6">
               <NewsManagement />
-            </TabsContent>
-          )}
-
-          {/* Notifications Tab - Main Admin Only */}
-          {user.role === 'admin' && (
-            <TabsContent value="notifications" className="space-y-6">
+              <Separator />
               <NotificationsManagement />
             </TabsContent>
           )}
