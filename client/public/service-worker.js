@@ -1,85 +1,101 @@
-const CACHE_NAME = 'sowa-v1.1';
-// Only cache assets that exist in both development and production
-const urlsToCache = [
+const CACHE_NAME = 'sowa-v2';
+const APP_SHELL = [
   '/',
+  '/portal/login',
+  '/portal/admin',
   '/manifest.json',
-  '/favicon.png'
+  '/favicon.png',
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('SW: Opened cache');
-        // Cache basic assets, ignore failures for flexibility
-        return Promise.allSettled(
-          urlsToCache.map(url => 
-            cache.add(url).catch(err => console.log('SW: Failed to cache:', url))
-          )
-        );
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      return Promise.allSettled(
+        APP_SHELL.map(url => cache.add(url).catch(() => {}))
+      );
+    })
   );
   self.skipWaiting();
 });
 
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((names) =>
+      Promise.all(
+        names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n))
+      )
+    )
+  );
+  self.clients.claim();
+});
+
 self.addEventListener('fetch', (event) => {
-  // Only cache GET requests
-  if (event.request.method !== 'GET') {
-    return event.respondWith(fetch(event.request));
+  const { request } = event;
+  const url = new URL(request.url);
+
+  if (request.method !== 'GET') {
+    event.respondWith(
+      fetch(request).catch(() =>
+        new Response(JSON.stringify({ queued: true, offline: true }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
+    return;
+  }
+
+  const isStaticAsset =
+    url.pathname.startsWith('/assets/') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.endsWith('.woff2') ||
+    url.pathname.endsWith('.png') ||
+    url.pathname.endsWith('.jpg') ||
+    url.pathname.endsWith('.svg');
+
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const networkFetch = fetch(request).then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        });
+        return cached || networkFetch;
+      })
+    );
+    return;
+  }
+
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
   }
 
   event.respondWith(
-    caches.match(event.request)
-      .then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
+    fetch(request)
+      .then((response) => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
-        
-        return fetch(event.request).then((response) => {
-          // Only cache successful responses
-          if (!response || response.status !== 200) {
-            return response;
-          }
-          
-          // Cache static assets (JS, CSS, images, fonts)
-          const url = new URL(event.request.url);
-          const shouldCache = 
-            url.origin === location.origin && (
-              event.request.url.includes('/assets/') ||
-              event.request.url.endsWith('.js') ||
-              event.request.url.endsWith('.css') ||
-              event.request.url.endsWith('.png') ||
-              event.request.url.endsWith('.jpg') ||
-              event.request.url.endsWith('.woff2')
-            );
-          
-          if (shouldCache) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          
-          return response;
-        }).catch(() => {
-          // Return offline page if available
-          return caches.match('/');
-        });
+        return response;
       })
-  );
-});
-
-self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+      .catch(() =>
+        caches.match(request).then((cached) => cached || caches.match('/'))
+      )
   );
 });

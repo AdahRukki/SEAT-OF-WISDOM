@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
+import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue } from "@/lib/offline-queue";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
@@ -158,6 +159,14 @@ export default function AdminDashboard() {
   
   // Firebase sync status
   const [syncStatus, setSyncStatus] = useState(firebaseSync.getSyncStatus());
+
+  // Offline status
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [offlineSyncState, setOfflineSyncState] = useState<{
+    syncing: boolean;
+    pendingCount: number;
+    justSynced: boolean;
+  }>({ syncing: false, pendingCount: getPendingCount(), justSynced: false });
   
   // Password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -527,6 +536,24 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Offline detection and sync listener
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const removeSyncListener = addSyncListener((status) => {
+      setOfflineSyncState(status);
+    });
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      removeSyncListener();
+    };
+  }, []);
+
   // School-aware queries  
   const { data: classes = [] } = useQuery<Class[]>({ 
     queryKey: ['/api/admin/classes', selectedSchoolId],
@@ -725,16 +752,27 @@ export default function AdminDashboard() {
 
   const createStudentMutation = useMutation({
     mutationFn: async (studentData: any) => {
-      return await apiRequest('/api/admin/students', {
+      return await queuedApiRequest('/api/admin/students', {
         method: 'POST',
         body: {
           ...studentData,
           parentWhatsapp: studentData.parentWhatsApp,
           schoolId: selectedSchoolId || user?.schoolId
         }
-      });
+      }, 'create-student');
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
+      if (response?.queued) {
+        toast({
+          title: "Saved Offline",
+          description: "You are offline. Student will be created when you reconnect. Do not enter scores or payments until synced.",
+        });
+        setIsStudentDialogOpen(false);
+        setCurrentStep(1);
+        setStudentCreationForm({ firstName: "", lastName: "", middleName: "", email: "", password: "", classId: "", dateOfBirth: "", parentWhatsApp: "", address: "" });
+        setStudentFormErrors({});
+        return;
+      }
       toast({
         title: "Success",
         description: "Student created successfully with auto-generated SOWA ID",
@@ -903,24 +941,27 @@ export default function AdminDashboard() {
 
   const updateScoresMutation = useMutation({
     mutationFn: async (scoresArray: any[]) => {
-      // Use the bulk update endpoint for better performance
-      return await apiRequest('/api/admin/scores/bulk-update', {
+      return await queuedApiRequest('/api/admin/scores/bulk-update', {
         method: 'POST',
         body: { scores: scoresArray }
-      });
+      }, 'save-scores');
     },
     onSuccess: (response) => {
-      // Handle both full success and partial failures (207)
-      if (response.errors && response.errors.length > 0) {
+      if (response?.queued) {
+        toast({ 
+          title: "Saved Offline", 
+          description: "You are offline. Scores saved locally and will sync when connected.",
+        });
+        return;
+      }
+      if (response?.errors && response.errors.length > 0) {
         const failedCount = response.errors.length;
         const successCount = response.results?.length || 0;
-        
         toast({ 
           title: "Partial Success", 
-          description: `${successCount} scores saved successfully, ${failedCount} failed. Check console for details.`,
+          description: `${successCount} scores saved successfully, ${failedCount} failed.`,
           variant: "destructive"
         });
-        
         console.warn("Score save failures:", response.errors);
       } else {
         toast({ title: "Success", description: "Scores updated successfully" });
@@ -3244,6 +3285,30 @@ export default function AdminDashboard() {
           )}
         </div>
       </header>
+
+      {/* Offline Status Banner */}
+      {(isOffline || offlineSyncState.syncing || offlineSyncState.justSynced) && (
+        <div className={`w-full px-4 py-2 text-sm font-medium text-center flex items-center justify-center gap-2 ${
+          offlineSyncState.justSynced
+            ? 'bg-green-500 text-white'
+            : offlineSyncState.syncing
+            ? 'bg-blue-500 text-white'
+            : 'bg-yellow-500 text-white'
+        }`}>
+          {offlineSyncState.justSynced ? (
+            <>✓ All changes synced successfully</>
+          ) : offlineSyncState.syncing ? (
+            <>⟳ Back online — syncing {offlineSyncState.pendingCount} pending change{offlineSyncState.pendingCount !== 1 ? 's' : ''}...</>
+          ) : (
+            <>
+              ⚠ You are offline — showing cached data
+              {offlineSyncState.pendingCount > 0 && (
+                <> · {offlineSyncState.pendingCount} change{offlineSyncState.pendingCount !== 1 ? 's' : ''} pending sync</>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">

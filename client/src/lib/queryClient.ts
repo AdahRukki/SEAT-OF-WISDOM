@@ -1,4 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { persistQueryClient } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -114,11 +116,27 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 1000 * 60 * 60,
       retry: false,
+      gcTime: 1000 * 60 * 60 * 24,
     },
     mutations: {
       retry: false,
     },
   },
 });
+
+if (typeof window !== 'undefined') {
+  const localStoragePersister = createSyncStoragePersister({
+    storage: window.localStorage,
+    key: 'sowa_query_cache',
+    throttleTime: 1000,
+  });
+
+  persistQueryClient({
+    queryClient,
+    persister: localStoragePersister,
+    maxAge: 1000 * 60 * 60 * 24,
+    buster: 'sowa-v1',
+  });
+}
