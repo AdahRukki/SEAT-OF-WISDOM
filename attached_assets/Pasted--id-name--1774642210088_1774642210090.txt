@@ -1,0 +1,75 @@
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 0  │ seatofwisdom       │ cluster  │ 3580 │ online    │ 0%       │ 162.8mb  │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+root@srv1076016:~# cd /var/www/sowa
+-bash: cd: /var/www/sowa: No such file or directory
+root@srv1076016:~# cd /var/www/seatofwisdom
+-bash: cd: /var/www/seatofwisdom: No such file or directory
+root@srv1076016:~# cd /var/www/seatofwisdom
+-bash: cd: /var/www/seatofwisdom: No such file or directory
+root@srv1076016:~# pm2 describe seatofwisdom
+ Describing process with id 0 - name seatofwisdom
+┌───────────────────┬──────────────────────────────────────────┐
+│ status            │ online                                   │
+│ name              │ seatofwisdom                             │
+│ namespace         │ default                                  │
+│ version           │ 1.0.0                                    │
+│ restarts          │ 3580                                     │
+│ uptime            │ 21D                                      │
+│ script path       │ /var/www/SEAT-OF-WISDOM/dist/index.js    │
+│ script args       │ N/A                                      │
+│ error log path    │ /root/.pm2/logs/seatofwisdom-error-0.log │
+│ out log path      │ /root/.pm2/logs/seatofwisdom-out-0.log   │
+│ pid path          │ /root/.pm2/pids/seatofwisdom-0.pid       │
+│ interpreter       │ node                                     │
+│ interpreter args  │ N/A                                      │
+│ script id         │ 0                                        │
+│ exec cwd          │ /var/www/SEAT-OF-WISDOM                  │
+│ exec mode         │ cluster_mode                             │
+│ node.js version   │ 20.19.5                                  │
+│ node env          │ production                               │
+│ watch & reload    │ ✘                                        │
+│ unstable restarts │ 0                                        │
+│ created at        │ 2026-03-06T10:33:26.513Z                 │
+└───────────────────┴──────────────────────────────────────────┘
+Process configuration
+┌────────────┬──────────────────┐
+│ JWT_SECRET │ sowa_secret_2025 │
+└────────────┴──────────────────┘
+ Actions available
+┌────────────────────────┐
+│ km:heapdump            │
+│ km:cpu:profiling:start │
+│ km:cpu:profiling:stop  │
+│ km:heap:sampling:start │
+│ km:heap:sampling:stop  │
+└────────────────────────┘
+ Trigger via: pm2 trigger seatofwisdom <action_name>
+
+ Code metrics value
+┌────────────────────────┬───────────┐
+│ Used Heap Size         │ 60.87 MiB │
+│ Heap Usage             │ 90.47 %   │
+│ Heap Size              │ 67.28 MiB │
+│ Event Loop Latency p95 │ 1.42 ms   │
+│ Event Loop Latency     │ 0.63 ms   │
+│ Active handles         │ 1         │
+│ Active requests        │ 0         │
+│ HTTP                   │ 0 req/min │
+│ HTTP P95 Latency       │ 101 ms    │
+│ HTTP Mean Latency      │ 7 ms      │
+└────────────────────────┴───────────┘
+ Divergent env variables from local env
+┌────────────────┬───────────────────────────────────┐
+│ SSH_CONNECTION │ 105.118.1.106 8672 72.61.145.3 22 │
+│ XDG_SESSION_ID │ 498                               │
+│ SSH_CLIENT     │ 105.118.1.106 8672 22             │
+│ SSH_TTY        │ /dev/pts/8                        │
+└────────────────┴───────────────────────────────────┘
+
+ Add your own code metrics: http://bit.ly/code-metrics
+ Use `pm2 logs seatofwisdom [--lines 1000]` to display logs
+ Use `pm2 env 0` to display environment variables
+ Use `pm2 monit` to monitor CPU and Memory usage seatofwisdom
