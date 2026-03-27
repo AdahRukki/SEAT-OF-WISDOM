@@ -28,3 +28,12 @@ Promise.race([ensureFirebaseReady(), timeoutPromise])
     // Render app anyway - Firebase features may be degraded but app should still work
     renderApp();
   });
+
+// Register service worker for offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(() => console.log('✓ Service worker registered'))
+      .catch((err) => console.warn('Service worker registration failed:', err));
+  });
+}
