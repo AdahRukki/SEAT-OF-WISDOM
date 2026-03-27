@@ -3242,6 +3242,31 @@ export default function AdminDashboard() {
                   </TooltipContent>
                 </Tooltip>
               )}
+
+              {/* Fallback Install Instructions Button */}
+              {!canInstall && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        toast({
+                          title: "Download App",
+                          description: "Look for the download icon (⬇️) in your address bar. Click it and select 'Install' to add SOWA Academy to your desktop.",
+                        });
+                      }}
+                      className="px-2 sm:px-4"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span className="hidden sm:inline sm:ml-2">Download</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Download app instructions</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
               
               {/* Logout Button - Icon only on mobile */}
               <Tooltip>
