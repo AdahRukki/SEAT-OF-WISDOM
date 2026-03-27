@@ -3243,30 +3243,39 @@ export default function AdminDashboard() {
                 </Tooltip>
               )}
 
-              {/* Fallback Install Instructions Button */}
-              {!canInstall && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        toast({
-                          title: "Download App",
-                          description: "Look for the download icon (⬇️) in your address bar. Click it and select 'Install' to add SOWA Academy to your desktop.",
-                        });
-                      }}
-                      className="px-2 sm:px-4"
-                    >
-                      <Download className="h-4 w-4" />
-                      <span className="hidden sm:inline sm:ml-2">Download</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Download app instructions</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
+              {/* Always-visible Download Button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={async () => {
+                      // Try to install if available, otherwise try browser install
+                      if (canInstall) {
+                        await installApp();
+                      } else {
+                        // Fallback: try to trigger browser install prompt
+                        const event = (window as any).deferredPrompt;
+                        if (event) {
+                          event.prompt();
+                        } else {
+                          toast({
+                            title: "Download App",
+                            description: "Click the download icon (⬇️) in your address bar, or use your browser's menu to 'Install app'.",
+                          });
+                        }
+                      }
+                    }}
+                    className="px-2 sm:px-4"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline sm:ml-2">Download</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Download and install the app</p>
+                </TooltipContent>
+              </Tooltip>
               
               {/* Logout Button - Icon only on mobile */}
               <Tooltip>
