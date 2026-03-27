@@ -6757,6 +6757,39 @@ export default function AdminDashboard() {
                   {updateGlobalSettings.isPending ? "Updating..." : "Update Settings"}
                 </Button>
               </div>
+
+              {/* Download App Section */}
+              <div className="mt-8 pt-6 border-t">
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-sm flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Download App
+                  </h3>
+                  <p className="text-xs text-gray-600">
+                    Install Seat of Wisdom Academy as a desktop application. It will work offline and appear in your Start menu.
+                  </p>
+                  <Button 
+                    className="w-full"
+                    onClick={() => {
+                      if (window.location.protocol === 'https:') {
+                        toast({
+                          title: "Install Instructions",
+                          description: "Click the install icon (⬇️) in your address bar at the top right, then click 'Install'.",
+                        });
+                      } else {
+                        toast({
+                          title: "HTTPS Required",
+                          description: "The app must be accessed over HTTPS to install. It's already secure on https://yourdomain.com",
+                          variant: "destructive"
+                        });
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Install App
+                  </Button>
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
