@@ -1,8 +1,7 @@
-const CACHE_NAME = 'sowa-v2';
+const CACHE_NAME = 'sowa-v3';
 const APP_SHELL = [
   '/',
   '/portal/login',
-  '/portal/admin',
   '/manifest.json',
   '/favicon.png',
 ];
@@ -11,7 +10,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.allSettled(
-        APP_SHELL.map(url => cache.add(url).catch(() => {}))
+        APP_SHELL.map(url =>
+          cache.add(url).catch(() => {})
+        )
       );
     })
   );
@@ -32,6 +33,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // Skip non-http(s) schemes (chrome-extension, etc.)
+  if (!url.protocol.startsWith('http')) return;
+
+  // Skip cross-origin requests
+  if (url.origin !== self.location.origin) return;
 
   if (request.method !== 'GET') {
     event.respondWith(
@@ -63,7 +70,7 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
           return response;
-        });
+        }).catch(() => cached);
         return cached || networkFetch;
       })
     );

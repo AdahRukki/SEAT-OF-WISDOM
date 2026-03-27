@@ -3243,37 +3243,40 @@ export default function AdminDashboard() {
                 </Tooltip>
               )}
 
-              {/* Always-visible Download Button */}
+              {/* Always-visible Download/Install Button */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
-                    variant="outline" 
+                    variant={canInstall ? "default" : "outline"}
                     size="sm"
                     onClick={async () => {
-                      // Try to install if available, otherwise try browser install
-                      if (canInstall) {
-                        await installApp();
-                      } else {
-                        // Fallback: try to trigger browser install prompt
-                        const event = (window as any).deferredPrompt;
-                        if (event) {
-                          event.prompt();
-                        } else {
-                          toast({
-                            title: "Download App",
-                            description: "Click the download icon (⬇️) in your address bar, or use your browser's menu to 'Install app'.",
-                          });
+                      const prompt = (window as any).deferredInstallPrompt;
+                      if (prompt) {
+                        try {
+                          await prompt.prompt();
+                          const { outcome } = await prompt.userChoice;
+                          if (outcome === 'accepted') {
+                            (window as any).deferredInstallPrompt = null;
+                            toast({ title: "App Installed!", description: "SOWA Academy is now on your desktop." });
+                          }
+                        } catch {
+                          toast({ title: "Install App", description: "Use your browser menu → 'Install app' or click ⬇️ in the address bar." });
                         }
+                      } else {
+                        toast({ 
+                          title: "Install App", 
+                          description: "In Chrome or Edge: click the ⬇️ icon in your address bar and select Install. On mobile: tap Share → Add to Home Screen.",
+                        });
                       }
                     }}
                     className="px-2 sm:px-4"
                   >
                     <Download className="h-4 w-4" />
-                    <span className="hidden sm:inline sm:ml-2">Download</span>
+                    <span className="hidden sm:inline sm:ml-2">{canInstall ? "Install App" : "Download"}</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Download and install the app</p>
+                  <p>{canInstall ? "Click to install SOWA as a desktop app" : "Download and install the app"}</p>
                 </TooltipContent>
               </Tooltip>
               
