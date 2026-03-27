@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home, Shield, HelpCircle, Key } from "lucide-react";
+import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home, Shield, HelpCircle, Key, Download } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { SEO } from "@/components/SEO";
