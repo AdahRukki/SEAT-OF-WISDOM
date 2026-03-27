@@ -1,0 +1,105 @@
+-bash: /var/www/SEAT-OF-WISDOM: Is a directory
+root@srv1076016:~# /var/www/SEAT-OF-WISDOM
+-bash: /var/www/SEAT-OF-WISDOM: Is a directory
+root@srv1076016:~# cd /var/www/SEAT-OF-WISDOM
+root@srv1076016:/var/www/SEAT-OF-WISDOM# tail -100 /root/.pm2/logs/seatofwisdom-error-0.log
+      path: [Array]
+    }
+  ]
+}
+Login error: ZodError: [
+  {
+    "code": "custom",
+    "message": "Please enter a valid email address or student ID (e.g., SOWA/1001)",
+    "path": [
+      "email"
+    ]
+  }
+]
+    at get error [as error] (file:///var/www/SEAT-OF-WISDOM/node_modules/zod/lib/index.mjs:587:31)
+    at ZodObject.parse (file:///var/www/SEAT-OF-WISDOM/node_modules/zod/lib/index.mjs:663:22)
+    at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3739:47
+    at Layer.handle [as handle_request] (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/layer.js:95:5)
+    at next (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/layer.js:95:5)
+    at /var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:284:15
+    at Function.process_params (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:346:12)
+    at next (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:280:10) {
+  issues: [
+    {
+      code: 'custom',
+      message: 'Please enter a valid email address or student ID (e.g., SOWA/1001)',
+      path: [Array]
+    }
+  ],
+  addIssue: [Function (anonymous)],
+  addIssues: [Function (anonymous)],
+  errors: [
+    {
+      code: 'custom',
+      message: 'Please enter a valid email address or student ID (e.g., SOWA/1001)',
+      path: [Array]
+    }
+  ]
+}
+Login error: ZodError: [
+  {
+    "code": "custom",
+    "message": "Please enter a valid email address or student ID (e.g., SOWA/1001)",
+    "path": [
+      "email"
+    ]
+  }
+]
+    at get error [as error] (file:///var/www/SEAT-OF-WISDOM/node_modules/zod/lib/index.mjs:587:31)
+    at ZodObject.parse (file:///var/www/SEAT-OF-WISDOM/node_modules/zod/lib/index.mjs:663:22)
+    at file:///var/www/SEAT-OF-WISDOM/dist/index.js:3739:47
+    at Layer.handle [as handle_request] (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/layer.js:95:5)
+    at next (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/layer.js:95:5)
+    at /var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:284:15
+    at Function.process_params (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:346:12)
+    at next (/var/www/SEAT-OF-WISDOM/node_modules/express/lib/router/index.js:280:10) {
+  issues: [
+    {
+      code: 'custom',
+      message: 'Please enter a valid email address or student ID (e.g., SOWA/1001)',
+      path: [Array]
+    }
+  ],
+  addIssue: [Function (anonymous)],
+  addIssues: [Function (anonymous)],
+  errors: [
+    {
+      code: 'custom',
+      message: 'Please enter a valid email address or student ID (e.g., SOWA/1001)',
+      path: [Array]
+    }
+  ]
+}
+[GET /api/payments/records] Error: error: relation "fee_payment_records" does not exist
+    at /var/www/SEAT-OF-WISDOM/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///var/www/SEAT-OF-WISDOM/node_modules/drizzle-orm/node-postgres/session.js:83:22
+    at async DatabaseStorage.getFeePaymentRecords (file:///var/www/SEAT-OF-WISDOM/dist/index.js:2731:21)
+    at async file:///var/www/SEAT-OF-WISDOM/dist/index.js:5981:23 {
+  length: 120,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '1441',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1449',
+  routine: 'parserOpenTable'
+}
