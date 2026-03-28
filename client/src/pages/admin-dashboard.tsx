@@ -110,6 +110,7 @@ import {
   Wallet,
   History,
   UserCheck,
+  UserX,
   ClipboardCheck,
   AlertCircle,
   Shield,
@@ -3597,12 +3598,17 @@ export default function AdminDashboard() {
                     {allStudents
                       .filter(student => student.classId === selectedClassForStudents)
                       .sort((a, b) => a.studentId.localeCompare(b.studentId))
-                      .map((student) => (
-                        <div key={student.id} className="flex items-center justify-between px-3 py-2 gap-2">
+                      .map((student) => {
+                        const isActive = student.user?.isActive ?? true;
+                        return (
+                        <div key={student.id} className={`flex items-center justify-between px-3 py-2 gap-2 ${!isActive ? 'opacity-60 bg-gray-50 dark:bg-gray-800/40' : ''}`}>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                              {student.user.firstName} {student.user.lastName}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                {student.user.firstName} {student.user.lastName}
+                              </p>
+                              {!isActive && <span className="text-[10px] bg-red-100 text-red-700 px-1 rounded shrink-0">Inactive</span>}
+                            </div>
                             <p className="text-xs text-gray-500">{student.studentId}</p>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -3619,19 +3625,33 @@ export default function AdminDashboard() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => {
-                                setSelectedStudentForDeletion(student);
-                                setIsDeleteStudentDialogOpen(true);
-                              }}
-                              className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                              data-testid={`button-delete-student-${student.id}`}
+                              onClick={() => updateStudentMutation.mutate({ id: student.id, isActive: !isActive })}
+                              disabled={updateStudentMutation.isPending}
+                              className={`h-7 px-2 text-xs ${isActive ? 'text-orange-600 hover:bg-orange-50' : 'text-green-600 hover:bg-green-50'}`}
+                              title={isActive ? 'Deactivate student' : 'Activate student'}
                             >
-                              <Trash2 className="h-3 w-3 sm:mr-1" />
-                              <span className="hidden sm:inline">Delete</span>
+                              {isActive ? <UserX className="h-3 w-3 sm:mr-1" /> : <UserCheck className="h-3 w-3 sm:mr-1" />}
+                              <span className="hidden sm:inline">{isActive ? 'Deactivate' : 'Activate'}</span>
                             </Button>
+                            {user?.role === 'admin' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedStudentForDeletion(student);
+                                  setIsDeleteStudentDialogOpen(true);
+                                }}
+                                className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                data-testid={`button-delete-student-${student.id}`}
+                              >
+                                <Trash2 className="h-3 w-3 sm:mr-1" />
+                                <span className="hidden sm:inline">Delete</span>
+                              </Button>
+                            )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
                       <div className="text-center py-8">
                         <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
