@@ -5796,8 +5796,15 @@ export default function AdminDashboard() {
 
             </div>
 
-            {/* Sticky footer buttons — always visible even when keyboard is open */}
-            <div className="flex flex-col-reverse sm:flex-row justify-between gap-2 px-4 sm:px-6 py-3 border-t bg-background shrink-0">
+            {/* Sticky footer — always visible, dismisses keyboard on touch */}
+            <div
+              className="flex flex-col-reverse sm:flex-row justify-between gap-2 px-4 sm:px-6 py-3 border-t bg-background shrink-0"
+              onPointerDown={() => {
+                if (document.activeElement instanceof HTMLElement) {
+                  document.activeElement.blur();
+                }
+              }}
+            >
               <Button 
                 variant="outline"
                 className="h-10 w-full sm:w-auto px-6"
