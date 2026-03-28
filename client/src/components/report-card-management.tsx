@@ -303,6 +303,11 @@ export function ReportCardManagement({
   );
   const [isGeneratingReports, setIsGeneratingReports] = useState(false);
 
+  // Filter state for generated reports list
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterClass, setFilterClass] = useState("");
+  const [filterTermSession, setFilterTermSession] = useState("");
+
   // Validation for entire school - only validates, shows class issues
   const handleValidateEntireSchool = async () => {
     setIsValidating(true);
@@ -1631,25 +1636,51 @@ export function ReportCardManagement({
     }
   };
 
+  // Build unique term/session combos from generated reports for the filter
+  const reportTermSessions = Array.from(
+    new Set(generatedReports.map((r) => `${r.term}|${r.session}`))
+  ).sort();
+
+  // Build unique classes from generated reports for the filter
+  const reportClasses = Array.from(
+    new Set(generatedReports.map((r) => r.classId))
+  ).map((cid) => {
+    const found = generatedReports.find((r) => r.classId === cid);
+    return { classId: cid, className: found?.className || cid };
+  });
+
+  // Apply filters
+  const filteredReports = generatedReports.filter((report) => {
+    const matchSearch =
+      !filterSearch ||
+      report.studentName.toLowerCase().includes(filterSearch.toLowerCase());
+    const matchClass = !filterClass || report.classId === filterClass;
+    const matchTermSession =
+      !filterTermSession ||
+      `${report.term}|${report.session}` === filterTermSession;
+    return matchSearch && matchClass && matchTermSession;
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Report Generation Controls */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <FileText className="w-5 h-5 text-primary" />
             Report Card Management
           </CardTitle>
-          <CardDescription>
-            Validate student data and manage generated report cards
+          <CardDescription className="text-xs">
+            Select context → Validate → Generate report cards
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div>
-              <Label>Select Class</Label>
+        <CardContent className="space-y-4">
+          {/* Step 1: Context selectors */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Class</Label>
               <Select value={selectedClass} onValueChange={setSelectedClass}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Choose a class" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1661,25 +1692,30 @@ export function ReportCardManagement({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Term and Session</Label>
-              <Select 
-                value={`${selectedTerm}|${selectedSession}`} 
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Term & Session</Label>
+              <Select
+                value={`${selectedTerm}|${selectedSession}`}
                 onValueChange={(value) => {
-                  const [term, session] = value.split('|');
+                  const [term, session] = value.split("|");
                   setSelectedTerm(term);
                   setSelectedSession(session);
                 }}
               >
-                <SelectTrigger data-testid="select-reports-session">
+                <SelectTrigger className="h-9 text-sm" data-testid="select-reports-session">
                   <SelectValue placeholder="Select term and session" />
                 </SelectTrigger>
                 <SelectContent>
                   {academicTerms.map((term) => {
-                    const session = academicSessions.find(s => s.id === term.sessionId);
+                    const session = academicSessions.find(
+                      (s) => s.id === term.sessionId
+                    );
                     if (!session) return null;
                     return (
-                      <SelectItem key={term.id} value={`${term.termName}|${session.sessionYear}`}>
+                      <SelectItem
+                        key={term.id}
+                        value={`${term.termName}|${session.sessionYear}`}
+                      >
                         {term.termName}, {session.sessionYear}
                       </SelectItem>
                     );
@@ -1689,366 +1725,306 @@ export function ReportCardManagement({
             </div>
           </div>
 
-          <div className="flex gap-4 flex-wrap">
-            <Button
-              onClick={handleValidateAll}
-              disabled={
-                !selectedClass ||
-                !selectedTerm ||
-                !selectedSession ||
-                isValidating
-              }
-              className="flex items-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              {isValidating ? "Validating..." : "Validate All Students"}
-            </Button>
+          {/* Step 2 & 3: Actions */}
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Actions</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={handleValidateAll}
+                disabled={!selectedClass || !selectedTerm || !selectedSession || isValidating}
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+              >
+                <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                {isValidating ? "Validating…" : "Validate Class"}
+              </Button>
 
-            {/* New Workflow: Validate First, Then Generate Reports */}
-            <Button
-              onClick={handleValidateEntireSchool}
-              disabled={isValidating}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-              data-testid="button-validate-entire-school"
-            >
-              <CheckCircle className="w-4 h-4" />
-              {isValidating ? "Validating..." : "Validate Entire School"}
-            </Button>
+              <Button
+                onClick={handleValidateEntireSchool}
+                disabled={isValidating}
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                data-testid="button-validate-entire-school"
+              >
+                <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                {isValidating ? "Validating…" : "Validate Entire School"}
+              </Button>
 
-            <Button
-              onClick={() => setShowResumptionDateDialog(true)}
-              disabled={!isAllStudentsValidated || isGeneratingReports}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-400"
-              data-testid="button-generate-all-reports"
-            >
-              <BookOpen className="w-4 h-4" />
-              {isGeneratingReports
-                ? "Generating Reports..."
-                : "Generate All Report Cards for Whole School"}
-            </Button>
+              <Button
+                onClick={() => setShowResumptionDateDialog(true)}
+                disabled={!isAllStudentsValidated || isGeneratingReports}
+                size="sm"
+                className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                data-testid="button-generate-all-reports"
+              >
+                <BookOpen className="w-3.5 h-3.5 mr-1.5" />
+                {isGeneratingReports ? "Generating…" : "Generate All Report Cards"}
+              </Button>
+            </div>
 
-            {/* Date Selection Dialog */}
-            <Dialog
-              open={showResumptionDateDialog}
-              onOpenChange={setShowResumptionDateDialog}
-            >
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Select Next Term Resumption Date</DialogTitle>
-                  <DialogDescription>
-                    Choose the date when the next term will resume. This will be
-                    included in the report cards.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="flex flex-col gap-4 py-4">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={`w-full justify-start text-left font-normal ${
-                          !resumptionDate && "text-muted-foreground"
-                        }`}
-                      >
-                        <CalendarDays className="mr-2 h-4 w-4" />
-                        {resumptionDate
-                          ? format(resumptionDate, "PPP")
-                          : "Pick a date"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <DatePicker
-                        mode="single"
-                        selected={resumptionDate}
-                        onSelect={setResumptionDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <DialogFooter className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowResumptionDateDialog(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleGenerateAllReports}
-                    disabled={!resumptionDate}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    Generate Reports & Advance Term
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            {/* Legacy batch generation removed - now handled by new workflow */}
+            {isAllStudentsValidated && (
+              <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2.5 py-1.5">
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                All students validated — ready to generate report cards.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* School-wide Validation Results by Class */}
+      {/* Date Selection Dialog */}
+      <Dialog open={showResumptionDateDialog} onOpenChange={setShowResumptionDateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Next Term Resumption Date</DialogTitle>
+            <DialogDescription>
+              Choose the date when the next term will resume. This will be
+              included in the report cards.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={`w-full justify-start text-left font-normal ${!resumptionDate && "text-muted-foreground"}`}
+                >
+                  <CalendarDays className="mr-2 h-4 w-4" />
+                  {resumptionDate ? format(resumptionDate, "PPP") : "Pick a date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <DatePicker
+                  mode="single"
+                  selected={resumptionDate}
+                  onSelect={setResumptionDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowResumptionDateDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerateAllReports}
+              disabled={!resumptionDate}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Generate Reports & Advance Term
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* School-wide Validation Results */}
       {Object.keys(schoolValidationResults).length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>School Validation Results by Class</CardTitle>
-            <CardDescription>
-              Overview of validation status across all classes
-            </CardDescription>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">School Validation Results</CardTitle>
+            <CardDescription className="text-xs">Validation status across all classes</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {Object.entries(schoolValidationResults).map(
-                ([classId, result]) => (
-                  <div key={classId} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h3 className="font-semibold text-lg">
-                          {result.className}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {result.validatedStudents}/{result.totalStudents}{" "}
-                          students validated
-                        </p>
+            <div className="space-y-2">
+              {Object.entries(schoolValidationResults).map(([classId, result]) => {
+                const isComplete = result.validatedStudents === result.totalStudents;
+                return (
+                  <div key={classId} className={`rounded-lg border p-3 ${isComplete ? 'border-green-200 bg-green-50/50' : 'border-border'}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{result.className}</p>
+                        <Badge className={`text-[10px] px-1.5 py-0 ${isComplete ? 'bg-green-500' : result.validatedStudents > 0 ? 'bg-yellow-500' : 'bg-red-500'} text-white`}>
+                          {isComplete ? "Complete" : result.validatedStudents > 0 ? "Partial" : "Incomplete"}
+                        </Badge>
                       </div>
-                      <Badge
-                        className={
-                          result.validatedStudents === result.totalStudents
-                            ? "bg-green-500 text-white"
-                            : result.validatedStudents > 0
-                              ? "bg-yellow-500 text-white"
-                              : "bg-red-500 text-white"
-                        }
-                      >
-                        {result.validatedStudents === result.totalStudents
-                          ? "Complete"
-                          : result.validatedStudents > 0
-                            ? "Partial"
-                            : "Incomplete"}
-                      </Badge>
+                      <span className="text-xs text-muted-foreground">{result.validatedStudents}/{result.totalStudents}</span>
                     </div>
-
                     {result.issues.length > 0 && (
-                      <div className="mt-3">
-                        <h4 className="font-medium text-red-700 mb-2 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4" />
-                          Issues Found:
-                        </h4>
-                        <div className="space-y-1 text-sm">
-                          {result.issues.slice(0, 5).map((issue, index) => (
-                            <p key={index} className="text-red-600 pl-6">
-                              • {issue}
-                            </p>
-                          ))}
-                          {result.issues.length > 5 && (
-                            <p className="text-muted-foreground pl-6">
-                              ... and {result.issues.length - 5} more issues
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {result.validatedStudents === result.totalStudents && (
-                      <div className="mt-3 flex items-center gap-2 text-green-600">
-                        <CheckCircle className="w-4 h-4" />
-                        <span className="text-sm">
-                          All students ready for report generation
-                        </span>
+                      <div className="space-y-0.5 mt-1.5">
+                        {result.issues.slice(0, 3).map((issue, i) => (
+                          <p key={i} className="text-[11px] text-red-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />{issue}
+                          </p>
+                        ))}
+                        {result.issues.length > 3 && (
+                          <p className="text-[11px] text-muted-foreground pl-4">+{result.issues.length - 3} more issues</p>
+                        )}
                       </div>
                     )}
                   </div>
-                ),
-              )}
+                );
+              })}
             </div>
-
-            {isAllStudentsValidated && (
-              <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-2 text-green-700">
-                  <CheckCircle className="w-5 h-5" />
-                  <span className="font-medium">
-                    All students validated successfully!
-                  </span>
-                </div>
-                <p className="text-sm text-green-600 mt-1">
-                  You can now generate report cards for the entire school.
-                </p>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
 
-      {/* Student Validation Results */}
-      {selectedClass &&
-        selectedTerm &&
-        selectedSession &&
-        Object.keys(validationResults).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Student Data Status</CardTitle>
-              <CardDescription>
-                Check which students have complete data for report generation
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {students.map((student: any) => {
-                  const status = getValidationStatus(student.id);
-                  const validation = validationResults[student.id];
-
-                  return (
-                    <div
-                      key={student.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div>
-                          <p className="font-medium">
-                            {student.user.firstName} {student.user.lastName}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {student.studentId}
-                          </p>
-                        </div>
-                        {status && (
-                          <Badge className={`${status.color} text-white`}>
-                            {status.text}
-                          </Badge>
-                        )}
-                      </div>
-
+      {/* Per-student Validation Results */}
+      {selectedClass && selectedTerm && selectedSession && Object.keys(validationResults).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Student Data Status</CardTitle>
+            <CardDescription className="text-xs">
+              {Object.values(validationResults).filter(v => v.hasAllScores && v.hasAttendance).length} of {students.length} students ready
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border rounded-lg border overflow-hidden">
+              {students.map((student: any) => {
+                const status = getValidationStatus(student.id);
+                const validation = validationResults[student.id];
+                const isReady = validation?.hasAllScores && validation?.hasAttendance;
+                return (
+                  <div key={student.id} className={`flex items-center justify-between px-3 py-2 gap-3 ${isReady ? 'bg-background' : 'bg-red-50/30 dark:bg-red-900/10'}`}>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        {validation && (
-                          <div className="text-sm text-muted-foreground">
-                            {!validation.hasAllScores &&
-                              validation.missingSubjects.length > 0 && (
-                                <p className="flex items-center gap-1 text-red-600">
-                                  <AlertTriangle className="w-4 h-4" />
-                                  Missing subjects:{" "}
-                                  {validation.missingSubjects.join(", ")}
-                                </p>
-                              )}
-                            {!validation.hasAllScores &&
-                              validation.missingSubjects.length === 0 && (
-                                <p className="flex items-center gap-1 text-red-600">
-                                  <AlertTriangle className="w-4 h-4" />
-                                  Missing assessment scores
-                                </p>
-                              )}
-                            {!validation.hasAttendance && (
-                              <p className="flex items-center gap-1 text-red-600">
-                                <AlertTriangle className="w-4 h-4" />
-                                No attendance data
-                              </p>
-                            )}
-                            {validation.hasAllScores &&
-                              validation.hasAttendance && (
-                                <p className="flex items-center gap-1 text-green-600">
-                                  <CheckCircle className="w-4 h-4" />
-                                  All data complete
-                                </p>
-                              )}
-                          </div>
+                        <p className="text-sm font-medium truncate">{student.user.firstName} {student.user.lastName}</p>
+                        {status && (
+                          <Badge className={`text-[10px] px-1.5 py-0 shrink-0 ${status.color} text-white`}>{status.text}</Badge>
                         )}
-
-                        <Button
-                          size="sm"
-                          disabled={
-                            !canGenerateReport(student.id) ||
-                            generatingReports.has(student.id)
-                          }
-                          onClick={() => handleGenerateReportCard(student)}
-                          className="flex items-center gap-1"
-                        >
-                          {generatingReports.has(student.id) ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              Generating...
-                            </>
-                          ) : (
-                            <>
-                              <Download className="w-4 h-4" />
-                              Generate
-                            </>
-                          )}
-                        </Button>
                       </div>
+                      {validation && !isReady && (
+                        <div className="flex flex-wrap gap-x-3 mt-0.5">
+                          {!validation.hasAllScores && validation.missingSubjects.length > 0 && (
+                            <span className="text-[11px] text-red-600">Missing: {validation.missingSubjects.slice(0,2).join(", ")}{validation.missingSubjects.length > 2 ? ` +${validation.missingSubjects.length-2}` : ""}</span>
+                          )}
+                          {!validation.hasAllScores && validation.missingSubjects.length === 0 && (
+                            <span className="text-[11px] text-red-600">Missing scores</span>
+                          )}
+                          {!validation.hasAttendance && (
+                            <span className="text-[11px] text-orange-600">No attendance</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                    <Button
+                      size="sm"
+                      variant={isReady ? "default" : "outline"}
+                      disabled={!canGenerateReport(student.id) || generatingReports.has(student.id)}
+                      onClick={() => handleGenerateReportCard(student)}
+                      className="h-7 px-2 text-xs shrink-0"
+                    >
+                      {generatingReports.has(student.id) ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <><Download className="w-3.5 h-3.5 sm:mr-1" /><span className="hidden sm:inline">Generate</span></>
+                      )}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Generated Reports List */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Eye className="w-5 h-5" />
-            Generated Report Cards
-          </CardTitle>
-          <CardDescription>
-            View and manage previously generated report cards
-          </CardDescription>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                <Eye className="w-4 h-4 text-primary" />
+                Generated Report Cards
+              </CardTitle>
+              <CardDescription className="text-xs mt-0.5">
+                {filteredReports.length} of {generatedReports.length} reports
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {/* Filter bar */}
+          {generatedReports.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Input
+                placeholder="Search by student name…"
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                className="h-8 text-sm"
+              />
+              <Select value={filterClass} onValueChange={setFilterClass}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="All classes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All classes</SelectItem>
+                  {reportClasses.map((c) => (
+                    <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterTermSession} onValueChange={setFilterTermSession}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="All terms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All terms</SelectItem>
+                  {reportTermSessions.map((ts) => {
+                    const [t, s] = ts.split("|");
+                    return (
+                      <SelectItem key={ts} value={ts}>{t}, {s}</SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {isLoadingReports ? (
-            <p>Loading generated reports...</p>
+            <div className="flex items-center justify-center py-10">
+              <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
+              <span className="text-sm text-muted-foreground">Loading reports…</span>
+            </div>
           ) : generatedReports.length === 0 ? (
-            <p className="text-muted-foreground">
-              No report cards have been generated yet.
-            </p>
+            <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed border-border rounded-xl">
+              <FileText className="w-10 h-10 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium text-foreground">No reports generated yet</p>
+              <p className="text-xs text-muted-foreground mt-1">Validate students above, then click Generate All Report Cards.</p>
+            </div>
+          ) : filteredReports.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">No reports match your filters.</p>
           ) : (
-            <div className="space-y-4">
-              {generatedReports.map((report: GeneratedReportCard) => (
-                <div
-                  key={report.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <School className="w-4 h-4 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">{report.studentName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {report.className} • {report.term} {report.session}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="w-4 h-4" />
-                      {new Date(report.generatedAt).toLocaleDateString()}
+            <div className="divide-y divide-border rounded-lg border overflow-hidden">
+              {filteredReports.map((report: GeneratedReportCard) => (
+                <div key={report.id} className="flex items-center justify-between px-3 py-2.5 gap-3 hover:bg-muted/30 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{report.studentName}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{report.className}</span>
+                      <span className="text-[11px] text-muted-foreground">{report.term} · {report.session}</span>
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(report.generatedAt).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleViewReportCard(report)}
-                      className="flex items-center gap-1"
+                      className="h-7 px-2 text-xs"
                     >
-                      <Eye className="w-4 h-4" />
-                      View
+                      <Eye className="w-3.5 h-3.5 sm:mr-1" />
+                      <span className="hidden sm:inline">View</span>
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm">
-                          <Trash2 className="w-4 h-4" />
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Delete Report Card
-                          </AlertDialogTitle>
+                          <AlertDialogTitle>Delete Report Card</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to delete this report card
-                            record for {report.studentName}? This action cannot
-                            be undone.
+                            Are you sure you want to delete the report card for{" "}
+                            <strong>{report.studentName}</strong>? This cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
