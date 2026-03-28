@@ -1649,14 +1649,14 @@ export function ReportCardManagement({
     return { classId: cid, className: found?.className || cid };
   });
 
-  // Apply filters
+  // Apply filters ("__all__" is the sentinel for "no filter")
   const filteredReports = generatedReports.filter((report) => {
     const matchSearch =
       !filterSearch ||
       report.studentName.toLowerCase().includes(filterSearch.toLowerCase());
-    const matchClass = !filterClass || report.classId === filterClass;
+    const matchClass = !filterClass || filterClass === "__all__" || report.classId === filterClass;
     const matchTermSession =
-      !filterTermSession ||
+      !filterTermSession || filterTermSession === "__all__" ||
       `${report.term}|${report.session}` === filterTermSession;
     return matchSearch && matchClass && matchTermSession;
   });
@@ -1946,23 +1946,23 @@ export function ReportCardManagement({
                 onChange={(e) => setFilterSearch(e.target.value)}
                 className="h-8 text-sm"
               />
-              <Select value={filterClass} onValueChange={setFilterClass}>
+              <Select value={filterClass || "__all__"} onValueChange={(v) => setFilterClass(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="All classes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All classes</SelectItem>
+                  <SelectItem value="__all__">All classes</SelectItem>
                   {reportClasses.map((c) => (
                     <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={filterTermSession} onValueChange={setFilterTermSession}>
+              <Select value={filterTermSession || "__all__"} onValueChange={(v) => setFilterTermSession(v === "__all__" ? "" : v)}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="All terms" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All terms</SelectItem>
+                  <SelectItem value="__all__">All terms</SelectItem>
                   {reportTermSessions.map((ts) => {
                     const [t, s] = ts.split("|");
                     return (
