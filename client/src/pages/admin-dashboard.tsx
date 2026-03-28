@@ -3672,21 +3672,34 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Scores Management Tab */}
-          <TabsContent value="scores" className="space-y-6 table-container">
+          <TabsContent value="scores" className="space-y-4 table-container">
             <Card>
-              <CardHeader>
-                <CardTitle>Score Entry System</CardTitle>
-                <CardDescription>
-                  Enter and manage student assessment scores (1st CA: 20 marks, 2nd CA: 20 marks, Exam: 60 marks)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-1 md:p-6 pt-0">
-                {/* Filters - Responsive Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
                   <div>
-                    <Label>Select Term</Label>
+                    <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                      <BookOpen className="h-5 w-5 text-primary" />
+                      Score Entry
+                    </CardTitle>
+                    <CardDescription className="mt-0.5 text-xs">
+                      CA1 /20 · CA2 /20 · Exam /60 · Total /100
+                    </CardDescription>
+                  </div>
+                  {scoresClassId && scoresSubjectId && scoresTerm && scoresSession && (
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-muted-foreground">{scoresTerm}</p>
+                      <p className="text-xs font-medium">{scoresSession}</p>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="px-3 sm:px-6 pt-0 pb-4">
+                {/* Filters */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Term</Label>
                     <Select value={scoresTerm} onValueChange={setScoresTerm}>
-                      <SelectTrigger data-testid="select-scores-term">
+                      <SelectTrigger className="h-9 text-sm" data-testid="select-scores-term">
                         <SelectValue placeholder="Select term" />
                       </SelectTrigger>
                       <SelectContent>
@@ -3696,11 +3709,11 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label>Select Academic Session</Label>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Session</Label>
                     <Select value={scoresSession} onValueChange={setScoresSession}>
-                      <SelectTrigger data-testid="select-academic-session">
-                        <SelectValue placeholder="Choose an academic session" />
+                      <SelectTrigger className="h-9 text-sm" data-testid="select-academic-session">
+                        <SelectValue placeholder="Session" />
                       </SelectTrigger>
                       <SelectContent>
                         {academicSessions.map((session) => (
@@ -3711,11 +3724,11 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label>Select Class</Label>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Class</Label>
                     <Select value={scoresClassId} onValueChange={setScoresClassId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a class" />
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select class" />
                       </SelectTrigger>
                       <SelectContent>
                         {sortClassesByOrder(classes).map((classItem) => (
@@ -3726,19 +3739,18 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label>Select Subject</Label>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Subject</Label>
                     <Select value={scoresSubjectId} onValueChange={(subjectId) => {
                       setScoresSubjectId(subjectId);
-                      // Auto-refresh assessments when subject changes
                       if (scoresClassId && subjectId && scoresTerm && scoresSession) {
                         queryClient.invalidateQueries({ 
                           queryKey: ['/api/admin/assessments', scoresClassId, subjectId, scoresTerm, scoresSession] 
                         });
                       }
                     }} disabled={!scoresClassId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a subject" />
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder={scoresClassId ? "Select subject" : "Select class first"} />
                       </SelectTrigger>
                       <SelectContent>
                         {classSubjects.map((subject) => (
@@ -3760,139 +3772,172 @@ export default function AdminDashboard() {
                   disabled={!scoresClassId}
                 />
 
-
                 {scoresClassId && scoresSubjectId ? (
-                  <div className="border rounded-lg overflow-x-auto">
-                    <table className="w-full min-w-[600px] text-[11px]">
-                      <thead className="bg-gray-50 dark:bg-gray-800">
-                        <tr>
-                          <th className="px-1.5 py-1.5 text-left text-[10px] font-medium text-gray-900 dark:text-white">Student</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">ID</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">CA1</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">CA2</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Exam</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Total</th>
-                          <th className="px-1.5 py-1.5 text-center text-[10px] font-medium text-gray-900 dark:text-white">Grade</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {allStudents
-                          .filter(student => student.classId === scoresClassId)
-                          .sort((a, b) => a.studentId.localeCompare(b.studentId))
-                          .map((student) => {
-                            const assessment = classAssessments.find(a => a.studentId === student.id);
-                            const currentScores = scoreInputs[student.id] || {};
-                            
-                            // Convert to numbers properly, handling both string and number inputs
-                            const firstCA = Number(currentScores.firstCA || assessment?.firstCA || 0);
-                            const secondCA = Number(currentScores.secondCA || assessment?.secondCA || 0);
-                            const exam = Number(currentScores.exam || assessment?.exam || 0);
-                            const total = firstCA + secondCA + exam;
-                            const grade = calculateGrade(total);
-                            
-                            return (
-                              <tr key={student.id}>
-                                <td className="px-1.5 py-0.5 text-[11px] font-medium text-gray-900 dark:text-white">
-                                  {student.user.firstName} {student.user.lastName}
-                                </td>
-                                <td className="px-1.5 py-0.5 text-[11px] text-center text-gray-900 dark:text-white">
-                                  {student.studentId}
-                                </td>
-                                <td className="px-1.5 py-0.5 text-center">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="0"
-                                    max="20"
-                                    className="w-12 h-6 text-center text-[11px] px-1"
-                                    value={currentScores.firstCA || assessment?.firstCA || ''}
-                                    onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
-                                    data-student-id={student.id}
-                                    data-field="firstCA"
-                                    placeholder="0"
-                                    tabIndex={0}
-                                  />
-                                </td>
-                                <td className="px-1.5 py-0.5 text-center">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="0"
-                                    max="20"
-                                    className="w-12 h-6 text-center text-[11px] px-1"
-                                    value={currentScores.secondCA || assessment?.secondCA || ''}
-                                    onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
-                                    data-student-id={student.id}
-                                    data-field="secondCA"
-                                    placeholder="0"
-                                    tabIndex={0}
-                                  />
-                                </td>
-                                <td className="px-1.5 py-0.5 text-center">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="0"
-                                    max="60"
-                                    className="w-12 h-6 text-center text-[11px] px-1"
-                                    value={currentScores.exam || assessment?.exam || ''}
-                                    onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
-                                    data-student-id={student.id}
-                                    data-field="exam"
-                                    placeholder="0"
-                                    tabIndex={0}
-                                  />
-                                </td>
-                                <td className="px-1.5 py-0.5 text-[11px] text-center font-semibold text-gray-900 dark:text-white">
-                                  {total}
-                                </td>
-                                <td className="px-1.5 py-0.5 text-center">
-                                  <span className={`inline-block px-1 py-0.5 rounded text-[10px] font-medium ${
-                                    grade === 'A' ? 'bg-green-500' : 
-                                    grade === 'B' ? 'bg-blue-500' : 
-                                    grade === 'C' ? 'bg-yellow-500' : 
-                                    grade === 'D' ? 'bg-orange-500' : 'bg-red-500'
-                                  } text-white`}>
-                                    {grade}
-                                  </span>
-                                </td>
+                  (() => {
+                    const filteredStudents = allStudents
+                      .filter(student => student.classId === scoresClassId)
+                      .sort((a, b) => a.studentId.localeCompare(b.studentId));
+                    const filledCount = filteredStudents.filter(s => {
+                      const sc = scoreInputs[s.id] || {};
+                      const as = classAssessments.find(a => a.studentId === s.id);
+                      return (sc.firstCA || as?.firstCA) || (sc.secondCA || as?.secondCA) || (sc.exam || as?.exam);
+                    }).length;
+
+                    return (
+                      <div className="rounded-xl border border-border overflow-hidden">
+                        {/* Summary bar */}
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{filteredStudents.length} students</span>
+                          <span>{filledCount} / {filteredStudents.length} scored</span>
+                        </div>
+
+                        {/* Table */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-muted/60 border-b border-border">
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-foreground w-[35%]">Student</th>
+                                <th className="px-2 py-2.5 text-center text-xs font-semibold text-muted-foreground hidden sm:table-cell">ID</th>
+                                <th className="px-2 py-2.5 text-center text-xs font-semibold text-blue-600 dark:text-blue-400">
+                                  CA1<span className="font-normal text-muted-foreground">/20</span>
+                                </th>
+                                <th className="px-2 py-2.5 text-center text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                                  CA2<span className="font-normal text-muted-foreground">/20</span>
+                                </th>
+                                <th className="px-2 py-2.5 text-center text-xs font-semibold text-purple-600 dark:text-purple-400">
+                                  Exam<span className="font-normal text-muted-foreground">/60</span>
+                                </th>
+                                <th className="px-2 py-2.5 text-center text-xs font-semibold text-foreground">Total</th>
+                                <th className="px-2 py-2.5 text-center text-xs font-semibold text-foreground">Grade</th>
                               </tr>
-                            );
-                          })
-                        }
-                      </tbody>
-                    </table>
-                    <div className="bg-gray-50 dark:bg-gray-800" style={{ minWidth: '600px' }}>
-                      <div className="p-1.5">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button 
-                              className="w-full h-7 text-[11px]"
-                              onClick={handleSaveAllScores}
-                              disabled={updateScoresMutation.isPending || isLoadingAssessments || !scoresTerm || !scoresSession}
-                            >
-                              {updateScoresMutation.isPending ? "Saving..." : 
-                               isLoadingAssessments ? "Loading scores..." : "Save All Scores"}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{isLoadingAssessments ? "Please wait while existing scores load" : "Save all entered scores to the database"}</p>
-                          </TooltipContent>
-                        </Tooltip>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {filteredStudents.map((student, idx) => {
+                                const assessment = classAssessments.find(a => a.studentId === student.id);
+                                const currentScores = scoreInputs[student.id] || {};
+                                const firstCA = Number(currentScores.firstCA ?? assessment?.firstCA ?? 0);
+                                const secondCA = Number(currentScores.secondCA ?? assessment?.secondCA ?? 0);
+                                const exam = Number(currentScores.exam ?? assessment?.exam ?? 0);
+                                const total = firstCA + secondCA + exam;
+                                const grade = calculateGrade(total);
+                                const hasDirtyInput = !!(currentScores.firstCA !== undefined || currentScores.secondCA !== undefined || currentScores.exam !== undefined);
+                                const gradeColors: Record<string, string> = {
+                                  A: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+                                  B: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+                                  C: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+                                  D: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+                                  F: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+                                };
+                                return (
+                                  <tr key={student.id} className={`${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'} hover:bg-primary/5 transition-colors ${hasDirtyInput ? 'border-l-2 border-l-amber-400' : ''}`}>
+                                    <td className="px-3 py-2">
+                                      <div className="font-medium text-sm text-foreground leading-tight">
+                                        {student.user.firstName} {student.user.lastName}
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground sm:hidden">{student.studentId}</div>
+                                    </td>
+                                    <td className="px-2 py-2 text-center text-xs text-muted-foreground hidden sm:table-cell">{student.studentId}</td>
+                                    <td className="px-1.5 py-2 text-center">
+                                      <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="0"
+                                        max="20"
+                                        className="w-14 h-8 text-center text-sm px-1 border-blue-200 focus:border-blue-400 dark:border-blue-800"
+                                        value={currentScores.firstCA ?? assessment?.firstCA ?? ''}
+                                        onChange={(e) => handleScoreChange(student.id, 'firstCA', e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, student.id, 'firstCA')}
+                                        data-student-id={student.id}
+                                        data-field="firstCA"
+                                        placeholder="—"
+                                        tabIndex={0}
+                                      />
+                                    </td>
+                                    <td className="px-1.5 py-2 text-center">
+                                      <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="0"
+                                        max="20"
+                                        className="w-14 h-8 text-center text-sm px-1 border-indigo-200 focus:border-indigo-400 dark:border-indigo-800"
+                                        value={currentScores.secondCA ?? assessment?.secondCA ?? ''}
+                                        onChange={(e) => handleScoreChange(student.id, 'secondCA', e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, student.id, 'secondCA')}
+                                        data-student-id={student.id}
+                                        data-field="secondCA"
+                                        placeholder="—"
+                                        tabIndex={0}
+                                      />
+                                    </td>
+                                    <td className="px-1.5 py-2 text-center">
+                                      <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="0"
+                                        max="60"
+                                        className="w-14 h-8 text-center text-sm px-1 border-purple-200 focus:border-purple-400 dark:border-purple-800"
+                                        value={currentScores.exam ?? assessment?.exam ?? ''}
+                                        onChange={(e) => handleScoreChange(student.id, 'exam', e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, student.id, 'exam')}
+                                        data-student-id={student.id}
+                                        data-field="exam"
+                                        placeholder="—"
+                                        tabIndex={0}
+                                      />
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      <span className={`text-sm font-bold ${total >= 70 ? 'text-green-600' : total >= 50 ? 'text-blue-600' : total > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                        {total > 0 ? total : '—'}
+                                      </span>
+                                    </td>
+                                    <td className="px-2 py-2 text-center">
+                                      {total > 0 && (
+                                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${gradeColors[grade] || gradeColors.F}`}>
+                                          {grade}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Save footer */}
+                        <div className="flex items-center justify-between gap-3 px-3 py-3 bg-muted/40 border-t">
+                          <p className="text-xs text-muted-foreground hidden sm:block">
+                            Use Tab / Enter to move between cells
+                          </p>
+                          <Button
+                            className="w-full sm:w-auto h-9 px-6 font-medium"
+                            onClick={handleSaveAllScores}
+                            disabled={updateScoresMutation.isPending || isLoadingAssessments || !scoresTerm || !scoresSession}
+                          >
+                            {updateScoresMutation.isPending ? (
+                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</>
+                            ) : isLoadingAssessments ? (
+                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Loading…</>
+                            ) : (
+                              <><Save className="h-4 w-4 mr-2" />Save All Scores</>
+                            )}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()
                 ) : (
-                  <div className="text-center py-8">
-                    <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                      Select Class and Subject
+                  <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-border rounded-xl">
+                    <BookOpen className="h-10 w-10 text-muted-foreground mb-3" />
+                    <h3 className="text-base font-semibold text-foreground mb-1">
+                      {!scoresClassId ? 'Select a Class' : 'Select a Subject'}
                     </h3>
-                    <p className="text-gray-500">
-                      Choose a class and subject above to view and manage student scores.
+                    <p className="text-sm text-muted-foreground max-w-xs">
+                      {!scoresTerm || !scoresSession
+                        ? 'Start by choosing the term and session, then the class and subject.'
+                        : !scoresClassId
+                        ? 'Choose a class to see the students and enter their scores.'
+                        : 'Choose a subject to begin entering scores for this class.'}
                     </p>
                   </div>
                 )}
