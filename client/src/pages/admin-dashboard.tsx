@@ -3591,60 +3591,47 @@ export default function AdminDashboard() {
                   </Select>
                 </div>
 
-                {/* Students Table - Only show when class is selected */}
+                {/* Students List - Compact mobile-friendly */}
                 {selectedClassForStudents ? (
-                  <div className="student-table-wrapper border rounded-lg">
-                    <table className="student-table w-full">
-                      <thead className="bg-gray-50 dark:bg-gray-800">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-40">Name</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-32">Student ID</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white w-24">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {allStudents
-                          .filter(student => student.classId === selectedClassForStudents)
-                          .sort((a, b) => a.studentId.localeCompare(b.studentId))
-                          .map((student) => (
-                            <tr key={student.id}>
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                {student.user.firstName} {student.user.lastName}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                                {student.studentId}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => openEditStudent(student)}
-                                    className="flex items-center"
-                                    data-testid={`button-edit-student-${student.id}`}
-                                  >
-                                    <Edit className="h-3 w-3 mr-1" />
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setSelectedStudentForDeletion(student);
-                                      setIsDeleteStudentDialogOpen(true);
-                                    }}
-                                    className="flex items-center text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    data-testid={`button-delete-student-${student.id}`}
-                                  >
-                                    <Trash2 className="h-3 w-3 mr-1" />
-                                    Delete
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
+                  <div className="border rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
+                    {allStudents
+                      .filter(student => student.classId === selectedClassForStudents)
+                      .sort((a, b) => a.studentId.localeCompare(b.studentId))
+                      .map((student) => (
+                        <div key={student.id} className="flex items-center justify-between px-3 py-2 gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {student.user.firstName} {student.user.lastName}
+                            </p>
+                            <p className="text-xs text-gray-500">{student.studentId}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEditStudent(student)}
+                              className="h-7 px-2 text-xs"
+                              data-testid={`button-edit-student-${student.id}`}
+                            >
+                              <Edit className="h-3 w-3 sm:mr-1" />
+                              <span className="hidden sm:inline">Edit</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedStudentForDeletion(student);
+                                setIsDeleteStudentDialogOpen(true);
+                              }}
+                              className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                              data-testid={`button-delete-student-${student.id}`}
+                            >
+                              <Trash2 className="h-3 w-3 sm:mr-1" />
+                              <span className="hidden sm:inline">Delete</span>
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
                       <div className="text-center py-8">
                         <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
