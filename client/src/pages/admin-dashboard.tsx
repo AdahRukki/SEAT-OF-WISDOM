@@ -87,6 +87,8 @@ import {
   GraduationCap, 
   BookOpen, 
   FileText,
+  LayoutDashboard,
+  Bell,
   Building,
   Building2,
   LogOut,
@@ -3314,29 +3316,41 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-10 gap-1 h-auto p-1">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Overview
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-4 md:grid-cols-8 gap-0.5 h-auto p-1 bg-muted/60">
+            <TabsTrigger value="overview" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <LayoutDashboard className="h-4 w-4 shrink-0" />
+              <span>Overview</span>
             </TabsTrigger>
-            <TabsTrigger value="students" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Students
+            <TabsTrigger value="students" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <Users className="h-4 w-4 shrink-0" />
+              <span>Students</span>
             </TabsTrigger>
-            <TabsTrigger value="scores" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Scores
+            <TabsTrigger value="scores" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <BookOpen className="h-4 w-4 shrink-0" />
+              <span>Scores</span>
             </TabsTrigger>
-            <TabsTrigger value="grading" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">Ratings & Attendance</TabsTrigger>
-            <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Finance
+            <TabsTrigger value="grading" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <ClipboardCheck className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Ratings</span>
+              <span className="sm:hidden">Ratings</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Reports
+            <TabsTrigger value="finance" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <Wallet className="h-4 w-4 shrink-0" />
+              <span>Finance</span>
             </TabsTrigger>
-            <TabsTrigger value="users" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-              Users & Settings
+            <TabsTrigger value="reports" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <FileText className="h-4 w-4 shrink-0" />
+              <span>Reports</span>
+            </TabsTrigger>
+            <TabsTrigger value="users" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <Shield className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Users</span>
+              <span className="sm:hidden">Users</span>
             </TabsTrigger>
             {user.role === 'admin' && (
-              <TabsTrigger value="news" className="text-xs sm:text-sm px-2 py-2 h-auto whitespace-nowrap">
-                News & Alerts
+              <TabsTrigger value="news" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <Bell className="h-4 w-4 shrink-0" />
+                <span>News</span>
               </TabsTrigger>
             )}
           </TabsList>
