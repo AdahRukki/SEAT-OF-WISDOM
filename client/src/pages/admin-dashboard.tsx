@@ -3751,73 +3751,14 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Action Buttons - Mobile Responsive */}
-                <div className="mb-6">
-                  <input
-                    type="file"
-                    id="excel-upload"
-                    accept=".xlsx,.xls,.csv"
-                    className="hidden"
-                    onChange={handleExcelUpload}
-                    disabled={!scoresClassId}
-                  />
-                  
-                  {/* Upload Button - Full Width on Mobile */}
-                  <div className="mb-3">
-                    <Button
-                      type="button"
-                      disabled={!scoresClassId}
-                      onClick={() => document.getElementById('excel-upload')?.click()}
-                      className="w-full h-11"
-                      data-testid="button-upload-excel"
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      <span className="hidden sm:inline">Upload Scores from Excel</span>
-                      <span className="sm:hidden">Upload Scores</span>
-                    </Button>
-                  </div>
-                  
-                  {/* Download Buttons - Stack on Mobile, Side by Side on Desktop */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={handleDownloadSingleSubjectTemplate}
-                          disabled={!scoresClassId || !scoresSubjectId}
-                          variant="outline"
-                          className="w-full h-11"
-                          data-testid="button-download-single-subject"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          <span className="hidden sm:inline">Download Template (Single)</span>
-                          <span className="sm:hidden">Template (1)</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Download template for selected subject only</p>
-                      </TooltipContent>
-                    </Tooltip>
-                    
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={handleDownloadMultiSubjectTemplate}
-                          disabled={!scoresClassId}
-                          variant="default"
-                          className="w-full h-11"
-                          data-testid="button-download-all-subjects"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          <span className="hidden sm:inline">Download Template (All Subjects)</span>
-                          <span className="sm:hidden">Template (All)</span>
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Download Excel with tabs for all subjects in class</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
+                <input
+                  type="file"
+                  id="excel-upload"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleExcelUpload}
+                  disabled={!scoresClassId}
+                />
 
 
                 {scoresClassId && scoresSubjectId ? (
