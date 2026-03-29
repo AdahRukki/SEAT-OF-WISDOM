@@ -26,37 +26,42 @@ const ADMIN_ONLY_ENDPOINTS = [
   '/api/admin/users?adminOnly=true',
 ];
 
-const PREFETCH_EVENTS = {
-  START: 'sowa:prefetch-start',
-  DONE: 'sowa:prefetch-done',
-};
+const PREFETCH_START = 'sowa:prefetch-start';
+const PREFETCH_DONE = 'sowa:prefetch-done';
 
 export function onPrefetchStart(cb: () => void) {
   const handler = () => cb();
-  window.addEventListener(PREFETCH_EVENTS.START, handler);
-  return () => window.removeEventListener(PREFETCH_EVENTS.START, handler);
+  window.addEventListener(PREFETCH_START, handler);
+  return () => window.removeEventListener(PREFETCH_START, handler);
 }
 
 export function onPrefetchDone(cb: () => void) {
   const handler = () => cb();
-  window.addEventListener(PREFETCH_EVENTS.DONE, handler);
-  return () => window.removeEventListener(PREFETCH_EVENTS.DONE, handler);
+  window.addEventListener(PREFETCH_DONE, handler);
+  return () => window.removeEventListener(PREFETCH_DONE, handler);
+}
+
+export interface PrefetchUserInfo {
+  role: string;
+  schoolId?: string | null;
 }
 
 export async function prefetchAllData(
   queryClient: QueryClient,
-  userRole: string
+  userInfo: PrefetchUserInfo
 ): Promise<void> {
-  window.dispatchEvent(new Event(PREFETCH_EVENTS.START));
+  window.dispatchEvent(new Event(PREFETCH_START));
 
   try {
-    const endpointsToPrefetch = [
+    const { role, schoolId } = userInfo;
+
+    const globalEndpoints = [
       ...GLOBAL_ENDPOINTS,
-      ...(userRole === 'admin' ? ADMIN_ONLY_ENDPOINTS : []),
+      ...(role === 'admin' ? ADMIN_ONLY_ENDPOINTS : []),
     ];
 
     await Promise.allSettled(
-      endpointsToPrefetch.map((url) =>
+      globalEndpoints.map((url) =>
         queryClient.prefetchQuery({
           queryKey: [url],
           queryFn: () => fetchWithAuth(url),
@@ -65,7 +70,7 @@ export async function prefetchAllData(
       )
     );
 
-    if (userRole === 'admin') {
+    if (role === 'admin') {
       const schools =
         queryClient.getQueryData<{ id: string }[]>(['/api/admin/schools']) ?? [];
 
@@ -89,20 +94,28 @@ export async function prefetchAllData(
         ])
       );
     } else {
+      // sub-admin: queries use schoolId as the cache key but the URL has no filter
+      // (the server infers school from the authenticated user's schoolId)
+      const key = schoolId ?? '';
       await Promise.allSettled([
         queryClient.prefetchQuery({
-          queryKey: ['/api/admin/students', ''],
+          queryKey: ['/api/admin/students', key],
           queryFn: () => fetchWithAuth('/api/admin/students'),
           staleTime: 1000 * 60 * 60,
         }),
         queryClient.prefetchQuery({
-          queryKey: ['/api/admin/classes', ''],
+          queryKey: ['/api/admin/classes', key],
           queryFn: () => fetchWithAuth('/api/admin/classes'),
+          staleTime: 1000 * 60 * 60,
+        }),
+        queryClient.prefetchQuery({
+          queryKey: ['/api/admin/fee-types', key],
+          queryFn: () => fetchWithAuth('/api/admin/fee-types'),
           staleTime: 1000 * 60 * 60,
         }),
       ]);
     }
   } finally {
-    window.dispatchEvent(new Event(PREFETCH_EVENTS.DONE));
+    window.dispatchEvent(new Event(PREFETCH_DONE));
   }
 }

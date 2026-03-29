@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useRef } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { prefetchAllData } from "@/lib/prefetch-data";
 import type { User, LoginData } from "@shared/schema";
@@ -119,12 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       });
       
-      // Refetch user data
+      // Refetch user data (prefetch runs from useEffect once /api/auth/me resolves)
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
-
-      // Fire-and-forget: prefetch all data so the app works offline immediately
-      const userRole = data.user?.role ?? data.role ?? 'sub-admin';
-      prefetchAllData(queryClient, userRole).catch(() => {});
     },
   });
 
@@ -220,17 +216,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.replace(`/portal/login?forced_logout=${timestamp}&reason=${reason}`);
   };
 
-  // Network status: when back online, refresh all cached data in the background
+  // Once the user object is resolved (includes schoolId from /api/auth/me),
+  // fire-and-forget prefetch of all data. Uses user.id as the trigger so it
+  // only runs once per login, not on every re-render.
+  const lastPrefetchedUserId = useRef<string | null>(null);
   useEffect(() => {
-    const handleOnline = () => {
-      if (token && user) {
-        const authUser = user as AuthUser;
-        prefetchAllData(queryClient, authUser.role).catch(() => {});
-      }
-    };
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [token, user, queryClient]);
+    const authUser = user as AuthUser | null;
+    if (!authUser?.id || !token) return;
+    if (lastPrefetchedUserId.current === authUser.id) return;
+    lastPrefetchedUserId.current = authUser.id;
+    prefetchAllData(queryClient, { role: authUser.role, schoolId: authUser.schoolId }).catch(() => {});
+  }, [(user as AuthUser | null)?.id, token]);
+
+  // Network reconnect: re-run prefetch to refresh all cached data
+  const runPrefetchForCurrentUser = useCallback(() => {
+    const authUser = user as AuthUser | null;
+    if (authUser?.id && token) {
+      prefetchAllData(queryClient, { role: authUser.role, schoolId: authUser.schoolId }).catch(() => {});
+    }
+  }, [user, token, queryClient]);
+
+  useEffect(() => {
+    window.addEventListener('online', runPrefetchForCurrentUser);
+    return () => window.removeEventListener('online', runPrefetchForCurrentUser);
+  }, [runPrefetchForCurrentUser]);
 
   // SECURITY: Inactivity timeout monitoring
   useEffect(() => {
