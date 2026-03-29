@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -159,6 +160,7 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { canInstall, installApp } = usePwaInstall();
+  const [, navigate] = useLocation();
   
   // Firebase sync status
   const [syncStatus, setSyncStatus] = useState(firebaseSync.getSyncStatus());
@@ -3370,7 +3372,7 @@ export default function AdminDashboard() {
                       <p className="text-xs text-muted-foreground">Across all classes</p>
                     </div>
                     <Button 
-                      onClick={() => setIsStudentDialogOpen(true)}
+                      onClick={() => navigate("/portal/add-student")}
                       size="sm"
                       className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
                     >
@@ -3579,7 +3581,7 @@ export default function AdminDashboard() {
                   </Button>
                   
                   <Button 
-                    onClick={() => setIsStudentDialogOpen(true)}
+                    onClick={() => navigate("/portal/add-student")}
                     className="w-full sm:w-auto"
                     data-testid="button-add-student"
                   >
@@ -5155,11 +5157,9 @@ export default function AdminDashboard() {
                         // Generate a new student ID for this new student
                         generateStudentId();
                         
-                        // Open the student dialog and close class details
-                        setIsStudentDialogOpen(true);
+                        // Navigate to full-page add student form
                         setIsClassDetailsDialogOpen(false);
-                        
-                        console.log("Student dialog should now be open:", true);
+                        navigate("/portal/add-student");
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
