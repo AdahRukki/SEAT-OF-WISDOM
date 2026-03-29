@@ -3372,7 +3372,7 @@ export default function AdminDashboard() {
                       <p className="text-xs text-muted-foreground">Across all classes</p>
                     </div>
                     <Button 
-                      onClick={() => navigate("/portal/add-student")}
+                      onClick={() => navigate("/add-student")}
                       size="sm"
                       className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
                     >
@@ -3581,7 +3581,7 @@ export default function AdminDashboard() {
                   </Button>
                   
                   <Button 
-                    onClick={() => navigate("/portal/add-student")}
+                    onClick={() => navigate("/add-student")}
                     className="w-full sm:w-auto"
                     data-testid="button-add-student"
                   >
@@ -5159,7 +5159,7 @@ export default function AdminDashboard() {
                         
                         // Navigate to full-page add student form
                         setIsClassDetailsDialogOpen(false);
-                        navigate("/portal/add-student");
+                        navigate("/add-student");
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />

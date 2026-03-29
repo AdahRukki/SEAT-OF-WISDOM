@@ -125,7 +125,7 @@ export default function AddStudent() {
         });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/students"] });
-      navigate("/portal/admin");
+      navigate("/");
     },
     onError: (error: any) => {
       toast({
@@ -174,7 +174,7 @@ export default function AddStudent() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate("/portal/admin")}
+          onClick={() => navigate("/")}
           className="shrink-0"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -526,7 +526,7 @@ export default function AddStudent() {
           variant="outline"
           className="flex-1"
           onClick={() => {
-            if (currentStep === 1) navigate("/portal/admin");
+            if (currentStep === 1) navigate("/");
             else setCurrentStep((s) => s - 1);
           }}
         >
