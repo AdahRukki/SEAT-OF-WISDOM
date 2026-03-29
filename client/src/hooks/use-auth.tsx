@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { useNetworkStatus } from "./use-network-status";
+import { prefetchAllData } from "@/lib/prefetch-data";
 import type { User, LoginData } from "@shared/schema";
 
 interface AuthUser {
@@ -122,6 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Refetch user data
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+
+      // Fire-and-forget: prefetch all data so the app works offline immediately
+      const userRole = data.user?.role ?? data.role ?? 'sub-admin';
+      prefetchAllData(queryClient, userRole).catch(() => {});
     },
   });
 
@@ -217,20 +220,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.replace(`/portal/login?forced_logout=${timestamp}&reason=${reason}`);
   };
 
-  // SECURITY: Network status monitoring - auto logout when offline
-  useNetworkStatus(
-    () => {
-      // When user goes offline, immediately logout for security
+  // Network status: when back online, refresh all cached data in the background
+  useEffect(() => {
+    const handleOnline = () => {
       if (token && user) {
-        console.warn('⚠️ Network offline detected - logging out for security');
-        logout('offline');
+        const authUser = user as AuthUser;
+        prefetchAllData(queryClient, authUser.role).catch(() => {});
       }
-    },
-    () => {
-      // When back online, user must re-authenticate
-      console.log('🌐 Network back online - please log in again');
-    }
-  );
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [token, user, queryClient]);
 
   // SECURITY: Inactivity timeout monitoring
   useEffect(() => {

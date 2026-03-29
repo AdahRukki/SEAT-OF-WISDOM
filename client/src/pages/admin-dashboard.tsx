@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue } from "@/lib/offline-queue";
+import { onPrefetchStart, onPrefetchDone } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
@@ -170,6 +171,10 @@ export default function AdminDashboard() {
     pendingCount: number;
     justSynced: boolean;
   }>({ syncing: false, pendingCount: getPendingCount(), justSynced: false });
+
+  // Prefetch sync status
+  const [prefetchStatus, setPrefetchStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
+  const prefetchDoneTimerRef = useRef<number | null>(null);
   
   // Password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -550,10 +555,31 @@ export default function AdminDashboard() {
       setOfflineSyncState(status);
     });
 
+    // Prefetch status listeners
+    const removePrefetchStart = onPrefetchStart(() => {
+      setPrefetchStatus('syncing');
+      if (prefetchDoneTimerRef.current) {
+        window.clearTimeout(prefetchDoneTimerRef.current);
+        prefetchDoneTimerRef.current = null;
+      }
+    });
+
+    const removePrefetchDone = onPrefetchDone(() => {
+      setPrefetchStatus('done');
+      prefetchDoneTimerRef.current = window.setTimeout(() => {
+        setPrefetchStatus('idle');
+      }, 4000);
+    });
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       removeSyncListener();
+      removePrefetchStart();
+      removePrefetchDone();
+      if (prefetchDoneTimerRef.current) {
+        window.clearTimeout(prefetchDoneTimerRef.current);
+      }
     };
   }, []);
 
@@ -3309,6 +3335,19 @@ export default function AdminDashboard() {
                 <> · {offlineSyncState.pendingCount} change{offlineSyncState.pendingCount !== 1 ? 's' : ''} pending sync</>
               )}
             </>
+          )}
+        </div>
+      )}
+
+      {/* Prefetch / Offline Sync Status Banner */}
+      {prefetchStatus !== 'idle' && (
+        <div className={`w-full px-4 py-2 text-sm font-medium text-center flex items-center justify-center gap-2 transition-all ${
+          prefetchStatus === 'done' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'
+        }`}>
+          {prefetchStatus === 'syncing' ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing offline data...</>
+          ) : (
+            <><CheckCircle className="h-3.5 w-3.5" /> Ready for offline use</>
           )}
         </div>
       )}
