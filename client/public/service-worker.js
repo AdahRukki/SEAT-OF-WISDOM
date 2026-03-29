@@ -1,9 +1,11 @@
-const CACHE_NAME = 'sowa-v3';
+const CACHE_NAME = 'sowa-v4';
 const APP_SHELL = [
   '/',
   '/portal/login',
   '/manifest.json',
   '/favicon.png',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -40,6 +42,7 @@ self.addEventListener('fetch', (event) => {
   // Skip cross-origin requests
   if (url.origin !== self.location.origin) return;
 
+  // Non-GET: try network, return offline stub if unavailable
   if (request.method !== 'GET') {
     event.respondWith(
       fetch(request).catch(() =>
@@ -59,50 +62,88 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.woff2') ||
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.jpg') ||
-    url.pathname.endsWith('.svg');
+    url.pathname.endsWith('.svg') ||
+    url.pathname.endsWith('.ico');
 
+  // Static assets: cache-first, update in background
   if (isStaticAsset) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        const networkFetch = fetch(request).then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        }).catch(() => cached);
-        return cached || networkFetch;
-      })
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.match(request).then((cached) => {
+          const networkFetch = fetch(request).then((response) => {
+            if (response && response.status === 200) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          }).catch(() => cached);
+          return cached || networkFetch;
+        })
+      )
     );
     return;
   }
 
+  // API calls: network-first, fall back to cached response
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        fetch(request)
+          .then((response) => {
+            if (response && response.status === 200) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          })
+          .catch(() =>
+            cache.match(request).then((cached) =>
+              cached ||
+              new Response(JSON.stringify({ error: 'offline', cached: false }), {
+                status: 503,
+                headers: { 'Content-Type': 'application/json' },
+              })
+            )
+          )
+      )
+    );
+    return;
+  }
+
+  // Navigation requests (HTML pages): network-first, always fall back to
+  // the cached app shell so the SPA loads even offline.
+  const isNavigation = request.mode === 'navigate' ||
+    request.headers.get('accept')?.includes('text/html');
+
+  if (isNavigation) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        fetch(request)
+          .then((response) => {
+            if (response && response.status === 200) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          })
+          .catch(() =>
+            cache.match(request).then((cached) =>
+              cached || cache.match('/')
+            )
+          )
+      )
+    );
+    return;
+  }
+
+  // Everything else: network-first with cache fallback
+  event.respondWith(
+    caches.open(CACHE_NAME).then((cache) =>
       fetch(request)
         .then((response) => {
           if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            cache.put(request, response.clone());
           }
           return response;
         })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
-
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() =>
-        caches.match(request).then((cached) => cached || caches.match('/'))
-      )
+        .catch(() => cache.match(request).then((cached) => cached || cache.match('/')))
+    )
   );
 });

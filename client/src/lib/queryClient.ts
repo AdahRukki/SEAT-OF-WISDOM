@@ -9,6 +9,14 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function clearAuthOnly() {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('firebase_token');
+  localStorage.removeItem('user_data');
+  localStorage.removeItem('auth_user');
+  sessionStorage.clear();
+}
+
 export async function apiRequest(
   url: string,
   options?: {
@@ -19,7 +27,6 @@ export async function apiRequest(
   const method = options?.method || 'GET';
   const token = localStorage.getItem('auth_token');
   
-  // Check if body is FormData - if so, don't set Content-Type (browser will set it with boundary)
   const isFormData = options?.body instanceof FormData;
   const headers: Record<string, string> = {};
   
@@ -38,21 +45,8 @@ export async function apiRequest(
     credentials: "include",
   });
 
-  // If we get 401, immediately clear all auth data and redirect
   if (res.status === 401) {
-    localStorage.clear();
-    sessionStorage.clear();
-    
-    // Clear all caches
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        names.forEach(name => {
-          caches.delete(name);
-        });
-      });
-    }
-    
-    // Force immediate redirect
+    clearAuthOnly();
     window.location.href = '/portal/login?expired=1';
     throw new Error('401: Session expired - redirecting to login');
   }
@@ -74,34 +68,28 @@ export const getQueryFn: <T>(options: {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(queryKey.join("") as string, {
-      headers,
-      credentials: "include",
-    });
+    let res: Response;
+    try {
+      res = await fetch(queryKey.join("") as string, {
+        headers,
+        credentials: "include",
+      });
+    } catch {
+      // Network error (offline) — return undefined so TanStack Query
+      // falls back to its persisted stale cache instead of throwing.
+      return undefined as T;
+    }
 
     if (res.status === 401) {
-      // Immediately clear all auth data on 401
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // Clear all caches
-      if ('caches' in window) {
-        caches.keys().then(names => {
-          names.forEach(name => {
-            caches.delete(name);
-          });
-        });
-      }
+      clearAuthOnly();
       
       if (unauthorizedBehavior === "returnNull") {
-        // Force redirect even if returning null
         setTimeout(() => {
           window.location.href = '/portal/login?expired=1';
         }, 100);
         return null;
       }
       
-      // Force immediate redirect
       window.location.href = '/portal/login?expired=1';
       throw new Error('401: Session expired - redirecting to login');
     }
