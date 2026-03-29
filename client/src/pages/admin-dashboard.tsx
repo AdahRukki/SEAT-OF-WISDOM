@@ -5552,14 +5552,18 @@ export default function AdminDashboard() {
               {/* Step 1: Basic Information */}
               {currentStep === 1 && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-center text-blue-600">Basic Information</h3>
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <GraduationCap className="h-5 w-5 text-blue-600" />
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 1: Personal Details</h3>
+                  </div>
+                  
                   <div>
-                    <Label htmlFor="student-class">Class *</Label>
+                    <Label htmlFor="student-class" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Class</Label>
                     <Select 
                       value={studentCreationForm.classId || selectedClassForStudents} 
                       onValueChange={(value) => handleStudentFormChange('classId', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="mt-1">
                         <SelectValue placeholder="Select a class" />
                       </SelectTrigger>
                       <SelectContent>
@@ -5571,60 +5575,50 @@ export default function AdminDashboard() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="student-firstname">First Name *</Label>
-                      <Input
-                        id="student-firstname"
-                        value={studentCreationForm.firstName}
-                        onChange={(e) => handleStudentFormChange('firstName', e.target.value)}
-                        placeholder="JOHN"
-                        className={studentFormErrors.firstName ? "border-red-500" : ""}
-                      />
-                      {studentFormErrors.firstName && (
-                        <p className="text-red-500 text-xs mt-1">{studentFormErrors.firstName}</p>
-                      )}
-                    </div>
-                    <div>
-                      <Label htmlFor="student-lastname">Last Name *</Label>
-                      <Input
-                        id="student-lastname"
-                        value={studentCreationForm.lastName}
-                        onChange={(e) => handleStudentFormChange('lastName', e.target.value)}
-                        placeholder="DOE"
-                        className={studentFormErrors.lastName ? "border-red-500" : ""}
-                      />
-                      {studentFormErrors.lastName && (
-                        <p className="text-red-500 text-xs mt-1">{studentFormErrors.lastName}</p>
-                      )}
+
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="student-firstname" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">First Name</Label>
+                        <Input
+                          id="student-firstname"
+                          value={studentCreationForm.firstName}
+                          onChange={(e) => handleStudentFormChange('firstName', e.target.value)}
+                          placeholder="JOHN"
+                          className={`mt-1 ${studentFormErrors.firstName ? "border-red-500 bg-red-50" : ""}`}
+                        />
+                        {studentFormErrors.firstName && (
+                          <p className="text-red-600 text-xs mt-0.5 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{studentFormErrors.firstName}</p>
+                        )}
+                      </div>
+                      <div>
+                        <Label htmlFor="student-lastname" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Last Name</Label>
+                        <Input
+                          id="student-lastname"
+                          value={studentCreationForm.lastName}
+                          onChange={(e) => handleStudentFormChange('lastName', e.target.value)}
+                          placeholder="DOE"
+                          className={`mt-1 ${studentFormErrors.lastName ? "border-red-500 bg-red-50" : ""}`}
+                        />
+                        {studentFormErrors.lastName && (
+                          <p className="text-red-600 text-xs mt-0.5 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{studentFormErrors.lastName}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
+
                   <div>
-                    <Label htmlFor="student-middlename" className="text-gray-600">Middle Name <span className="text-xs text-gray-400">(Optional)</span></Label>
+                    <Label htmlFor="student-middlename" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Middle Name <span className="text-blue-600 font-normal">(Optional)</span></Label>
                     <Input
                       id="student-middlename"
                       value={studentCreationForm.middleName}
                       onChange={(e) => handleStudentFormChange('middleName', e.target.value)}
-                      placeholder="Optional - Leave blank if none"
-                      className={studentFormErrors.middleName ? "border-red-500" : ""}
+                      placeholder="Optional"
+                      className={`mt-1 ${studentFormErrors.middleName ? "border-red-500 bg-red-50" : ""}`}
                     />
                     {studentFormErrors.middleName && (
-                      <p className="text-red-500 text-xs mt-1">{studentFormErrors.middleName}</p>
+                      <p className="text-red-600 text-xs mt-0.5 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{studentFormErrors.middleName}</p>
                     )}
-                  </div>
-                  <div>
-                    <Label htmlFor="student-id">Student ID (Auto-Generated by System)</Label>
-                    <Input
-                      id="student-id"
-                      value="Will be auto-generated with gap-filling"
-                      readOnly
-                      disabled
-                      className="bg-gray-50 cursor-default text-gray-500 italic pointer-events-none"
-                      tabIndex={-1}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      The system will automatically assign the next available ID (e.g., SOWA/4001, 4002, etc.)
-                    </p>
                   </div>
                 </div>
               )}
@@ -5632,26 +5626,33 @@ export default function AdminDashboard() {
               {/* Step 2: Personal & Contact Details */}
               {currentStep === 2 && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-center text-green-600">Personal & Contact Information</h3>
-                  <div>
-                    <Label htmlFor="student-gender">Gender *</Label>
-                    <Select 
-                      value={studentCreationForm.gender} 
-                      onValueChange={(value) => handleStudentFormChange('gender', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select gender" />
-                      </SelectTrigger>
-                      <SelectContent className="z-50">
-                        <SelectItem value="Male">Male</SelectItem>
-                        <SelectItem value="Female">Female</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Users className="h-5 w-5 text-green-600" />
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 2: Contact Information</h3>
                   </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="student-gender" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Gender</Label>
+                      <Select 
+                        value={studentCreationForm.gender} 
+                        onValueChange={(value) => handleStudentFormChange('gender', value)}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                        <SelectContent className="z-50">
+                          <SelectItem value="Male">Male</SelectItem>
+                          <SelectItem value="Female">Female</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
                   <div>
-                    <Label htmlFor="student-dob">Date of Birth (Optional)</Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Label htmlFor="student-dob" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date of Birth <span className="text-blue-600 font-normal">(Optional)</span></Label>
+                    <div className="grid grid-cols-3 gap-2 mt-1">
                       <Select 
                         value={studentCreationForm.dateOfBirth ? new Date(studentCreationForm.dateOfBirth).getDate().toString() : ""} 
                         onValueChange={(day) => {
@@ -5723,25 +5724,29 @@ export default function AdminDashboard() {
                       Select day, month, and year
                     </p>
                   </div>
-                  <div>
-                    <Label htmlFor="student-email">Email (Optional)</Label>
-                    <Input
-                      id="student-email"
-                      type="email"
-                      value={studentCreationForm.email}
-                      onChange={(e) => handleStudentFormChange('email', e.target.value)}
-                      placeholder="john.doe@student.com"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="student-whatsapp">Parent WhatsApp Number *</Label>
-                    <Input
-                      id="student-whatsapp"
-                      value={studentCreationForm.parentWhatsApp}
-                      onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
-                      placeholder="+234 XXX XXX XXXX"
-                      required
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="student-email" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Email <span className="text-blue-600 font-normal">(Optional)</span></Label>
+                      <Input
+                        id="student-email"
+                        type="email"
+                        value={studentCreationForm.email}
+                        onChange={(e) => handleStudentFormChange('email', e.target.value)}
+                        placeholder="john@student.com"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="student-whatsapp" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Parent WhatsApp</Label>
+                      <Input
+                        id="student-whatsapp"
+                        value={studentCreationForm.parentWhatsApp}
+                        onChange={(e) => handleStudentFormChange('parentWhatsApp', e.target.value)}
+                        placeholder="+234 XXX XXX XXXX"
+                        className="mt-1"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -5749,19 +5754,24 @@ export default function AdminDashboard() {
               {/* Step 3: Additional Information (All Optional) */}
               {currentStep === 3 && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-center text-orange-600">Additional Information (Optional)</h3>
-                  <p className="text-sm text-gray-600 text-center">These fields are optional. You can skip this step or fill them in later.</p>
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <FileText className="h-5 w-5 text-orange-600" />
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Step 3: Extra Details</h3>
+                  </div>
+
                   <div>
-                    <Label htmlFor="student-address">Address (Optional)</Label>
+                    <Label htmlFor="student-address" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Address <span className="text-blue-600 font-normal">(Optional)</span></Label>
                     <Input
                       id="student-address"
                       value={studentCreationForm.address}
                       onChange={(e) => handleStudentFormChange('address', e.target.value)}
-                      placeholder="Student's home address"
+                      placeholder="Home address"
+                      className="mt-1"
                     />
                   </div>
+
                   <div>
-                    <Label htmlFor="student-profile-image">Profile Image (Optional)</Label>
+                    <Label htmlFor="student-profile-image" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Profile Photo <span className="text-blue-600 font-normal">(Optional)</span></Label>
                     <Input
                       id="student-profile-image"
                       type="file"
@@ -5777,19 +5787,9 @@ export default function AdminDashboard() {
                           reader.readAsDataURL(file);
                         }
                       }}
+                      className="mt-1"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Upload a profile photo (optional). Supported formats: JPG, PNG, GIF
-                    </p>
-                  </div>
-                  
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <h4 className="text-sm font-medium text-blue-800 mb-2">
-                      Ready to Create Student
-                    </h4>
-                    <p className="text-xs text-blue-700">
-                      Review your information and click "Create Student" to complete the registration.
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">JPG, PNG, or GIF • Max 5MB</p>
                   </div>
                 </div>
               )}
