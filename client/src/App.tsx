@@ -18,7 +18,6 @@ import SchoolAdmissions from "@/pages/school-admissions";
 import SchoolContact from "@/pages/school-contact";
 import NewsPage from "@/pages/news";
 import NewsDetailPage from "@/pages/news-detail";
-import AddStudent from "@/pages/add-student";
 import { useEffect } from "react";
 
 // Portal Routes Component for authenticated users
@@ -104,7 +103,6 @@ function PortalRoutes() {
         <>
           <Route path="" component={AdminDashboard} />
           <Route path="admin" component={AdminDashboard} />
-          <Route path="add-student" component={AddStudent} />
           <Route path="users" component={UserManagement} />
           <Route path="profile" component={Profile} />
         </>
