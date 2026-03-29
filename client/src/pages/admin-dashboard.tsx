@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
 import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue } from "@/lib/offline-queue";
-import { onPrefetchStart, onPrefetchDone } from "@/lib/prefetch-data";
+import { onPrefetchStart, onPrefetchDone, isPrefetchRunning } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
@@ -172,8 +172,10 @@ export default function AdminDashboard() {
     justSynced: boolean;
   }>({ syncing: false, pendingCount: getPendingCount(), justSynced: false });
 
-  // Prefetch sync status
-  const [prefetchStatus, setPrefetchStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
+  // Prefetch sync status — initialised from module flag to avoid mount-order race
+  const [prefetchStatus, setPrefetchStatus] = useState<'idle' | 'syncing' | 'done'>(
+    () => isPrefetchRunning() ? 'syncing' : 'idle'
+  );
   const prefetchDoneTimerRef = useRef<number | null>(null);
   
   // Password visibility
@@ -3341,14 +3343,23 @@ export default function AdminDashboard() {
 
       {/* Prefetch / Offline Sync Status Banner */}
       {prefetchStatus !== 'idle' && (
-        <div className={`w-full px-4 py-2 text-sm font-medium text-center flex items-center justify-center gap-2 transition-all ${
+        <div className={`w-full px-4 py-2 text-sm font-medium flex items-center justify-between gap-2 transition-all ${
           prefetchStatus === 'done' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'
         }`}>
-          {prefetchStatus === 'syncing' ? (
-            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing offline data...</>
-          ) : (
-            <><CheckCircle className="h-3.5 w-3.5" /> Ready for offline use</>
-          )}
+          <div className="flex items-center gap-2 flex-1 justify-center">
+            {prefetchStatus === 'syncing' ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing offline data...</>
+            ) : (
+              <><CheckCircle className="h-3.5 w-3.5" /> Ready for offline use</>
+            )}
+          </div>
+          <button
+            onClick={() => setPrefetchStatus('idle')}
+            className="shrink-0 opacity-75 hover:opacity-100 transition-opacity"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 

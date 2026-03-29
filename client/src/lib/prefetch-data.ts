@@ -29,6 +29,11 @@ const ADMIN_ONLY_ENDPOINTS = [
 const PREFETCH_START = 'sowa:prefetch-start';
 const PREFETCH_DONE = 'sowa:prefetch-done';
 
+// Module-level flag so components can read current state on mount, avoiding
+// the race where a component mounts after the start event has already fired.
+let _prefetchRunning = false;
+export function isPrefetchRunning() { return _prefetchRunning; }
+
 export function onPrefetchStart(cb: () => void) {
   const handler = () => cb();
   window.addEventListener(PREFETCH_START, handler);
@@ -50,6 +55,7 @@ export async function prefetchAllData(
   queryClient: QueryClient,
   userInfo: PrefetchUserInfo
 ): Promise<void> {
+  _prefetchRunning = true;
   window.dispatchEvent(new Event(PREFETCH_START));
 
   try {
@@ -116,6 +122,7 @@ export async function prefetchAllData(
       ]);
     }
   } finally {
+    _prefetchRunning = false;
     window.dispatchEvent(new Event(PREFETCH_DONE));
   }
 }
