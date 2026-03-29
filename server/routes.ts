@@ -1139,7 +1139,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Handle date conversion properly and filter out non-student fields
-      const { firstName, lastName, middleName, email, isActive, ...studentOnlyData } = updateData;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { firstName, lastName, middleName, email, isActive, id: _bodyId, ...studentOnlyData } = updateData;
       
       // Convert date string to Date object if provided
       if (studentOnlyData.dateOfBirth && typeof studentOnlyData.dateOfBirth === 'string') {
@@ -1178,8 +1179,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Update student fields  
-      const updatedStudent = await storage.updateStudent(id, studentOnlyData);
+      // Update student fields (only when there are actual student-table columns to change)
+      let updatedStudent;
+      const studentOnlyKeys = Object.keys(studentOnlyData).filter(k => studentOnlyData[k] !== undefined);
+      if (studentOnlyKeys.length > 0) {
+        updatedStudent = await storage.updateStudent(id, studentOnlyData);
+      } else {
+        updatedStudent = await storage.getStudent(id);
+      }
       res.json(updatedStudent);
     } catch (error: any) {
       console.error('Error updating student:', error);

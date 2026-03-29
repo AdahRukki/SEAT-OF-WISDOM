@@ -765,6 +765,9 @@ export default function AdminDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      if (user?.schoolId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/students', user.schoolId] });
+      }
       setIsDeleteStudentDialogOpen(false);
       setSelectedStudentForDeletion(null);
       toast({
@@ -1677,11 +1680,14 @@ export default function AdminDashboard() {
         isActive: true
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      if (user?.schoolId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/students', user.schoolId] });
+      }
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Error", 
-        description: "Failed to update student details", 
+        description: error?.message || "Failed to update student details", 
         variant: "destructive"
       });
     }
