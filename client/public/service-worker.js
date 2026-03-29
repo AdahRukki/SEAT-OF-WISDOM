@@ -108,26 +108,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation requests (HTML pages): network-first, always fall back to
-  // the cached app shell so the SPA loads even offline.
+  // Navigation requests (HTML pages): cache-first (app shell), then network.
+  // Always serve the cached app shell so the SPA loads even when offline.
   const isNavigation = request.mode === 'navigate' ||
     request.headers.get('accept')?.includes('text/html');
 
   if (isNavigation) {
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) =>
-        fetch(request)
-          .then((response) => {
-            if (response && response.status === 200) {
-              cache.put(request, response.clone());
-            }
-            return response;
+        Promise.all([cache.match(request), cache.match('/')])
+          .then(([cachedRoute, cachedShell]) => {
+            const appShell = cachedRoute || cachedShell;
+            // Background-refresh the cache for next visit
+            fetch(request)
+              .then((response) => {
+                if (response && response.status === 200) {
+                  cache.put(request, response.clone());
+                }
+              })
+              .catch(() => {});
+            // Serve cached shell immediately if available
+            if (appShell) return appShell;
+            // First visit (nothing cached yet) — go to network
+            return fetch(request).then((response) => {
+              if (response && response.status === 200) {
+                cache.put(request, response.clone());
+              }
+              return response;
+            });
           })
-          .catch(() =>
-            cache.match(request).then((cached) =>
-              cached || cache.match('/')
-            )
-          )
       )
     );
     return;

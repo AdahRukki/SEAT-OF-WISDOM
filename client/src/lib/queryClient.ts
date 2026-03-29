@@ -74,10 +74,13 @@ export const getQueryFn: <T>(options: {
         headers,
         credentials: "include",
       });
-    } catch {
-      // Network error (offline) — return undefined so TanStack Query
-      // falls back to its persisted stale cache instead of throwing.
-      return undefined as T;
+    } catch (err) {
+      // Only swallow genuine network/offline errors (TypeError: Failed to fetch).
+      // Rethrow anything unexpected so real bugs are not silently hidden.
+      if (err instanceof TypeError) {
+        return undefined as T;
+      }
+      throw err;
     }
 
     if (res.status === 401) {
