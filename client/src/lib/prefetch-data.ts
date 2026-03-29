@@ -58,39 +58,42 @@ async function prefetchPerClass(
   currentTerm: string | null,
   currentSession: string | null
 ): Promise<void> {
-  // Step A: subjects for this class (must complete before assessments)
-  await queryClient.prefetchQuery({
-    queryKey: ['/api/admin/classes', classId, 'subjects'],
-    queryFn: () => fetchWithAuth(`/api/admin/classes/${classId}/subjects`),
-    staleTime: STALE_1H,
-  });
-
-  const subjects =
-    (queryClient.getQueryData<{ id: string }[]>(
-      ['/api/admin/classes', classId, 'subjects']
-    ) ?? []);
-
-  // Step B: students for this class + assessments per subject — run in parallel
+  // Step A: subjects + students run in parallel; subjects are also needed for assessments
+  // Both are wrapped in allSettled so neither failure blocks the other
   await Promise.allSettled([
+    queryClient.prefetchQuery({
+      queryKey: ['/api/admin/classes', classId, 'subjects'],
+      queryFn: () => fetchWithAuth(`/api/admin/classes/${classId}/subjects`),
+      staleTime: STALE_1H,
+    }),
     queryClient.prefetchQuery({
       queryKey: ['/api/admin/classes', classId, 'students'],
       queryFn: () => fetchWithAuth(`/api/admin/classes/${classId}/students`),
       staleTime: STALE_1H,
     }),
-    ...(currentTerm && currentSession
-      ? subjects.map((subject) =>
-          queryClient.prefetchQuery({
-            queryKey: ['/api/admin/assessments', classId, subject.id, currentTerm, currentSession],
-            queryFn: () =>
-              fetchWithAuth(
-                `/api/admin/assessments?classId=${classId}&subjectId=${subject.id}` +
-                `&term=${encodeURIComponent(currentTerm)}&session=${encodeURIComponent(currentSession)}`
-              ),
-            staleTime: STALE_1H,
-          })
-        )
-      : []),
   ]);
+
+  // Step B: assessments per subject — only runs after subjects are in cache
+  if (currentTerm && currentSession) {
+    const subjects =
+      queryClient.getQueryData<{ id: string }[]>(
+        ['/api/admin/classes', classId, 'subjects']
+      ) ?? [];
+
+    await Promise.allSettled(
+      subjects.map((subject) =>
+        queryClient.prefetchQuery({
+          queryKey: ['/api/admin/assessments', classId, subject.id, currentTerm, currentSession],
+          queryFn: () =>
+            fetchWithAuth(
+              `/api/admin/assessments?classId=${classId}&subjectId=${subject.id}` +
+              `&term=${encodeURIComponent(currentTerm)}&session=${encodeURIComponent(currentSession)}`
+            ),
+          staleTime: STALE_1H,
+        })
+      )
+    );
+  }
 }
 
 export async function prefetchAllData(
@@ -121,11 +124,13 @@ export async function prefetchAllData(
 
     // Phase 1b: notifications for student role
     if (role === 'student') {
-      await queryClient.prefetchQuery({
-        queryKey: ['/api/notifications'],
-        queryFn: () => fetchWithAuth('/api/notifications'),
-        staleTime: STALE_1H,
-      });
+      await Promise.allSettled([
+        queryClient.prefetchQuery({
+          queryKey: ['/api/notifications'],
+          queryFn: () => fetchWithAuth('/api/notifications'),
+          staleTime: STALE_1H,
+        }),
+      ]);
     }
 
     // Resolve active term & session for assessments + payments prefetch
