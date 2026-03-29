@@ -44,7 +44,7 @@ const EMPTY_FORM: StudentForm = {
 };
 
 export default function AddStudent() {
-  const [, navigate] = useLocation();
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -125,7 +125,7 @@ export default function AddStudent() {
         });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/students"] });
-      navigate("/");
+      setLocation("/");
     },
     onError: (error: any) => {
       toast({
@@ -174,7 +174,7 @@ export default function AddStudent() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate("/")}
+          onClick={() => setLocation("/")}
           className="shrink-0"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -526,7 +526,7 @@ export default function AddStudent() {
           variant="outline"
           className="flex-1"
           onClick={() => {
-            if (currentStep === 1) navigate("/");
+            if (currentStep === 1) setLocation("/");
             else setCurrentStep((s) => s - 1);
           }}
         >
