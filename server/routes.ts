@@ -2820,6 +2820,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/validate-report-data-bulk", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can validate report data" });
+      }
+      const { classId, term, session } = req.body;
+      if (!classId || !term || !session) {
+        return res.status(400).json({ error: "Missing required fields: classId, term, session" });
+      }
+      const result = await storage.validateReportCardDataBulk(classId, term, session);
+      res.json(result);
+    } catch (error) {
+      console.error("Error in bulk validation:", error);
+      res.status(500).json({ error: "Failed to validate report data in bulk" });
+    }
+  });
+
+  app.post("/api/admin/validate-report-data-school", authenticate, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can validate report data" });
+      }
+      const { term, session, schoolId } = req.body;
+      if (!term || !session) {
+        return res.status(400).json({ error: "Missing required fields: term, session" });
+      }
+      const effectiveSchoolId = user.role === "sub-admin" ? user.schoolId : schoolId;
+      const result = await storage.validateReportCardDataSchool(term, session, effectiveSchoolId || undefined);
+      res.json(result);
+    } catch (error) {
+      console.error("Error in school-wide validation:", error);
+      res.status(500).json({ error: "Failed to validate school report data" });
+    }
+  });
+
   app.post("/api/admin/generated-reports", authenticate, async (req: Request, res: Response) => {
     const user = (req as any).user;
     

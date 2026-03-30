@@ -233,6 +233,20 @@ export interface IStorage {
   createGeneratedReportCard(reportCardData: InsertGeneratedReportCard): Promise<GeneratedReportCard>;
   deleteGeneratedReportCard(reportCardId: string): Promise<void>;
   validateReportCardData(studentId: string, classId: string, term: string, session: string): Promise<{ hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
+  validateReportCardDataBulk(classId: string, term: string, session: string): Promise<{
+    results: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
+    summary: { total: number; ready: number; partial: number; incomplete: number };
+  }>;
+  validateReportCardDataSchool(term: string, session: string, schoolId?: string): Promise<{
+    classes: Record<string, {
+      className: string;
+      totalStudents: number;
+      validatedStudents: number;
+      issues: string[];
+    }>;
+    studentResults: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
+    summary: { totalStudents: number; readyStudents: number };
+  }>;
   
   // Enhanced student creation helpers
   getSchoolNumber(schoolId: string): Promise<string>;
@@ -1873,6 +1887,168 @@ export class DatabaseStorage implements IStorage {
       hasAllScores,
       hasAttendance,
       missingSubjects: adjustedMissingSubjects
+    };
+  }
+
+  async validateReportCardDataBulk(classId: string, term: string, session: string): Promise<{
+    results: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
+    summary: { total: number; ready: number; partial: number; incomplete: number };
+  }> {
+    const [classInfo] = await db
+      .select()
+      .from(classes)
+      .where(eq(classes.id, classId));
+
+    const classSubjectsQuery = await db
+      .select({ subject: subjects })
+      .from(classSubjects)
+      .leftJoin(subjects, eq(classSubjects.subjectId, subjects.id))
+      .where(eq(classSubjects.classId, classId));
+
+    const assignedSubjects = classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
+
+    const classStudents = await db
+      .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .where(and(eq(students.classId, classId), eq(users.isActive, true)));
+
+    if (classStudents.length === 0) {
+      return { results: {}, summary: { total: 0, ready: 0, partial: 0, incomplete: 0 } };
+    }
+
+    const studentIds = classStudents.map(s => s.id);
+
+    const allAssessments = await db
+      .select()
+      .from(assessments)
+      .where(
+        and(
+          inArray(assessments.studentId, studentIds),
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+
+    const allAttendance = await db
+      .select()
+      .from(attendance)
+      .where(
+        and(
+          inArray(attendance.studentId, studentIds),
+          eq(attendance.classId, classId),
+          eq(attendance.term, term),
+          eq(attendance.session, session)
+        )
+      );
+
+    const isSSClass = classInfo && (classInfo.name.includes('S.S.S 2') || classInfo.name.includes('S.S.S 3'));
+    const minimumRequiredSubjects = isSSClass ? 9 : assignedSubjects.length;
+
+    const results: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }> = {};
+    let ready = 0, partial = 0, incomplete = 0;
+
+    for (const student of classStudents) {
+      const studentAssessments = allAssessments.filter(a => a.studentId === student.id);
+      const completeAssessments = studentAssessments.filter(
+        a => a.firstCA !== null && a.secondCA !== null && a.exam !== null
+      );
+
+      const missingSubjects = assignedSubjects
+        .filter(subject => !completeAssessments.find(a => a.subjectId === subject.id))
+        .map(subject => subject.name);
+
+      let hasAllScores: boolean;
+      let adjustedMissing = missingSubjects;
+
+      if (isSSClass) {
+        hasAllScores = completeAssessments.length >= minimumRequiredSubjects;
+        if (hasAllScores) adjustedMissing = [];
+      } else {
+        hasAllScores = missingSubjects.length === 0 && assignedSubjects.length > 0;
+      }
+
+      const studentAttendance = allAttendance.find(a => a.studentId === student.id);
+      const hasAttendance = !!studentAttendance && studentAttendance.totalDays > 0;
+
+      results[student.id] = { hasAllScores, hasAttendance, missingSubjects: adjustedMissing };
+
+      if (hasAllScores && hasAttendance) ready++;
+      else if (hasAllScores || hasAttendance) partial++;
+      else incomplete++;
+    }
+
+    return {
+      results,
+      summary: { total: classStudents.length, ready, partial, incomplete }
+    };
+  }
+
+  async validateReportCardDataSchool(term: string, session: string, schoolId?: string): Promise<{
+    classes: Record<string, {
+      className: string;
+      totalStudents: number;
+      validatedStudents: number;
+      issues: string[];
+    }>;
+    studentResults: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
+    summary: { totalStudents: number; readyStudents: number };
+  }> {
+    let schoolClasses;
+    if (schoolId) {
+      schoolClasses = await db.select().from(classes).where(eq(classes.schoolId, schoolId));
+    } else {
+      schoolClasses = await db.select().from(classes);
+    }
+
+    const classResults: Record<string, { className: string; totalStudents: number; validatedStudents: number; issues: string[] }> = {};
+    const allStudentResults: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }> = {};
+    let totalStudents = 0;
+    let readyStudents = 0;
+
+    for (const cls of schoolClasses) {
+      const bulkResult = await this.validateReportCardDataBulk(cls.id, term, session);
+
+      const issues: string[] = [];
+      const classStudents = await db
+        .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+        .from(students)
+        .leftJoin(users, eq(students.userId, users.id))
+        .where(and(eq(students.classId, cls.id), eq(users.isActive, true)));
+
+      const studentNameMap = new Map(classStudents.map(s => [s.id, `${s.firstName} ${s.lastName}`]));
+
+      for (const [studentId, result] of Object.entries(bulkResult.results)) {
+        allStudentResults[studentId] = result;
+        if (!result.hasAllScores || !result.hasAttendance) {
+          const name = studentNameMap.get(studentId) || studentId;
+          const parts: string[] = [];
+          if (!result.hasAllScores && result.missingSubjects.length > 0) {
+            parts.push(`Missing subjects: ${result.missingSubjects.slice(0, 2).join(", ")}${result.missingSubjects.length > 2 ? ` +${result.missingSubjects.length - 2}` : ""}`);
+          } else if (!result.hasAllScores) {
+            parts.push("Missing scores");
+          }
+          if (!result.hasAttendance) parts.push("No attendance");
+          issues.push(`${name}: ${parts.join(", ")}`);
+        }
+      }
+
+      classResults[cls.id] = {
+        className: cls.name,
+        totalStudents: bulkResult.summary.total,
+        validatedStudents: bulkResult.summary.ready,
+        issues
+      };
+
+      totalStudents += bulkResult.summary.total;
+      readyStudents += bulkResult.summary.ready;
+    }
+
+    return {
+      classes: classResults,
+      studentResults: allStudentResults,
+      summary: { totalStudents, readyStudents }
     };
   }
 

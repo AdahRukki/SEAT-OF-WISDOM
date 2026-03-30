@@ -40,7 +40,7 @@ Preferred communication style: Simple, everyday language.
 -   **Multi-Branch Structure**: Schools, classes, subjects, with branch isolation (e.g., School 1 Ikpoto, School 2 Bonsaac).
 -   **Student Records**: Profiles linked to users, classes, and school branches (SOWA/#### ID), including parent WhatsApp as primary contact. Inactive students (isActive = false) are automatically filtered from all system queries while preserving historical data.
 -   **Assessment System**: 20+20+60 scoring with automatic grading and subject filtering.
--   **Report Cards**: Professional, printable academic summaries with school header, statistics, and behavioral assessment.
+-   **Report Cards**: Professional, printable academic summaries with school header, statistics, and behavioral assessment. Bulk validation endpoints (`validate-report-data-bulk` for single class, `validate-report-data-school` for entire school) replace sequential per-student API calls with 4 DB queries total regardless of student count. Auto-validates on class/term/session selection.
 -   **News System**: Public news articles with title, content, images, tags, and publication dates, transformed into a blog format with individual article pages.
 -   **Notifications**: In-app student notifications with real-time inbox, unread counts, and broadcast messaging.
 -   **Payment Tracking & Reconciliation System**: Comprehensive fee payment management with:

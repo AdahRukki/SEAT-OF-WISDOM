@@ -150,40 +150,32 @@ export function ReportCardManagement({
     }
   }, [academicInfo]);
 
-  // Validation mutation
-  const validateMutation = useMutation({
-    mutationFn: async (data: {
-      studentId: string;
-      classId: string;
-      term: string;
-      session: string;
-    }) => {
-      return await apiRequest("/api/admin/validate-report-data", {
+  // Bulk validation mutation (replaces per-student sequential calls)
+  const bulkValidateMutation = useMutation({
+    mutationFn: async (data: { classId: string; term: string; session: string }) => {
+      return await apiRequest("/api/admin/validate-report-data-bulk", {
         method: "POST",
         body: data,
       });
     },
-    onSuccess: (result, variables) => {
-      // Map server response to frontend ValidationResult format
-      const validationResult: ValidationResult = {
-        hasAllScores:
-          result.status === "complete" ||
-          (result.status === "partial" &&
-            (!result.missingSubjects || result.missingSubjects.length === 0)),
-        hasAttendance: result.hasAttendance,
-        missingSubjects: result.missingSubjects || [],
-      };
-
-      setValidationResults((prev) => ({
-        ...prev,
-        [variables.studentId]: validationResult,
-      }));
+    onSuccess: (result) => {
+      setValidationResults(result.results);
     },
-    onError: (error) => {
+    onError: () => {
       toast({
         title: "Validation Error",
         description: "Failed to validate report data",
         variant: "destructive",
+      });
+    },
+  });
+
+  // School-wide bulk validation mutation
+  const schoolValidateMutation = useMutation({
+    mutationFn: async (data: { term: string; session: string; schoolId?: string }) => {
+      return await apiRequest("/api/admin/validate-report-data-school", {
+        method: "POST",
+        body: data,
       });
     },
   });
@@ -249,42 +241,43 @@ export function ReportCardManagement({
       return;
     }
 
-    if (students.length === 0) {
-      toast({
-        title: "No Students Found",
-        description: "No students found in the selected class",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsValidating(true);
     setValidationResults({});
 
     try {
-      for (const student of students) {
-        await validateMutation.mutateAsync({
-          studentId: student.id,
-          classId: selectedClass,
-          term: selectedTerm,
-          session: selectedSession,
-        });
-      }
+      const result = await bulkValidateMutation.mutateAsync({
+        classId: selectedClass,
+        term: selectedTerm,
+        session: selectedSession,
+      });
 
       toast({
         title: "Validation Complete",
-        description: `Validated ${students.length} students. Check the results below.`,
+        description: `${result.summary.ready}/${result.summary.total} students ready. ${result.summary.partial > 0 ? `${result.summary.partial} partial.` : ""} ${result.summary.incomplete > 0 ? `${result.summary.incomplete} incomplete.` : ""}`.trim(),
       });
     } catch (error) {
       toast({
         title: "Validation Error",
-        description: "Some validations failed. Please try again.",
+        description: "Failed to validate. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsValidating(false);
     }
   };
+
+  // Auto-validate when class + term + session are all selected
+  useEffect(() => {
+    if (selectedClass && selectedTerm && selectedSession && students.length > 0) {
+      setValidationResults({});
+      setIsValidating(true);
+      bulkValidateMutation.mutateAsync({
+        classId: selectedClass,
+        term: selectedTerm,
+        session: selectedSession,
+      }).finally(() => setIsValidating(false));
+    }
+  }, [selectedClass, selectedTerm, selectedSession, students.length]);
 
   // State for tracking validation results by class
   const [schoolValidationResults, setSchoolValidationResults] = useState<{
@@ -308,7 +301,7 @@ export function ReportCardManagement({
   const [filterClass, setFilterClass] = useState("");
   const [filterTermSession, setFilterTermSession] = useState("");
 
-  // Validation for entire school - only validates, shows class issues
+  // Validation for entire school - single bulk API call
   const handleValidateEntireSchool = async () => {
     setIsValidating(true);
     setValidationResults({});
@@ -316,17 +309,14 @@ export function ReportCardManagement({
     setIsAllStudentsValidated(false);
 
     try {
-      // Use shared academic info instead of direct API call
       if (!academicInfo?.currentTerm || !academicInfo?.currentSession) {
         try {
           await apiRequest("/api/admin/initialize-academic-calendar", {
             method: "POST",
           });
-          // Refresh the academic info query after initialization
           queryClient.invalidateQueries({
             queryKey: ["/api/current-academic-info"],
           });
-
           toast({
             title: "Academic Calendar Initialized",
             description: "Academic calendar has been initialized successfully.",
@@ -334,8 +324,7 @@ export function ReportCardManagement({
         } catch (error) {
           toast({
             title: "Initialization Failed",
-            description:
-              "Failed to initialize academic calendar. Please contact administrator.",
+            description: "Failed to initialize academic calendar. Please contact administrator.",
             variant: "destructive",
           });
           return;
@@ -354,59 +343,15 @@ export function ReportCardManagement({
         return;
       }
 
-      let totalStudentsAcrossSchool = 0;
-      let validatedStudentsAcrossSchool = 0;
-      const classResults: typeof schoolValidationResults = {};
+      const result = await schoolValidateMutation.mutateAsync({
+        term: currentTerm,
+        session: currentSession,
+      });
 
-      // Validate all students by class
-      for (const classItem of classes) {
-        const classStudents = await apiRequest(
-          `/api/admin/students/class/${classItem.id}`,
-        );
-        const classTotal = classStudents.length;
-        let classValidated = 0;
-        const classIssues: string[] = [];
+      setSchoolValidationResults(result.classes);
+      setValidationResults(result.studentResults);
 
-        totalStudentsAcrossSchool += classTotal;
-
-        // Validate each student in the class
-        for (const student of classStudents) {
-          try {
-            const validationResult = await validateMutation.mutateAsync({
-              studentId: student.id,
-              classId: classItem.id,
-              term: currentTerm,
-              session: currentSession,
-            });
-
-            if (validationResult.status === "complete") {
-              classValidated++;
-              validatedStudentsAcrossSchool++;
-            } else {
-              classIssues.push(
-                `${student.user.firstName} ${student.user.lastName}: ${validationResult.message}`,
-              );
-            }
-          } catch (error) {
-            console.error(`Failed to validate student ${student.id}:`, error);
-            classIssues.push(
-              `${student.user.firstName} ${student.user.lastName}: Validation failed`,
-            );
-          }
-        }
-
-        // Store class results
-        classResults[classItem.id] = {
-          className: classItem.name,
-          totalStudents: classTotal,
-          validatedStudents: classValidated,
-          issues: classIssues,
-        };
-      }
-
-      setSchoolValidationResults(classResults);
-
-      if (totalStudentsAcrossSchool === 0) {
+      if (result.summary.totalStudents === 0) {
         toast({
           title: "No Students Found",
           description: "No students found across all classes.",
@@ -415,24 +360,22 @@ export function ReportCardManagement({
         return;
       }
 
-      const successRate =
-        (validatedStudentsAcrossSchool / totalStudentsAcrossSchool) * 100;
-      const allValidated =
-        validatedStudentsAcrossSchool === totalStudentsAcrossSchool;
+      const allValidated = result.summary.readyStudents === result.summary.totalStudents;
       setIsAllStudentsValidated(allValidated);
+
+      const successRate = (result.summary.readyStudents / result.summary.totalStudents) * 100;
 
       toast({
         title: allValidated
           ? "All Students Validated Successfully"
           : "Validation Complete - Issues Found",
-        description: `${validatedStudentsAcrossSchool}/${totalStudentsAcrossSchool} students validated (${successRate.toFixed(1)}%). Check class details below.`,
+        description: `${result.summary.readyStudents}/${result.summary.totalStudents} students validated (${successRate.toFixed(1)}%). Check class details below.`,
         variant: allValidated ? "default" : "destructive",
       });
     } catch (error) {
       toast({
         title: "Validation Error",
-        description:
-          "Failed to complete school-wide validation. Please try again.",
+        description: "Failed to complete school-wide validation. Please try again.",
         variant: "destructive",
       });
     } finally {
