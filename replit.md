@@ -26,6 +26,7 @@ Preferred communication style: Simple, everyday language.
 -   **Session Management**: Express sessions with PostgreSQL store
 -   **Development**: Hot reloading with tsx and Vite middleware
 -   **Technical Implementations**: Intelligent student ID reuse, score publication control, comprehensive security features including auto-logout and JWT invalidation, Excel-based bulk student and score uploads, system-wide inactive student filtering.
+-   **Prefetch Strategy**: Phase 1 (global: academic info, sessions, terms, subjects, news) + Phase 2 (per-school: students, classes, fee types, payments, student fees, financial summary). Per-class data (subjects, assessments) loads lazily on demand when user selects a class. Finance/attendance term+session auto-sync from active academic info.
 
 ### Authentication & Authorization
 -   **Authentication**: Firebase Authentication with JWT and local fallback.

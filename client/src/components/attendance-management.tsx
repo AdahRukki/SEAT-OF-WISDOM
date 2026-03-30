@@ -35,20 +35,26 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
     enabled: !!selectedSchoolId,
   });
 
-  // Fetch students in selected class
-  const { data: studentsInClass = [], isLoading: studentsLoading } = useQuery({
-    queryKey: ["/api/admin/students", "by-class", selectedClassId],
-    queryFn: async () => {
-      const allStudents = await apiRequest("/api/admin/students");
-      return (allStudents as StudentWithDetails[]).filter((student: StudentWithDetails) => student.classId === selectedClassId);
-    },
+  // Fetch students in selected class using per-class endpoint (matches prefetch cache)
+  const { data: studentsInClass = [], isLoading: studentsLoading } = useQuery<StudentWithDetails[]>({
+    queryKey: ['/api/admin/classes', selectedClassId, 'students'],
+    queryFn: () => apiRequest(`/api/admin/classes/${selectedClassId}/students`),
     enabled: !!selectedClassId,
   });
 
   // Fetch current academic info
-  const { data: academicInfo } = useQuery({
+  const { data: academicInfo } = useQuery<{ currentTerm: string | null; currentSession: string | null }>({
     queryKey: ["/api/current-academic-info"],
   });
+
+  useEffect(() => {
+    if (academicInfo?.currentTerm && !selectedTerm) {
+      setSelectedTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession && !selectedSession) {
+      setSelectedSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
 
   // Fetch existing attendance records for the class
   const { data: existingAttendance = [], isLoading: attendanceLoading } = useQuery({

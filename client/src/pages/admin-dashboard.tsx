@@ -315,8 +315,8 @@ export default function AdminDashboard() {
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
   const [isPaymentHistoryDialogOpen, setIsPaymentHistoryDialogOpen] = useState(false);
   const [selectedStudentForHistory, setSelectedStudentForHistory] = useState<StudentWithDetails | null>(null);
-  const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("First Term");
-  const [selectedFinanceSession, setSelectedFinanceSession] = useState("2024/2025");
+  const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
+  const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
   
   // Bulk payment states
@@ -359,8 +359,8 @@ export default function AdminDashboard() {
     defaultValues: {
       feeTypeId: "",
       classId: "",
-      term: "First Term",
-      session: "2024/2025",
+      term: "",
+      session: "",
     },
   });
 
@@ -404,6 +404,22 @@ export default function AdminDashboard() {
     }
     if (academicInfo?.currentSession) {
       setScoresSession(academicInfo.currentSession);
+    }
+  }, [academicInfo]);
+
+  // Sync finance term and session with actual academic calendar
+  useEffect(() => {
+    if (academicInfo?.currentTerm && !selectedFinanceTerm) {
+      setSelectedFinanceTerm(academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession && !selectedFinanceSession) {
+      setSelectedFinanceSession(academicInfo.currentSession);
+    }
+    if (academicInfo?.currentTerm) {
+      assignFeeForm.setValue('term', assignFeeForm.getValues('term') || academicInfo.currentTerm);
+    }
+    if (academicInfo?.currentSession) {
+      assignFeeForm.setValue('session', assignFeeForm.getValues('session') || academicInfo.currentSession);
     }
   }, [academicInfo]);
 

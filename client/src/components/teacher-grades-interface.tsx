@@ -99,7 +99,8 @@ export function TeacherGradesInterface({
 
 
   const { data: nonAcademicRatings = [], isLoading: ratingsLoading } = useQuery<NonAcademicRating[]>({
-    queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${selectedTerm}/${selectedSession}`],
+    queryKey: ['/api/admin/non-academic-ratings', selectedClassId, selectedTerm, selectedSession],
+    queryFn: () => apiRequest(`/api/admin/non-academic-ratings/${selectedClassId}/${encodeURIComponent(selectedTerm)}/${encodeURIComponent(selectedSession)}`),
     enabled: !!selectedClassId && !!selectedTerm && !!selectedSession
   });
 
@@ -116,9 +117,8 @@ export function TeacherGradesInterface({
       toast({ description: "Non-academic ratings saved successfully!" });
       // Invalidate the specific ratings query
       queryClient.invalidateQueries({ 
-        queryKey: [`/api/admin/non-academic-ratings/${selectedClassId}/${selectedTerm}/${selectedSession}`] 
+        queryKey: ['/api/admin/non-academic-ratings', selectedClassId, selectedTerm, selectedSession] 
       });
-      // Also invalidate all non-academic ratings queries to ensure refresh
       queryClient.invalidateQueries({ 
         predicate: (query) => query.queryKey[0]?.toString().includes('/api/admin/non-academic-ratings')
       });

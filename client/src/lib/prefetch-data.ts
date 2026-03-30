@@ -52,50 +52,6 @@ export interface PrefetchUserInfo {
   schoolId?: string | null;
 }
 
-async function prefetchPerClass(
-  queryClient: QueryClient,
-  classId: string,
-  currentTerm: string | null,
-  currentSession: string | null
-): Promise<void> {
-  // Step A: subjects + students run in parallel; subjects are also needed for assessments
-  // Both are wrapped in allSettled so neither failure blocks the other
-  await Promise.allSettled([
-    queryClient.prefetchQuery({
-      queryKey: ['/api/admin/classes', classId, 'subjects'],
-      queryFn: () => fetchWithAuth(`/api/admin/classes/${classId}/subjects`),
-      staleTime: STALE_1H,
-    }),
-    queryClient.prefetchQuery({
-      queryKey: ['/api/admin/classes', classId, 'students'],
-      queryFn: () => fetchWithAuth(`/api/admin/classes/${classId}/students`),
-      staleTime: STALE_1H,
-    }),
-  ]);
-
-  // Step B: assessments per subject — only runs after subjects are in cache
-  if (currentTerm && currentSession) {
-    const subjects =
-      queryClient.getQueryData<{ id: string }[]>(
-        ['/api/admin/classes', classId, 'subjects']
-      ) ?? [];
-
-    await Promise.allSettled(
-      subjects.map((subject) =>
-        queryClient.prefetchQuery({
-          queryKey: ['/api/admin/assessments', classId, subject.id, currentTerm, currentSession],
-          queryFn: () =>
-            fetchWithAuth(
-              `/api/admin/assessments?classId=${classId}&subjectId=${subject.id}` +
-              `&term=${encodeURIComponent(currentTerm)}&session=${encodeURIComponent(currentSession)}`
-            ),
-          staleTime: STALE_1H,
-        })
-      )
-    );
-  }
-}
-
 export async function prefetchAllData(
   queryClient: QueryClient,
   userInfo: PrefetchUserInfo
@@ -106,7 +62,6 @@ export async function prefetchAllData(
   try {
     const { role, schoolId } = userInfo;
 
-    // Phase 1: global endpoints (same for all roles) + admin-only extras
     const globalEndpoints = [
       ...GLOBAL_ENDPOINTS,
       ...(role === 'admin' ? ADMIN_ONLY_ENDPOINTS : []),
@@ -122,7 +77,6 @@ export async function prefetchAllData(
       )
     );
 
-    // Phase 1b: notifications for student role
     if (role === 'student') {
       await Promise.allSettled([
         queryClient.prefetchQuery({
@@ -133,7 +87,6 @@ export async function prefetchAllData(
       ]);
     }
 
-    // Resolve active term & session for assessments + payments prefetch
     const academicInfo = queryClient.getQueryData<{
       currentTerm: string | null;
       currentSession: string | null;
@@ -145,7 +98,6 @@ export async function prefetchAllData(
       const schools =
         queryClient.getQueryData<{ id: string }[]>(['/api/admin/schools']) ?? [];
 
-      // Phase 2 (admin): per-school flat data — students, classes, fee types, payments
       await Promise.allSettled(
         schools.flatMap((school) => [
           queryClient.prefetchQuery({
@@ -174,29 +126,31 @@ export async function prefetchAllData(
                     ),
                   staleTime: STALE_1H,
                 }),
+                queryClient.prefetchQuery({
+                  queryKey: ['/api/admin/student-fees', school.id, currentTerm, currentSession],
+                  queryFn: () =>
+                    fetchWithAuth(
+                      `/api/admin/student-fees?schoolId=${school.id}` +
+                      `&term=${encodeURIComponent(currentTerm)}&session=${encodeURIComponent(currentSession)}`
+                    ),
+                  staleTime: STALE_1H,
+                }),
+                queryClient.prefetchQuery({
+                  queryKey: ['/api/admin/financial-summary', school.id, currentTerm, currentSession],
+                  queryFn: () =>
+                    fetchWithAuth(
+                      `/api/admin/financial-summary?schoolId=${school.id}` +
+                      `&term=${encodeURIComponent(currentTerm)}&session=${encodeURIComponent(currentSession)}`
+                    ),
+                  staleTime: STALE_1H,
+                }),
               ]
             : []),
         ])
       );
-
-      // Phase 3 (admin): per-class subjects, students, assessments
-      // Must run after Phase 2 so classes are in cache
-      await Promise.allSettled(
-        schools.map(async (school) => {
-          const classes =
-            queryClient.getQueryData<{ id: string }[]>(['/api/admin/classes', school.id]) ?? [];
-          await Promise.allSettled(
-            classes.map((cls) =>
-              prefetchPerClass(queryClient, cls.id, currentTerm, currentSession)
-            )
-          );
-        })
-      );
-    } else {
-      // sub-admin (or student): single school
+    } else if (role !== 'student') {
       const key = schoolId ?? '';
 
-      // Phase 2 (sub-admin): per-school flat data
       await Promise.allSettled([
         queryClient.prefetchQuery({
           queryKey: ['/api/admin/students', key],
@@ -216,7 +170,6 @@ export async function prefetchAllData(
         ...(currentTerm && currentSession
           ? [
               queryClient.prefetchQuery({
-                // sub-admin: server infers schoolId from JWT — use key as cache discriminator
                 queryKey: ['/api/admin/payments', key, currentTerm, currentSession],
                 queryFn: () =>
                   fetchWithAuth(
@@ -225,20 +178,27 @@ export async function prefetchAllData(
                   ),
                 staleTime: STALE_1H,
               }),
+              queryClient.prefetchQuery({
+                queryKey: ['/api/admin/student-fees', key, currentTerm, currentSession],
+                queryFn: () =>
+                  fetchWithAuth(
+                    `/api/admin/student-fees?term=${encodeURIComponent(currentTerm)}` +
+                    `&session=${encodeURIComponent(currentSession)}`
+                  ),
+                staleTime: STALE_1H,
+              }),
+              queryClient.prefetchQuery({
+                queryKey: ['/api/admin/financial-summary', key, currentTerm, currentSession],
+                queryFn: () =>
+                  fetchWithAuth(
+                    `/api/admin/financial-summary?term=${encodeURIComponent(currentTerm)}` +
+                    `&session=${encodeURIComponent(currentSession)}`
+                  ),
+                staleTime: STALE_1H,
+              }),
             ]
           : []),
       ]);
-
-      // Phase 3 (sub-admin): per-class subjects, students, assessments
-      if (role !== 'student') {
-        const classes =
-          queryClient.getQueryData<{ id: string }[]>(['/api/admin/classes', key]) ?? [];
-        await Promise.allSettled(
-          classes.map((cls) =>
-            prefetchPerClass(queryClient, cls.id, currentTerm, currentSession)
-          )
-        );
-      }
     }
   } finally {
     _prefetchRunning = false;
