@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home, Shield, HelpCircle, Key, Download } from "lucide-react";
+import { GraduationCap, ArrowLeft, Mail, Eye, EyeOff, Home, Shield, HelpCircle, Key, Download, WifiOff } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { SEO } from "@/components/SEO";
@@ -29,9 +29,21 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const { login } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Show security logout message if redirected after auto-logout
   useEffect(() => {
@@ -44,12 +56,12 @@ export default function Login() {
       
       switch (reason) {
         case 'offline':
-          message = 'Logged Out for Security';
-          description = 'You were automatically logged out because your device went offline. Please log in again.';
+          message = 'Logged Out';
+          description = 'You were logged out. You can log in again even while offline if you have logged in before.';
           break;
         case 'inactivity':
           message = 'Session Expired';
-          description = 'You were logged out due to 30 minutes of inactivity. Please log in again.';
+          description = 'You were logged out due to inactivity. Please log in again.';
           break;
         default:
           message = 'Logged Out';
@@ -82,10 +94,11 @@ export default function Login() {
     }
 
     try {
-      await login({ email: loginId, password });
+      const result = await login({ email: loginId, password });
+      const isOffline = !navigator.onLine;
       toast({
-        title: "Login Successful",
-        description: "Welcome back!",
+        title: isOffline ? "Offline Login Successful" : "Login Successful",
+        description: isOffline ? "Using cached data. Some features may be limited." : "Welcome back!",
       });
       navigate("/portal");
     } catch (error) {
@@ -167,6 +180,12 @@ export default function Login() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {!isOnline && (
+            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-4">
+              <WifiOff className="w-4 h-4 shrink-0" />
+              <span>You're offline. You can still log in if you've signed in before.</span>
+            </div>
+          )}
           {!showForgotPassword ? (
             <>
               <form onSubmit={handleSubmit} className="space-y-4">

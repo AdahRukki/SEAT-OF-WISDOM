@@ -29,11 +29,12 @@ Preferred communication style: Simple, everyday language.
 -   **Prefetch Strategy**: Phase 1 (global: academic info, sessions, terms, subjects, news) + Phase 2 (per-school: students, classes, fee types, payments, student fees, financial summary). Per-class data (subjects, assessments) loads lazily on demand when user selects a class. Finance/attendance term+session auto-sync from active academic info.
 
 ### Authentication & Authorization
--   **Authentication**: Firebase Authentication with JWT and local fallback.
+-   **Authentication**: Firebase Authentication with JWT and local fallback. Offline login supported via cached credentials (SHA-256 hashed passwords stored locally after first successful login).
 -   **Firebase Configuration**: Production-ready async configuration loading, offline persistence, auto-detection of long-polling, comprehensive error handling.
--   **Session Handling**: Express sessions with PostgreSQL store.
+-   **Session Handling**: Express sessions with PostgreSQL store. JWT tokens valid for 7 days.
 -   **Role-based Access**: Admin (all schools), sub-admin (single school), student with granular control over features (e.g., user management restricted to main admin).
--   **Security**: Password hashing, token validation, secure session management, auto-logout on inactivity/offline, critical bug fixes for session invalidation.
+-   **Security**: Password hashing, token validation, secure session management, 4-hour inactivity timeout (skipped when offline), auto-reconnect to server when back online. Offline auth credentials preserved across logouts for seamless re-login.
+-   **Offline Login Flow**: On login attempt: try server first → if network error, fall back to locally cached credentials → show offline mode indicator. When connectivity returns, silently re-authenticate with server. Cached credentials expire after 30 days.
 
 ### Data Schema
 -   **User Management**: Roles for admin, sub-admin, and student with isActive flag for soft deletion.
