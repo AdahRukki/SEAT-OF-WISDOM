@@ -1247,7 +1247,7 @@ export default function AdminDashboard() {
     mutationFn: async (studentId: string) => {
       return await apiRequest(`/api/admin/students/${studentId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ isActive: true })
+        body: { isActive: true }
       });
     },
     onSuccess: () => {
