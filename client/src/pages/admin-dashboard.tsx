@@ -1246,7 +1246,7 @@ export default function AdminDashboard() {
   const reactivateStudentMutation = useMutation({
     mutationFn: async (studentId: string) => {
       return await apiRequest(`/api/admin/students/${studentId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         body: JSON.stringify({ isActive: true })
       });
     },
