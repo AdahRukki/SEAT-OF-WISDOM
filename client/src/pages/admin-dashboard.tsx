@@ -1263,7 +1263,7 @@ export default function AdminDashboard() {
   // Update subject name mutation
   const updateSubjectMutation = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      return await apiRequest(`/api/admin/subjects/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+      return await apiRequest(`/api/admin/subjects/${id}`, { method: 'PATCH', body: { name } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/subjects'] });
