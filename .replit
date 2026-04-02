@@ -44,3 +44,6 @@ waitForPort = 5000
 
 [agent]
 integrations = ["firebase_barebones_javascript:1.0.0", "resend:1.0.0"]
+
+[objectStorage]
+defaultBucketID = "replit-objstore-eb784079-9574-4775-acf5-39a96b8e449f"

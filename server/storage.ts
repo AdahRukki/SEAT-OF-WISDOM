@@ -122,6 +122,7 @@ export interface IStorage {
   // Data retrieval (school-aware)
   getAllClasses(schoolId?: string): Promise<(Class & { school: School })[]>;
   getAllSubjects(): Promise<Subject[]>;
+  updateSubject(id: string, name: string): Promise<Subject>;
   getStudentsByClass(classId: string): Promise<StudentWithDetails[]>;
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
   getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
@@ -702,6 +703,15 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSubjects(): Promise<Subject[]> {
     return await db.select().from(subjects);
+  }
+
+  async updateSubject(id: string, name: string): Promise<Subject> {
+    const [updated] = await db.update(subjects)
+      .set({ name, updatedAt: new Date() })
+      .where(eq(subjects.id, id))
+      .returning();
+    if (!updated) throw new Error("Subject not found");
+    return updated;
   }
 
 

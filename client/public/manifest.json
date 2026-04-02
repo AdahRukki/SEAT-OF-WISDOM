@@ -2,7 +2,7 @@
   "name": "Seat of Wisdom Academy",
   "short_name": "SOWA",
   "description": "Multi-branch academy management system with student score tracking and reporting",
-  "start_url": "/",
+  "start_url": "/portal/login",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2563eb",

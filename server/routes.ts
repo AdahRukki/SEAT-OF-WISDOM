@@ -656,6 +656,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/admin/subjects/:id', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: "Subject name is required" });
+      }
+      const updated = await storage.updateSubject(id, name.trim());
+      res.json(updated);
+    } catch (error) {
+      console.error("Update subject error:", error);
+      res.status(500).json({ error: "Failed to update subject" });
+    }
+  });
+
   // Get subjects for a specific class
   app.get('/api/admin/classes/:classId/subjects', authenticate, requireAdmin, async (req, res) => {
     try {

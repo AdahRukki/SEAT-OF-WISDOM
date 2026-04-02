@@ -121,7 +121,8 @@ import {
   Loader2,
   Camera,
   CheckCircle,
-  XCircle
+  XCircle,
+  Pencil
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -208,8 +209,8 @@ export default function AdminDashboard() {
   // School selection for main admin
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
 
-  // Active tab state
-  const [activeTab, setActiveTab] = useState("overview");
+  // Active tab state — sub-admins start on Students (no Overview access)
+  const [activeTab, setActiveTab] = useState(user?.role === 'sub-admin' ? 'students' : 'overview');
 
   // Student editing states
   const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
@@ -260,6 +261,10 @@ export default function AdminDashboard() {
   const [newSubjectName, setNewSubjectName] = useState("");
   const [newSubjectCode, setNewSubjectCode] = useState("");
   const [newSubjectDescription, setNewSubjectDescription] = useState("");
+
+  // Subject inline editing states
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [editingSubjectName, setEditingSubjectName] = useState("");
 
   // Report generation and promotion states
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
@@ -1228,6 +1233,22 @@ export default function AdminDashboard() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to upload signature", variant: "destructive" });
+    }
+  });
+
+  // Update subject name mutation
+  const updateSubjectMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      return await apiRequest(`/api/admin/subjects/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/subjects'] });
+      setEditingSubjectId(null);
+      setEditingSubjectName("");
+      toast({ title: "Subject updated", description: "Subject name updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update subject name", variant: "destructive" });
     }
   });
 
@@ -3388,11 +3409,13 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-4 md:grid-cols-8 gap-0.5 h-auto p-1 bg-muted/60">
-            <TabsTrigger value="overview" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-              <LayoutDashboard className="h-4 w-4 shrink-0" />
-              <span>Overview</span>
-            </TabsTrigger>
+          <TabsList className={`grid w-full gap-0.5 h-auto p-1 bg-muted/60 ${user?.role === 'sub-admin' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4 sm:grid-cols-4 md:grid-cols-8'}`}>
+            {user?.role === 'admin' && (
+              <TabsTrigger value="overview" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <LayoutDashboard className="h-4 w-4 shrink-0" />
+                <span>Overview</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="students" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
               <Users className="h-4 w-4 shrink-0" />
               <span>Students</span>
@@ -3403,23 +3426,25 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="grading" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
               <ClipboardCheck className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Ratings</span>
-              <span className="sm:hidden">Ratings</span>
+              <span>Ratings</span>
             </TabsTrigger>
             <TabsTrigger value="finance" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
               <Wallet className="h-4 w-4 shrink-0" />
               <span>Finance</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-              <FileText className="h-4 w-4 shrink-0" />
-              <span>Reports</span>
-            </TabsTrigger>
-            <TabsTrigger value="users" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-              <Shield className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Users</span>
-              <span className="sm:hidden">Users</span>
-            </TabsTrigger>
-            {user.role === 'admin' && (
+            {user?.role === 'admin' && (
+              <TabsTrigger value="reports" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <FileText className="h-4 w-4 shrink-0" />
+                <span>Reports</span>
+              </TabsTrigger>
+            )}
+            {user?.role === 'admin' && (
+              <TabsTrigger value="users" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <Shield className="h-4 w-4 shrink-0" />
+                <span>Users</span>
+              </TabsTrigger>
+            )}
+            {user?.role === 'admin' && (
               <TabsTrigger value="news" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Bell className="h-4 w-4 shrink-0" />
                 <span>News</span>
@@ -3427,8 +3452,8 @@ export default function AdminDashboard() {
             )}
           </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+          {/* Overview Tab - Admin Only */}
+          {user?.role === 'admin' && <TabsContent value="overview" className="space-y-4 sm:space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -3626,7 +3651,7 @@ export default function AdminDashboard() {
             </Card>
 
 
-          </TabsContent>
+          </TabsContent>}
 
           {/* Students Tab - Class-based viewing */}
           <TabsContent value="students" className="space-y-6 table-container">
@@ -4320,16 +4345,18 @@ export default function AdminDashboard() {
             )}
           </TabsContent>
 
-          {/* Report Cards Tab */}
-          <TabsContent value="reports" className="space-y-6 table-container">
-            <ReportCardManagement 
-              classes={classes}
-              user={user}
-            />
-          </TabsContent>
+          {/* Report Cards Tab - Admin Only */}
+          {user?.role === 'admin' && (
+            <TabsContent value="reports" className="space-y-6 table-container">
+              <ReportCardManagement 
+                classes={classes}
+                user={user}
+              />
+            </TabsContent>
+          )}
 
-          {/* User Management Tab */}
-          <TabsContent value="users" className="space-y-6 table-container">
+          {/* User Management Tab - Admin Only */}
+          {user?.role === 'admin' && <TabsContent value="users" className="space-y-6 table-container">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -5088,7 +5115,7 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </TabsContent>}
 
           {/* News & Notifications Tab - Main Admin Only */}
           {user.role === 'admin' && (
@@ -5449,24 +5476,53 @@ export default function AdminDashboard() {
                 {subjects
                   .filter(subject => !selectedClassSubjects.some(cs => cs.id === subject.id))
                   .map((subject) => (
-                    <div key={subject.id} className="flex items-center justify-between p-2 border rounded">
-                      <span className="text-sm">{subject.name.toUpperCase()}</span>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => {
-                          if (selectedClassForDetails?.id) {
-                            addSubjectMutation.mutate({
-                              classId: selectedClassForDetails.id,
-                              subjectId: subject.id
-                            });
-                          }
-                        }}
-                        disabled={addSubjectMutation.isPending}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Add
-                      </Button>
+                    <div key={subject.id} className="flex items-center justify-between p-2 border rounded gap-2">
+                      {editingSubjectId === subject.id ? (
+                        <div className="flex items-center gap-1 flex-1">
+                          <Input
+                            value={editingSubjectName}
+                            onChange={(e) => setEditingSubjectName(e.target.value)}
+                            className="h-7 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') updateSubjectMutation.mutate({ id: subject.id, name: editingSubjectName });
+                              if (e.key === 'Escape') { setEditingSubjectId(null); setEditingSubjectName(""); }
+                            }}
+                          />
+                          <Button size="sm" className="h-7 px-2" onClick={() => updateSubjectMutation.mutate({ id: subject.id, name: editingSubjectName })} disabled={updateSubjectMutation.isPending || !editingSubjectName.trim()}>Save</Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setEditingSubjectId(null); setEditingSubjectName(""); }}>✕</Button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-sm flex-1">{subject.name.toUpperCase()}</span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => { setEditingSubjectId(subject.id); setEditingSubjectName(subject.name); }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                if (selectedClassForDetails?.id) {
+                                  addSubjectMutation.mutate({
+                                    classId: selectedClassForDetails.id,
+                                    subjectId: subject.id
+                                  });
+                                }
+                              }}
+                              disabled={addSubjectMutation.isPending}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
               </div>
