@@ -123,6 +123,7 @@ export interface IStorage {
   getAllClasses(schoolId?: string): Promise<(Class & { school: School })[]>;
   getAllSubjects(): Promise<Subject[]>;
   updateSubject(id: string, name: string): Promise<Subject>;
+  getInactiveStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
   getStudentsByClass(classId: string): Promise<StudentWithDetails[]>;
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
   getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
@@ -965,6 +966,29 @@ export class DatabaseStorage implements IStorage {
       user: user!,
       class: classData!,
       assessments: [] // Will be populated separately if needed
+    }));
+  }
+
+  async getInactiveStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]> {
+    let query = db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id));
+
+    if (schoolId) {
+      query = query.where(and(eq(classes.schoolId, schoolId), eq(users.isActive, false)));
+    } else {
+      query = query.where(eq(users.isActive, false));
+    }
+
+    const studentsData = await query;
+
+    return studentsData.map(({ students: student, users: user, classes: classData }) => ({
+      ...student,
+      user: user!,
+      class: classData!,
+      assessments: []
     }));
   }
 

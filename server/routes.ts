@@ -1221,6 +1221,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all students (admin only, school-aware)
+  app.get('/api/admin/students/inactive', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = req.query.schoolId as string || user.schoolId;
+      if (user.role === 'sub-admin' && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied to this school's data" });
+      }
+      const inactiveStudents = await storage.getInactiveStudentsWithDetails(schoolId);
+      res.json(inactiveStudents);
+    } catch (error) {
+      console.error("Get inactive students error:", error);
+      res.status(500).json({ error: "Failed to fetch inactive students" });
+    }
+  });
+
   app.get('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
     try {
       const user = (req as any).user;

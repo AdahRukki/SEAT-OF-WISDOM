@@ -636,6 +636,12 @@ export default function AdminDashboard() {
     enabled: user?.role === 'admin'
   });
 
+  const { data: inactiveStudents = [], isLoading: inactiveStudentsLoading } = useQuery<StudentWithDetails[]>({
+    queryKey: ['/api/admin/students/inactive', selectedSchoolId],
+    queryFn: () => apiRequest(selectedSchoolId ? `/api/admin/students/inactive?schoolId=${selectedSchoolId}` : '/api/admin/students/inactive'),
+    enabled: user?.role === 'admin'
+  });
+
   // Helper functions for user management
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -1233,6 +1239,24 @@ export default function AdminDashboard() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to upload signature", variant: "destructive" });
+    }
+  });
+
+  // Reactivate student mutation
+  const reactivateStudentMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      return await apiRequest(`/api/admin/students/${studentId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ isActive: true })
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/inactive'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      toast({ title: "Student reactivated", description: "The student account has been reactivated successfully." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to reactivate student", variant: "destructive" });
     }
   });
 
@@ -5113,6 +5137,66 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Inactive Students Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserX className="w-5 h-5 text-muted-foreground" />
+                  Inactive Students
+                </CardTitle>
+                <CardDescription>
+                  Students who have been deactivated. You can restore their access by reactivating them.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {inactiveStudentsLoading ? (
+                  <div className="text-center py-6 text-muted-foreground">Loading inactive students...</div>
+                ) : inactiveStudents.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">No inactive students found.</div>
+                ) : (
+                  <div className="border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Student ID</TableHead>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Class</TableHead>
+                          <TableHead>School</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {inactiveStudents.map((student) => (
+                          <TableRow key={student.id}>
+                            <TableCell className="font-mono text-sm">{student.studentId}</TableCell>
+                            <TableCell className="font-medium">
+                              {student.user?.firstName} {student.user?.lastName}
+                            </TableCell>
+                            <TableCell>{student.class?.name || '—'}</TableCell>
+                            <TableCell>
+                              {student.class?.schoolId ? getSchoolName(student.class.schoolId) : '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 border-green-600 hover:bg-green-50"
+                                onClick={() => reactivateStudentMutation.mutate(student.id)}
+                                disabled={reactivateStudentMutation.isPending}
+                              >
+                                <UserCheck className="w-4 h-4 mr-1" />
+                                Reactivate
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>}
