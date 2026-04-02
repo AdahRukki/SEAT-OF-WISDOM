@@ -198,10 +198,11 @@ export interface IStorage {
   setSetting(key: string, value: string): Promise<Setting>;
 
   // Current academic info
-  getCurrentAcademicInfo(): Promise<{
+  getCurrentAcademicInfo(schoolId?: string): Promise<{
     currentSession: string | null;
     currentTerm: string | null;
   }>;
+  advanceAcademicTermForSchool(schoolId: string): Promise<{ newTerm: string; newSession: string }>;
 
   // Academic sessions and terms management
   createAcademicSession(sessionData: InsertAcademicSession): Promise<AcademicSession>;
@@ -1665,18 +1666,28 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getCurrentAcademicInfo(): Promise<{
+  async getCurrentAcademicInfo(schoolId?: string): Promise<{
     currentSession: string | null;
     currentTerm: string | null;
   }> {
     try {
-      // Get active session
+      // If schoolId provided, use that school's own term/session
+      if (schoolId) {
+        const [school] = await db
+          .select({ currentTerm: schools.currentTerm, currentSession: schools.currentSession })
+          .from(schools)
+          .where(eq(schools.id, schoolId));
+        if (school?.currentTerm && school?.currentSession) {
+          return { currentSession: school.currentSession, currentTerm: school.currentTerm };
+        }
+      }
+
+      // Fall back to global active flags
       const [activeSession] = await db
         .select()
         .from(academicSessions)
         .where(eq(academicSessions.isActive, true));
 
-      // Get active term
       const [activeTerm] = await db
         .select({
           termName: academicTerms.termName,
@@ -1692,10 +1703,85 @@ export class DatabaseStorage implements IStorage {
       };
     } catch (error) {
       console.error("Error getting current academic info:", error);
-      return {
-        currentSession: null,
-        currentTerm: null
-      };
+      return { currentSession: null, currentTerm: null };
+    }
+  }
+
+  async advanceAcademicTermForSchool(schoolId: string): Promise<{ newTerm: string; newSession: string }> {
+    try {
+      const currentInfo = await this.getCurrentAcademicInfo(schoolId);
+      const currentTerm = currentInfo.currentTerm;
+      const currentSession = currentInfo.currentSession;
+
+      if (!currentTerm || !currentSession) {
+        throw new Error("No active term or session found for this school");
+      }
+
+      let newTerm: string;
+      let newSession: string;
+
+      if (currentTerm === "First Term") {
+        newTerm = "Second Term";
+        newSession = currentSession;
+      } else if (currentTerm === "Second Term") {
+        newTerm = "Third Term";
+        newSession = currentSession;
+      } else if (currentTerm === "Third Term") {
+        newTerm = "First Term";
+        const [startYear, endYear] = currentSession.split('/');
+        newSession = `${parseInt(startYear) + 1}/${parseInt(endYear) + 1}`;
+      } else {
+        throw new Error("Invalid current term");
+      }
+
+      // Ensure the session record exists in academic_sessions
+      const existingSession = await db
+        .select()
+        .from(academicSessions)
+        .where(eq(academicSessions.sessionYear, newSession))
+        .limit(1);
+
+      if (existingSession.length === 0) {
+        await db.insert(academicSessions).values({
+          sessionYear: newSession,
+          startDate: new Date(),
+          endDate: new Date(new Date().getFullYear() + 1, 7, 31),
+          isActive: false
+        });
+      }
+
+      // Ensure the term record exists in academic_terms for that session
+      const [session] = await db
+        .select()
+        .from(academicSessions)
+        .where(eq(academicSessions.sessionYear, newSession));
+
+      const existingTerm = await db
+        .select()
+        .from(academicTerms)
+        .where(and(eq(academicTerms.sessionId, session.id), eq(academicTerms.termName, newTerm)))
+        .limit(1);
+
+      if (existingTerm.length === 0) {
+        await db.insert(academicTerms).values({
+          sessionId: session.id,
+          termName: newTerm,
+          startDate: new Date(),
+          endDate: new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000),
+          isActive: false
+        });
+      }
+
+      // Update ONLY this school's current term/session
+      await db
+        .update(schools)
+        .set({ currentTerm: newTerm, currentSession: newSession, updatedAt: new Date() })
+        .where(eq(schools.id, schoolId));
+
+      return { newTerm, newSession };
+    } catch (error) {
+      console.error("Error advancing academic term for school:", error);
+      throw error;
     }
   }
 

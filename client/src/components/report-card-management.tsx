@@ -135,12 +135,13 @@ export function ReportCardManagement({
     enabled: !!selectedClass,
   });
 
-  // Use same academic info query as Settings for synchronization
+  // Use same academic info query as Settings for synchronization (school-aware)
   const { data: academicInfo } = useQuery<{
     currentSession: string | null;
     currentTerm: string | null;
   }>({
-    queryKey: ["/api/current-academic-info"],
+    queryKey: ["/api/current-academic-info", activeSchoolId],
+    queryFn: () => apiRequest(activeSchoolId ? `/api/current-academic-info?schoolId=${activeSchoolId}` : "/api/current-academic-info"),
   });
 
   // Fetch academic sessions
@@ -684,6 +685,7 @@ export function ReportCardManagement({
     mutationFn: async () => {
       return await apiRequest("/api/admin/advance-term", {
         method: "POST",
+        body: activeSchoolId ? { schoolId: activeSchoolId } : {},
       });
     },
     onSuccess: (response) => {
@@ -691,9 +693,9 @@ export function ReportCardManagement({
         title: "Term Advanced Successfully",
         description: `School has been advanced to ${response.newTerm} ${response.newSession}`,
       });
-      // Refresh current academic info to sync with Settings page
+      // Refresh current academic info for this school
       queryClient.invalidateQueries({
-        queryKey: ["/api/current-academic-info"],
+        queryKey: ["/api/current-academic-info", activeSchoolId],
       });
       // Also reset validation results since we're in a new term
       setSchoolValidationResults({});

@@ -379,7 +379,8 @@ export default function AdminDashboard() {
     currentSession: string | null;
     currentTerm: string | null;
   }>({
-    queryKey: ['/api/current-academic-info'],
+    queryKey: ['/api/current-academic-info', selectedSchoolId],
+    queryFn: () => apiRequest(selectedSchoolId ? `/api/current-academic-info?schoolId=${selectedSchoolId}` : '/api/current-academic-info'),
   });
 
   // Fetch academic sessions for dropdown
@@ -1677,7 +1678,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       toast({ title: "Success", description: "Academic calendar updated successfully" });
       setIsSettingsDialogOpen(false);
-      // Invalidate the academic info query to refresh both Settings and Report Cards
+      // Invalidate academic info for all schools
       queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
     },
     onError: (error) => {

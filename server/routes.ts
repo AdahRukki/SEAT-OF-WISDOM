@@ -541,8 +541,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Advance term automatically: First → Second → Third → First (next session)
   app.post('/api/admin/advance-term', authenticate, requireAdmin, async (req, res) => {
     try {
-      const result = await storage.advanceAcademicTerm();
-      res.json(result);
+      const { schoolId } = req.body;
+      if (schoolId) {
+        const result = await storage.advanceAcademicTermForSchool(schoolId);
+        res.json(result);
+      } else {
+        const result = await storage.advanceAcademicTerm();
+        res.json(result);
+      }
     } catch (error) {
       console.error("Advance term error:", error);
       res.status(400).json({ error: "Failed to advance academic term" });
@@ -2317,7 +2323,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current academic session and term
   app.get('/api/current-academic-info', async (req, res) => {
     try {
-      const currentInfo = await storage.getCurrentAcademicInfo();
+      const schoolId = req.query.schoolId as string | undefined;
+      const currentInfo = await storage.getCurrentAcademicInfo(schoolId || undefined);
       res.json(currentInfo);
     } catch (error) {
       console.error("Error fetching current academic info:", error);

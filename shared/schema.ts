@@ -56,6 +56,8 @@ export const schools = pgTable("schools", {
   logoUrl: varchar("logo_url", { length: 500 }),
   principalSignature: text("principal_signature"), // URL to principal's signature image
   sortOrder: integer("sort_order").default(1), // Ensures consistent ordering
+  currentTerm: varchar("current_term", { length: 50 }), // Per-school active term
+  currentSession: varchar("current_session", { length: 20 }), // Per-school active session
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
