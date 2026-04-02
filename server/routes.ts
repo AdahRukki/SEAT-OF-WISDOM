@@ -2775,7 +2775,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins and sub-admins can view generated reports" });
       }
 
-      const reportCards = await storage.getAllGeneratedReportCards();
+      const schoolId = user.role === 'sub-admin' ? user.schoolId : (req.query.schoolId as string | undefined);
+      const reportCards = await storage.getAllGeneratedReportCards(schoolId || undefined);
       res.json(reportCards);
     } catch (error) {
       console.error("Error fetching generated report cards:", error);

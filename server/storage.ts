@@ -229,7 +229,7 @@ export interface IStorage {
   getAttendanceByStudent(studentId: string, term: string, session: string): Promise<Attendance | undefined>;
 
   // Report Card operations
-  getAllGeneratedReportCards(): Promise<GeneratedReportCard[]>;
+  getAllGeneratedReportCards(schoolId?: string): Promise<GeneratedReportCard[]>;
   getGeneratedReportCardsByStudent(studentId: string): Promise<GeneratedReportCard[]>;
   getGeneratedReportCardsByClass(classId: string): Promise<GeneratedReportCard[]>;
   createGeneratedReportCard(reportCardData: InsertGeneratedReportCard): Promise<GeneratedReportCard>;
@@ -1810,7 +1810,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Report Card operations
-  async getAllGeneratedReportCards(): Promise<GeneratedReportCard[]> {
+  async getAllGeneratedReportCards(schoolId?: string): Promise<GeneratedReportCard[]> {
+    if (schoolId) {
+      const result = await db
+        .select({ report: generatedReportCards })
+        .from(generatedReportCards)
+        .innerJoin(classes, eq(generatedReportCards.classId, classes.id))
+        .where(eq(classes.schoolId, schoolId))
+        .orderBy(desc(generatedReportCards.generatedAt));
+      return result.map(r => r.report);
+    }
     return await db.select().from(generatedReportCards).orderBy(desc(generatedReportCards.generatedAt));
   }
 

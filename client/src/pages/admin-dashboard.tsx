@@ -4375,6 +4375,8 @@ export default function AdminDashboard() {
               <ReportCardManagement 
                 classes={classes}
                 user={user}
+                selectedSchoolId={selectedSchoolId}
+                schools={schools}
               />
             </TabsContent>
           )}

@@ -66,6 +66,8 @@ import { calculateGrade } from "@shared/schema";
 interface ReportCardManagementProps {
   classes: any[];
   user: any;
+  selectedSchoolId?: string;
+  schools?: any[];
 }
 
 interface ValidationResult {
@@ -92,10 +94,20 @@ interface GeneratedReportCard {
 export function ReportCardManagement({
   classes,
   user,
+  selectedSchoolId: initialSchoolId = "",
+  schools = [],
 }: ReportCardManagementProps) {
+  const [activeSchoolId, setActiveSchoolId] = useState(initialSchoolId);
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("");
   const [selectedSession, setSelectedSession] = useState("");
+
+  // Sync if parent changes the school selection
+  useEffect(() => {
+    setActiveSchoolId(initialSchoolId);
+    setSelectedClass("");
+  }, [initialSchoolId]);
+
   const [validationResults, setValidationResults] = useState<
     Record<string, ValidationResult>
   >({});
@@ -109,11 +121,12 @@ export function ReportCardManagement({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch generated report cards
+  // Fetch generated report cards (filtered by school)
   const { data: generatedReports = [], isLoading: isLoadingReports } = useQuery<
     GeneratedReportCard[]
   >({
-    queryKey: ["/api/admin/generated-reports"],
+    queryKey: ["/api/admin/generated-reports", activeSchoolId],
+    queryFn: () => apiRequest(activeSchoolId ? `/api/admin/generated-reports?schoolId=${activeSchoolId}` : "/api/admin/generated-reports"),
   });
 
   // Fetch students for selected class
@@ -189,7 +202,7 @@ export function ReportCardManagement({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/admin/generated-reports"],
+        queryKey: ["/api/admin/generated-reports", activeSchoolId],
       });
       toast({
         title: "Success",
@@ -215,7 +228,7 @@ export function ReportCardManagement({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["/api/admin/generated-reports"],
+        queryKey: ["/api/admin/generated-reports", activeSchoolId],
       });
       toast({
         title: "Success",
@@ -346,6 +359,7 @@ export function ReportCardManagement({
       const result = await schoolValidateMutation.mutateAsync({
         term: currentTerm,
         session: currentSession,
+        schoolId: activeSchoolId || undefined,
       });
 
       setSchoolValidationResults(result.classes);
@@ -1619,6 +1633,35 @@ export function ReportCardManagement({
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Step 1: Context selectors */}
+          {/* School selector — shown for main admin only */}
+          {user?.role === 'admin' && schools.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">School</Label>
+              <Select
+                value={activeSchoolId || "__all__"}
+                onValueChange={(v) => {
+                  setActiveSchoolId(v === "__all__" ? "" : v);
+                  setSelectedClass("");
+                  setValidationResults({});
+                  setSchoolValidationResults({});
+                  setIsAllStudentsValidated(false);
+                }}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Select school" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Schools</SelectItem>
+                  {schools.map((school) => (
+                    <SelectItem key={school.id} value={school.id}>
+                      {school.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground uppercase tracking-wide">Class</Label>
@@ -1627,7 +1670,10 @@ export function ReportCardManagement({
                   <SelectValue placeholder="Choose a class" />
                 </SelectTrigger>
                 <SelectContent>
-                  {classes.map((classItem) => (
+                  {(activeSchoolId
+                    ? classes.filter((c) => c.schoolId === activeSchoolId || c.school?.id === activeSchoolId)
+                    : classes
+                  ).map((classItem) => (
                     <SelectItem key={classItem.id} value={classItem.id}>
                       {classItem.name}
                     </SelectItem>
