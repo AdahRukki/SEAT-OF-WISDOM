@@ -370,7 +370,7 @@ export default function AdminDashboard() {
   });
 
   // Queries - Move queries to the top to avoid initialization issues
-  const { data: schools = [] } = useQuery<SchoolType[]>({ 
+  const { data: schools = [], isLoading: isLoadingSchools } = useQuery<SchoolType[]>({ 
     queryKey: ['/api/admin/schools'],
     enabled: user?.role === 'admin'
   });
@@ -379,7 +379,7 @@ export default function AdminDashboard() {
     currentSession: string | null;
     currentTerm: string | null;
   }>({
-    queryKey: ['/api/current-academic-info', selectedSchoolId],
+    queryKey: selectedSchoolId ? ['/api/current-academic-info', selectedSchoolId] : ['/api/current-academic-info'],
     queryFn: () => apiRequest(selectedSchoolId ? `/api/current-academic-info?schoolId=${selectedSchoolId}` : '/api/current-academic-info'),
   });
 
@@ -3165,7 +3165,12 @@ export default function AdminDashboard() {
                   Available School Branches
                 </Label>
                 <div className="grid gap-2">
-                  {schools?.map((school) => (
+                  {isLoadingSchools ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      <span className="ml-3 text-sm text-muted-foreground">Loading school branches...</span>
+                    </div>
+                  ) : schools?.map((school) => (
                     <Button
                       key={school.id}
                       variant="outline"

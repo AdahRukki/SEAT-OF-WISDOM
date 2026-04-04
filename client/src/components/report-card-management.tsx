@@ -140,7 +140,7 @@ export function ReportCardManagement({
     currentSession: string | null;
     currentTerm: string | null;
   }>({
-    queryKey: ["/api/current-academic-info", activeSchoolId],
+    queryKey: activeSchoolId ? ["/api/current-academic-info", activeSchoolId] : ["/api/current-academic-info"],
     queryFn: () => apiRequest(activeSchoolId ? `/api/current-academic-info?schoolId=${activeSchoolId}` : "/api/current-academic-info"),
   });
 
