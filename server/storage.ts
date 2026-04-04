@@ -132,6 +132,7 @@ export interface IStorage {
   
   // Assessment operations
   createOrUpdateAssessment(assessmentData: InsertAssessment): Promise<Assessment>;
+  deleteAssessment(assessmentId: string): Promise<void>;
   getStudentAssessments(studentId: string, term: string, session: string, classId?: string): Promise<(Assessment & { subject: Subject })[]>;
   getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
   getStudentEnrolledClasses(studentId: string): Promise<Class[]>;
@@ -846,6 +847,10 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return assessment;
     }
+  }
+
+  async deleteAssessment(assessmentId: string): Promise<void> {
+    await db.delete(assessments).where(eq(assessments.id, assessmentId));
   }
 
   async getStudentAssessments(studentId: string, term: string, session: string, classId?: string): Promise<(Assessment & { subject: Subject })[]> {

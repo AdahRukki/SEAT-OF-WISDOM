@@ -1821,6 +1821,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin/Teacher routes - Assessment management
+  app.delete('/api/admin/assessments/:assessmentId', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { assessmentId } = req.params;
+      await storage.deleteAssessment(assessmentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete assessment error:", error);
+      res.status(500).json({ error: "Failed to delete assessment" });
+    }
+  });
+
   app.post('/api/admin/assessments', authenticate, requireAdmin, async (req, res) => {
     try {
       const assessmentData = addScoreSchema.parse(req.body);

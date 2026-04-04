@@ -2258,6 +2258,30 @@ export default function AdminDashboard() {
     updateScoresMutation.mutate(scoresData);
   };
 
+  const deleteAssessmentMutation = useMutation({
+    mutationFn: async (assessmentId: string) => {
+      return await apiRequest(`/api/admin/assessments/${assessmentId}`, {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Score Deleted",
+        description: "The score has been removed successfully",
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['/api/admin/assessments'],
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete score",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Handle Excel file upload (supports both single and multi-subject files)
   const handleExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -3945,6 +3969,7 @@ export default function AdminDashboard() {
                                 </th>
                                 <th className="px-2 py-2.5 text-center text-xs font-semibold text-foreground">Total</th>
                                 <th className="px-2 py-2.5 text-center text-xs font-semibold text-foreground">Grade</th>
+                                <th className="px-1 py-2.5 text-center text-xs font-semibold text-muted-foreground w-8"></th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
@@ -4031,6 +4056,24 @@ export default function AdminDashboard() {
                                         <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${gradeColors[grade] || gradeColors.F}`}>
                                           {grade}
                                         </span>
+                                      )}
+                                    </td>
+                                    <td className="px-1 py-2 text-center">
+                                      {assessment && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 text-muted-foreground hover:text-red-500"
+                                          onClick={() => {
+                                            if (window.confirm(`Delete score for ${student.user.firstName} ${student.user.lastName}?`)) {
+                                              deleteAssessmentMutation.mutate(assessment.id);
+                                            }
+                                          }}
+                                          disabled={deleteAssessmentMutation.isPending}
+                                          title="Delete score"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
                                       )}
                                     </td>
                                   </tr>
