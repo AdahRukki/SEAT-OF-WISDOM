@@ -313,6 +313,7 @@ export default function AdminDashboard() {
   const [isDeleteFeeTypeDialogOpen, setIsDeleteFeeTypeDialogOpen] = useState(false);
   const [feeTypeToDelete, setFeeTypeToDelete] = useState<FeeType | null>(null);
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
+  const [feeTypeAssignClassId, setFeeTypeAssignClassId] = useState("");
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
@@ -1769,22 +1770,42 @@ export default function AdminDashboard() {
   // Financial mutations
   const createFeeTypeMutation = useMutation({
     mutationFn: async (feeTypeData: FeeTypeForm) => {
-      return await apiRequest('/api/admin/fee-types', {
+      const result = await apiRequest('/api/admin/fee-types', {
         method: 'POST',
         body: {
           ...feeTypeData,
           schoolId: selectedSchoolId || user?.schoolId
         }
       });
+      if (feeTypeAssignClassId && result?.id) {
+        await apiRequest('/api/admin/assign-fee', {
+          method: 'POST',
+          body: {
+            feeTypeId: result.id,
+            classId: feeTypeAssignClassId,
+            term: selectedFinanceTerm || 'First Term',
+            session: selectedFinanceSession || '2024/2025',
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            notes: `Auto-assigned on creation`,
+          }
+        });
+      }
+      return result;
     },
     onSuccess: () => {
+      const wasAssigned = !!feeTypeAssignClassId;
       toast({ 
         title: "Success", 
-        description: "Fee type created successfully" 
+        description: wasAssigned ? "Fee type created and assigned to class" : "Fee type created successfully"
       });
       feeTypeForm.reset();
+      setFeeTypeAssignClassId("");
       setIsFeeTypeDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
+      if (wasAssigned) {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+      }
     },
     onError: () => {
       toast({ 
@@ -4076,8 +4097,8 @@ export default function AdminDashboard() {
               </Card>
             </div>
 
-            {/* Fee Types Management */}
-            <Card>
+            {/* Fee Types Management - Admin Only */}
+            {user?.role === 'admin' && (<Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Fee Types Management</CardTitle>
@@ -4172,6 +4193,7 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+            )}
 
 
             {/* Payment Recording & Reconciliation */}
@@ -6204,11 +6226,28 @@ export default function AdminDashboard() {
                   )}
                 />
                 
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Assign to Class (Optional)</label>
+                  <Select value={feeTypeAssignClassId} onValueChange={setFeeTypeAssignClassId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select class to assign" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortClassesByOrder(classes).map((cls) => (
+                        <SelectItem key={cls.id} value={cls.id}>
+                          {cls.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">If selected, the fee will be assigned to all students in this class for the current term/session</p>
+                </div>
+
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsFeeTypeDialogOpen(false)}
+                    onClick={() => { setIsFeeTypeDialogOpen(false); setFeeTypeAssignClassId(""); }}
                   >
                     Cancel
                   </Button>
@@ -6222,7 +6261,7 @@ export default function AdminDashboard() {
                     ) : (
                       <Plus className="h-4 w-4 mr-2" />
                     )}
-                    {createFeeTypeMutation.isPending ? "Creating..." : "Create Fee Type"}
+                    {createFeeTypeMutation.isPending ? "Creating..." : feeTypeAssignClassId ? "Create & Assign" : "Create Fee Type"}
                   </Button>
                 </div>
               </form>
