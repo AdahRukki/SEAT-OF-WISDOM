@@ -110,9 +110,7 @@ import {
   CreditCard,
   TrendingUp,
   Calendar,
-  Receipt,
   Wallet,
-  History,
   UserCheck,
   UserX,
   ClipboardCheck,
@@ -141,12 +139,10 @@ import type {
   StudentWithDetails,
   FeeType,
   StudentFee,
-  PaymentWithDetails,
   School as SchoolType 
 } from "@shared/schema";
 import { 
   insertFeeTypeSchema, 
-  recordPaymentSchema, 
   assignFeeSchema,
   type AssignFeeForm 
 } from "@shared/schema";
@@ -154,7 +150,6 @@ import type { z } from "zod";
 import * as XLSX from 'xlsx';
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
-type PaymentForm = z.infer<typeof recordPaymentSchema>;
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -317,23 +312,10 @@ export default function AdminDashboard() {
   const [editFeeTypeDescription, setEditFeeTypeDescription] = useState("");
   const [isDeleteFeeTypeDialogOpen, setIsDeleteFeeTypeDialogOpen] = useState(false);
   const [feeTypeToDelete, setFeeTypeToDelete] = useState<FeeType | null>(null);
-  const [isRecordPaymentDialogOpen, setIsRecordPaymentDialogOpen] = useState(false);
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
-  const [isPaymentHistoryDialogOpen, setIsPaymentHistoryDialogOpen] = useState(false);
-  const [selectedStudentForHistory, setSelectedStudentForHistory] = useState<StudentWithDetails | null>(null);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
-  
-  // Bulk payment states
-  const [selectedPaymentClass, setSelectedPaymentClass] = useState("");
-  const [bulkPaymentDate, setBulkPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [bulkPayments, setBulkPayments] = useState<Array<{
-    studentId: string;
-    feeTypeId: string;
-    amount: number;
-    notes: string;
-  }>>([]);
 
   // Fee type form
   const feeTypeForm = useForm<FeeTypeForm>({
@@ -344,19 +326,6 @@ export default function AdminDashboard() {
       category: "",
       description: "",
       isActive: true,
-    },
-  });
-
-  // Payment form
-  const paymentForm = useForm<PaymentForm>({
-    resolver: zodResolver(recordPaymentSchema),
-    defaultValues: {
-      studentFeeId: "",
-      amount: 0,
-      paymentMethod: "cash",
-      reference: "",
-      paymentDate: new Date().toISOString().split('T')[0],
-      notes: "",
     },
   });
 
@@ -725,16 +694,6 @@ export default function AdminDashboard() {
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
 
-  const { data: payments = [] } = useQuery<PaymentWithDetails[]>({ 
-    queryKey: ['/api/admin/payments', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
-    queryFn: () => {
-      let url = '/api/admin/payments?';
-      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
-      url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
-      return apiRequest(url);
-    },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
-  });
 
   // Mutations
   const createClassMutation = useMutation({
@@ -1897,33 +1856,6 @@ export default function AdminDashboard() {
     }
   });
 
-  const recordPaymentMutation = useMutation({
-    mutationFn: async (paymentData: PaymentForm) => {
-      return await apiRequest('/api/admin/payments', {
-        method: 'POST',
-        body: paymentData
-      });
-    },
-    onSuccess: () => {
-      toast({ 
-        title: "Success", 
-        description: "Payment recorded successfully" 
-      });
-      paymentForm.reset();
-      setIsRecordPaymentDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/payments'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
-    },
-    onError: () => {
-      toast({ 
-        title: "Error", 
-        description: "Failed to record payment", 
-        variant: "destructive" 
-      });
-    }
-  });
-
   const assignFeeMutation = useMutation({
     mutationFn: async (assignmentData: AssignFeeForm) => {
       return await apiRequest('/api/admin/assign-fee', {
@@ -1953,97 +1885,6 @@ export default function AdminDashboard() {
   // Form submission handlers
   const handleFeeTypeSubmit = (data: FeeTypeForm) => {
     createFeeTypeMutation.mutate(data);
-  };
-
-  const handlePaymentSubmit = (data: PaymentForm) => {
-    recordPaymentMutation.mutate(data);
-  };
-
-  // Helper functions for bulk payment
-  const getStudentsForPaymentClass = () => {
-    if (!selectedPaymentClass) return [];
-    return allStudents.filter(student => student.classId === selectedPaymentClass);
-  };
-
-  const updateBulkPayment = (index: number, field: string, value: any) => {
-    setBulkPayments(prev => {
-      const updated = [...prev];
-      if (!updated[index]) {
-        updated[index] = { 
-          studentId: "", 
-          amount: 0, 
-          notes: "" 
-        };
-      }
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
-    });
-  };
-
-  const getStudentFeeAmount = (studentId: string, feeTypeId: string) => {
-    if (!feeTypeId) return "---";
-    const studentFee = studentFees.find(sf => 
-      sf.studentId === studentId && sf.feeTypeId === feeTypeId
-    );
-    const feeType = feeTypes.find(ft => ft.id === feeTypeId);
-    return studentFee ? `₦${parseFloat(studentFee.amount).toLocaleString()}` : 
-           feeType ? `₦${parseFloat(feeType.amount).toLocaleString()}` : "---";
-  };
-
-  const handleBulkPaymentSubmit = async () => {
-    const validPayments = bulkPayments.filter(payment => payment.amount > 0);
-
-    if (validPayments.length === 0) {
-      toast({
-        title: "No payments to record",
-        description: "Please enter payment amounts for at least one student.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const classStudents = getStudentsForPaymentClass();
-      
-      for (let i = 0; i < validPayments.length; i++) {
-        const payment = validPayments[i];
-        const student = classStudents[i];
-        
-        if (student && payment.amount > 0) {
-          // Find existing student fee assignment for this student
-          const studentFee = studentFees.find(sf => sf.studentId === student.id);
-
-          if (studentFee) {
-            const paymentData = {
-              studentFeeId: studentFee.id,
-              amount: payment.amount,
-              paymentDate: bulkPaymentDate,
-              paymentMethod: "cash",
-              notes: payment.notes || "",
-            };
-            await recordPaymentMutation.mutateAsync(paymentData);
-          } else {
-            console.warn(`No fee assignment found for student ${student.studentId}`);
-          }
-        }
-      }
-
-      toast({
-        title: "Payments recorded successfully",
-        description: `Recorded ${validPayments.length} payment(s) for the class.`,
-      });
-      
-      setIsRecordPaymentDialogOpen(false);
-      setSelectedPaymentClass("");
-      setBulkPayments([]);
-      
-    } catch (error) {
-      toast({
-        title: "Error recording payments",
-        description: "Some payments may not have been recorded. Please try again.",
-        variant: "destructive",
-      });
-    }
   };
 
   const handleAssignFeeSubmit = (data: Pick<AssignFeeForm, 'feeTypeId' | 'classId' | 'term' | 'session'>) => {
@@ -4333,81 +4174,6 @@ export default function AdminDashboard() {
             </Card>
 
 
-            {/* Payment Records */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Recent Payments</CardTitle>
-                  <CardDescription>
-                    Track and record student fee payments
-                  </CardDescription>
-                </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button onClick={() => setIsRecordPaymentDialogOpen(true)}>
-                      <Receipt className="h-4 w-4 mr-2" />
-                      Record Payment
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Record a new fee payment from a student</p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardHeader>
-              <CardContent>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Method</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Reference</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Recorded By</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {payments.length === 0 ? (
-                        <tr>
-                          <td className="px-4 py-3 text-sm text-gray-500" colSpan={7}>
-                            No payments recorded yet. Use "Record Payment" to add payment entries.
-                          </td>
-                        </tr>
-                      ) : (
-                        payments.map((payment) => (
-                          <tr key={payment.id}>
-                            <td className="px-4 py-3">
-                              {payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString() : 'N/A'}
-                            </td>
-                            <td className="px-4 py-3 font-medium">
-                              {payment.student?.user?.firstName} {payment.student?.user?.lastName}
-                            </td>
-                            <td className="px-4 py-3">
-                              {payment.studentFee?.feeType?.name || 'N/A'}
-                            </td>
-                            <td className="px-4 py-3">
-                              ₦{parseFloat(payment.amount).toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3 capitalize">
-                              {payment.paymentMethod || 'N/A'}
-                            </td>
-                            <td className="px-4 py-3">
-                              {payment.reference || 'N/A'}
-                            </td>
-                            <td className="px-4 py-3">
-                              {payment.recordedBy?.firstName || ''} {payment.recordedBy?.lastName || ''}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Payment Recording & Reconciliation */}
             <Card>
               <CardHeader>
@@ -6464,158 +6230,6 @@ export default function AdminDashboard() {
           </DialogContent>
         </Dialog>
 
-        {/* Record Payment Dialog - Spreadsheet Style */}
-        <Dialog open={isRecordPaymentDialogOpen} onOpenChange={setIsRecordPaymentDialogOpen}>
-          <DialogContent className="max-w-6xl dialog-content-scrollable table-container">
-            <DialogHeader>
-              <DialogTitle>Record Class Payments</DialogTitle>
-              <DialogDescription>
-                Select a class and record payments for multiple students in spreadsheet format
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {/* Class Selection */}
-              <div className="flex items-center space-x-4">
-                <div className="flex-1">
-                  <label className="text-sm font-medium">Select Class *</label>
-                  <Select 
-                    value={selectedPaymentClass} 
-                    onValueChange={setSelectedPaymentClass}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortClassesByOrder(classes).map((cls) => (
-                        <SelectItem key={cls.id} value={cls.id}>
-                          {cls.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="flex-1">
-                  <label className="text-sm font-medium">Payment Date *</label>
-                  <Input 
-                    type="date" 
-                    value={bulkPaymentDate}
-                    onChange={(e) => setBulkPaymentDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Spreadsheet Table */}
-              {selectedPaymentClass && (
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="max-h-96 overflow-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Student ID</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Student Name</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Total Paid (₦)</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Balance (₦)</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Payment Amount (₦)</th>
-                          <th className="px-3 py-2 text-left text-sm font-medium">Notes</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getStudentsForPaymentClass().map((student, index) => {
-                          // Calculate total paid and balance for this student
-                          const studentPayments = payments.filter(p => {
-                            const studentFee = studentFees.find(sf => sf.id === p.studentFeeId);
-                            return studentFee?.studentId === student.id;
-                          });
-                          const totalPaid = studentPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-                          
-                          // Get the assigned fee amount for this student
-                          const studentFee = studentFees.find(sf => sf.studentId === student.id);
-                          const feeAmount = studentFee ? Number(studentFee.amount) : 0;
-                          const balance = feeAmount - totalPaid;
-                          
-                          return (
-                            <tr key={student.id} className="border-t">
-                              <td className="px-3 py-2 text-sm">{student.studentId}</td>
-                              <td className="px-3 py-2 text-sm font-medium">
-                                {student.user?.firstName} {student.user?.lastName}
-                              </td>
-                              <td className="px-3 py-2 text-sm font-medium">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-green-600">₦{totalPaid.toLocaleString()}</span>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-6 w-6 p-0 hover:bg-blue-100"
-                                    onClick={() => {
-                                      // Show payment history modal
-                                      setSelectedStudentForHistory(student);
-                                      setIsPaymentHistoryDialogOpen(true);
-                                    }}
-                                  >
-                                    <History className="h-4 w-4 text-blue-600" />
-                                  </Button>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 text-sm text-red-600 font-medium">
-                                ₦{balance.toLocaleString()}
-                              </td>
-                              <td className="px-3 py-2">
-                                <Input
-                                  type="number"
-                                  placeholder="0"
-                                  className="h-8 w-24"
-                                  value={bulkPayments[index]?.amount || ""}
-                                  onChange={(e) => updateBulkPayment(index, 'amount', Number(e.target.value) || 0)}
-                                />
-                              </td>
-                              <td className="px-3 py-2">
-                                <Input
-                                  placeholder="Notes"
-                                  className="h-8 w-32"
-                                  value={bulkPayments[index]?.notes || ""}
-                                  onChange={(e) => updateBulkPayment(index, 'notes', e.target.value)}
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsRecordPaymentDialogOpen(false);
-                    setSelectedPaymentClass("");
-                    setBulkPayments([]);
-                  }}
-                >
-                  Close
-                </Button>
-                <Button 
-                  disabled={!selectedPaymentClass || bulkPayments.filter(p => p.amount > 0).length === 0}
-                  onClick={handleBulkPaymentSubmit}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {false ? (
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Receipt className="h-4 w-4 mr-2" />
-                  )}
-                  {recordPaymentMutation.isPending ? "Recording..." : "Record Payments"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
         {/* Assign Fee Dialog */}
         <Dialog open={isAssignFeeDialogOpen} onOpenChange={setIsAssignFeeDialogOpen}>
           <DialogContent className="max-w-md">
@@ -6898,97 +6512,6 @@ export default function AdminDashboard() {
             </div>
           </DialogContent>
         </Dialog>
-
-        {/* Payment History Dialog */}
-        <Dialog open={isPaymentHistoryDialogOpen} onOpenChange={setIsPaymentHistoryDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Payment History</DialogTitle>
-              <DialogDescription>
-                {selectedStudentForHistory && (
-                  <>
-                    Payment history for {selectedStudentForHistory.user?.firstName} {selectedStudentForHistory.user?.lastName} ({selectedStudentForHistory.studentId})
-                  </>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {(() => {
-                // Get payments for this student
-                const studentPaymentHistory = payments.filter(p => {
-                  const studentFee = studentFees.find(sf => sf.id === p.studentFeeId);
-                  return studentFee?.studentId === selectedStudentForHistory?.id;
-                });
-
-                if (studentPaymentHistory.length === 0) {
-                  return (
-                    <div className="text-center py-8">
-                      <Receipt className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-500">No payment history found</p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Date</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Amount</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Method</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Reference</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium">Notes</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {studentPaymentHistory.map((payment, index) => (
-                          <tr key={payment.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                            <td className="px-4 py-2 text-sm">
-                              {new Date(payment.paymentDate).toLocaleDateString()}
-                            </td>
-                            <td className="px-4 py-2 text-sm font-medium text-green-600">
-                              ₦{Number(payment.amount).toLocaleString()}
-                            </td>
-                            <td className="px-4 py-2 text-sm capitalize">
-                              {payment.paymentMethod}
-                            </td>
-                            <td className="px-4 py-2 text-sm">
-                              {payment.reference || '-'}
-                            </td>
-                            <td className="px-4 py-2 text-sm">
-                              {payment.notes || '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    
-                    <div className="px-4 py-3 bg-gray-100 border-t">
-                      <div className="flex justify-between text-sm font-medium">
-                        <span>Total Paid:</span>
-                        <span className="text-green-600">
-                          ₦{studentPaymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            
-            <div className="flex justify-end pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setIsPaymentHistoryDialogOpen(false)}
-              >
-                Close
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
 
         {/* Universal Settings Dialog */}
         <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
