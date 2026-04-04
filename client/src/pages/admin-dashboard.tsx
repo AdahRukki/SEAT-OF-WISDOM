@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
-import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue } from "@/lib/offline-queue";
+import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue, saveOfflineStudent, getOfflineStudents } from "@/lib/offline-queue";
+import type { OfflineStudent } from "@/lib/offline-queue";
 import { onPrefetchStart, onPrefetchDone, isPrefetchRunning } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -577,6 +578,10 @@ export default function AdminDashboard() {
 
     const removeSyncListener = addSyncListener((status) => {
       setOfflineSyncState(status);
+      if (status.studentsChanged) {
+        setOfflineStudents(getOfflineStudents());
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      }
     });
 
     // Prefetch status listeners
@@ -812,22 +817,28 @@ export default function AdminDashboard() {
     }
   });
 
+  const [offlineStudents, setOfflineStudents] = useState<OfflineStudent[]>(() => getOfflineStudents());
+
   const createStudentMutation = useMutation({
     mutationFn: async (studentData: any) => {
-      return await queuedApiRequest('/api/admin/students', {
+      const bodyData = {
+        ...studentData,
+        parentWhatsapp: studentData.parentWhatsApp,
+        schoolId: selectedSchoolId || user?.schoolId
+      };
+      const result = await queuedApiRequest('/api/admin/students', {
         method: 'POST',
-        body: {
-          ...studentData,
-          parentWhatsapp: studentData.parentWhatsApp,
-          schoolId: selectedSchoolId || user?.schoolId
-        }
+        body: bodyData
       }, 'create-student');
+      return { ...result, _bodyData: bodyData };
     },
     onSuccess: (response) => {
       if (response?.queued) {
+        saveOfflineStudent(response._bodyData, response.offlineId);
+        setOfflineStudents(getOfflineStudents());
         toast({
           title: "Saved Offline",
-          description: "You are offline. Student will be created when you reconnect. Do not enter scores or payments until synced.",
+          description: "Student saved locally. Will sync when you reconnect. Do not enter scores or payments until synced.",
         });
         setIsStudentDialogOpen(false);
         setCurrentStep(1);
@@ -3750,7 +3761,7 @@ export default function AdminDashboard() {
                     <SelectContent>
                       {sortClassesByOrder(classes).map((classItem) => (
                         <SelectItem key={classItem.id} value={classItem.id}>
-                          {classItem.name} ({allStudents.filter(s => s.classId === classItem.id).length} students)
+                          {classItem.name} ({allStudents.filter(s => s.classId === classItem.id).length + offlineStudents.filter(s => s.classId === classItem.id).length} students)
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -3817,7 +3828,22 @@ export default function AdminDashboard() {
                         </div>
                         );
                       })}
-                    {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
+                    {offlineStudents
+                      .filter(s => s.classId === selectedClassForStudents)
+                      .map((student) => (
+                        <div key={student.offlineId} className="flex items-center justify-between px-3 py-2 gap-2 bg-amber-50 dark:bg-amber-900/20 border-l-2 border-l-amber-400">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                {student.firstName} {student.lastName}
+                              </p>
+                              <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Pending Sync</span>
+                            </div>
+                            <p className="text-xs text-gray-500">—</p>
+                          </div>
+                        </div>
+                      ))}
+                    {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
                       <div className="text-center py-8">
                         <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No students in this class</h3>

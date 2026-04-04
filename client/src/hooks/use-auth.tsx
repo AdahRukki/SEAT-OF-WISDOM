@@ -251,11 +251,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     
     if ('caches' in window) {
-      caches.keys().then(names => {
-        names.forEach(name => {
-          caches.delete(name);
+      caches.open('sowa-v4').then(cache => {
+        cache.keys().then(requests => {
+          requests.forEach(request => {
+            const url = new URL(request.url);
+            if (url.pathname.startsWith('/api/')) {
+              cache.delete(request);
+            }
+          });
         });
-      });
+      }).catch(() => {});
     }
     
     if ('indexedDB' in window) {

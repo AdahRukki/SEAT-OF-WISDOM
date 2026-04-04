@@ -35,7 +35,9 @@ Preferred communication style: Simple, everyday language.
 -   **Session Handling**: Express sessions with PostgreSQL store. JWT tokens valid for 7 days.
 -   **Role-based Access**: Admin (all schools), sub-admin (single school), student with granular control over features (e.g., user management restricted to main admin).
 -   **Security**: Password hashing, token validation, secure session management, 4-hour inactivity timeout (skipped when offline), auto-reconnect to server when back online. Offline auth credentials preserved across logouts for seamless re-login.
--   **Offline Login Flow**: On login attempt: try server first → if network error, fall back to locally cached credentials → show offline mode indicator. When connectivity returns, silently re-authenticate with server. Cached credentials expire after 30 days.
+-   **Offline Login Flow**: On login attempt: try server first → if network error, fall back to locally cached credentials → show offline mode indicator. When connectivity returns, silently re-authenticate with server. Cached credentials expire after 30 days. Logout preserves the service worker app-shell cache (only clears API response caches) so the PWA can load offline after logout.
+-   **Offline Student Creation**: Students created offline are saved to `sowa_offline_students` in localStorage with a temporary `PENDING-{timestamp}` ID. They appear in the student list with a "Pending Sync" badge and "—" for SOWA ID. When connectivity returns, the offline queue syncs and offline student entries are cleaned up automatically. Offline students are excluded from scores/payments.
+-   **Auto-Migration**: `server/index.ts` runs `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on startup for any schema columns that may be missing from the production database (e.g., `current_term`, `current_session` on the `schools` table).
 
 ### Data Schema
 -   **User Management**: Roles for admin, sub-admin, and student with isActive flag for soft deletion.

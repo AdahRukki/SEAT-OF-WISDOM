@@ -1,4 +1,5 @@
 const QUEUE_KEY = 'sowa_offline_queue';
+const OFFLINE_STUDENTS_KEY = 'sowa_offline_students';
 
 export interface QueuedOperation {
   id: string;
@@ -10,7 +11,22 @@ export interface QueuedOperation {
   type: string;
 }
 
-type SyncListener = (status: { syncing: boolean; pendingCount: number; justSynced: boolean }) => void;
+export interface OfflineStudent {
+  offlineId: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  email?: string;
+  classId: string;
+  schoolId?: string;
+  dateOfBirth?: string;
+  parentWhatsapp?: string;
+  address?: string;
+  createdAt: number;
+  queueOperationId: string;
+}
+
+type SyncListener = (status: { syncing: boolean; pendingCount: number; justSynced: boolean; studentsChanged?: boolean }) => void;
 
 const listeners: SyncListener[] = [];
 let isSyncing = false;
@@ -23,7 +39,7 @@ export function addSyncListener(fn: SyncListener) {
   };
 }
 
-function notify(status: { syncing: boolean; pendingCount: number; justSynced: boolean }) {
+function notify(status: { syncing: boolean; pendingCount: number; justSynced: boolean; studentsChanged?: boolean }) {
   listeners.forEach(fn => fn(status));
 }
 
@@ -97,9 +113,15 @@ export async function processOfflineQueue(): Promise<void> {
   const token = localStorage.getItem('auth_token');
   const remaining: QueuedOperation[] = [];
 
+  let studentsChanged = false;
   for (const op of queue) {
     const success = await replayOperation(op, token);
-    if (!success) {
+    if (success) {
+      if (op.type === 'create-student') {
+        removeOfflineStudentByQueueId(op.id);
+        studentsChanged = true;
+      }
+    } else {
       op.retryCount += 1;
       if (op.retryCount < 5) remaining.push(op);
     }
@@ -107,7 +129,7 @@ export async function processOfflineQueue(): Promise<void> {
 
   saveQueue(remaining);
   isSyncing = false;
-  notify({ syncing: false, pendingCount: remaining.length, justSynced: true });
+  notify({ syncing: false, pendingCount: remaining.length, justSynced: true, studentsChanged });
 
   setTimeout(() => {
     notify({ syncing: false, pendingCount: remaining.length, justSynced: false });
@@ -151,6 +173,41 @@ export async function queuedApiRequest(
   }
 
   return res.json();
+}
+
+export function getOfflineStudents(): OfflineStudent[] {
+  try {
+    const stored = localStorage.getItem(OFFLINE_STUDENTS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveOfflineStudent(studentData: Record<string, any>, queueOperationId: string): OfflineStudent {
+  const student: OfflineStudent = {
+    offlineId: `PENDING-${Date.now()}`,
+    firstName: studentData.firstName || '',
+    lastName: studentData.lastName || '',
+    middleName: studentData.middleName,
+    email: studentData.email,
+    classId: studentData.classId || '',
+    schoolId: studentData.schoolId,
+    dateOfBirth: studentData.dateOfBirth,
+    parentWhatsapp: studentData.parentWhatsapp || studentData.parentWhatsApp,
+    address: studentData.address,
+    createdAt: Date.now(),
+    queueOperationId,
+  };
+  const students = getOfflineStudents();
+  students.push(student);
+  localStorage.setItem(OFFLINE_STUDENTS_KEY, JSON.stringify(students));
+  return student;
+}
+
+function removeOfflineStudentByQueueId(queueOperationId: string): void {
+  const students = getOfflineStudents().filter(s => s.queueOperationId !== queueOperationId);
+  localStorage.setItem(OFFLINE_STUDENTS_KEY, JSON.stringify(students));
 }
 
 if (typeof window !== 'undefined') {
