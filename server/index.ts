@@ -2,6 +2,19 @@ import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { pool } from "./db";
+
+async function runMigrations() {
+  try {
+    await pool.query(`
+      ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_term VARCHAR(50);
+      ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_session VARCHAR(20);
+    `);
+    log("Database migrations applied successfully");
+  } catch (err) {
+    console.error("Migration error:", err);
+  }
+}
 
 const app = express();
 app.use(express.json({ limit: '50mb' })); // Increased limit for image uploads
@@ -38,6 +51,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await runMigrations();
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
