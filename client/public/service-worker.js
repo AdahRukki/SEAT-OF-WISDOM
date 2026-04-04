@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sowa-v4';
+const CACHE_NAME = 'sowa-v4'; // IMPORTANT: Keep in sync with client/src/lib/constants.ts SW_CACHE_NAME
 const APP_SHELL = [
   '/',
   '/portal/login',
