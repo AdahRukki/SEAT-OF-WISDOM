@@ -59,6 +59,7 @@ import {
   Plus,
   Sparkles,
   Calendar,
+  Trash2,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails, BankTransactionWithDetails } from "@shared/schema";
 
@@ -114,6 +115,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [isReverseDialogOpen, setIsReverseDialogOpen] = useState(false);
   const [reversalReason, setReversalReason] = useState("");
+  const [deleteStatementId, setDeleteStatementId] = useState<string | null>(null);
   const [isAllocateDialogOpen, setIsAllocateDialogOpen] = useState(false);
   const [transactionToAllocate, setTransactionToAllocate] = useState<BankTransaction | null>(null);
   const [allocations, setAllocations] = useState<Allocation[]>([{ studentId: "", amount: 0 }]);
@@ -201,6 +203,31 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       toast({
         title: "Upload Failed",
         description: error.message || "Failed to upload bank statement",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteStatementMutation = useMutation({
+    mutationFn: async (statementId: string) => {
+      const res = await apiRequest(`/api/admin/bank-statements/${statementId}`, {
+        method: "DELETE",
+      });
+      return res;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Statement Deleted",
+        description: `Removed statement and ${data.deletedTransactions} associated transactions.`,
+      });
+      setDeleteStatementId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete bank statement",
         variant: "destructive",
       });
     },
@@ -569,6 +596,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       <TableHead>New</TableHead>
                       <TableHead>Duplicates</TableHead>
                       <TableHead>Uploaded</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -596,6 +624,16 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           {statement.createdAt
                             ? new Date(statement.createdAt).toLocaleDateString()
                             : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => setDeleteStatementId(statement.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1214,6 +1252,39 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <>
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Confirm Allocation
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteStatementId} onOpenChange={(open) => { if (!open) setDeleteStatementId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Bank Statement</DialogTitle>
+            <DialogDescription>
+              This will permanently remove this statement and all its associated transactions. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteStatementId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteStatementId && deleteStatementMutation.mutate(deleteStatementId)}
+              disabled={deleteStatementMutation.isPending}
+            >
+              {deleteStatementMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Statement
                 </>
               )}
             </Button>

@@ -32,7 +32,9 @@ import {
   users,
   students,
   classes,
-  contactSubmissions
+  contactSubmissions,
+  bankStatements,
+  bankTransactions
 } from "@shared/schema";
 import { sendContactFormNotification } from "./resend";
 import { db } from "./db";
@@ -3554,6 +3556,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[GET /api/admin/bank-statements] Error:", error);
       res.status(500).json({ error: "Failed to fetch bank statements" });
+    }
+  });
+
+  app.delete("/api/admin/bank-statements/:id", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { id } = req.params;
+
+      const deletedTxCount = await db.delete(bankTransactions).where(eq(bankTransactions.statementId, id)).returning();
+      await db.delete(bankStatements).where(eq(bankStatements.id, id));
+
+      await storage.createPaymentAuditLog({
+        action: 'delete_statement',
+        entityType: 'bank_statement',
+        entityId: id,
+        userId: user.id,
+        newData: { deletedTransactions: deletedTxCount.length },
+      });
+
+      res.json({ success: true, deletedTransactions: deletedTxCount.length });
+    } catch (error: any) {
+      console.error("[DELETE /api/admin/bank-statements/:id] Error:", error);
+      res.status(500).json({ error: "Failed to delete bank statement" });
     }
   });
 

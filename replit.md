@@ -48,6 +48,8 @@ Preferred communication style: Simple, everyday language.
 -   **News System**: Public news articles with title, content, images, tags, and publication dates, transformed into a blog format with individual article pages.
 -   **Notifications**: In-app student notifications with real-time inbox, unread counts, and broadcast messaging.
 -   **Payment Tracking & Reconciliation System**: Comprehensive fee payment management with:
+    -   **Bank Statement Parsing**: Multi-bank PDF parser supporting Zenith, Access, and Fidelity formats. Fidelity uses dedicated parser for `D-Mon-YY` date format and "Pay In"/"Pay Out" column layout. Generic parser handles `DD/MM/YYYY`, `DD-MM-YYYY`, and `D-Mon-YY` date formats.
+    -   **Statement Deletion**: Admin can delete a processed bank statement and all its associated transactions via trash icon in Upload History.
     -   **Fee Payment Records**: Student payments recorded by bursars/sub-admins with status tracking (recorded, confirmed, reversed).
     -   **Bank Statement Processing**: CSV/Excel upload with duplicate detection using SHA256 fingerprinting.
     -   **Bank Transactions**: Imported transactions with matching, confidence scoring, and status tracking.
