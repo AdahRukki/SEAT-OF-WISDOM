@@ -62,6 +62,8 @@ import {
   X,
   Users,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { recordFeePaymentSchema, type FeePaymentRecordWithDetails } from "@shared/schema";
 
@@ -346,7 +348,7 @@ export function PaymentRecording({
   });
 
   const toggleClassSort = () => {
-    setClassSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    setClassSortDir((prev) => prev === null ? "asc" : prev === "asc" ? "desc" : null);
   };
 
   const sortedRecords = [...paymentRecords].sort((a, b) => {
@@ -773,9 +775,12 @@ export function PaymentRecording({
                       className="flex items-center gap-1 hover:text-foreground text-left font-medium"
                       onClick={toggleClassSort}
                       type="button"
+                      title={classSortDir === null ? "Sort by class A→Z" : classSortDir === "asc" ? "Sort by class Z→A" : "Clear class sort"}
                     >
                       Class
-                      <ArrowUpDown className="h-3 w-3" />
+                      {classSortDir === null && <ArrowUpDown className="h-3 w-3 text-muted-foreground" />}
+                      {classSortDir === "asc" && <ArrowUp className="h-3 w-3 text-primary" />}
+                      {classSortDir === "desc" && <ArrowDown className="h-3 w-3 text-primary" />}
                     </button>
                   </TableHead>
                   <TableHead>Amount</TableHead>
