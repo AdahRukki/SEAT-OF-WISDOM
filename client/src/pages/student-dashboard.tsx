@@ -151,7 +151,7 @@ export default function StudentDashboard() {
     enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
 
-  const { data: paymentHistory = [] } = useQuery<any[]>({ 
+  const { data: paymentsData } = useQuery<{ oldPayments: any[]; confirmedRecords: any[] }>({ 
     queryKey: ['/api/student/payments', selectedTerm, selectedClass, selectedSession],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -174,6 +174,9 @@ export default function StudentDashboard() {
     },
     enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
   });
+
+  const paymentHistory: any[] = paymentsData?.oldPayments ?? [];
+  const confirmedPaymentRecords: any[] = paymentsData?.confirmedRecords ?? [];
 
   // Fetch behavioral ratings
   const { data: behavioralRating = null } = useQuery<any>({ 
@@ -1450,7 +1453,7 @@ export default function StudentDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ₦{paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0).toLocaleString()}
+                    ₦{(paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0) + confirmedPaymentRecords.reduce((sum, r) => sum + Number(r.amount), 0)).toLocaleString()}
                   </div>
                   <p className="text-xs text-muted-foreground">Total payments</p>
                 </CardContent>
@@ -1463,7 +1466,7 @@ export default function StudentDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    ₦{Math.max(0, studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0) - paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0)).toLocaleString()}
+                    ₦{Math.max(0, studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0) - (paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0) + confirmedPaymentRecords.reduce((sum, r) => sum + Number(r.amount), 0))).toLocaleString()}
                   </div>
                   <p className="text-xs text-muted-foreground">Balance due</p>
                 </CardContent>
@@ -1570,6 +1573,60 @@ export default function StudentDashboard() {
                 </div>
               </CardContent>
             </Card>
+            {/* Confirmed Payment Receipts from admin */}
+            {confirmedPaymentRecords.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Receipt className="h-5 w-5 text-green-600" />
+                    Payment Receipts
+                  </CardTitle>
+                  <CardDescription>
+                    Payments confirmed by the school for {selectedTerm}, {selectedSession}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Date</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Amount</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Purpose</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Method</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {confirmedPaymentRecords.map((record: any) => (
+                          <tr key={record.id}>
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                              {record.paymentDate
+                                ? new Date(record.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                                : "N/A"}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                              ₦{Number(record.amount).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                              {record.purpose || <span className="text-gray-400">—</span>}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white capitalize">
+                              {record.paymentMethod}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              <Badge className="bg-green-100 text-green-800 border-green-200">
+                                Confirmed
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Profile Tab - keeping existing content with password form */}

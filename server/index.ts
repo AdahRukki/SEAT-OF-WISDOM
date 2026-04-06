@@ -9,6 +9,7 @@ async function runMigrations() {
     await pool.query(`
       ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_term VARCHAR(50);
       ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_session VARCHAR(20);
+      ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS purpose VARCHAR(100);
     `);
     log("Database migrations applied successfully");
   } catch (err) {

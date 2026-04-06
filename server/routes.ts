@@ -34,11 +34,12 @@ import {
   classes,
   contactSubmissions,
   bankStatements,
-  bankTransactions
+  bankTransactions,
+  feePaymentRecords
 } from "@shared/schema";
 import { sendContactFormNotification } from "./resend";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
@@ -2660,8 +2661,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const session = req.query.session as string;
       const classId = req.query.classId as string;
       
-      const payments = await storage.getPayments(student.id, undefined, undefined, term, session, classId);
-      res.json(payments);
+      const oldPayments = await storage.getPayments(student.id, undefined, undefined, term, session, classId);
+
+      // Also fetch confirmed fee_payment_records for this student
+      const conditions: any[] = [
+        eq(feePaymentRecords.studentId, student.id),
+        eq(feePaymentRecords.status, 'confirmed'),
+      ];
+      if (term) conditions.push(eq(feePaymentRecords.term, term));
+      if (session) conditions.push(eq(feePaymentRecords.session, session));
+
+      const confirmedRecords = await db
+        .select({
+          id: feePaymentRecords.id,
+          amount: feePaymentRecords.amount,
+          paymentMethod: feePaymentRecords.paymentMethod,
+          paymentDate: feePaymentRecords.paymentDate,
+          purpose: feePaymentRecords.purpose,
+          notes: feePaymentRecords.notes,
+          status: feePaymentRecords.status,
+          term: feePaymentRecords.term,
+          session: feePaymentRecords.session,
+          reference: feePaymentRecords.reference,
+        })
+        .from(feePaymentRecords)
+        .where(and(...conditions));
+
+      const confirmedMapped = confirmedRecords.map((r) => ({
+        ...r,
+        source: 'record' as const,
+        studentFeeId: null,
+      }));
+
+      res.json({ oldPayments, confirmedRecords: confirmedMapped });
     } catch (error) {
       console.error("Get student payments error:", error);
       res.status(500).json({ error: "Failed to fetch student payments" });

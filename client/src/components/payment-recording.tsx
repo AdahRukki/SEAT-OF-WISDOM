@@ -66,6 +66,17 @@ import { recordFeePaymentSchema, type FeePaymentRecordWithDetails } from "@share
 
 type RecordPaymentForm = z.infer<typeof recordFeePaymentSchema>;
 
+const PAYMENT_PURPOSES = [
+  "Tuition Fee",
+  "Uniform",
+  "Books / Stationery",
+  "Excursion",
+  "Development Levy",
+  "PTA Fee",
+  "Exam Fee",
+  "Other",
+];
+
 const commonFieldsSchema = recordFeePaymentSchema.omit({ studentId: true, amount: true });
 type CommonFields = z.infer<typeof commonFieldsSchema>;
 
@@ -162,6 +173,7 @@ export function PaymentRecording({
     defaultValues: {
       paymentMethod: "cash",
       paymentDate: new Date().toISOString().split("T")[0],
+      purpose: "",
       reference: "",
       term: currentTerm || "",
       session: currentSession || "",
@@ -287,6 +299,7 @@ export function PaymentRecording({
     form.reset({
       paymentMethod: "cash",
       paymentDate: new Date().toISOString().split("T")[0],
+      purpose: "",
       reference: "",
       term: currentTerm || "",
       session: currentSession || "",
@@ -554,12 +567,35 @@ export function PaymentRecording({
 
                   <FormField
                     control={form.control}
+                    name="purpose"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Purpose</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="What is this payment for?" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {PAYMENT_PURPOSES.map((p) => (
+                              <SelectItem key={p} value={p}>{p}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="reference"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Reference (Optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="Transaction reference" {...field} />
+                          <Input placeholder="Transaction reference / POS slip code" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -669,6 +705,7 @@ export function PaymentRecording({
                   <TableHead>Date</TableHead>
                   <TableHead>Student</TableHead>
                   <TableHead>Amount</TableHead>
+                  <TableHead>Purpose</TableHead>
                   <TableHead>Method</TableHead>
                   <TableHead>Term/Session</TableHead>
                   <TableHead>Status</TableHead>
@@ -678,13 +715,13 @@ export function PaymentRecording({
               <TableBody>
                 {recordsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : paymentRecords.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No payment records found
                     </TableCell>
                   </TableRow>
@@ -706,6 +743,9 @@ export function PaymentRecording({
                       </TableCell>
                       <TableCell className="font-medium">
                         ₦{parseFloat(record.amount).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {(record as any).purpose || <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="capitalize text-sm">
                         {record.paymentMethod}
