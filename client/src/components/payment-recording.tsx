@@ -92,7 +92,6 @@ interface Student {
 
 interface SelectedStudentEntry {
   student: Student;
-  amount: number;
 }
 
 interface PaymentRecordingProps {
@@ -326,7 +325,7 @@ export function PaymentRecording({
 
   const addStudent = (student: Student) => {
     if (selectedEntries.some((e) => e.student.id === student.id)) return;
-    setSelectedEntries([...selectedEntries, { student, amount: 0 }]);
+    setSelectedEntries([...selectedEntries, { student }]);
     setSearchQuery("");
   };
 

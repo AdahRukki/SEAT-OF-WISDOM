@@ -83,6 +83,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, asc, desc, sql, inArray, ne, isNotNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
@@ -2653,6 +2654,8 @@ export class DatabaseStorage implements IStorage {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
+    const recorderUsers = alias(users, 'recorder_users');
+
     const records = await db
       .select({
         record: feePaymentRecords,
@@ -2660,16 +2663,17 @@ export class DatabaseStorage implements IStorage {
         user: users,
         class: classes,
         recordedByUser: {
-          id: users.id,
-          firstName: users.firstName,
-          lastName: users.lastName,
-          email: users.email,
+          id: recorderUsers.id,
+          firstName: recorderUsers.firstName,
+          lastName: recorderUsers.lastName,
+          email: recorderUsers.email,
         },
       })
       .from(feePaymentRecords)
       .leftJoin(students, eq(feePaymentRecords.studentId, students.id))
       .leftJoin(users, eq(students.userId, users.id))
       .leftJoin(classes, eq(students.classId, classes.id))
+      .leftJoin(recorderUsers, eq(feePaymentRecords.recordedBy, recorderUsers.id))
       .where(whereClause)
       .orderBy(desc(feePaymentRecords.createdAt));
 
