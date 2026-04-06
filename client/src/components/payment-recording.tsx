@@ -59,10 +59,15 @@ import {
   Clock,
   RefreshCw,
   Loader2,
+  X,
+  Users,
 } from "lucide-react";
 import { recordFeePaymentSchema, type FeePaymentRecordWithDetails } from "@shared/schema";
 
 type RecordPaymentForm = z.infer<typeof recordFeePaymentSchema>;
+
+const commonFieldsSchema = recordFeePaymentSchema.omit({ studentId: true, amount: true });
+type CommonFields = z.infer<typeof commonFieldsSchema>;
 
 interface Student {
   id: string;
@@ -71,6 +76,11 @@ interface Student {
   lastName: string;
   className?: string;
   classId?: string;
+}
+
+interface SelectedStudentEntry {
+  student: Student;
+  amount: number;
 }
 
 interface PaymentRecordingProps {
@@ -88,10 +98,11 @@ export function PaymentRecording({
 }: PaymentRecordingProps) {
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -146,11 +157,9 @@ export function PaymentRecording({
     },
   });
 
-  const form = useForm<RecordPaymentForm>({
-    resolver: zodResolver(recordFeePaymentSchema),
+  const form = useForm<CommonFields>({
+    resolver: zodResolver(commonFieldsSchema),
     defaultValues: {
-      studentId: "",
-      amount: 0,
       paymentMethod: "cash",
       paymentDate: new Date().toISOString().split("T")[0],
       reference: "",
@@ -164,23 +173,6 @@ export function PaymentRecording({
     mutationFn: async (data: RecordPaymentForm) => {
       const res = await apiRequest("/api/payments/record", { method: "POST", body: data });
       return res;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Recorded",
-        description: "The payment has been successfully recorded and is pending confirmation.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-      setIsRecordDialogOpen(false);
-      setSelectedStudent(null);
-      form.reset();
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to record payment",
-        variant: "destructive",
-      });
     },
   });
 
@@ -197,7 +189,7 @@ export function PaymentRecording({
     }
 
     setPendingPayments(failed);
-    
+
     if (failed.length === 0) {
       toast({
         title: "Sync Complete",
@@ -214,33 +206,115 @@ export function PaymentRecording({
     queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
   };
 
-  const onSubmit = (data: RecordPaymentForm) => {
-    if (!isOnline) {
-      const offlinePayment = {
-        ...data,
-        offlineId: `offline_${Date.now()}`,
-        createdAt: new Date().toISOString(),
-      };
-      setPendingPayments([...pendingPayments, offlinePayment]);
+  const onSubmit = async (commonData: CommonFields) => {
+    if (selectedEntries.length === 0) {
       toast({
-        title: "Payment Saved Offline",
-        description: "This payment will be synced when you're back online.",
+        title: "No Students Selected",
+        description: "Please add at least one student before recording a payment.",
+        variant: "destructive",
       });
-      setIsRecordDialogOpen(false);
-      setSelectedStudent(null);
-      form.reset();
       return;
     }
 
-    recordPaymentMutation.mutate(data);
+    const invalidEntries = selectedEntries.filter((e) => !e.amount || e.amount <= 0);
+    if (invalidEntries.length > 0) {
+      toast({
+        title: "Missing Amounts",
+        description: "Please enter a valid amount for every selected student.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isOnline) {
+      const offlinePayments = selectedEntries.map((entry) => ({
+        ...commonData,
+        studentId: entry.student.id,
+        amount: entry.amount,
+        offlineId: `offline_${Date.now()}_${entry.student.id}`,
+        createdAt: new Date().toISOString(),
+      }));
+      setPendingPayments([...pendingPayments, ...offlinePayments]);
+      toast({
+        title: "Payments Saved Offline",
+        description: `${offlinePayments.length} payment(s) will be synced when you're back online.`,
+      });
+      closeAndReset();
+      return;
+    }
+
+    setIsSubmitting(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const entry of selectedEntries) {
+      try {
+        await recordPaymentMutation.mutateAsync({
+          ...commonData,
+          studentId: entry.student.id,
+          amount: entry.amount,
+        });
+        successCount++;
+      } catch (err: any) {
+        errors.push(`${entry.student.lastName} ${entry.student.firstName}: ${err.message || "Failed"}`);
+      }
+    }
+
+    setIsSubmitting(false);
+
+    if (successCount > 0) {
+      toast({
+        title: successCount === selectedEntries.length ? "Payments Recorded" : "Partially Recorded",
+        description: `${successCount} of ${selectedEntries.length} payment(s) recorded successfully.${errors.length > 0 ? ` ${errors.length} failed.` : ""}`,
+        variant: errors.length > 0 ? "destructive" : "default",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+    } else {
+      toast({
+        title: "All Payments Failed",
+        description: errors.join("; "),
+        variant: "destructive",
+      });
+    }
+
+    if (successCount > 0) closeAndReset();
   };
 
-  const handleStudentSelect = (student: Student) => {
-    setSelectedStudent(student);
-    form.setValue("studentId", student.id);
+  const closeAndReset = () => {
+    setIsRecordDialogOpen(false);
+    setSelectedEntries([]);
+    setSearchQuery("");
+    form.reset({
+      paymentMethod: "cash",
+      paymentDate: new Date().toISOString().split("T")[0],
+      reference: "",
+      term: currentTerm || "",
+      session: currentSession || "",
+      notes: "",
+    });
   };
+
+  const addStudent = (student: Student) => {
+    if (selectedEntries.some((e) => e.student.id === student.id)) return;
+    setSelectedEntries([...selectedEntries, { student, amount: 0 }]);
+    setSearchQuery("");
+  };
+
+  const removeStudent = (studentId: string) => {
+    setSelectedEntries(selectedEntries.filter((e) => e.student.id !== studentId));
+  };
+
+  const updateAmount = (studentId: string, amount: number) => {
+    setSelectedEntries(selectedEntries.map((e) =>
+      e.student.id === studentId ? { ...e, amount } : e
+    ));
+  };
+
+  const selectedIds = new Set(selectedEntries.map((e) => e.student.id));
 
   const filteredStudents = students.filter((s) => {
+    if (!searchQuery.trim()) return false;
+    if (selectedIds.has(s.id)) return false;
     const query = searchQuery.toLowerCase();
     const firstName = (s.firstName || '').toLowerCase();
     const lastName = (s.lastName || '').toLowerCase();
@@ -288,7 +362,7 @@ export function PaymentRecording({
               </>
             )}
           </Badge>
-          <Dialog open={isRecordDialogOpen} onOpenChange={setIsRecordDialogOpen}>
+          <Dialog open={isRecordDialogOpen} onOpenChange={(open) => { if (!open) closeAndReset(); else setIsRecordDialogOpen(true); }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -299,243 +373,241 @@ export function PaymentRecording({
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 <DialogDescription>
-                  Enter payment details. This will be submitted for owner confirmation.
+                  Search and add one or more students, set each amount, then fill in the shared payment details.
                 </DialogDescription>
               </DialogHeader>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  {!selectedStudent ? (
-                    <div className="space-y-4">
-                      <Label>Search Student</Label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search by name or ID..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-9"
-                        />
-                      </div>
-                      <div className="max-h-[200px] overflow-y-auto border rounded-md">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+
+                  {/* Student Search */}
+                  <div className="space-y-2">
+                    <Label>Add Students</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by name or ID..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    {searchQuery.trim() && (
+                      <div className="max-h-[160px] overflow-y-auto border rounded-md">
                         {studentsLoading ? (
-                          <div className="p-4 text-center text-muted-foreground">
-                            Loading students...
-                          </div>
+                          <div className="p-4 text-center text-muted-foreground">Loading students...</div>
                         ) : filteredStudents.length === 0 ? (
-                          <div className="p-4 text-center text-muted-foreground">
-                            No students found
-                          </div>
+                          <div className="p-4 text-center text-muted-foreground">No students found</div>
                         ) : (
-                          filteredStudents.slice(0, 10).map((student) => (
+                          filteredStudents.slice(0, 8).map((student) => (
                             <div
                               key={student.id}
-                              className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0"
-                              onClick={() => handleStudentSelect(student)}
+                              className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0 flex items-center justify-between"
+                              onClick={() => addStudent(student)}
                             >
-                              <div className="font-medium">
-                                {student.lastName} {student.firstName}
+                              <div>
+                                <div className="font-medium text-sm">
+                                  {student.lastName} {student.firstName}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  ID: {student.studentId} | {student.className || "N/A"}
+                                </div>
                               </div>
-                              <div className="text-sm text-muted-foreground">
-                                ID: {student.studentId} | {student.className || "N/A"}
-                              </div>
+                              <Plus className="h-4 w-4 text-primary flex-shrink-0" />
                             </div>
                           ))
                         )}
                       </div>
-                    </div>
-                  ) : (
-                    <>
-                      <Card>
-                        <CardContent className="pt-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium">
-                                {selectedStudent.lastName} {selectedStudent.firstName}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                ID: {selectedStudent.studentId} | {selectedStudent.className || "N/A"}
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedStudent(null);
-                                form.setValue("studentId", "");
-                              }}
-                            >
-                              Change
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
+                    )}
+                  </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="amount"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Amount (₦)</FormLabel>
-                              <FormControl>
+                  {/* Selected Students with Amounts */}
+                  {selectedEntries.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <Label>{selectedEntries.length} student{selectedEntries.length > 1 ? "s" : ""} selected</Label>
+                      </div>
+                      <div className="border rounded-md divide-y">
+                        {selectedEntries.map((entry) => (
+                          <div key={entry.student.id} className="p-3 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm truncate">
+                                {entry.student.lastName} {entry.student.firstName}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {entry.student.studentId} | {entry.student.className || "N/A"}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="relative w-32">
+                                <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">₦</span>
                                 <Input
                                   type="number"
                                   placeholder="0.00"
-                                  {...field}
-                                  onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                  className="pl-7 h-9 text-sm"
+                                  value={entry.amount || ""}
+                                  onChange={(e) => updateAmount(entry.student.id, parseFloat(e.target.value) || 0)}
                                 />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="paymentMethod"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Payment Method</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select method" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="transfer">Bank Transfer</SelectItem>
-                                  <SelectItem value="pos">POS</SelectItem>
-                                  <SelectItem value="cash">Cash</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-muted-foreground hover:text-red-500"
+                                onClick={() => removeStudent(entry.student.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="paymentDate"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Payment Date</FormLabel>
-                              <FormControl>
-                                <Input type="date" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="reference"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Reference (Optional)</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Transaction reference"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="term"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Term</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || ""}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select term" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="First Term">First Term</SelectItem>
-                                  <SelectItem value="Second Term">Second Term</SelectItem>
-                                  <SelectItem value="Third Term">Third Term</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        <FormField
-                          control={form.control}
-                          name="session"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Session</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., 2024/2025"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      <FormField
-                        control={form.control}
-                        name="notes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Notes (Optional)</FormLabel>
-                            <FormControl>
-                              <Textarea
-                                placeholder="Any additional notes about this payment..."
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="flex gap-2 pt-4">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setIsRecordDialogOpen(false)}
-                          className="flex-1"
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          type="submit"
-                          className="flex-1"
-                          disabled={recordPaymentMutation.isPending}
-                        >
-                          {recordPaymentMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Recording...
-                            </>
-                          ) : isOnline ? (
-                            "Record Payment"
-                          ) : (
-                            "Save Offline"
-                          )}
-                        </Button>
-                      </div>
-                    </>
+                      {selectedEntries.length > 1 && (
+                        <div className="text-sm text-right text-muted-foreground">
+                          Total: ₦{selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
                   )}
+
+                  <Separator />
+
+                  {/* Shared Payment Details */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="paymentMethod"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Method</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select method" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="transfer">Bank Transfer</SelectItem>
+                              <SelectItem value="pos">POS</SelectItem>
+                              <SelectItem value="cash">Cash</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="paymentDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="term"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Term</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select term" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="First Term">First Term</SelectItem>
+                              <SelectItem value="Second Term">Second Term</SelectItem>
+                              <SelectItem value="Third Term">Third Term</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="session"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Session</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 2024/2025" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="reference"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reference (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Transaction reference" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Notes (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Any additional notes about this payment..." {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeAndReset}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="flex-1"
+                      disabled={isSubmitting || selectedEntries.length === 0}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Recording...
+                        </>
+                      ) : isOnline ? (
+                        selectedEntries.length > 1
+                          ? `Record ${selectedEntries.length} Payments`
+                          : "Record Payment"
+                      ) : (
+                        "Save Offline"
+                      )}
+                    </Button>
+                  </div>
                 </form>
               </Form>
             </DialogContent>
@@ -580,11 +652,7 @@ export function PaymentRecording({
                 {pendingPayments.length} payment(s) waiting to sync
               </div>
               {isOnline && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={syncPendingPayments}
-                >
+                <Button size="sm" variant="outline" onClick={syncPendingPayments}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Sync Now
                 </Button>
@@ -623,37 +691,31 @@ export function PaymentRecording({
                 ) : (
                   paymentRecords.map((record) => (
                     <TableRow key={record.id}>
-                      <TableCell>
-                        {new Date(record.paymentDate).toLocaleDateString()}
+                      <TableCell className="text-sm">
+                        {record.paymentDate
+                          ? new Date(record.paymentDate).toLocaleDateString()
+                          : "N/A"}
                       </TableCell>
                       <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {record.student?.user?.lastName} {record.student?.user?.firstName}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {record.student?.studentId}
-                          </div>
+                        <div className="font-medium text-sm">
+                          {record.student?.user?.lastName} {record.student?.user?.firstName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {record.student?.studentId}
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">
                         ₦{parseFloat(record.amount).toLocaleString()}
                       </TableCell>
-                      <TableCell className="capitalize">
+                      <TableCell className="capitalize text-sm">
                         {record.paymentMethod}
                       </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {record.term || "-"}
-                          <br />
-                          <span className="text-muted-foreground">
-                            {record.session || "-"}
-                          </span>
-                        </div>
+                      <TableCell className="text-sm">
+                        {record.term} / {record.session}
                       </TableCell>
                       <TableCell>{getStatusBadge(record.status)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {record.recordedByUser?.firstName} {record.recordedByUser?.lastName}
+                        {record.recordedBy?.firstName} {record.recordedBy?.lastName}
                       </TableCell>
                     </TableRow>
                   ))
