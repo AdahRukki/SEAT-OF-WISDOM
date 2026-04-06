@@ -693,7 +693,7 @@ export function PaymentRecording({
                     <TableRow key={record.id}>
                       <TableCell className="text-sm">
                         {record.paymentDate
-                          ? new Date(record.paymentDate).toLocaleDateString()
+                          ? new Date(record.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
                           : "N/A"}
                       </TableCell>
                       <TableCell>
