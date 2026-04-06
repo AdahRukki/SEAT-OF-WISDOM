@@ -408,17 +408,28 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         reasons.push("Within a week");
       }
 
-      // Reference match (20 points)
-      if (payment.reference && tx.rawDescription?.toLowerCase().includes(payment.reference.toLowerCase())) {
-        score += 20;
-        reasons.push("Reference found");
+      // Depositor name in description (25 points)
+      const depositorName = ((payment as any).depositorName || '').toLowerCase().trim();
+      if (depositorName) {
+        const txDesc = tx.rawDescription?.toLowerCase() || '';
+        const depositorWords = depositorName.split(/\s+/).filter((w: string) => w.length > 2);
+        if (depositorWords.some((w: string) => txDesc.includes(w))) {
+          score += 25;
+          reasons.push("Depositor name match");
+        }
       }
 
-      // Student name in description (10 points)
+      // Student name in description (20 points)
       const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
       if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
-        score += 10;
+        score += 20;
         reasons.push("Name match");
+      }
+
+      // Reference match (10 points)
+      if (payment.reference && tx.rawDescription?.toLowerCase().includes(payment.reference.toLowerCase())) {
+        score += 10;
+        reasons.push("Reference found");
       }
 
       if (score > bestScore) {

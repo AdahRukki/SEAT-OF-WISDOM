@@ -3323,6 +3323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentMethod: validatedData.paymentMethod,
         paymentDate: new Date(validatedData.paymentDate),
         purpose: validatedData.purpose,
+        depositorName: validatedData.depositorName,
         reference: validatedData.reference,
         term: validatedData.term,
         session: validatedData.session,

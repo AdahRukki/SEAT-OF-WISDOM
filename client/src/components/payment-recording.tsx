@@ -178,6 +178,7 @@ export function PaymentRecording({
       paymentMethod: "cash",
       paymentDate: new Date().toISOString().split("T")[0],
       purpose: "",
+      depositorName: "",
       reference: "",
       term: currentTerm || "",
       session: currentSession || "",
@@ -315,6 +316,7 @@ export function PaymentRecording({
       paymentMethod: "cash",
       paymentDate: new Date().toISOString().split("T")[0],
       purpose: "",
+      depositorName: "",
       reference: "",
       term: currentTerm || "",
       session: currentSession || "",
@@ -639,6 +641,20 @@ export function PaymentRecording({
 
                   <FormField
                     control={form.control}
+                    name="depositorName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Depositor Name (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Name of person who made the deposit" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="reference"
                     render={({ field }) => (
                       <FormItem>
@@ -799,6 +815,11 @@ export function PaymentRecording({
                         <div className="text-xs text-muted-foreground">
                           {record.student?.studentId}
                         </div>
+                        {(record as any).depositorName && (
+                          <div className="text-xs text-blue-600 mt-0.5">
+                            via {(record as any).depositorName}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {((record.student as any)?.class?.name) || <span className="text-muted-foreground">—</span>}
