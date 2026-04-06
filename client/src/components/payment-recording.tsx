@@ -248,6 +248,15 @@ export function PaymentRecording({
       return;
     }
 
+    if (studentCount > 1 && totalAmount < studentCount) {
+      toast({
+        title: "Amount Too Low",
+        description: `Total amount must be at least ₦${studentCount} when splitting across ${studentCount} students.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const resolvedPurpose = commonData.purpose === "Other" ? (customPurpose.trim() || "Other") : commonData.purpose;
     const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
 
@@ -473,7 +482,12 @@ export function PaymentRecording({
                         min={0}
                       />
                     </div>
-                    {studentCount > 1 && totalAmount > 0 && (
+                    {studentCount > 1 && totalAmount > 0 && totalAmount < studentCount && (
+                      <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
+                        Amount too low to split across {studentCount} students — minimum ₦{studentCount}.
+                      </div>
+                    )}
+                    {studentCount > 1 && totalAmount >= studentCount && totalAmount > 0 && (
                       <div className="text-xs text-muted-foreground bg-muted rounded p-2">
                         ₦{totalAmount.toLocaleString()} ÷ {studentCount} students = ₦{perStudentBase.toLocaleString()} each
                         {remainder > 0 && ` (₦${remainder} added to first student)`}
