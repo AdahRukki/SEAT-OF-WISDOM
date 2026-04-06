@@ -371,6 +371,7 @@ export const feePaymentRecords = pgTable("fee_payment_records", {
   session: varchar("session", { length: 20 }),
   status: varchar("status", { length: 30 }).notNull().default("recorded"), // recorded, confirmed, reversed
   purpose: varchar("purpose", { length: 100 }), // e.g. Tuition Fee, Uniform, Books, Excursion, etc.
+  depositorName: varchar("depositor_name", { length: 150 }), // Name of person who made the deposit
   notes: text("notes"),
   recordedBy: uuid("recorded_by").notNull().references(() => users.id),
   confirmedBy: uuid("confirmed_by").references(() => users.id),
@@ -1003,6 +1004,7 @@ export const recordFeePaymentSchema = z.object({
   }),
   paymentDate: z.string().min(1, "Payment date is required"),
   purpose: z.string().max(100).optional(),
+  depositorName: z.string().max(150).optional(),
   reference: z.string().optional(),
   term: z.string().optional(),
   session: z.string().optional(),

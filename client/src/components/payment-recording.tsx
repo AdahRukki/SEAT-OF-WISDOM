@@ -61,6 +61,7 @@ import {
   Loader2,
   X,
   Users,
+  ArrowUpDown,
 } from "lucide-react";
 import { recordFeePaymentSchema, type FeePaymentRecordWithDetails } from "@shared/schema";
 
@@ -110,11 +111,13 @@ export function PaymentRecording({
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
+  const [totalAmount, setTotalAmount] = useState<number>(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customPurpose, setCustomPurpose] = useState("");
+  const [classSortDir, setClassSortDir] = useState<"asc" | "desc" | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -219,6 +222,11 @@ export function PaymentRecording({
     queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
   };
 
+  // Compute per-student share from shared total amount
+  const studentCount = selectedEntries.length;
+  const perStudentBase = studentCount > 0 ? Math.floor(totalAmount / studentCount) : 0;
+  const remainder = studentCount > 0 ? totalAmount - perStudentBase * studentCount : 0;
+
   const onSubmit = async (commonData: CommonFields) => {
     if (selectedEntries.length === 0) {
       toast({
@@ -229,11 +237,10 @@ export function PaymentRecording({
       return;
     }
 
-    const invalidEntries = selectedEntries.filter((e) => !e.amount || e.amount <= 0);
-    if (invalidEntries.length > 0) {
+    if (!totalAmount || totalAmount <= 0) {
       toast({
-        title: "Missing Amounts",
-        description: "Please enter a valid amount for every selected student.",
+        title: "Missing Amount",
+        description: "Please enter a total amount greater than zero.",
         variant: "destructive",
       });
       return;
@@ -243,10 +250,10 @@ export function PaymentRecording({
     const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
 
     if (!isOnline) {
-      const offlinePayments = selectedEntries.map((entry) => ({
+      const offlinePayments = selectedEntries.map((entry, idx) => ({
         ...dataWithPurpose,
         studentId: entry.student.id,
-        amount: entry.amount,
+        amount: idx === 0 ? perStudentBase + remainder : perStudentBase,
         offlineId: `offline_${Date.now()}_${entry.student.id}`,
         createdAt: new Date().toISOString(),
       }));
@@ -263,12 +270,14 @@ export function PaymentRecording({
     let successCount = 0;
     const errors: string[] = [];
 
-    for (const entry of selectedEntries) {
+    for (let idx = 0; idx < selectedEntries.length; idx++) {
+      const entry = selectedEntries[idx];
+      const entryAmount = idx === 0 ? perStudentBase + remainder : perStudentBase;
       try {
         await recordPaymentMutation.mutateAsync({
           ...dataWithPurpose,
           studentId: entry.student.id,
-          amount: entry.amount,
+          amount: entryAmount,
         });
         successCount++;
       } catch (err: any) {
@@ -299,6 +308,7 @@ export function PaymentRecording({
   const closeAndReset = () => {
     setIsRecordDialogOpen(false);
     setSelectedEntries([]);
+    setTotalAmount(0);
     setSearchQuery("");
     setCustomPurpose("");
     form.reset({
@@ -322,12 +332,6 @@ export function PaymentRecording({
     setSelectedEntries(selectedEntries.filter((e) => e.student.id !== studentId));
   };
 
-  const updateAmount = (studentId: string, amount: number) => {
-    setSelectedEntries(selectedEntries.map((e) =>
-      e.student.id === studentId ? { ...e, amount } : e
-    ));
-  };
-
   const selectedIds = new Set(selectedEntries.map((e) => e.student.id));
 
   const filteredStudents = students.filter((s) => {
@@ -338,6 +342,19 @@ export function PaymentRecording({
     const lastName = (s.lastName || '').toLowerCase();
     const studentId = (s.studentId || '').toLowerCase();
     return firstName.includes(query) || lastName.includes(query) || studentId.includes(query);
+  });
+
+  const toggleClassSort = () => {
+    setClassSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+  };
+
+  const sortedRecords = [...paymentRecords].sort((a, b) => {
+    if (!classSortDir) return 0;
+    const nameA = ((a.student as any)?.class?.name || "").toLowerCase();
+    const nameB = ((b.student as any)?.class?.name || "").toLowerCase();
+    if (nameA < nameB) return classSortDir === "asc" ? -1 : 1;
+    if (nameA > nameB) return classSortDir === "asc" ? 1 : -1;
+    return 0;
   });
 
   const getStatusBadge = (status: string) => {
@@ -391,7 +408,7 @@ export function PaymentRecording({
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 <DialogDescription>
-                  Search and add one or more students, set each amount, then fill in the shared payment details.
+                  Enter the total amount, search and add students — it will be split equally. Fill in the shared payment details below.
                 </DialogDescription>
               </DialogHeader>
 
@@ -439,53 +456,71 @@ export function PaymentRecording({
                     )}
                   </div>
 
-                  {/* Selected Students with Amounts */}
+                  {/* Total Amount (shared across all selected students) */}
+                  <div className="space-y-2">
+                    <Label>Total Amount (₦)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">₦</span>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        className="pl-7"
+                        value={totalAmount || ""}
+                        onChange={(e) => setTotalAmount(parseFloat(e.target.value) || 0)}
+                        min={0}
+                      />
+                    </div>
+                    {studentCount > 1 && totalAmount > 0 && (
+                      <div className="text-xs text-muted-foreground bg-muted rounded p-2">
+                        ₦{totalAmount.toLocaleString()} ÷ {studentCount} students = ₦{perStudentBase.toLocaleString()} each
+                        {remainder > 0 && ` (₦${remainder} added to first student)`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected Students List */}
                   {selectedEntries.length > 0 && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-muted-foreground" />
                         <Label>{selectedEntries.length} student{selectedEntries.length > 1 ? "s" : ""} selected</Label>
+                        {studentCount > 1 && (
+                          <span className="text-xs text-muted-foreground ml-auto">Each gets a separate payment record</span>
+                        )}
                       </div>
                       <div className="border rounded-md divide-y">
-                        {selectedEntries.map((entry) => (
-                          <div key={entry.student.id} className="p-3 flex items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm truncate">
-                                {entry.student.lastName} {entry.student.firstName}
+                        {selectedEntries.map((entry, idx) => {
+                          const share = idx === 0 ? perStudentBase + remainder : perStudentBase;
+                          return (
+                            <div key={entry.student.id} className="p-3 flex items-center gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm truncate">
+                                  {entry.student.lastName} {entry.student.firstName}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {entry.student.studentId} | {entry.student.className || "N/A"}
+                                </div>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {entry.student.studentId} | {entry.student.className || "N/A"}
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {totalAmount > 0 && (
+                                  <span className="text-sm font-medium text-muted-foreground w-28 text-right">
+                                    ₦{share.toLocaleString()}
+                                  </span>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-muted-foreground hover:text-red-500"
+                                  onClick={() => removeStudent(entry.student.id)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <div className="relative w-32">
-                                <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">₦</span>
-                                <Input
-                                  type="number"
-                                  placeholder="0.00"
-                                  className="pl-7 h-9 text-sm"
-                                  value={entry.amount || ""}
-                                  onChange={(e) => updateAmount(entry.student.id, parseFloat(e.target.value) || 0)}
-                                />
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 text-muted-foreground hover:text-red-500"
-                                onClick={() => removeStudent(entry.student.id)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                      {selectedEntries.length > 1 && (
-                        <div className="text-sm text-right text-muted-foreground">
-                          Total: ₦{selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0).toLocaleString()}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -718,6 +753,16 @@ export function PaymentRecording({
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Student</TableHead>
+                  <TableHead>
+                    <button
+                      className="flex items-center gap-1 hover:text-foreground text-left font-medium"
+                      onClick={toggleClassSort}
+                      type="button"
+                    >
+                      Class
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Purpose</TableHead>
                   <TableHead>Method</TableHead>
@@ -729,18 +774,18 @@ export function PaymentRecording({
               <TableBody>
                 {recordsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
-                ) : paymentRecords.length === 0 ? (
+                ) : sortedRecords.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No payment records found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paymentRecords.map((record) => (
+                  sortedRecords.map((record) => (
                     <TableRow key={record.id}>
                       <TableCell className="text-sm">
                         {record.paymentDate
@@ -754,6 +799,9 @@ export function PaymentRecording({
                         <div className="text-xs text-muted-foreground">
                           {record.student?.studentId}
                         </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {((record.student as any)?.class?.name) || <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="font-medium">
                         ₦{parseFloat(record.amount).toLocaleString()}

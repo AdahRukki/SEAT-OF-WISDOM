@@ -4050,32 +4050,36 @@ export default function AdminDashboard() {
 
           {/* Finance Tab */}
           <TabsContent value="finance" className="space-y-6 table-container">
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
-                  <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
-                  <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="p-3 sm:p-6 pt-0">
-                  <div className="text-lg sm:text-2xl font-bold truncate">
-                    ₦{financialSummary?.totalPaid?.toLocaleString() || "0.00"}
-                  </div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedFinanceTerm}</p>
-                </CardContent>
-              </Card>
+            <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-2 xl:grid-cols-4' : 'grid-cols-2'}`}>
+              {user?.role === 'admin' && (
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+                    <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
+                    <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent className="p-3 sm:p-6 pt-0">
+                    <div className="text-lg sm:text-2xl font-bold truncate">
+                      ₦{financialSummary?.totalPaid?.toLocaleString() || "0.00"}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedFinanceTerm}</p>
+                  </CardContent>
+                </Card>
+              )}
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
-                  <CardTitle className="text-xs sm:text-sm font-medium">Outstanding Fees</CardTitle>
-                  <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent className="p-3 sm:p-6 pt-0">
-                  <div className="text-lg sm:text-2xl font-bold truncate">
-                    ₦{financialSummary?.totalOutstanding?.toLocaleString() || "0.00"}
-                  </div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Pending payments</p>
-                </CardContent>
-              </Card>
+              {user?.role === 'admin' && (
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+                    <CardTitle className="text-xs sm:text-sm font-medium">Outstanding Fees</CardTitle>
+                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent className="p-3 sm:p-6 pt-0">
+                    <div className="text-lg sm:text-2xl font-bold truncate">
+                      ₦{financialSummary?.totalOutstanding?.toLocaleString() || "0.00"}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Pending payments</p>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
