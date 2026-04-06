@@ -313,7 +313,8 @@ export default function AdminDashboard() {
   const [isDeleteFeeTypeDialogOpen, setIsDeleteFeeTypeDialogOpen] = useState(false);
   const [feeTypeToDelete, setFeeTypeToDelete] = useState<FeeType | null>(null);
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
-  const [feeTypeAssignClassId, setFeeTypeAssignClassId] = useState("");
+  const [feeTypeAssignClassIds, setFeeTypeAssignClassIds] = useState<string[]>([]);
+  const [assignFeeClassIds, setAssignFeeClassIds] = useState<string[]>([]);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
@@ -330,11 +331,10 @@ export default function AdminDashboard() {
     },
   });
 
-  const assignFeeForm = useForm<Pick<AssignFeeForm, 'feeTypeId' | 'classId' | 'term' | 'session'>>({
-    resolver: zodResolver(assignFeeSchema.pick({ feeTypeId: true, classId: true, term: true, session: true })),
+  const assignFeeForm = useForm<Pick<AssignFeeForm, 'feeTypeId' | 'term' | 'session'>>({
+    resolver: zodResolver(assignFeeSchema.pick({ feeTypeId: true, term: true, session: true })),
     defaultValues: {
       feeTypeId: "",
-      classId: "",
       term: "",
       session: "",
     },
@@ -1777,29 +1777,33 @@ export default function AdminDashboard() {
           schoolId: selectedSchoolId || user?.schoolId
         }
       });
-      if (feeTypeAssignClassId && result?.id) {
-        await apiRequest('/api/admin/assign-fee', {
-          method: 'POST',
-          body: {
-            feeTypeId: result.id,
-            classId: feeTypeAssignClassId,
-            term: selectedFinanceTerm || 'First Term',
-            session: selectedFinanceSession || '2024/2025',
-            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            notes: `Auto-assigned on creation`,
-          }
-        });
+      if (feeTypeAssignClassIds.length > 0 && result?.id) {
+        for (const classId of feeTypeAssignClassIds) {
+          await apiRequest('/api/admin/assign-fee', {
+            method: 'POST',
+            body: {
+              feeTypeId: result.id,
+              classId,
+              term: selectedFinanceTerm || 'First Term',
+              session: selectedFinanceSession || '2024/2025',
+              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              notes: `Auto-assigned on creation`,
+            }
+          });
+        }
       }
       return result;
     },
     onSuccess: () => {
-      const wasAssigned = !!feeTypeAssignClassId;
+      const wasAssigned = feeTypeAssignClassIds.length > 0;
       toast({ 
         title: "Success", 
-        description: wasAssigned ? "Fee type created and assigned to class" : "Fee type created successfully"
+        description: wasAssigned
+          ? `Fee type created and assigned to ${feeTypeAssignClassIds.length} class${feeTypeAssignClassIds.length > 1 ? "es" : ""}`
+          : "Fee type created successfully"
       });
       feeTypeForm.reset();
-      setFeeTypeAssignClassId("");
+      setFeeTypeAssignClassIds([]);
       setIsFeeTypeDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
       if (wasAssigned) {
@@ -1884,23 +1888,6 @@ export default function AdminDashboard() {
         body: assignmentData
       });
     },
-    onSuccess: (data) => {
-      toast({ 
-        title: "Success", 
-        description: `Fee assigned to ${data.assignedFees?.length || 0} students` 
-      });
-      assignFeeForm.reset();
-      setIsAssignFeeDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
-    },
-    onError: () => {
-      toast({ 
-        title: "Error", 
-        description: "Failed to assign fee to class", 
-        variant: "destructive" 
-      });
-    }
   });
 
   // Form submission handlers
@@ -1908,13 +1895,33 @@ export default function AdminDashboard() {
     createFeeTypeMutation.mutate(data);
   };
 
-  const handleAssignFeeSubmit = (data: Pick<AssignFeeForm, 'feeTypeId' | 'classId' | 'term' | 'session'>) => {
-    const fullData: AssignFeeForm = {
-      ...data,
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      notes: `Assigned for ${data.term} ${data.session}`,
-    };
-    assignFeeMutation.mutate(fullData);
+  const handleAssignFeeSubmit = async (data: Pick<AssignFeeForm, 'feeTypeId' | 'term' | 'session'>) => {
+    if (assignFeeClassIds.length === 0) {
+      toast({ title: "No Classes Selected", description: "Please select at least one class.", variant: "destructive" });
+      return;
+    }
+    let totalStudents = 0;
+    for (const classId of assignFeeClassIds) {
+      try {
+        const result = await assignFeeMutation.mutateAsync({
+          feeTypeId: data.feeTypeId,
+          classId,
+          term: data.term,
+          session: data.session,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          notes: `Assigned for ${data.term} ${data.session}`,
+        });
+        totalStudents += result.assignedFees?.length || 0;
+      } catch {
+        // continue with remaining classes
+      }
+    }
+    toast({ title: "Success", description: `Fee assigned to ${totalStudents} students across ${assignFeeClassIds.length} class${assignFeeClassIds.length > 1 ? "es" : ""}` });
+    assignFeeForm.reset();
+    setAssignFeeClassIds([]);
+    setIsAssignFeeDialogOpen(false);
+    queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
   };
 
   // Logo upload functions
@@ -6226,28 +6233,38 @@ export default function AdminDashboard() {
                   )}
                 />
                 
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Assign to Class (Optional)</label>
-                  <Select value={feeTypeAssignClassId} onValueChange={setFeeTypeAssignClassId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select class to assign" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sortClassesByOrder(classes).map((cls) => (
-                        <SelectItem key={cls.id} value={cls.id}>
-                          {cls.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">If selected, the fee will be assigned to all students in this class for the current term/session</p>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Assign to Classes (Optional)</label>
+                  <div className="border rounded-md max-h-[180px] overflow-y-auto divide-y">
+                    {sortClassesByOrder(classes).map((cls) => (
+                      <label key={cls.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300"
+                          checked={feeTypeAssignClassIds.includes(cls.id)}
+                          onChange={(e) => {
+                            setFeeTypeAssignClassIds(prev =>
+                              e.target.checked ? [...prev, cls.id] : prev.filter(id => id !== cls.id)
+                            );
+                          }}
+                        />
+                        <span className="text-sm">{cls.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {feeTypeAssignClassIds.length > 0 && (
+                    <p className="text-xs text-blue-600">{feeTypeAssignClassIds.length} class{feeTypeAssignClassIds.length > 1 ? "es" : ""} selected — fee will be assigned to all students in those classes</p>
+                  )}
+                  {feeTypeAssignClassIds.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Optionally tick one or more classes to auto-assign this fee on creation</p>
+                  )}
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => { setIsFeeTypeDialogOpen(false); setFeeTypeAssignClassId(""); }}
+                    onClick={() => { setIsFeeTypeDialogOpen(false); setFeeTypeAssignClassIds([]); }}
                   >
                     Cancel
                   </Button>
@@ -6261,7 +6278,7 @@ export default function AdminDashboard() {
                     ) : (
                       <Plus className="h-4 w-4 mr-2" />
                     )}
-                    {createFeeTypeMutation.isPending ? "Creating..." : feeTypeAssignClassId ? "Create & Assign" : "Create Fee Type"}
+                    {createFeeTypeMutation.isPending ? "Creating..." : feeTypeAssignClassIds.length > 0 ? `Create & Assign to ${feeTypeAssignClassIds.length} Class${feeTypeAssignClassIds.length > 1 ? "es" : ""}` : "Create Fee Type"}
                   </Button>
                 </div>
               </form>
@@ -6270,12 +6287,12 @@ export default function AdminDashboard() {
         </Dialog>
 
         {/* Assign Fee Dialog */}
-        <Dialog open={isAssignFeeDialogOpen} onOpenChange={setIsAssignFeeDialogOpen}>
+        <Dialog open={isAssignFeeDialogOpen} onOpenChange={(open) => { setIsAssignFeeDialogOpen(open); if (!open) { setAssignFeeClassIds([]); assignFeeForm.reset(); } }}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Assign Fee to Class</DialogTitle>
+              <DialogTitle>Assign Fee to Classes</DialogTitle>
               <DialogDescription>
-                Assign a fee type to all students in a class for a specific term and session
+                Assign a fee type to all students in one or more classes for a specific term and session
               </DialogDescription>
             </DialogHeader>
             <Form {...assignFeeForm}>
@@ -6305,30 +6322,31 @@ export default function AdminDashboard() {
                   )}
                 />
                 
-                <FormField
-                  control={assignFeeForm.control}
-                  name="classId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Class *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select class" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {classes.map((classItem) => (
-                            <SelectItem key={classItem.id} value={classItem.id}>
-                              {classItem.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Classes *</label>
+                  <div className="border rounded-md max-h-[200px] overflow-y-auto divide-y">
+                    {sortClassesByOrder(classes).map((cls) => (
+                      <label key={cls.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300"
+                          checked={assignFeeClassIds.includes(cls.id)}
+                          onChange={(e) => {
+                            setAssignFeeClassIds(prev =>
+                              e.target.checked ? [...prev, cls.id] : prev.filter(id => id !== cls.id)
+                            );
+                          }}
+                        />
+                        <span className="text-sm">{cls.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {assignFeeClassIds.length > 0 ? (
+                    <p className="text-xs text-blue-600">{assignFeeClassIds.length} class{assignFeeClassIds.length > 1 ? "es" : ""} selected</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Select one or more classes</p>
                   )}
-                />
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
@@ -6383,13 +6401,13 @@ export default function AdminDashboard() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsAssignFeeDialogOpen(false)}
+                    onClick={() => { setIsAssignFeeDialogOpen(false); setAssignFeeClassIds([]); assignFeeForm.reset(); }}
                   >
                     Cancel
                   </Button>
                   <Button 
                     type="submit" 
-                    disabled={assignFeeMutation.isPending}
+                    disabled={assignFeeMutation.isPending || assignFeeClassIds.length === 0}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     {assignFeeMutation.isPending ? (
@@ -6397,7 +6415,7 @@ export default function AdminDashboard() {
                     ) : (
                       <Plus className="h-4 w-4 mr-2" />
                     )}
-                    {assignFeeMutation.isPending ? "Assigning..." : "Assign Fee"}
+                    {assignFeeMutation.isPending ? "Assigning..." : assignFeeClassIds.length > 1 ? `Assign to ${assignFeeClassIds.length} Classes` : "Assign Fee"}
                   </Button>
                 </div>
               </form>
