@@ -592,7 +592,8 @@ export function PaymentRecording({
                           <Input
                             placeholder="Describe the payment purpose..."
                             value={customPurpose}
-                            onChange={(e) => setCustomPurpose(e.target.value)}
+                            onChange={(e) => setCustomPurpose(e.target.value.slice(0, 100))}
+                            maxLength={100}
                             className="mt-2"
                           />
                         )}

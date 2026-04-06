@@ -1002,7 +1002,7 @@ export const recordFeePaymentSchema = z.object({
     required_error: "Payment method is required" 
   }),
   paymentDate: z.string().min(1, "Payment date is required"),
-  purpose: z.string().optional(),
+  purpose: z.string().max(100).optional(),
   reference: z.string().optional(),
   term: z.string().optional(),
   session: z.string().optional(),
