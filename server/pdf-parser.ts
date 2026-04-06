@@ -116,11 +116,16 @@ function parseFidelityTransactions(rawText: string): ParsedTransaction[] {
     const dateMatch = line.match(dateRegex);
     if (dateMatch) {
       flushTransaction();
-      currentDate = dateMatch[1];
       const rest = line.substring(dateMatch[0].length).trim();
-      const amounts = rest.match(/[\d,]+\.\d{2}/g);
+      // Prefer the Value Date (second date on the line) over Transaction Date (first)
+      const valueDateMatch = rest.match(/\d{1,2}-[A-Za-z]{3}-\d{2}/);
+      currentDate = valueDateMatch ? valueDateMatch[0] : dateMatch[1];
+      const restAfterValueDate = valueDateMatch
+        ? rest.substring(rest.indexOf(valueDateMatch[0]) + valueDateMatch[0].length).trim()
+        : rest;
+      const amounts = restAfterValueDate.match(/[\d,]+\.\d{2}/g);
       currentAmounts = amounts ? amounts.map(a => parseFloat(a.replace(/,/g, ""))) : [];
-      const descPart = rest.replace(/[\d,]+\.\d{2}/g, "").replace(/\s+/g, " ").trim();
+      const descPart = restAfterValueDate.replace(/[\d,]+\.\d{2}/g, "").replace(/\s+/g, " ").trim();
       currentDescription = descPart;
     } else {
       const amounts = line.match(/[\d,]+\.\d{2}/g);
@@ -151,10 +156,12 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
   const transactions: ParsedTransaction[] = [];
 
   for (const line of lines) {
-    const dateMatch = line.match(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/);
-    if (!dateMatch) continue;
+    // Find all date matches and use the second (Value Date) when present, else the first
+    const allDateMatches = [...line.matchAll(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g)];
+    if (allDateMatches.length === 0) continue;
 
-    const normalizedDate = parseDateString(dateMatch[0]);
+    const chosenMatch = allDateMatches.length >= 2 ? allDateMatches[1] : allDateMatches[0];
+    const normalizedDate = parseDateString(chosenMatch[0]);
     if (!normalizedDate) continue;
 
     const amounts = line.match(/[\d,]+\.\d{2}/g);
