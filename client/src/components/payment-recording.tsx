@@ -352,8 +352,8 @@ export function PaymentRecording({
 
   const sortedRecords = [...paymentRecords].sort((a, b) => {
     if (!classSortDir) return 0;
-    const nameA = ((a.student as any)?.class?.name || "").toLowerCase();
-    const nameB = ((b.student as any)?.class?.name || "").toLowerCase();
+    const nameA = (a.student?.class?.name || "").toLowerCase();
+    const nameB = (b.student?.class?.name || "").toLowerCase();
     if (nameA < nameB) return classSortDir === "asc" ? -1 : 1;
     if (nameA > nameB) return classSortDir === "asc" ? 1 : -1;
     return 0;
@@ -815,14 +815,14 @@ export function PaymentRecording({
                         <div className="text-xs text-muted-foreground">
                           {record.student?.studentId}
                         </div>
-                        {(record as any).depositorName && (
+                        {record.depositorName && (
                           <div className="text-xs text-blue-600 mt-0.5">
-                            via {(record as any).depositorName}
+                            via {record.depositorName}
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {((record.student as any)?.class?.name) || <span className="text-muted-foreground">—</span>}
+                        {record.student?.class?.name || <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="font-medium">
                         ₦{parseFloat(record.amount).toLocaleString()}
@@ -838,7 +838,7 @@ export function PaymentRecording({
                       </TableCell>
                       <TableCell>{getStatusBadge(record.status)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {record.recordedBy?.firstName} {record.recordedBy?.lastName}
+                        {record.recordedByUser?.firstName} {record.recordedByUser?.lastName}
                       </TableCell>
                     </TableRow>
                   ))

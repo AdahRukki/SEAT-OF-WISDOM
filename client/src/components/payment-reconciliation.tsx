@@ -409,11 +409,11 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       }
 
       // Depositor name in description (25 points)
-      const depositorName = ((payment as any).depositorName || '').toLowerCase().trim();
+      const depositorName = (payment.depositorName || '').toLowerCase().trim();
       if (depositorName) {
         const txDesc = tx.rawDescription?.toLowerCase() || '';
-        const depositorWords = depositorName.split(/\s+/).filter((w: string) => w.length > 2);
-        if (depositorWords.some((w: string) => txDesc.includes(w))) {
+        const depositorWords = depositorName.split(/\s+/).filter(w => w.length > 2);
+        if (depositorWords.some(w => txDesc.includes(w))) {
           score += 25;
           reasons.push("Depositor name match");
         }
