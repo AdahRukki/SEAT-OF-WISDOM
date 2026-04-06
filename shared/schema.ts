@@ -727,14 +727,16 @@ export const changePasswordSchema = z.object({
 
 // Financial schemas
 export const insertFeeTypeSchema = createInsertSchema(feeTypes).omit({ id: true, createdAt: true, updatedAt: true }).extend({
-  amount: z.string().transform((val) => {
-    // Remove commas and convert to number
-    const numericValue = parseFloat(val.replace(/,/g, ''));
-    if (isNaN(numericValue)) {
-      throw new Error('Invalid amount');
-    }
-    return numericValue.toString();
-  }),
+  amount: z.string()
+    .min(1, "Amount is required")
+    .transform((val, ctx) => {
+      const numericValue = parseFloat(val.replace(/,/g, ''));
+      if (isNaN(numericValue) || numericValue <= 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Amount must be a positive number" });
+        return z.NEVER;
+      }
+      return numericValue.toString();
+    }),
 });
 export const insertStudentFeeSchema = createInsertSchema(studentFees).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
