@@ -114,6 +114,7 @@ export function PaymentRecording({
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customPurpose, setCustomPurpose] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -238,9 +239,12 @@ export function PaymentRecording({
       return;
     }
 
+    const resolvedPurpose = commonData.purpose === "Other" ? (customPurpose.trim() || "Other") : commonData.purpose;
+    const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
+
     if (!isOnline) {
       const offlinePayments = selectedEntries.map((entry) => ({
-        ...commonData,
+        ...dataWithPurpose,
         studentId: entry.student.id,
         amount: entry.amount,
         offlineId: `offline_${Date.now()}_${entry.student.id}`,
@@ -262,7 +266,7 @@ export function PaymentRecording({
     for (const entry of selectedEntries) {
       try {
         await recordPaymentMutation.mutateAsync({
-          ...commonData,
+          ...dataWithPurpose,
           studentId: entry.student.id,
           amount: entry.amount,
         });
@@ -296,6 +300,7 @@ export function PaymentRecording({
     setIsRecordDialogOpen(false);
     setSelectedEntries([]);
     setSearchQuery("");
+    setCustomPurpose("");
     form.reset({
       paymentMethod: "cash",
       paymentDate: new Date().toISOString().split("T")[0],
@@ -583,6 +588,14 @@ export function PaymentRecording({
                             ))}
                           </SelectContent>
                         </Select>
+                        {field.value === "Other" && (
+                          <Input
+                            placeholder="Describe the payment purpose..."
+                            value={customPurpose}
+                            onChange={(e) => setCustomPurpose(e.target.value)}
+                            className="mt-2"
+                          />
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -745,7 +758,7 @@ export function PaymentRecording({
                         ₦{parseFloat(record.amount).toLocaleString()}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {(record as any).purpose || <span className="text-muted-foreground">—</span>}
+                        {record.purpose || <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="capitalize text-sm">
                         {record.paymentMethod}
