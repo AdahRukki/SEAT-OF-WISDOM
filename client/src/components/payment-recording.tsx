@@ -281,25 +281,14 @@ export function PaymentRecording({
     if (!currentPurpose || selectedEntries.length === 0) return;
     const matchedFee = feeTypesData.find(ft => ft.name === currentPurpose);
     if (matchedFee?.isTuition) {
-      if (selectedEntries.length === 1) {
-        const classId = selectedEntries[0].student.classId;
-        if (classId) {
-          const amt = tuitionAmountMap.get(classId);
-          if (amt && amt > 0) setTotalAmount(amt);
-        }
-      } else {
-        let sum = 0;
-        for (const entry of selectedEntries) {
-          const classId = entry.student.classId;
-          if (classId) sum += tuitionAmountMap.get(classId) || 0;
-        }
-        if (sum > 0) setTotalAmount(sum);
+      let sum = 0;
+      for (const entry of selectedEntries) {
+        const classId = entry.student.classId;
+        if (classId) sum += tuitionAmountMap.get(classId) || 0;
       }
-    } else if (matchedFee && !matchedFee.isTuition) {
-      const amt = parseFloat(matchedFee.amount);
-      if (amt > 0) setTotalAmount(amt * selectedEntries.length);
+      if (sum > 0) setTotalAmount(sum);
     }
-  }, [selectedEntries.length, currentPurpose, tuitionAmountMap.size]);
+  }, [selectedEntries, currentPurpose, feeTypesData, tuitionAmountMap]);
 
   // Compute per-student share from shared total amount
   const studentCount = selectedEntries.length;
@@ -731,17 +720,6 @@ export function PaymentRecording({
                         <Select onValueChange={(val) => {
                           field.onChange(val);
                           if (val !== "Other") setCustomPurpose("");
-                          const matchedFee = feeTypesData.find(ft => ft.name === val);
-                          if (matchedFee?.isTuition && selectedEntries.length === 1) {
-                            const classId = selectedEntries[0].student.classId;
-                            if (classId) {
-                              const tuitionAmt = tuitionAmountMap.get(classId);
-                              if (tuitionAmt && tuitionAmt > 0) setTotalAmount(tuitionAmt);
-                            }
-                          } else if (matchedFee && !matchedFee.isTuition) {
-                            const amt = parseFloat(matchedFee.amount);
-                            if (amt > 0 && selectedEntries.length > 0) setTotalAmount(amt * selectedEntries.length);
-                          }
                         }} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
