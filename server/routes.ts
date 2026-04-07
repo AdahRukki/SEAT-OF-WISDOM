@@ -3393,8 +3393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/payment-broadsheet", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
     try {
-      const user = (req as any).user;
-      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      const schoolId = req.query.schoolId as string;
       const term = req.query.term as string;
       const session = req.query.session as string;
       if (!schoolId || !term || !session) {
