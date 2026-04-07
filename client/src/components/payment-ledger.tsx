@@ -56,16 +56,25 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
   }, [currentSession]);
 
   const { data: sessions = [] } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ["/api/admin/academic-sessions"],
+    queryKey: ["/api/student/academic-sessions"],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch("/api/admin/academic-sessions", { credentials: "include", headers });
+      const res = await fetch("/api/student/academic-sessions", { credentials: "include", headers });
       if (!res.ok) return [];
       return res.json();
     },
   });
+
+  const sessionOptions: string[] = sessions.length > 0
+    ? sessions.map((s) => s.name)
+    : (() => {
+        const base = currentSession
+          ? parseInt(currentSession.split("/")[0]) || new Date().getFullYear()
+          : new Date().getFullYear();
+        return [`${base - 1}/${base}`, `${base}/${base + 1}`, `${base + 1}/${base + 2}`];
+      })();
 
   const { data: schoolClasses = [] } = useQuery<SchoolClass[]>({
     queryKey: ["/api/admin/classes", schoolId],
@@ -127,8 +136,8 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
               <SelectValue placeholder="Select session" />
             </SelectTrigger>
             <SelectContent>
-              {sessions.map((s) => (
-                <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+              {sessionOptions.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
             </SelectContent>
           </Select>
