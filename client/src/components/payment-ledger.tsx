@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Table,
@@ -45,6 +45,25 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
+
+  useEffect(() => {
+    if (currentTerm) setSelectedTerm(currentTerm);
+  }, [currentTerm]);
+  useEffect(() => {
+    if (currentSession) setSelectedSession(currentSession);
+  }, [currentSession]);
+
+  const { data: sessions = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/sessions"],
+    queryFn: async () => {
+      const token = localStorage.getItem("auth_token");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch("/api/sessions", { credentials: "include", headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
 
   const { data: schoolClasses = [] } = useQuery<SchoolClass[]>({
     queryKey: ["/api/admin/classes", schoolId],
@@ -99,13 +118,16 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
         </div>
         <div className="space-y-1 w-full sm:w-auto">
           <label className="text-xs text-muted-foreground font-medium">Session</label>
-          <input
-            type="text"
-            placeholder="e.g., 2024/2025"
-            value={selectedSession}
-            onChange={(e) => setSelectedSession(e.target.value)}
-            className="flex h-8 w-full sm:w-[140px] rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
+          <Select value={selectedSession} onValueChange={setSelectedSession}>
+            <SelectTrigger className="h-8 text-sm w-full sm:w-[140px]">
+              <SelectValue placeholder="Select session" />
+            </SelectTrigger>
+            <SelectContent>
+              {sessions.map((s) => (
+                <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1 w-full sm:w-auto">
           <label className="text-xs text-muted-foreground font-medium">Class</label>
