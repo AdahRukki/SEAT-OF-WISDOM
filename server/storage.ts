@@ -203,6 +203,24 @@ export interface IStorage {
     paymentCount: number;
     lastPaymentDate: string | null;
   }[]>;
+  getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{
+    classes: Array<{
+      classId: string;
+      className: string;
+      students: Array<{
+        studentId: string;
+        firstName: string;
+        lastName: string;
+        sowaId: string;
+        totalAssigned: number;
+        totalPaid: number;
+        balance: number;
+        status: 'paid' | 'partial' | 'unpaid';
+      }>;
+      classTotals: { totalAssigned: number; totalPaid: number; balance: number };
+    }>;
+    grandTotal: { totalAssigned: number; totalPaid: number; balance: number };
+  }>;
   getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
     totalFees: number;
     totalPaid: number;
@@ -1418,6 +1436,115 @@ export class DatabaseStorage implements IStorage {
       paymentCount: Number(r.paymentCount) || 0,
       lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
     }));
+  }
+
+  async getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{
+    classes: Array<{
+      classId: string;
+      className: string;
+      students: Array<{
+        studentId: string;
+        firstName: string;
+        lastName: string;
+        sowaId: string;
+        totalAssigned: number;
+        totalPaid: number;
+        balance: number;
+        status: 'paid' | 'partial' | 'unpaid';
+      }>;
+      classTotals: { totalAssigned: number; totalPaid: number; balance: number };
+    }>;
+    grandTotal: { totalAssigned: number; totalPaid: number; balance: number };
+  }> {
+    const studentsRows = await db.execute(sql`
+      SELECT s.id, s.student_id AS "sowaId", s.class_id AS "classId",
+             u.first_name AS "firstName", u.last_name AS "lastName",
+             c.name AS "className"
+      FROM students s
+      JOIN users u ON s.user_id = u.id
+      LEFT JOIN classes c ON s.class_id = c.id
+      WHERE u.is_active = true AND u.school_id = ${schoolId}
+      ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
+    `);
+
+    const feesRows = await db.execute(sql`
+      SELECT sf.student_id AS "studentId", COALESCE(SUM(sf.amount), 0)::numeric AS "totalAssigned"
+      FROM student_fees sf
+      JOIN students s ON sf.student_id = s.id
+      JOIN users u ON s.user_id = u.id
+      WHERE u.school_id = ${schoolId} AND sf.term = ${term} AND sf.session = ${session}
+      GROUP BY sf.student_id
+    `);
+
+    const paymentsRows = await db.execute(sql`
+      SELECT fpr.student_id AS "studentId", COALESCE(SUM(fpr.amount), 0)::numeric AS "totalPaid"
+      FROM fee_payment_records fpr
+      WHERE fpr.school_id = ${schoolId} AND fpr.status != 'reversed'
+        AND fpr.term = ${term} AND fpr.session = ${session}
+      GROUP BY fpr.student_id
+    `);
+
+    const tuitionFeeRows = await db.execute(sql`
+      SELECT ft.id, ft.name FROM fee_types ft
+      WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.is_active = true
+      LIMIT 1
+    `);
+    const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
+
+    let tuitionMap = new Map<string, number>();
+    if (tuitionFee) {
+      let tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
+      if (tuitionAmts.length === 0) tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id);
+      tuitionMap = new Map(tuitionAmts.map(ta => [ta.classId, Number(ta.amount)]));
+    }
+
+    const allStudents = ((studentsRows as any).rows || studentsRows) as any[];
+    const feesMap = new Map(((feesRows as any).rows || feesRows).map((r: any) => [r.studentId, Number(r.totalAssigned)]));
+    const paymentsMap = new Map(((paymentsRows as any).rows || paymentsRows).map((r: any) => [r.studentId, Number(r.totalPaid)]));
+
+    const classGroupMap = new Map<string, { classId: string; className: string; students: any[] }>();
+
+    for (const s of allStudents) {
+      if (!classGroupMap.has(s.classId)) {
+        classGroupMap.set(s.classId, { classId: s.classId, className: s.className || s.classId, students: [] });
+      }
+      const sfAssigned = feesMap.get(s.id) || 0;
+      const tuitionAssigned = tuitionMap.get(s.classId) || 0;
+      const totalAssigned = sfAssigned + tuitionAssigned;
+      const totalPaid = paymentsMap.get(s.id) || 0;
+      const balance = totalAssigned - totalPaid;
+      let status: 'paid' | 'partial' | 'unpaid' = 'unpaid';
+      if (totalAssigned > 0 && balance <= 0) status = 'paid';
+      else if (totalPaid > 0) status = 'partial';
+
+      classGroupMap.get(s.classId)!.students.push({
+        studentId: s.id,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        sowaId: s.sowaId,
+        totalAssigned,
+        totalPaid,
+        balance: Math.max(0, balance),
+        status,
+      });
+    }
+
+    const classesArr = Array.from(classGroupMap.values()).map(cls => ({
+      ...cls,
+      classTotals: {
+        totalAssigned: cls.students.reduce((sum: number, st: any) => sum + st.totalAssigned, 0),
+        totalPaid: cls.students.reduce((sum: number, st: any) => sum + st.totalPaid, 0),
+        balance: cls.students.reduce((sum: number, st: any) => sum + st.balance, 0),
+      },
+    }));
+
+    const grandTotal = {
+      totalAssigned: classesArr.reduce((sum, c) => sum + c.classTotals.totalAssigned, 0),
+      totalPaid: classesArr.reduce((sum, c) => sum + c.classTotals.totalPaid, 0),
+      balance: classesArr.reduce((sum, c) => sum + c.classTotals.balance, 0),
+    };
+
+    return { classes: classesArr, grandTotal };
   }
 
   async getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{

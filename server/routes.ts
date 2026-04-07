@@ -3391,6 +3391,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/admin/payment-broadsheet", authenticate, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      const term = req.query.term as string;
+      const session = req.query.session as string;
+      if (!schoolId || !term || !session) {
+        return res.status(400).json({ error: "schoolId, term, and session are required" });
+      }
+      const broadsheet = await storage.getPaymentBroadsheet(schoolId, term, session);
+      res.json(broadsheet);
+    } catch (error) {
+      console.error("Get payment broadsheet error:", error);
+      res.status(500).json({ error: "Failed to fetch payment broadsheet" });
+    }
+  });
+
   app.get("/api/payments/ledger", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;

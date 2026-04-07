@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -121,7 +121,8 @@ import {
   Camera,
   CheckCircle,
   XCircle,
-  Pencil
+  Pencil,
+  Printer
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -151,6 +152,145 @@ import type { z } from "zod";
 import * as XLSX from 'xlsx';
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
+
+interface BroadsheetData {
+  classes: Array<{
+    classId: string;
+    className: string;
+    students: Array<{
+      studentId: string;
+      firstName: string;
+      lastName: string;
+      sowaId: string;
+      totalAssigned: number;
+      totalPaid: number;
+      balance: number;
+      status: 'paid' | 'partial' | 'unpaid';
+    }>;
+    classTotals: { totalAssigned: number; totalPaid: number; balance: number };
+  }>;
+  grandTotal: { totalAssigned: number; totalPaid: number; balance: number };
+}
+
+function BroadsheetTable({ schoolId, term, session, schoolName }: {
+  schoolId?: string;
+  term: string;
+  session: string;
+  schoolName: string;
+}) {
+  const params = new URLSearchParams();
+  if (schoolId) params.set("schoolId", schoolId);
+  if (term) params.set("term", term);
+  if (session) params.set("session", session);
+
+  const { data, isLoading } = useQuery<BroadsheetData>({
+    queryKey: ["/api/admin/payment-broadsheet", schoolId, term, session],
+    queryFn: async () => {
+      const token = localStorage.getItem("auth_token");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`/api/admin/payment-broadsheet?${params.toString()}`, { credentials: "include", headers });
+      if (!res.ok) throw new Error("Failed to fetch broadsheet");
+      return res.json();
+    },
+    enabled: !!schoolId && !!term && !!session,
+  });
+
+  if (!term || !session) {
+    return <p className="text-sm text-muted-foreground text-center py-8">Select a term and session above to view the broadsheet.</p>;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} className="h-10 w-full bg-muted animate-pulse rounded" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!data || data.classes.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
+        <p className="text-sm">No students found for the selected school, term, and session.</p>
+      </div>
+    );
+  }
+
+  const statusBadge = (status: string, totalAssigned: number) => {
+    if (totalAssigned === 0) return <Badge variant="outline" className="text-gray-500 text-[10px]">No Fees</Badge>;
+    if (status === 'paid') return <Badge className="bg-green-100 text-green-800 text-[10px]">Paid</Badge>;
+    if (status === 'partial') return <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">Partial</Badge>;
+    return <Badge className="bg-red-100 text-red-800 text-[10px]">Unpaid</Badge>;
+  };
+
+  return (
+    <div className="broadsheet-print-content">
+      <div className="hidden print:block text-center mb-4">
+        <h2 className="text-lg font-bold">{schoolName}</h2>
+        <p className="text-sm">Payment Broadsheet — {term}, {session}</p>
+      </div>
+      <div className="rounded-md border overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="w-[40px] text-center">S/N</TableHead>
+              <TableHead>Student Name</TableHead>
+              <TableHead>SOWA ID</TableHead>
+              <TableHead className="text-right">Assigned (₦)</TableHead>
+              <TableHead className="text-right">Paid (₦)</TableHead>
+              <TableHead className="text-right">Balance (₦)</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.classes.map((cls) => (
+              <Fragment key={cls.classId}>
+                <TableRow className="bg-blue-50 dark:bg-blue-950/30">
+                  <TableCell colSpan={7} className="font-bold text-sm py-2">
+                    {cls.className}
+                    <span className="text-xs font-normal text-muted-foreground ml-2">({cls.students.length} students)</span>
+                  </TableCell>
+                </TableRow>
+                {cls.students.map((st, idx) => (
+                  <TableRow key={st.studentId}>
+                    <TableCell className="text-center text-xs">{idx + 1}</TableCell>
+                    <TableCell className="text-sm">{st.lastName}, {st.firstName}</TableCell>
+                    <TableCell className="text-sm font-mono">{st.sowaId}</TableCell>
+                    <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.totalAssigned.toLocaleString()}` : "—"}</TableCell>
+                    <TableCell className="text-right text-sm font-medium text-green-600">{st.totalPaid > 0 ? `₦${st.totalPaid.toLocaleString()}` : "₦0"}</TableCell>
+                    <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.balance.toLocaleString()}` : "—"}</TableCell>
+                    <TableCell className="text-center">{statusBadge(st.status, st.totalAssigned)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow key={`subtotal-${cls.classId}`} className="bg-muted/40 border-t font-semibold">
+                  <TableCell />
+                  <TableCell className="text-sm">Class Total</TableCell>
+                  <TableCell />
+                  <TableCell className="text-right text-sm">₦{cls.classTotals.totalAssigned.toLocaleString()}</TableCell>
+                  <TableCell className="text-right text-sm text-green-600">₦{cls.classTotals.totalPaid.toLocaleString()}</TableCell>
+                  <TableCell className="text-right text-sm">₦{cls.classTotals.balance.toLocaleString()}</TableCell>
+                  <TableCell />
+                </TableRow>
+              </Fragment>
+            ))}
+            <TableRow className="bg-muted/80 font-bold border-t-2 text-base">
+              <TableCell />
+              <TableCell>School Total</TableCell>
+              <TableCell />
+              <TableCell className="text-right">₦{data.grandTotal.totalAssigned.toLocaleString()}</TableCell>
+              <TableCell className="text-right text-green-700">₦{data.grandTotal.totalPaid.toLocaleString()}</TableCell>
+              <TableCell className="text-right">₦{data.grandTotal.balance.toLocaleString()}</TableCell>
+              <TableCell />
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
 
 function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, onDelete }: {
   feeType: FeeType;
@@ -4331,6 +4471,34 @@ export default function AdminDashboard() {
                   schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
                   currentTerm={selectedFinanceTerm}
                   currentSession={selectedFinanceSession}
+                />
+              </CardContent>
+            </Card>
+
+            <Card id="broadsheet-print-area">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Payment Broadsheet</CardTitle>
+                  <CardDescription>
+                    Per-class student fee summary for the selected term and session
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="print:hidden"
+                >
+                  <Printer className="h-4 w-4 mr-1" />
+                  Print
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <BroadsheetTable
+                  schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                  term={selectedFinanceTerm}
+                  session={selectedFinanceSession}
+                  schoolName={schools.find(s => s.id === (user?.role === 'admin' ? selectedSchoolId : user?.schoolId))?.name || ''}
                 />
               </CardContent>
             </Card>
