@@ -266,7 +266,7 @@ export interface IStorage {
 
   // Fee Payment Records (Payment Tracking & Reconciliation)
   recordFeePayment(data: InsertFeePaymentRecord): Promise<FeePaymentRecord>;
-  getFeePaymentRecords(filters: { schoolId?: string; studentId?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<FeePaymentRecordWithDetails[]>;
+  getFeePaymentRecords(filters: { schoolId?: string; studentId?: string; status?: string; startDate?: Date; endDate?: Date; term?: string; session?: string }): Promise<FeePaymentRecordWithDetails[]>;
   getFeePaymentRecordById(id: string): Promise<FeePaymentRecordWithDetails | undefined>;
   confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord>;
   reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<FeePaymentRecord>;
@@ -2676,7 +2676,9 @@ export class DatabaseStorage implements IStorage {
     studentId?: string; 
     status?: string; 
     startDate?: Date; 
-    endDate?: Date 
+    endDate?: Date;
+    term?: string;
+    session?: string;
   }): Promise<FeePaymentRecordWithDetails[]> {
     console.log('[getFeePaymentRecords] Fetching with filters:', filters);
     
@@ -2696,6 +2698,12 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters.endDate) {
       conditions.push(sql`${feePaymentRecords.paymentDate} <= ${filters.endDate}`);
+    }
+    if (filters.term) {
+      conditions.push(eq(feePaymentRecords.term, filters.term));
+    }
+    if (filters.session) {
+      conditions.push(eq(feePaymentRecords.session, filters.session));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

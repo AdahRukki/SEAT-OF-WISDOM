@@ -4058,7 +4058,10 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Select term" />
                   </SelectTrigger>
                   <SelectContent>
-                    {['First Term', 'Second Term', 'Third Term'].map((t) => (
+                    {(academicTerms.length > 0
+                      ? [...new Set(academicTerms.map((t) => t.termName))]
+                      : ['First Term', 'Second Term', 'Third Term']
+                    ).map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>

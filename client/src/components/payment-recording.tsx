@@ -185,13 +185,15 @@ export function PaymentRecording({
   });
 
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
-    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo],
+    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, currentTerm, currentSession],
     queryFn: async () => {
       let url = "/api/payments/records?";
       if (schoolId) url += `schoolId=${schoolId}&`;
       if (statusFilter && statusFilter !== "all") url += `status=${statusFilter}&`;
       if (dateFrom) url += `startDate=${dateFrom}&`;
       if (dateTo) url += `endDate=${dateTo}&`;
+      if (currentTerm) url += `term=${encodeURIComponent(currentTerm)}&`;
+      if (currentSession) url += `session=${encodeURIComponent(currentSession)}&`;
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
       if (token) {

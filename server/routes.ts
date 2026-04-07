@@ -3361,23 +3361,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('[GET /api/payments/records] User:', user.id, 'Role:', user.role);
       
-      const { schoolId, studentId, status, startDate, endDate } = req.query;
+      const { schoolId, studentId, status, startDate, endDate, term, session } = req.query;
 
-      // Build filters
       const filters: {
         schoolId?: string;
         studentId?: string;
         status?: string;
         startDate?: Date;
         endDate?: Date;
+        term?: string;
+        session?: string;
       } = {};
 
-      // Sub-admins and bursars can only see their school's records
       if (user.role === 'sub-admin' || user.role === 'bursar') {
         if (user.schoolId) {
           filters.schoolId = user.schoolId;
         }
-        // If they try to access another school, deny
         if (schoolId && schoolId !== user.schoolId) {
           return res.status(403).json({ error: "Access denied to this school's data" });
         }
@@ -3389,6 +3388,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (status) filters.status = status as string;
       if (startDate) filters.startDate = new Date(startDate as string);
       if (endDate) filters.endDate = new Date(endDate as string);
+      if (term) filters.term = term as string;
+      if (session) filters.session = session as string;
 
       console.log('[GET /api/payments/records] Filters:', filters);
       
