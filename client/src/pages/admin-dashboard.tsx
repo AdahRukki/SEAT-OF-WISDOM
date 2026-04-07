@@ -4106,7 +4106,7 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
                     <div className="text-lg sm:text-2xl font-bold truncate">
-                      {financialSummary?.totalFees ? `₦${financialSummary.totalOutstanding.toLocaleString()}` : "N/A"}
+                      {financialSummary?.totalFees ? `₦${(financialSummary.totalOutstanding ?? 0).toLocaleString()}` : "N/A"}
                     </div>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">
                       {financialSummary?.totalFees ? "Assigned fees minus confirmed" : "No fees assigned"}
