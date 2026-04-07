@@ -384,12 +384,12 @@ export default function AdminDashboard() {
     }
   }, [academicInfo]);
 
-  // Sync finance term and session with actual academic calendar
+  // Sync finance term and session with actual academic calendar (also re-sync on school change)
   useEffect(() => {
-    if (academicInfo?.currentTerm && !selectedFinanceTerm) {
+    if (academicInfo?.currentTerm) {
       setSelectedFinanceTerm(academicInfo.currentTerm);
     }
-    if (academicInfo?.currentSession && !selectedFinanceSession) {
+    if (academicInfo?.currentSession) {
       setSelectedFinanceSession(academicInfo.currentSession);
     }
     if (academicInfo?.currentTerm) {
