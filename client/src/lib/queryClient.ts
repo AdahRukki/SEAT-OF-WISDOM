@@ -128,6 +128,6 @@ if (typeof window !== 'undefined') {
     queryClient,
     persister: localStoragePersister,
     maxAge: 1000 * 60 * 60 * 24,
-    buster: 'sowa-v1',
+    buster: 'sowa-v2',
   });
 }
