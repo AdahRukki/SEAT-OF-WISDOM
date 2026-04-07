@@ -459,7 +459,7 @@ export function PaymentRecording({
                     <Label>Add Students</Label>
                     <div className="flex gap-2">
                       <Select value={classFilter} onValueChange={setClassFilter}>
-                        <SelectTrigger className="w-[160px] flex-shrink-0">
+                        <SelectTrigger className="w-[160px] flex-shrink-0" aria-label="Filter by class">
                           <SelectValue placeholder="All Classes" />
                         </SelectTrigger>
                         <SelectContent>
