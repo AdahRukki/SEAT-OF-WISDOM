@@ -2431,6 +2431,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         feeTypeData.schoolId = user.schoolId;
       }
 
+      if (feeTypeData.isTuition) {
+        const schoolId = feeTypeData.schoolId;
+        const existing = await storage.getFeeTypes(schoolId);
+        const hasTuition = existing.some(ft => ft.isTuition);
+        if (hasTuition) {
+          return res.status(400).json({ error: "Only one tuition fee type is allowed per school. Edit the existing one instead." });
+        }
+      }
+
       const feeType = await storage.createFeeType(feeTypeData);
 
       if (feeTypeData.isTuition && Array.isArray(classAmounts) && classAmounts.length > 0) {
@@ -2451,6 +2460,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = (req as any).user;
       const { id } = req.params;
+      const existingFeeType = await storage.getFeeTypeById(id);
+      if (!existingFeeType) return res.status(404).json({ error: "Fee type not found" });
+      if (user.role === 'sub-admin' && existingFeeType.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const { name, amount, category, description } = req.body;
       
       const updateData: any = {};
@@ -2495,7 +2509,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/tuition-amounts/:feeTypeId', authenticate, requireBursarOrAdmin, async (req, res) => {
     try {
+      const user = (req as any).user;
       const { feeTypeId } = req.params;
+      const feeType = await storage.getFeeTypeById(feeTypeId);
+      if (!feeType) return res.status(404).json({ error: "Fee type not found" });
+      if ((user.role === 'sub-admin' || user.role === 'bursar') && feeType.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const term = req.query.term as string;
       const session = req.query.session as string;
       const amounts = await storage.getTuitionClassAmounts(feeTypeId, term, session);
@@ -2508,7 +2528,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/admin/tuition-amounts/:feeTypeId', authenticate, requireAdmin, async (req, res) => {
     try {
+      const user = (req as any).user;
       const { feeTypeId } = req.params;
+      const feeType = await storage.getFeeTypeById(feeTypeId);
+      if (!feeType) return res.status(404).json({ error: "Fee type not found" });
+      if (user.role === 'sub-admin' && feeType.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const { amounts, term, session } = req.body;
       if (!Array.isArray(amounts)) {
         return res.status(400).json({ error: "amounts must be an array" });

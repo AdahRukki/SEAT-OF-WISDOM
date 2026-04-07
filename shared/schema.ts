@@ -744,8 +744,8 @@ export const insertFeeTypeSchema = createInsertSchema(feeTypes).omit({ id: true,
     .min(1, "Amount is required")
     .transform((val, ctx) => {
       const numericValue = parseFloat(val.replace(/,/g, ''));
-      if (isNaN(numericValue) || numericValue <= 0) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Amount must be a positive number" });
+      if (isNaN(numericValue) || numericValue < 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Amount must be zero or a positive number" });
         return z.NEVER;
       }
       return numericValue.toString();
