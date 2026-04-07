@@ -131,6 +131,7 @@ import { NewsManagement } from "@/components/news-management";
 import { NotificationsManagement } from "@/components/notifications-management";
 import { PaymentRecording } from "@/components/payment-recording";
 import { PaymentReconciliation } from "@/components/payment-reconciliation";
+import { PaymentLedger } from "@/components/payment-ledger";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
@@ -4314,6 +4315,22 @@ export default function AdminDashboard() {
                   currentTerm={selectedFinanceTerm}
                   currentSession={selectedFinanceSession}
                   userRole={user?.role as "admin" | "sub-admin" | "bursar"}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Ledger</CardTitle>
+                <CardDescription>
+                  Complete financial roll-call showing all students and their payment totals
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PaymentLedger
+                  schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                  currentTerm={selectedFinanceTerm}
+                  currentSession={selectedFinanceSession}
                 />
               </CardContent>
             </Card>

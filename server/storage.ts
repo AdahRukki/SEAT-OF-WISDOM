@@ -192,6 +192,17 @@ export interface IStorage {
   getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string, classId?: string): Promise<PaymentWithDetails[]>;
   getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
   
+  getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
+    studentDbId: string;
+    studentId: string;
+    firstName: string;
+    lastName: string;
+    className: string;
+    classId: string;
+    totalPaid: number;
+    paymentCount: number;
+    lastPaymentDate: string | null;
+  }[]>;
   getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
     totalFees: number;
     totalPaid: number;
@@ -1347,6 +1358,66 @@ export class DatabaseStorage implements IStorage {
         user: user!
       }
     };
+  }
+
+  async getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
+    studentDbId: string;
+    studentId: string;
+    firstName: string;
+    lastName: string;
+    className: string;
+    classId: string;
+    totalPaid: number;
+    paymentCount: number;
+    lastPaymentDate: string | null;
+  }[]> {
+    const paymentConditions = [
+      sql`fpr.school_id = ${schoolId}`,
+      sql`fpr.status != 'reversed'`,
+    ];
+    if (term) paymentConditions.push(sql`fpr.term = ${term}`);
+    if (session) paymentConditions.push(sql`fpr.session = ${session}`);
+
+    const studentConditions = [
+      sql`u.is_active = true`,
+      sql`u.school_id = ${schoolId}`,
+    ];
+    if (classId) studentConditions.push(sql`s.class_id = ${classId}`);
+
+    const paymentJoinClause = paymentConditions.map(c => c).reduce((a, b) => sql`${a} AND ${b}`);
+    const studentWhereClause = studentConditions.map(c => c).reduce((a, b) => sql`${a} AND ${b}`);
+
+    const rows = await db.execute(sql`
+      SELECT
+        s.id AS "studentDbId",
+        s.student_id AS "studentId",
+        u.first_name AS "firstName",
+        u.last_name AS "lastName",
+        c.name AS "className",
+        s.class_id AS "classId",
+        COALESCE(SUM(fpr.amount), 0)::numeric AS "totalPaid",
+        COUNT(fpr.id)::int AS "paymentCount",
+        MAX(fpr.payment_date) AS "lastPaymentDate"
+      FROM students s
+      JOIN users u ON s.user_id = u.id
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN fee_payment_records fpr ON fpr.student_id = s.id AND ${paymentJoinClause}
+      WHERE ${studentWhereClause}
+      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id
+      ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
+    `);
+
+    return (rows.rows || rows).map((r: any) => ({
+      studentDbId: r.studentDbId,
+      studentId: r.studentId,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      className: r.className || '',
+      classId: r.classId,
+      totalPaid: Number(r.totalPaid) || 0,
+      paymentCount: Number(r.paymentCount) || 0,
+      lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
+    }));
   }
 
   async getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{

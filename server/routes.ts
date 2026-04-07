@@ -3391,6 +3391,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/payments/ledger", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = (user.role === 'sub-admin' || user.role === 'bursar') ? user.schoolId : req.query.schoolId as string;
+      if (!schoolId) return res.status(400).json({ error: "schoolId is required" });
+      const classId = req.query.classId as string | undefined;
+      const term = req.query.term as string | undefined;
+      const session = req.query.session as string | undefined;
+      const ledger = await storage.getStudentPaymentLedger(schoolId, classId || undefined, term || undefined, session || undefined);
+      res.json(ledger);
+    } catch (error) {
+      console.error("Get payment ledger error:", error);
+      res.status(500).json({ error: "Failed to fetch payment ledger" });
+    }
+  });
+
   // Get payment records with filters
   app.get("/api/payments/records", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
     const user = (req as any).user;
