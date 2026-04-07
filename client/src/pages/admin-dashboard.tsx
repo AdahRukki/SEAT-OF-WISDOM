@@ -122,7 +122,8 @@ import {
   CheckCircle,
   XCircle,
   Pencil,
-  Printer
+  Printer,
+  Search
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -183,6 +184,8 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   if (term) params.set("term", term);
   if (session) params.set("session", session);
 
+  const [bsSearch, setBsSearch] = useState("");
+
   const { data, isLoading, error } = useQuery<BroadsheetData>({
     queryKey: ["/api/admin/payment-broadsheet", schoolId, term, session],
     queryFn: async () => {
@@ -237,11 +240,40 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
     return <Badge className="bg-red-100 text-red-800 text-[10px]">Unpaid</Badge>;
   };
 
+  const filteredClasses = bsSearch.trim()
+    ? data.classes
+        .map((cls) => ({
+          ...cls,
+          students: cls.students.filter(
+            (st) =>
+              `${st.lastName} ${st.firstName}`.toLowerCase().includes(bsSearch.toLowerCase()) ||
+              st.sowaId?.toLowerCase().includes(bsSearch.toLowerCase())
+          ),
+        }))
+        .filter((cls) => cls.students.length > 0)
+    : data.classes;
+
   return (
     <div className="broadsheet-print-content">
       <div className="hidden print:block text-center mb-4">
         <h2 className="text-lg font-bold">{schoolName}</h2>
         <p className="text-sm">Payment Broadsheet — {term}, {session}</p>
+      </div>
+      <div className="flex items-center gap-2 mb-3 print:hidden">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search student name or SOWA ID..."
+            value={bsSearch}
+            onChange={(e) => setBsSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
+          />
+        </div>
+        {bsSearch && (
+          <span className="text-xs text-muted-foreground">
+            {filteredClasses.reduce((s, c) => s + c.students.length, 0)} result(s)
+          </span>
+        )}
       </div>
       <div className="rounded-md border overflow-x-auto">
         <Table>
@@ -257,7 +289,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.classes.map((cls) => (
+            {filteredClasses.map((cls) => (
               <Fragment key={cls.classId}>
                 <TableRow className="bg-blue-50 dark:bg-blue-950/30">
                   <TableCell colSpan={7} className="font-bold text-sm py-2">
@@ -4494,7 +4526,7 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {(user?.role === 'admin' || user?.role === 'sub-admin') && (
+            {user?.role === 'admin' && (
             <Card id="broadsheet-print-area">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>

@@ -3391,7 +3391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/payment-broadsheet", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/payment-broadsheet", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;

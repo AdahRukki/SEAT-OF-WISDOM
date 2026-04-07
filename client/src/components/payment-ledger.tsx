@@ -15,8 +15,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users } from "lucide-react";
+import { Users, Eye, Search, Loader2 } from "lucide-react";
 
 interface LedgerEntry {
   studentDbId: string;
@@ -37,6 +46,16 @@ interface SchoolClass {
   name: string;
 }
 
+interface PaymentRecord {
+  id: string;
+  amount: string;
+  purpose: string | null;
+  paymentMethod: string | null;
+  reference: string | null;
+  status: string;
+  paymentDate: string | null;
+}
+
 interface PaymentLedgerProps {
   schoolId?: string;
   currentTerm?: string;
@@ -47,6 +66,8 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
+  const [nameSearch, setNameSearch] = useState<string>("");
+  const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
 
   useEffect(() => {
     if (currentTerm) setSelectedTerm(currentTerm);
@@ -108,10 +129,41 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
     enabled: !!schoolId,
   });
 
-  const grandTotalPaid = ledger.reduce((sum, entry) => sum + entry.totalPaid, 0);
-  const grandTotalAssigned = ledger.reduce((sum, entry) => sum + (entry.totalAssigned || 0), 0);
-  const grandBalance = ledger.reduce((sum, entry) => sum + (entry.balance || 0), 0);
-  const totalPayments = ledger.reduce((sum, entry) => sum + entry.paymentCount, 0);
+  const { data: studentRecords = [], isLoading: recordsLoading } = useQuery<PaymentRecord[]>({
+    queryKey: ["/api/payments/records", schoolId, selectedStudent?.studentDbId, selectedTerm, selectedSession],
+    queryFn: async () => {
+      const token = localStorage.getItem("auth_token");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const url = `/api/payments/records?schoolId=${schoolId}&studentId=${selectedStudent!.studentDbId}` +
+        (selectedTerm ? `&term=${encodeURIComponent(selectedTerm)}` : "") +
+        (selectedSession ? `&session=${encodeURIComponent(selectedSession)}` : "");
+      const res = await fetch(url, { credentials: "include", headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!selectedStudent && !!schoolId,
+  });
+
+  const filteredLedger = nameSearch.trim()
+    ? ledger.filter(
+        (e) =>
+          `${e.lastName} ${e.firstName}`.toLowerCase().includes(nameSearch.toLowerCase()) ||
+          e.studentId.toLowerCase().includes(nameSearch.toLowerCase())
+      )
+    : ledger;
+
+  const grandTotalPaid = filteredLedger.reduce((sum, entry) => sum + entry.totalPaid, 0);
+  const grandTotalAssigned = filteredLedger.reduce((sum, entry) => sum + (entry.totalAssigned || 0), 0);
+  const grandBalance = filteredLedger.reduce((sum, entry) => sum + (entry.balance || 0), 0);
+  const totalPayments = filteredLedger.reduce((sum, entry) => sum + entry.paymentCount, 0);
+
+  const getStatusBadge = (status: string) => {
+    if (status === "confirmed") return <Badge className="bg-green-100 text-green-800 text-[10px]">Confirmed</Badge>;
+    if (status === "recorded") return <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">Pending</Badge>;
+    if (status === "reversed") return <Badge className="bg-red-100 text-red-800 text-[10px]">Reversed</Badge>;
+    return <Badge variant="outline" className="text-[10px]">{status}</Badge>;
+  };
 
   return (
     <div className="space-y-4">
@@ -156,9 +208,21 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
             </SelectContent>
           </Select>
         </div>
+        <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-xs space-y-1">
+          <label className="text-xs text-muted-foreground font-medium">Search</label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Name or SOWA ID..."
+              value={nameSearch}
+              onChange={(e) => setNameSearch(e.target.value)}
+              className="pl-8 h-8 text-sm"
+            />
+          </div>
+        </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
           <Users className="h-4 w-4" />
-          <span>{ledger.length} student{ledger.length !== 1 ? "s" : ""}</span>
+          <span>{filteredLedger.length} student{filteredLedger.length !== 1 ? "s" : ""}</span>
         </div>
       </div>
 
@@ -168,10 +232,10 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
             <Skeleton key={i} className="h-10 w-full" />
           ))}
         </div>
-      ) : ledger.length === 0 ? (
+      ) : filteredLedger.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
-          <p className="text-sm">No students found for the selected filters.</p>
+          <p className="text-sm">{ledger.length === 0 ? "No students found for the selected filters." : "No students match your search."}</p>
         </div>
       ) : (
         <div className="rounded-md border overflow-x-auto">
@@ -186,10 +250,11 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 <TableHead className="text-right">Balance (₦)</TableHead>
                 <TableHead className="text-center">Payments</TableHead>
                 <TableHead>Last Payment</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ledger.map((entry, idx) => (
+              {filteredLedger.map((entry, idx) => (
                 <TableRow key={entry.studentDbId} className={entry.totalPaid === 0 ? "text-muted-foreground" : ""}>
                   <TableCell className="text-center text-xs">{idx + 1}</TableCell>
                   <TableCell className="font-medium">
@@ -211,6 +276,17 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                       ? new Date(entry.lastPaymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
                       : "—"}
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => setSelectedStudent(entry)}
+                      title="View payment details"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
               <TableRow className="bg-muted/80 font-bold border-t-2">
@@ -224,11 +300,74 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 </TableCell>
                 <TableCell className="text-center">{totalPayments}</TableCell>
                 <TableCell />
+                <TableCell />
               </TableRow>
             </TableBody>
           </Table>
         </div>
       )}
+
+      <Dialog open={!!selectedStudent} onOpenChange={(open) => { if (!open) setSelectedStudent(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedStudent ? `${selectedStudent.lastName} ${selectedStudent.firstName}` : ""} — Payment Details
+            </DialogTitle>
+          </DialogHeader>
+          {selectedStudent && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground pb-2 border-b">
+                <span>Class: <strong className="text-foreground">{selectedStudent.className}</strong></span>
+                <span>SOWA ID: <strong className="text-foreground font-mono">{selectedStudent.studentId}</strong></span>
+                <span>Term: <strong className="text-foreground">{selectedTerm || "All"}</strong></span>
+                <span>Session: <strong className="text-foreground">{selectedSession || "All"}</strong></span>
+              </div>
+              {recordsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : studentRecords.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  No confirmed payments recorded for this term/session.
+                </p>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Amount (₦)</TableHead>
+                        <TableHead>Purpose</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead>Reference</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {studentRecords.map((rec) => (
+                        <TableRow key={rec.id}>
+                          <TableCell className="text-sm">
+                            {rec.paymentDate
+                              ? new Date(rec.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-green-600">
+                            ₦{parseFloat(rec.amount).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-sm">{rec.purpose || "—"}</TableCell>
+                          <TableCell className="text-sm capitalize">{rec.paymentMethod || "—"}</TableCell>
+                          <TableCell className="text-sm font-mono">{rec.reference || "—"}</TableCell>
+                          <TableCell>{getStatusBadge(rec.status)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

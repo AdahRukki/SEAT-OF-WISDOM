@@ -60,6 +60,7 @@ import {
   Sparkles,
   Calendar,
   Trash2,
+  Search,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails, BankTransactionWithDetails } from "@shared/schema";
 
@@ -120,6 +121,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [transactionToAllocate, setTransactionToAllocate] = useState<BankTransaction | null>(null);
   const [allocations, setAllocations] = useState<Allocation[]>([{ studentId: "", amount: 0 }]);
   const [studentSearch, setStudentSearch] = useState("");
+  const [txSearch, setTxSearch] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -828,17 +830,36 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   <h5 className="font-semibold text-purple-700">Bank Transactions</h5>
                   <Badge variant="secondary">{unmatchedTransactions.length}</Badge>
                 </div>
-                
-                {unmatchedTransactions.length === 0 ? (
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search narration, reference or amount..."
+                    value={txSearch}
+                    onChange={(e) => setTxSearch(e.target.value)}
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+                {(() => {
+                  const filteredTx = txSearch.trim()
+                    ? unmatchedTransactions.filter((t) => {
+                        const q = txSearch.toLowerCase();
+                        return (
+                          t.rawDescription?.toLowerCase().includes(q) ||
+                          t.reference?.toLowerCase().includes(q) ||
+                          t.amount?.toString().includes(q)
+                        );
+                      })
+                    : unmatchedTransactions;
+                  return filteredTx.length === 0 ? (
                   <Card>
                     <CardContent className="text-center py-6 text-muted-foreground">
                       <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                      <p className="text-sm">All transactions matched</p>
+                      <p className="text-sm">{unmatchedTransactions.length === 0 ? "All transactions matched" : "No transactions match your search"}</p>
                     </CardContent>
                   </Card>
                 ) : (
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                    {unmatchedTransactions.map((tx) => {
+                    {filteredTx.map((tx) => {
                       // Check if any payment matches this transaction
                       const matchingPayments = pendingPayments.filter(p => 
                         Math.abs(parseFloat(p.amount) - parseFloat(tx.amount)) < 0.01
@@ -910,7 +931,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       );
                     })}
                   </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           )}

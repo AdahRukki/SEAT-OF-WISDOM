@@ -120,6 +120,7 @@ export function PaymentRecording({
   const [classFilter, setClassFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [nameSearch, setNameSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 25;
 
@@ -451,10 +452,21 @@ export function PaymentRecording({
     return 0;
   });
 
-  const totalRecords = sortedRecords.length;
+  const nameFilteredRecords = nameSearch.trim()
+    ? sortedRecords.filter((r) => {
+        const q = nameSearch.toLowerCase();
+        return (
+          r.student?.user?.lastName?.toLowerCase().includes(q) ||
+          r.student?.user?.firstName?.toLowerCase().includes(q) ||
+          r.student?.studentId?.toLowerCase().includes(q)
+        );
+      })
+    : sortedRecords;
+
+  const totalRecords = nameFilteredRecords.length;
   const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
-  const paginatedRecords = sortedRecords.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const paginatedRecords = nameFilteredRecords.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const showingFrom = totalRecords === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const showingTo = Math.min(safePage * PAGE_SIZE, totalRecords);
 
@@ -889,6 +901,15 @@ export function PaymentRecording({
               Clear dates
             </Button>
           )}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search student name or ID..."
+              value={nameSearch}
+              onChange={(e) => { setNameSearch(e.target.value); setCurrentPage(1); }}
+              className="pl-8 w-[200px]"
+            />
+          </div>
           <div className="ml-auto">
             <Button variant="outline" size="sm" onClick={() => refetchRecords()}>
               <RefreshCw className="h-4 w-4 mr-2" />
