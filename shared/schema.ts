@@ -1017,7 +1017,7 @@ export const recordFeePaymentSchema = z.object({
   }),
   paymentDate: z.string().min(1, "Payment date is required"),
   purpose: z.string().max(100).optional(),
-  depositorName: z.string().max(150).optional(),
+  depositorName: z.string().min(1, "Depositor name is required").max(150),
   reference: z.string().optional(),
   term: z.string().optional(),
   session: z.string().optional(),

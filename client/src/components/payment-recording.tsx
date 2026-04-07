@@ -754,7 +754,7 @@ export function PaymentRecording({
                     name="depositorName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Depositor Name (Optional)</FormLabel>
+                        <FormLabel>Depositor Name</FormLabel>
                         <FormControl>
                           <Input placeholder="Name of person who made the deposit" {...field} />
                         </FormControl>
