@@ -151,6 +151,87 @@ import * as XLSX from 'xlsx';
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 
+function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, onDelete }: {
+  feeType: FeeType;
+  classes: any[];
+  sortClassesByOrder: (c: any[]) => any[];
+  onAssign: () => void;
+  onEdit: (tuitionAmounts?: any[]) => void;
+  onDelete: () => void;
+}) {
+  const { data: tuitionAmounts = [] } = useQuery<any[]>({
+    queryKey: ['/api/admin/tuition-amounts', feeType.id],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/admin/tuition-amounts/${feeType.id}`, { credentials: 'include', headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!feeType.isTuition,
+  });
+
+  const classMap = new Map(classes.map(c => [c.id, c.name]));
+
+  return (
+    <div className="border rounded-lg p-3 sm:p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="font-semibold text-gray-900 dark:text-white">{feeType.name}</span>
+            {feeType.isTuition && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800">Tuition</span>
+            )}
+            <span className={`px-2 py-0.5 text-xs rounded-full ${
+              feeType.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            }`}>
+              {feeType.isActive ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+          {feeType.isTuition ? (
+            <div className="mt-1">
+              {tuitionAmounts.length > 0 ? (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  {sortClassesByOrder(tuitionAmounts.map(ta => ({ id: ta.classId, name: classMap.get(ta.classId) || ta.classId, _amount: ta.amount }))).map((item: any) => (
+                    <div key={item.id} className="flex justify-between text-sm">
+                      <span className="text-muted-foreground truncate">{item.name}</span>
+                      <span className="font-medium text-green-600 ml-2">₦{parseFloat(item._amount).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No per-class amounts set</p>
+              )}
+            </div>
+          ) : (
+            <div className="text-xl font-bold text-green-600">
+              ₦{parseFloat(feeType.amount).toLocaleString()}
+            </div>
+          )}
+          <div className="text-xs text-muted-foreground capitalize mt-1">
+            {feeType.category}{feeType.description ? ` - ${feeType.description}` : ''}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {!feeType.isTuition && (
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onAssign}>
+              <Plus className="h-3 w-3 sm:mr-1" />
+              <span className="hidden sm:inline">Assign</span>
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="h-8" onClick={() => onEdit(feeType.isTuition ? tuitionAmounts : undefined)}>
+            <Edit className="h-3 w-3" />
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={onDelete}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const { logoUrl: currentLogoUrl, isLoading: logoLoading } = useLogo();
@@ -314,6 +395,9 @@ export default function AdminDashboard() {
   const [feeTypeToDelete, setFeeTypeToDelete] = useState<FeeType | null>(null);
   const [isAssignFeeDialogOpen, setIsAssignFeeDialogOpen] = useState(false);
   const [feeTypeAssignClassIds, setFeeTypeAssignClassIds] = useState<string[]>([]);
+  const [isTuitionMode, setIsTuitionMode] = useState(false);
+  const [tuitionClassAmountsMap, setTuitionClassAmountsMap] = useState<Record<string, string>>({});
+  const [editTuitionClassAmountsMap, setEditTuitionClassAmountsMap] = useState<Record<string, string>>({});
   const [assignFeeClassIds, setAssignFeeClassIds] = useState<string[]>([]);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
@@ -1770,14 +1854,22 @@ export default function AdminDashboard() {
   // Financial mutations
   const createFeeTypeMutation = useMutation({
     mutationFn: async (feeTypeData: FeeTypeForm) => {
+      const classAmounts = isTuitionMode
+        ? Object.entries(tuitionClassAmountsMap)
+            .filter(([_, amt]) => amt && parseFloat(amt) > 0)
+            .map(([classId, amount]) => ({ classId, amount }))
+        : undefined;
+
       const result = await apiRequest('/api/admin/fee-types', {
         method: 'POST',
         body: {
           ...feeTypeData,
-          schoolId: selectedSchoolId || user?.schoolId
+          isTuition: isTuitionMode,
+          schoolId: selectedSchoolId || user?.schoolId,
+          classAmounts,
         }
       });
-      if (feeTypeAssignClassIds.length > 0 && result?.id) {
+      if (!isTuitionMode && feeTypeAssignClassIds.length > 0 && result?.id) {
         for (const classId of feeTypeAssignClassIds) {
           await apiRequest('/api/admin/assign-fee', {
             method: 'POST',
@@ -1795,21 +1887,21 @@ export default function AdminDashboard() {
       return result;
     },
     onSuccess: () => {
-      const wasAssigned = feeTypeAssignClassIds.length > 0;
       toast({ 
         title: "Success", 
-        description: wasAssigned
-          ? `Fee type created and assigned to ${feeTypeAssignClassIds.length} class${feeTypeAssignClassIds.length > 1 ? "es" : ""}`
-          : "Fee type created successfully"
+        description: isTuitionMode
+          ? "Tuition fee created with per-class amounts"
+          : feeTypeAssignClassIds.length > 0
+            ? `Fee type created and assigned to ${feeTypeAssignClassIds.length} class${feeTypeAssignClassIds.length > 1 ? "es" : ""}`
+            : "Fee type created successfully"
       });
       feeTypeForm.reset();
       setFeeTypeAssignClassIds([]);
+      setIsTuitionMode(false);
+      setTuitionClassAmountsMap({});
       setIsFeeTypeDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
-      if (wasAssigned) {
-        queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
-      }
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
     },
     onError: () => {
       toast({ 
@@ -4173,68 +4265,33 @@ export default function AdminDashboard() {
                 ) : (
                   <div className="space-y-3">
                     {feeTypes.map((feeType) => (
-                      <div key={feeType.id} className="border rounded-lg p-3 sm:p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                              <span className="font-semibold text-gray-900 dark:text-white">{feeType.name}</span>
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${
-                                feeType.isActive 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {feeType.isActive ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                            <div className="text-xl font-bold text-green-600">
-                              ₦{parseFloat(feeType.amount).toLocaleString()}
-                            </div>
-                            <div className="text-xs text-muted-foreground capitalize mt-1">
-                              {feeType.category}{feeType.description ? ` - ${feeType.description}` : ''}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 text-xs"
-                              onClick={() => {
-                                assignFeeForm.setValue('feeTypeId', feeType.id);
-                                setIsAssignFeeDialogOpen(true);
-                              }}
-                            >
-                              <Plus className="h-3 w-3 sm:mr-1" />
-                              <span className="hidden sm:inline">Assign</span>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8"
-                              onClick={() => {
-                                setEditingFeeType(feeType);
-                                setEditFeeTypeName(feeType.name);
-                                setEditFeeTypeAmount(feeType.amount);
-                                setEditFeeTypeCategory(feeType.category);
-                                setEditFeeTypeDescription(feeType.description || "");
-                                setIsEditFeeTypeDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => {
-                                setFeeTypeToDelete(feeType);
-                                setIsDeleteFeeTypeDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
+                      <FeeTypeCard
+                        key={feeType.id}
+                        feeType={feeType}
+                        classes={classes}
+                        sortClassesByOrder={sortClassesByOrder}
+                        onAssign={() => {
+                          assignFeeForm.setValue('feeTypeId', feeType.id);
+                          setIsAssignFeeDialogOpen(true);
+                        }}
+                        onEdit={(tuitionAmounts) => {
+                          setEditingFeeType(feeType);
+                          setEditFeeTypeName(feeType.name);
+                          setEditFeeTypeAmount(feeType.amount);
+                          setEditFeeTypeCategory(feeType.category);
+                          setEditFeeTypeDescription(feeType.description || "");
+                          if (feeType.isTuition && tuitionAmounts) {
+                            const map: Record<string, string> = {};
+                            tuitionAmounts.forEach((ta: any) => { map[ta.classId] = ta.amount; });
+                            setEditTuitionClassAmountsMap(map);
+                          }
+                          setIsEditFeeTypeDialogOpen(true);
+                        }}
+                        onDelete={() => {
+                          setFeeTypeToDelete(feeType);
+                          setIsDeleteFeeTypeDialogOpen(true);
+                        }}
+                      />
                     ))}
                   </div>
                 )}
@@ -6200,7 +6257,7 @@ export default function AdminDashboard() {
         </Dialog>
 
         {/* Fee Type Creation Dialog */}
-        <Dialog open={isFeeTypeDialogOpen} onOpenChange={setIsFeeTypeDialogOpen}>
+        <Dialog open={isFeeTypeDialogOpen} onOpenChange={(open) => { setIsFeeTypeDialogOpen(open); if (!open) { setIsTuitionMode(false); setTuitionClassAmountsMap({}); setFeeTypeAssignClassIds([]); } }}>
           <DialogContent className="max-w-md dialog-content-scrollable form-container">
             <DialogHeader>
               <DialogTitle>Create New Fee Type</DialogTitle>
@@ -6210,6 +6267,34 @@ export default function AdminDashboard() {
             </DialogHeader>
             <Form {...feeTypeForm}>
               <form onSubmit={feeTypeForm.handleSubmit(handleFeeTypeSubmit)} className="space-y-4">
+                <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300"
+                    checked={isTuitionMode}
+                    disabled={feeTypes.some((ft: FeeType) => ft.isTuition)}
+                    onChange={(e) => {
+                      setIsTuitionMode(e.target.checked);
+                      if (e.target.checked) {
+                        feeTypeForm.setValue('name', 'Tuition Fee');
+                        feeTypeForm.setValue('category', 'Tuition');
+                        feeTypeForm.setValue('amount', '0');
+                      } else {
+                        feeTypeForm.setValue('name', '');
+                        feeTypeForm.setValue('category', '');
+                        feeTypeForm.setValue('amount', '');
+                      }
+                    }}
+                  />
+                  <div>
+                    <span className="text-sm font-medium">This is a Tuition Fee</span>
+                    <p className="text-xs text-muted-foreground">Compulsory fee with different amounts per class</p>
+                    {feeTypes.some((ft: FeeType) => ft.isTuition) && (
+                      <p className="text-xs text-orange-600 mt-0.5">A tuition fee type already exists for this school</p>
+                    )}
+                  </div>
+                </div>
+
                 <FormField
                   control={feeTypeForm.control}
                   name="name"
@@ -6217,26 +6302,28 @@ export default function AdminDashboard() {
                     <FormItem>
                       <FormLabel>Fee Type Name *</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Tuition, Registration, Textbooks" {...field} />
+                        <Input placeholder="e.g., Tuition, Registration, Textbooks" {...field} disabled={isTuitionMode} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
-                <FormField
-                  control={feeTypeForm.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Amount (₦) *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., 25000" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+
+                {!isTuitionMode && (
+                  <FormField
+                    control={feeTypeForm.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Amount (₦) *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g., 25000" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 
                 <FormField
                   control={feeTypeForm.control}
@@ -6245,7 +6332,7 @@ export default function AdminDashboard() {
                     <FormItem>
                       <FormLabel>Category *</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Academic, Administrative, Miscellaneous" {...field} />
+                        <Input placeholder="e.g., Academic, Administrative, Miscellaneous" {...field} disabled={isTuitionMode} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -6261,7 +6348,7 @@ export default function AdminDashboard() {
                       <FormControl>
                         <Textarea 
                           placeholder="Brief description of this fee type"
-                          rows={3}
+                          rows={2}
                           value={field.value || ''}
                           onChange={field.onChange}
                           onBlur={field.onBlur}
@@ -6272,39 +6359,64 @@ export default function AdminDashboard() {
                     </FormItem>
                   )}
                 />
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Assign to Classes (Optional)</label>
-                  <div className="border rounded-md max-h-[180px] overflow-y-auto divide-y">
-                    {sortClassesByOrder(classes).map((cls) => (
-                      <label key={cls.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300"
-                          checked={feeTypeAssignClassIds.includes(cls.id)}
-                          onChange={(e) => {
-                            setFeeTypeAssignClassIds(prev =>
-                              e.target.checked ? [...prev, cls.id] : prev.filter(id => id !== cls.id)
-                            );
-                          }}
-                        />
-                        <span className="text-sm">{cls.name}</span>
-                      </label>
-                    ))}
+
+                {isTuitionMode ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Amount per Class *</label>
+                    <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y">
+                      {sortClassesByOrder(classes).map((cls) => (
+                        <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
+                          <span className="text-sm flex-1 min-w-0 truncate">{cls.name}</span>
+                          <div className="relative w-32 shrink-0">
+                            <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              className="pl-6 h-8 text-sm"
+                              value={tuitionClassAmountsMap[cls.id] || ""}
+                              onChange={(e) => setTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }))}
+                              min={0}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Set the tuition amount for each class. Leave empty or 0 for classes that don't apply.</p>
                   </div>
-                  {feeTypeAssignClassIds.length > 0 && (
-                    <p className="text-xs text-blue-600">{feeTypeAssignClassIds.length} class{feeTypeAssignClassIds.length > 1 ? "es" : ""} selected — fee will be assigned to all students in those classes</p>
-                  )}
-                  {feeTypeAssignClassIds.length === 0 && (
-                    <p className="text-xs text-muted-foreground">Optionally tick one or more classes to auto-assign this fee on creation</p>
-                  )}
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Assign to Classes (Optional)</label>
+                    <div className="border rounded-md max-h-[180px] overflow-y-auto divide-y">
+                      {sortClassesByOrder(classes).map((cls) => (
+                        <label key={cls.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300"
+                            checked={feeTypeAssignClassIds.includes(cls.id)}
+                            onChange={(e) => {
+                              setFeeTypeAssignClassIds(prev =>
+                                e.target.checked ? [...prev, cls.id] : prev.filter(id => id !== cls.id)
+                              );
+                            }}
+                          />
+                          <span className="text-sm">{cls.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {feeTypeAssignClassIds.length > 0 && (
+                      <p className="text-xs text-blue-600">{feeTypeAssignClassIds.length} class{feeTypeAssignClassIds.length > 1 ? "es" : ""} selected — fee will be assigned to all students in those classes</p>
+                    )}
+                    {feeTypeAssignClassIds.length === 0 && (
+                      <p className="text-xs text-muted-foreground">Optionally tick one or more classes to auto-assign this fee on creation</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex justify-end space-x-2 pt-4">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => { setIsFeeTypeDialogOpen(false); setFeeTypeAssignClassIds([]); }}
+                    onClick={() => { setIsFeeTypeDialogOpen(false); setFeeTypeAssignClassIds([]); setIsTuitionMode(false); setTuitionClassAmountsMap({}); }}
                   >
                     Cancel
                   </Button>
@@ -6318,7 +6430,7 @@ export default function AdminDashboard() {
                     ) : (
                       <Plus className="h-4 w-4 mr-2" />
                     )}
-                    {createFeeTypeMutation.isPending ? "Creating..." : feeTypeAssignClassIds.length > 0 ? `Create & Assign to ${feeTypeAssignClassIds.length} Class${feeTypeAssignClassIds.length > 1 ? "es" : ""}` : "Create Fee Type"}
+                    {createFeeTypeMutation.isPending ? "Creating..." : isTuitionMode ? "Create Tuition Fee" : feeTypeAssignClassIds.length > 0 ? `Create & Assign to ${feeTypeAssignClassIds.length} Class${feeTypeAssignClassIds.length > 1 ? "es" : ""}` : "Create Fee Type"}
                   </Button>
                 </div>
               </form>
@@ -6464,8 +6576,8 @@ export default function AdminDashboard() {
         </Dialog>
 
         {/* Edit Fee Type Dialog */}
-        <Dialog open={isEditFeeTypeDialogOpen} onOpenChange={setIsEditFeeTypeDialogOpen}>
-          <DialogContent className="max-w-md">
+        <Dialog open={isEditFeeTypeDialogOpen} onOpenChange={(open) => { setIsEditFeeTypeDialogOpen(open); if (!open) setEditTuitionClassAmountsMap({}); }}>
+          <DialogContent className="max-w-md dialog-content-scrollable form-container">
             <DialogHeader>
               <DialogTitle>Edit Fee Type</DialogTitle>
               <DialogDescription>
@@ -6480,35 +6592,40 @@ export default function AdminDashboard() {
                   value={editFeeTypeName}
                   onChange={(e) => setEditFeeTypeName(e.target.value)}
                   placeholder="e.g. Tuition Fee"
+                  disabled={editingFeeType?.isTuition}
                 />
               </div>
-              <div>
-                <Label htmlFor="edit-fee-amount">Amount (₦) *</Label>
-                <Input
-                  id="edit-fee-amount"
-                  value={editFeeTypeAmount}
-                  onChange={(e) => setEditFeeTypeAmount(e.target.value)}
-                  placeholder="e.g. 50000"
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-fee-category">Category</Label>
-                <Select value={editFeeTypeCategory} onValueChange={setEditFeeTypeCategory}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tuition">Tuition</SelectItem>
-                    <SelectItem value="registration">Registration</SelectItem>
-                    <SelectItem value="uniform">Uniform</SelectItem>
-                    <SelectItem value="books">Books</SelectItem>
-                    <SelectItem value="transport">Transport</SelectItem>
-                    <SelectItem value="feeding">Feeding</SelectItem>
-                    <SelectItem value="exam">Exam</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!editingFeeType?.isTuition && (
+                <div>
+                  <Label htmlFor="edit-fee-amount">Amount (₦) *</Label>
+                  <Input
+                    id="edit-fee-amount"
+                    value={editFeeTypeAmount}
+                    onChange={(e) => setEditFeeTypeAmount(e.target.value)}
+                    placeholder="e.g. 50000"
+                  />
+                </div>
+              )}
+              {!editingFeeType?.isTuition && (
+                <div>
+                  <Label htmlFor="edit-fee-category">Category</Label>
+                  <Select value={editFeeTypeCategory} onValueChange={setEditFeeTypeCategory}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tuition">Tuition</SelectItem>
+                      <SelectItem value="registration">Registration</SelectItem>
+                      <SelectItem value="uniform">Uniform</SelectItem>
+                      <SelectItem value="books">Books</SelectItem>
+                      <SelectItem value="transport">Transport</SelectItem>
+                      <SelectItem value="feeding">Feeding</SelectItem>
+                      <SelectItem value="exam">Exam</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div>
                 <Label htmlFor="edit-fee-description">Description</Label>
                 <Input
@@ -6518,28 +6635,63 @@ export default function AdminDashboard() {
                   placeholder="Optional description"
                 />
               </div>
+              {editingFeeType?.isTuition && (
+                <div className="space-y-2">
+                  <Label>Amount per Class</Label>
+                  <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y">
+                    {sortClassesByOrder(classes).map((cls) => (
+                      <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
+                        <span className="text-sm flex-1 min-w-0 truncate">{cls.name}</span>
+                        <div className="relative w-32 shrink-0">
+                          <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
+                          <Input
+                            type="number"
+                            placeholder="0"
+                            className="pl-6 h-8 text-sm"
+                            value={editTuitionClassAmountsMap[cls.id] || ""}
+                            onChange={(e) => setEditTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }))}
+                            min={0}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-end space-x-2 pt-4">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsEditFeeTypeDialogOpen(false)}
+                  onClick={() => { setIsEditFeeTypeDialogOpen(false); setEditTuitionClassAmountsMap({}); }}
                 >
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => {
-                    if (!editingFeeType || !editFeeTypeName.trim() || !editFeeTypeAmount.trim()) return;
+                  onClick={async () => {
+                    if (!editingFeeType || !editFeeTypeName.trim()) return;
+                    if (!editingFeeType.isTuition && !editFeeTypeAmount.trim()) return;
                     updateFeeTypeMutation.mutate({
                       id: editingFeeType.id,
                       data: {
                         name: editFeeTypeName,
-                        amount: editFeeTypeAmount.replace(/,/g, ''),
+                        amount: editingFeeType.isTuition ? '0' : editFeeTypeAmount.replace(/,/g, ''),
                         category: editFeeTypeCategory,
                         description: editFeeTypeDescription,
                       }
                     });
+                    if (editingFeeType.isTuition) {
+                      const classAmounts = Object.entries(editTuitionClassAmountsMap)
+                        .filter(([_, amt]) => amt && parseFloat(amt) > 0)
+                        .map(([classId, amount]) => ({ classId, amount }));
+                      await apiRequest(`/api/admin/tuition-amounts/${editingFeeType.id}`, {
+                        method: 'PUT',
+                        body: { amounts: classAmounts },
+                      });
+                      queryClient.invalidateQueries({ queryKey: ['/api/admin/tuition-amounts', editingFeeType.id] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+                    }
                   }}
-                  disabled={updateFeeTypeMutation.isPending || !editFeeTypeName.trim() || !editFeeTypeAmount.trim()}
+                  disabled={updateFeeTypeMutation.isPending || !editFeeTypeName.trim() || (!editingFeeType?.isTuition && !editFeeTypeAmount.trim())}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   {updateFeeTypeMutation.isPending ? (

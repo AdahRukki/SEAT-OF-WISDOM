@@ -2424,14 +2424,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/fee-types', authenticate, requireAdmin, async (req, res) => {
     try {
       const user = (req as any).user;
-      const feeTypeData = insertFeeTypeSchema.parse(req.body);
+      const { classAmounts, ...bodyData } = req.body;
+      const feeTypeData = insertFeeTypeSchema.parse(bodyData);
       
-      // Sub-admins can only create fee types for their school
       if (user.role === 'sub-admin') {
         feeTypeData.schoolId = user.schoolId;
       }
 
       const feeType = await storage.createFeeType(feeTypeData);
+
+      if (feeTypeData.isTuition && Array.isArray(classAmounts) && classAmounts.length > 0) {
+        await storage.upsertTuitionClassAmounts(feeType.id, classAmounts);
+      }
+
       res.json(feeType);
     } catch (error) {
       console.error("Create fee type error:", error);
@@ -2473,10 +2478,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/fee-types', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/fee-types', authenticate, requireBursarOrAdmin, async (req, res) => {
     try {
       const user = (req as any).user;
-      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      const schoolId = user.role === 'sub-admin' || user.role === 'bursar' ? user.schoolId : req.query.schoolId as string;
       
       const feeTypes = await storage.getFeeTypes(schoolId);
       res.json(feeTypes);
@@ -2486,27 +2491,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/admin/fee-types/:id', authenticate, requireAdmin, async (req, res) => {
+  // Fee type PUT and DELETE are defined above
+
+  app.get('/api/admin/tuition-amounts/:feeTypeId', authenticate, requireBursarOrAdmin, async (req, res) => {
     try {
-      const { id } = req.params;
-      const updateData = req.body;
-      
-      const feeType = await storage.updateFeeType(id, updateData);
-      res.json(feeType);
+      const { feeTypeId } = req.params;
+      const term = req.query.term as string;
+      const session = req.query.session as string;
+      const amounts = await storage.getTuitionClassAmounts(feeTypeId, term, session);
+      res.json(amounts);
     } catch (error) {
-      console.error("Update fee type error:", error);
-      res.status(500).json({ error: "Failed to update fee type" });
+      console.error("Get tuition amounts error:", error);
+      res.status(500).json({ error: "Failed to fetch tuition amounts" });
     }
   });
 
-  app.delete('/api/admin/fee-types/:id', authenticate, requireAdmin, async (req, res) => {
+  app.put('/api/admin/tuition-amounts/:feeTypeId', authenticate, requireAdmin, async (req, res) => {
     try {
-      const { id } = req.params;
-      await storage.deleteFeeType(id);
-      res.json({ message: "Fee type deleted successfully" });
+      const { feeTypeId } = req.params;
+      const { amounts, term, session } = req.body;
+      if (!Array.isArray(amounts)) {
+        return res.status(400).json({ error: "amounts must be an array" });
+      }
+      const result = await storage.upsertTuitionClassAmounts(feeTypeId, amounts, term, session);
+      res.json(result);
     } catch (error) {
-      console.error("Delete fee type error:", error);
-      res.status(500).json({ error: "Failed to delete fee type" });
+      console.error("Upsert tuition amounts error:", error);
+      res.status(500).json({ error: "Failed to update tuition amounts" });
     }
   });
 

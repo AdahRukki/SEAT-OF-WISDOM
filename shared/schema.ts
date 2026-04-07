@@ -251,9 +251,20 @@ export const feeTypes = pgTable("fee_types", {
   category: varchar("category", { length: 50 }).notNull(),
   schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  isTuition: boolean("is_tuition").default(false),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const tuitionClassAmounts = pgTable("tuition_class_amounts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  feeTypeId: uuid("fee_type_id").notNull().references(() => feeTypes.id, { onDelete: "cascade" }),
+  classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  term: varchar("term", { length: 30 }),
+  session: varchar("session", { length: 20 }),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Student Fees table (records fees assigned to students)
@@ -873,6 +884,8 @@ export type AddScore = z.infer<typeof addScoreSchema>;
 // Financial types
 export type FeeType = typeof feeTypes.$inferSelect;
 export type InsertFeeType = z.infer<typeof insertFeeTypeSchema>;
+
+export type TuitionClassAmount = typeof tuitionClassAmounts.$inferSelect;
 
 export type StudentFee = typeof studentFees.$inferSelect;
 export type InsertStudentFee = z.infer<typeof insertStudentFeeSchema>;

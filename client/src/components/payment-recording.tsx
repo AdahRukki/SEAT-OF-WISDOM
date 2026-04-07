@@ -65,20 +65,9 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
-import { recordFeePaymentSchema, type FeePaymentRecordWithDetails } from "@shared/schema";
+import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeeType } from "@shared/schema";
 
 type RecordPaymentForm = z.infer<typeof recordFeePaymentSchema>;
-
-const PAYMENT_PURPOSES = [
-  "Tuition Fee",
-  "Uniform",
-  "Books / Stationery",
-  "Excursion",
-  "Development Levy",
-  "PTA Fee",
-  "Exam Fee",
-  "Other",
-];
 
 const commonFieldsSchema = recordFeePaymentSchema.omit({ studentId: true, amount: true });
 type CommonFields = z.infer<typeof commonFieldsSchema>;
@@ -184,6 +173,37 @@ export function PaymentRecording({
     enabled: !!schoolId,
   });
 
+  const { data: feeTypesData = [] } = useQuery<FeeType[]>({
+    queryKey: ["/api/admin/fee-types", schoolId],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = schoolId ? `/api/admin/fee-types?schoolId=${schoolId}` : `/api/admin/fee-types`;
+      const res = await fetch(url, { credentials: "include", headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!schoolId,
+  });
+
+  const tuitionFeeType = feeTypesData.find(ft => ft.isTuition);
+
+  const { data: tuitionAmounts = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/tuition-amounts", tuitionFeeType?.id],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/admin/tuition-amounts/${tuitionFeeType!.id}`, { credentials: "include", headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!tuitionFeeType?.id,
+  });
+
+  const tuitionAmountMap = new Map(tuitionAmounts.map((ta: any) => [ta.classId, Number(ta.amount)]));
+
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
     queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, currentTerm, currentSession],
     queryFn: async () => {
@@ -255,6 +275,31 @@ export function PaymentRecording({
 
     queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
   };
+
+  const currentPurpose = form.watch("purpose");
+  useEffect(() => {
+    if (!currentPurpose || selectedEntries.length === 0) return;
+    const matchedFee = feeTypesData.find(ft => ft.name === currentPurpose);
+    if (matchedFee?.isTuition) {
+      if (selectedEntries.length === 1) {
+        const classId = selectedEntries[0].student.classId;
+        if (classId) {
+          const amt = tuitionAmountMap.get(classId);
+          if (amt && amt > 0) setTotalAmount(amt);
+        }
+      } else {
+        let sum = 0;
+        for (const entry of selectedEntries) {
+          const classId = entry.student.classId;
+          if (classId) sum += tuitionAmountMap.get(classId) || 0;
+        }
+        if (sum > 0) setTotalAmount(sum);
+      }
+    } else if (matchedFee && !matchedFee.isTuition) {
+      const amt = parseFloat(matchedFee.amount);
+      if (amt > 0) setTotalAmount(amt * selectedEntries.length);
+    }
+  }, [selectedEntries.length, currentPurpose, tuitionAmountMap.size]);
 
   // Compute per-student share from shared total amount
   const studentCount = selectedEntries.length;
@@ -598,7 +643,46 @@ export function PaymentRecording({
 
                   <Separator />
 
-                  {/* Shared Payment Details */}
+                  {/* Term & Session (compact) */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="term"
+                      render={({ field }) => (
+                        <FormItem className="space-y-1">
+                          <FormLabel className="text-xs text-muted-foreground">Term</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Select term" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="First Term">First Term</SelectItem>
+                              <SelectItem value="Second Term">Second Term</SelectItem>
+                              <SelectItem value="Third Term">Third Term</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="session"
+                      render={({ field }) => (
+                        <FormItem className="space-y-1">
+                          <FormLabel className="text-xs text-muted-foreground">Session</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 2024/2025" {...field} className="h-8 text-sm" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Payment Details */}
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -638,61 +722,39 @@ export function PaymentRecording({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="term"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Term</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select term" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="First Term">First Term</SelectItem>
-                              <SelectItem value="Second Term">Second Term</SelectItem>
-                              <SelectItem value="Third Term">Third Term</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="session"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Session</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g., 2024/2025" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
                   <FormField
                     control={form.control}
                     name="purpose"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Purpose</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <Select onValueChange={(val) => {
+                          field.onChange(val);
+                          if (val !== "Other") setCustomPurpose("");
+                          const matchedFee = feeTypesData.find(ft => ft.name === val);
+                          if (matchedFee?.isTuition && selectedEntries.length === 1) {
+                            const classId = selectedEntries[0].student.classId;
+                            if (classId) {
+                              const tuitionAmt = tuitionAmountMap.get(classId);
+                              if (tuitionAmt && tuitionAmt > 0) setTotalAmount(tuitionAmt);
+                            }
+                          } else if (matchedFee && !matchedFee.isTuition) {
+                            const amt = parseFloat(matchedFee.amount);
+                            if (amt > 0 && selectedEntries.length > 0) setTotalAmount(amt * selectedEntries.length);
+                          }
+                        }} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="What is this payment for?" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {PAYMENT_PURPOSES.map((p) => (
-                              <SelectItem key={p} value={p}>{p}</SelectItem>
+                            {feeTypesData.filter(ft => ft.isActive).map((ft) => (
+                              <SelectItem key={ft.id} value={ft.name}>
+                                {ft.name}{ft.isTuition ? " (Tuition)" : ""}
+                              </SelectItem>
                             ))}
+                            <SelectItem value="Other">Other</SelectItem>
                           </SelectContent>
                         </Select>
                         {field.value === "Other" && (

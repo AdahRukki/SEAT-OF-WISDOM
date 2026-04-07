@@ -11,6 +11,16 @@ async function runMigrations() {
       ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_session VARCHAR(20);
       ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS purpose VARCHAR(100);
       ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS depositor_name VARCHAR(150);
+      ALTER TABLE fee_types ADD COLUMN IF NOT EXISTS is_tuition BOOLEAN DEFAULT FALSE;
+      CREATE TABLE IF NOT EXISTS tuition_class_amounts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        fee_type_id UUID NOT NULL REFERENCES fee_types(id) ON DELETE CASCADE,
+        class_id VARCHAR(50) NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+        amount DECIMAL(10,2) NOT NULL,
+        term VARCHAR(30),
+        session VARCHAR(20),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
     `);
     log("Database migrations applied successfully");
   } catch (err) {

@@ -10,6 +10,7 @@ import {
   reportCardTemplates,
   generatedReportCards,
   feeTypes,
+  tuitionClassAmounts,
   studentFees,
   payments,
   settings,
@@ -36,6 +37,7 @@ import {
   type ReportCardTemplate,
   type GeneratedReportCard,
   type FeeType,
+  type TuitionClassAmount,
   type StudentFee,
   type Payment,
   type Setting,
@@ -177,6 +179,8 @@ export interface IStorage {
   getFeeTypeById(id: string): Promise<FeeType | undefined>;
   updateFeeType(id: string, data: Partial<InsertFeeType>): Promise<FeeType>;
   deleteFeeType(id: string): Promise<void>;
+  getTuitionClassAmounts(feeTypeId: string, term?: string, session?: string): Promise<TuitionClassAmount[]>;
+  upsertTuitionClassAmounts(feeTypeId: string, amounts: { classId: string; amount: string }[], term?: string, session?: string): Promise<TuitionClassAmount[]>;
   
   assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee>;
   assignFeeToClass(classId: string, feeTypeId: string, term: string, session: string, dueDate: string, notes?: string): Promise<StudentFee[]>;
@@ -1078,6 +1082,37 @@ export class DatabaseStorage implements IStorage {
     await db.update(feeTypes).set({ isActive: false }).where(eq(feeTypes.id, id));
   }
 
+  async getTuitionClassAmounts(feeTypeId: string, term?: string, session?: string): Promise<TuitionClassAmount[]> {
+    const conditions: any[] = [eq(tuitionClassAmounts.feeTypeId, feeTypeId)];
+    if (term) conditions.push(eq(tuitionClassAmounts.term, term));
+    if (session) conditions.push(eq(tuitionClassAmounts.session, session));
+    return await db.select().from(tuitionClassAmounts).where(and(...conditions));
+  }
+
+  async upsertTuitionClassAmounts(
+    feeTypeId: string,
+    amounts: { classId: string; amount: string }[],
+    term?: string,
+    session?: string
+  ): Promise<TuitionClassAmount[]> {
+    await db.delete(tuitionClassAmounts).where(
+      and(
+        eq(tuitionClassAmounts.feeTypeId, feeTypeId),
+        term ? eq(tuitionClassAmounts.term, term) : sql`true`,
+        session ? eq(tuitionClassAmounts.session, session) : sql`true`
+      )
+    );
+    if (amounts.length === 0) return [];
+    const rows = amounts.map(a => ({
+      feeTypeId,
+      classId: a.classId,
+      amount: a.amount,
+      term: term || null,
+      session: session || null,
+    }));
+    return await db.insert(tuitionClassAmounts).values(rows).returning();
+  }
+
   async assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee> {
     // Get the fee type to determine amount if not provided
     const feeType = await this.getFeeTypeById(feeTypeId);
@@ -1324,26 +1359,6 @@ export class DatabaseStorage implements IStorage {
     collectionRate: number;
     studentsOwing: number;
   }> {
-    const studentFeesData = await this.getAllStudentFees(schoolId, term, session);
-    
-    let totalFees = 0;
-    let totalPaid = 0;
-    let totalPending = 0;
-    let totalOverdue = 0;
-
-    for (const studentFee of studentFeesData) {
-      const feeAmount = Number(studentFee.amount);
-      totalFees += feeAmount;
-
-      if (studentFee.status === 'paid') {
-        totalPaid += feeAmount;
-      } else if (studentFee.status === 'pending') {
-        totalPending += feeAmount;
-      } else if (studentFee.status === 'overdue') {
-        totalOverdue += feeAmount;
-      }
-    }
-
     const revenueConditions: any[] = [eq(feePaymentRecords.status, 'confirmed')];
     if (schoolId) revenueConditions.push(eq(feePaymentRecords.schoolId, schoolId));
     if (term) revenueConditions.push(eq(feePaymentRecords.term, term));
@@ -1355,35 +1370,65 @@ export class DatabaseStorage implements IStorage {
       .where(and(...revenueConditions));
     const totalRevenue = Number(revenueRow?.total || 0);
 
-    const totalOutstanding = Math.max(0, totalFees - totalRevenue);
-    const collectionRate = totalFees > 0 ? Math.round((totalRevenue / totalFees) * 100) : 0;
-
     const studentConditions: any[] = [eq(students.isActive, true)];
     if (schoolId) studentConditions.push(eq(students.schoolId, schoolId));
 
     const allActiveStudents = await db
-      .select({ id: students.id })
+      .select({ id: students.id, classId: students.classId })
       .from(students)
       .where(and(...studentConditions));
 
-    const paidStudentConditions: any[] = [eq(feePaymentRecords.status, 'confirmed')];
-    if (schoolId) paidStudentConditions.push(eq(feePaymentRecords.schoolId, schoolId));
-    if (term) paidStudentConditions.push(eq(feePaymentRecords.term, term));
-    if (session) paidStudentConditions.push(eq(feePaymentRecords.session, session));
+    const tuitionFeeConditions: any[] = [eq(feeTypes.isTuition, true), eq(feeTypes.isActive, true)];
+    if (schoolId) tuitionFeeConditions.push(eq(feeTypes.schoolId, schoolId));
+    const [tuitionFeeType] = await db.select().from(feeTypes).where(and(...tuitionFeeConditions)).limit(1);
 
-    const paidStudentRows = await db
-      .selectDistinct({ studentId: feePaymentRecords.studentId })
-      .from(feePaymentRecords)
-      .where(and(...paidStudentConditions));
+    let totalTuitionOwed = 0;
+    let tuitionPaid = 0;
+    let studentsOwing = 0;
 
-    const paidStudentIds = new Set(paidStudentRows.map(r => r.studentId));
-    const studentsOwing = allActiveStudents.filter(s => !paidStudentIds.has(s.id)).length;
+    if (tuitionFeeType) {
+      const tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
+      const classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
+
+      for (const student of allActiveStudents) {
+        const classAmount = student.classId ? classAmountMap.get(student.classId) : undefined;
+        if (classAmount) {
+          totalTuitionOwed += classAmount;
+        }
+      }
+
+      const tuitionPaymentConditions: any[] = [
+        eq(feePaymentRecords.status, 'confirmed'),
+        eq(feePaymentRecords.purpose, tuitionFeeType.name),
+      ];
+      if (schoolId) tuitionPaymentConditions.push(eq(feePaymentRecords.schoolId, schoolId));
+      if (term) tuitionPaymentConditions.push(eq(feePaymentRecords.term, term));
+      if (session) tuitionPaymentConditions.push(eq(feePaymentRecords.session, session));
+
+      const [tuitionPaidRow] = await db
+        .select({ total: sql<string>`COALESCE(SUM(${feePaymentRecords.amount}), 0)` })
+        .from(feePaymentRecords)
+        .where(and(...tuitionPaymentConditions));
+      tuitionPaid = Number(tuitionPaidRow?.total || 0);
+
+      const paidTuitionStudentRows = await db
+        .selectDistinct({ studentId: feePaymentRecords.studentId })
+        .from(feePaymentRecords)
+        .where(and(...tuitionPaymentConditions));
+      const paidTuitionStudentIds = new Set(paidTuitionStudentRows.map(r => r.studentId));
+      studentsOwing = allActiveStudents.filter(s => !paidTuitionStudentIds.has(s.id)).length;
+    } else {
+      studentsOwing = 0;
+    }
+
+    const totalOutstanding = Math.max(0, totalTuitionOwed - tuitionPaid);
+    const collectionRate = totalTuitionOwed > 0 ? Math.round((tuitionPaid / totalTuitionOwed) * 100) : 0;
 
     return {
-      totalFees,
-      totalPaid,
-      totalPending,
-      totalOverdue,
+      totalFees: totalTuitionOwed,
+      totalPaid: tuitionPaid,
+      totalPending: 0,
+      totalOverdue: 0,
       totalRevenue,
       totalOutstanding,
       collectionRate,
