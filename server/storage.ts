@@ -1444,8 +1444,7 @@ export class DatabaseStorage implements IStorage {
 
     let tuitionMap = new Map<string, number>();
     if (tuitionFee) {
-      let tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
-      if (tuitionAmts.length === 0) tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id);
+      const tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
       tuitionMap = new Map(tuitionAmts.map(ta => [ta.classId, Number(ta.amount)]));
     }
 
@@ -1525,8 +1524,7 @@ export class DatabaseStorage implements IStorage {
 
     let tuitionMap = new Map<string, number>();
     if (tuitionFee) {
-      let tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
-      if (tuitionAmts.length === 0) tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id);
+      const tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
       tuitionMap = new Map(tuitionAmts.map(ta => [ta.classId, Number(ta.amount)]));
     }
 
