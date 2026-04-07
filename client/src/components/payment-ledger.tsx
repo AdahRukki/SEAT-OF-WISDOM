@@ -135,7 +135,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const url = `/api/payments/records?schoolId=${schoolId}&studentId=${selectedStudent!.studentDbId}` +
+      const url = `/api/payments/records?schoolId=${schoolId}&studentId=${selectedStudent!.studentDbId}&status=confirmed` +
         (selectedTerm ? `&term=${encodeURIComponent(selectedTerm)}` : "") +
         (selectedSession ? `&session=${encodeURIComponent(selectedSession)}` : "");
       const res = await fetch(url, { credentials: "include", headers });
