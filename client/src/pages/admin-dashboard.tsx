@@ -3619,7 +3619,7 @@ export default function AdminDashboard() {
             {user?.role === 'admin' && (
               <TabsTrigger value="users" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Shield className="h-4 w-4 shrink-0" />
-                <span>Users</span>
+                <span>Settings</span>
               </TabsTrigger>
             )}
             {user?.role === 'admin' && (
