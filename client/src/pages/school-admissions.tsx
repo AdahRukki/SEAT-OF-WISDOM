@@ -386,10 +386,10 @@ export default function SchoolAdmissions() {
                       <SelectValue placeholder="Select branch" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="asaba">Asaba Main Campus</SelectItem>
-                      <SelectItem value="lugazi">Lugazi Branch</SelectItem>
-                      <SelectItem value="kampala">Kampala Branch</SelectItem>
-                      <SelectItem value="mukono">Mukono Branch</SelectItem>
+                      <SelectItem value="bonsaac">Bonsaac, Asaba</SelectItem>
+                      <SelectItem value="ikpoto">Ikpoto Powerline, Asaba</SelectItem>
+                      <SelectItem value="akwuofor">Akwuofor along Amusement Park, Koka</SelectItem>
+                      <SelectItem value="akwuose">Akwuose behind Mama's Mart along Ibusa Road</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
