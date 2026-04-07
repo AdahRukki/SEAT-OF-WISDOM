@@ -251,6 +251,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       setSelectedTransaction(null);
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
     onError: (error: Error) => {
       toast({
@@ -278,6 +281,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       setSelectedPayment(null);
       setReversalReason("");
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
     onError: (error: Error) => {
       toast({
@@ -306,6 +312,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       setAllocations([{ studentId: "", amount: 0 }]);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
     onError: (error: Error) => {
       toast({
