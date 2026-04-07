@@ -183,17 +183,19 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   if (term) params.set("term", term);
   if (session) params.set("session", session);
 
-  const { data, isLoading } = useQuery<BroadsheetData>({
+  const { data, isLoading, error } = useQuery<BroadsheetData>({
     queryKey: ["/api/admin/payment-broadsheet", schoolId, term, session],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`/api/admin/payment-broadsheet?${params.toString()}`, { credentials: "include", headers });
+      if (res.status === 403) throw new Error("You do not have permission to view the payment broadsheet.");
       if (!res.ok) throw new Error("Failed to fetch broadsheet");
       return res.json();
     },
     enabled: !!schoolId && !!term && !!session,
+    retry: false,
   });
 
   if (!term || !session) {
@@ -206,6 +208,15 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className="h-10 w-full bg-muted animate-pulse rounded" />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 text-destructive">
+        <AlertCircle className="h-10 w-10 mx-auto mb-3 opacity-60" />
+        <p className="text-sm">{(error as Error).message || "Failed to load broadsheet data."}</p>
       </div>
     );
   }
@@ -4475,6 +4486,7 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
+            {(user?.role === 'admin' || user?.role === 'sub-admin') && (
             <Card id="broadsheet-print-area">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -4502,6 +4514,7 @@ export default function AdminDashboard() {
                 />
               </CardContent>
             </Card>
+            )}
 
             {/* Bank Statement Upload & Reconciliation (Admin Only) */}
             {user?.role === 'admin' && (
