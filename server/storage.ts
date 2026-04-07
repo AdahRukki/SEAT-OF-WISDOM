@@ -1387,7 +1387,10 @@ export class DatabaseStorage implements IStorage {
     let studentsOwing = 0;
 
     if (tuitionFeeType) {
-      const tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id, term, session);
+      let tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id, term, session);
+      if (tuitionAmounts.length === 0 && (term || session)) {
+        tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
+      }
       const classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
 
       for (const student of allActiveStudents) {
