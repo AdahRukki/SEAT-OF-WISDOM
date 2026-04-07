@@ -86,10 +86,19 @@ type CommonFields = z.infer<typeof commonFieldsSchema>;
 interface Student {
   id: string;
   studentId: string;
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   className?: string;
   classId?: string;
+  user?: {
+    firstName: string;
+    lastName: string;
+  };
+}
+
+interface SchoolClass {
+  id: string;
+  name: string;
 }
 
 interface SelectedStudentEntry {
@@ -119,6 +128,7 @@ export function PaymentRecording({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [customPurpose, setCustomPurpose] = useState("");
   const [classSortDir, setClassSortDir] = useState<"asc" | "desc" | null>(null);
+  const [classFilter, setClassFilter] = useState<string>("all");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -153,6 +163,20 @@ export function PaymentRecording({
 
   const { data: students = [], isLoading: studentsLoading } = useQuery<Student[]>({
     queryKey: ["/api/admin/students", schoolId],
+    enabled: !!schoolId,
+  });
+
+  const { data: schoolClasses = [] } = useQuery<SchoolClass[]>({
+    queryKey: ["/api/admin/classes", schoolId],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = schoolId ? `/api/admin/classes?schoolId=${schoolId}` : `/api/admin/classes`;
+      const res = await fetch(url, { credentials: "include", headers });
+      if (!res.ok) throw new Error("Failed to fetch classes");
+      return res.json();
+    },
     enabled: !!schoolId,
   });
 
@@ -292,7 +316,7 @@ export function PaymentRecording({
         });
         successCount++;
       } catch (err: any) {
-        errors.push(`${entry.student.lastName} ${entry.student.firstName}: ${err.message || "Failed"}`);
+        errors.push(`${entry.student.user?.lastName || entry.student.lastName} ${entry.student.user?.firstName || entry.student.firstName}: ${err.message || "Failed"}`);
       }
     }
 
@@ -321,6 +345,7 @@ export function PaymentRecording({
     setSelectedEntries([]);
     setTotalAmount(0);
     setSearchQuery("");
+    setClassFilter("all");
     setCustomPurpose("");
     form.reset({
       paymentMethod: "cash",
@@ -347,11 +372,13 @@ export function PaymentRecording({
   const selectedIds = new Set(selectedEntries.map((e) => e.student.id));
 
   const filteredStudents = students.filter((s) => {
-    if (!searchQuery.trim()) return false;
+    if (!searchQuery.trim() && classFilter === "all") return false;
     if (selectedIds.has(s.id)) return false;
+    if (classFilter !== "all" && s.classId !== classFilter) return false;
+    if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
-    const firstName = (s.firstName || '').toLowerCase();
-    const lastName = (s.lastName || '').toLowerCase();
+    const firstName = (s.user?.firstName || s.firstName || '').toLowerCase();
+    const lastName = (s.user?.lastName || s.lastName || '').toLowerCase();
     const studentId = (s.studentId || '').toLowerCase();
     return firstName.includes(query) || lastName.includes(query) || studentId.includes(query);
   });
@@ -430,23 +457,36 @@ export function PaymentRecording({
                   {/* Student Search */}
                   <div className="space-y-2">
                     <Label>Add Students</Label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search by name or ID..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
+                    <div className="flex gap-2">
+                      <Select value={classFilter} onValueChange={setClassFilter}>
+                        <SelectTrigger className="w-[160px] flex-shrink-0">
+                          <SelectValue placeholder="All Classes" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Classes</SelectItem>
+                          {schoolClasses.map((cls) => (
+                            <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name or ID..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
                     </div>
-                    {searchQuery.trim() && (
+                    {(searchQuery.trim() || classFilter !== "all") && (
                       <div className="max-h-[160px] overflow-y-auto border rounded-md">
                         {studentsLoading ? (
                           <div className="p-4 text-center text-muted-foreground">Loading students...</div>
                         ) : filteredStudents.length === 0 ? (
                           <div className="p-4 text-center text-muted-foreground">No students found</div>
                         ) : (
-                          filteredStudents.slice(0, 8).map((student) => (
+                          filteredStudents.slice(0, 10).map((student) => (
                             <div
                               key={student.id}
                               className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0 flex items-center justify-between"
@@ -454,7 +494,7 @@ export function PaymentRecording({
                             >
                               <div>
                                 <div className="font-medium text-sm">
-                                  {student.lastName} {student.firstName}
+                                  {student.user?.lastName || student.lastName} {student.user?.firstName || student.firstName}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
                                   ID: {student.studentId} | {student.className || "N/A"}
@@ -512,7 +552,7 @@ export function PaymentRecording({
                             <div key={entry.student.id} className="p-3 flex items-center gap-3">
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-sm truncate">
-                                  {entry.student.lastName} {entry.student.firstName}
+                                  {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
                                   {entry.student.studentId} | {entry.student.className || "N/A"}
