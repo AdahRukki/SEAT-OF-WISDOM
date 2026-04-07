@@ -1395,7 +1395,7 @@ export class DatabaseStorage implements IStorage {
   }[]> {
     const paymentConditions = [
       sql`fpr.school_id = ${schoolId}`,
-      sql`fpr.status != 'reversed'`,
+      sql`fpr.status = 'confirmed'`,
     ];
     if (term) paymentConditions.push(sql`fpr.term = ${term}`);
     if (session) paymentConditions.push(sql`fpr.session = ${session}`);
@@ -1511,7 +1511,7 @@ export class DatabaseStorage implements IStorage {
     const paymentsRows = await db.execute(sql`
       SELECT fpr.student_id AS "studentId", COALESCE(SUM(fpr.amount), 0)::numeric AS "totalPaid"
       FROM fee_payment_records fpr
-      WHERE fpr.school_id = ${schoolId} AND fpr.status != 'reversed'
+      WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'
         AND fpr.term = ${term} AND fpr.session = ${session}
       GROUP BY fpr.student_id
     `);
