@@ -1568,13 +1568,14 @@ export class DatabaseStorage implements IStorage {
       .where(and(...revenueConditions));
     const totalRevenue = Number(revenueRow?.total || 0);
 
-    const studentConditions: any[] = [eq(students.isActive, true)];
-    if (schoolId) studentConditions.push(eq(students.schoolId, schoolId));
-
-    const allActiveStudents = await db
-      .select({ id: students.id, classId: students.classId })
-      .from(students)
-      .where(and(...studentConditions));
+    const activeStudentsRows = await db.execute(sql`
+      SELECT s.id, s.class_id AS "classId"
+      FROM students s
+      JOIN users u ON s.user_id = u.id
+      WHERE u.is_active = true
+        ${schoolId ? sql`AND u.school_id = ${schoolId}` : sql``}
+    `);
+    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string }[];
 
     const tuitionFeeConditions: any[] = [eq(feeTypes.isTuition, true), eq(feeTypes.isActive, true)];
     if (schoolId) tuitionFeeConditions.push(eq(feeTypes.schoolId, schoolId));

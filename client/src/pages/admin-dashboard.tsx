@@ -4318,8 +4318,16 @@ export default function AdminDashboard() {
                     <SelectValue placeholder="Select session" />
                   </SelectTrigger>
                   <SelectContent>
-                    {academicSessions.map((s) => (
-                      <SelectItem key={s.id} value={s.sessionYear}>{s.sessionYear}</SelectItem>
+                    {(academicSessions.length > 0
+                      ? academicSessions.map((s) => s.sessionYear)
+                      : (() => {
+                          const baseYear = selectedFinanceSession
+                            ? parseInt(selectedFinanceSession.split('/')[0])
+                            : new Date().getFullYear();
+                          return [baseYear - 1, baseYear, baseYear + 1].map(y => `${y}/${y + 1}`);
+                        })()
+                    ).map((yr) => (
+                      <SelectItem key={yr} value={yr}>{yr}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
