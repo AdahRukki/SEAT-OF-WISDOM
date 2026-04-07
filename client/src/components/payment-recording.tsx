@@ -122,10 +122,20 @@ export function PaymentRecording({
   const [dateTo, setDateTo] = useState("");
   const [nameSearch, setNameSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [filterTerm, setFilterTerm] = useState<string>(currentTerm || "");
+  const [filterSession, setFilterSession] = useState<string>(currentSession || "");
   const PAGE_SIZE = 25;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (currentTerm) setFilterTerm(currentTerm);
+  }, [currentTerm]);
+
+  useEffect(() => {
+    if (currentSession) setFilterSession(currentSession);
+  }, [currentSession]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -155,12 +165,12 @@ export function PaymentRecording({
     }
   }, [isOnline]);
 
-  const { data: academicSessions = [] } = useQuery<{ id: number; name: string }[]>({
-    queryKey: ["/api/student/academic-sessions"],
+  const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string }[]>({
+    queryKey: ["/api/admin/academic-sessions"],
   });
 
   const sessionOptions: string[] = academicSessions.length > 0
-    ? academicSessions.map((s) => s.name)
+    ? academicSessions.map((s) => s.sessionYear)
     : (() => {
         const base = currentSession
           ? parseInt(currentSession.split("/")[0]) || new Date().getFullYear()
@@ -219,15 +229,15 @@ export function PaymentRecording({
   const tuitionAmountMap = new Map(tuitionAmounts.map((ta: any) => [ta.classId, Number(ta.amount)]));
 
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
-    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, currentTerm, currentSession],
+    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, filterTerm, filterSession],
     queryFn: async () => {
       let url = "/api/payments/records?";
       if (schoolId) url += `schoolId=${schoolId}&`;
       if (statusFilter && statusFilter !== "all") url += `status=${statusFilter}&`;
       if (dateFrom) url += `startDate=${dateFrom}&`;
       if (dateTo) url += `endDate=${dateTo}&`;
-      if (currentTerm) url += `term=${encodeURIComponent(currentTerm)}&`;
-      if (currentSession) url += `session=${encodeURIComponent(currentSession)}&`;
+      if (filterTerm) url += `term=${encodeURIComponent(filterTerm)}&`;
+      if (filterSession) url += `session=${encodeURIComponent(filterSession)}&`;
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
       if (token) {
@@ -864,6 +874,34 @@ export function PaymentRecording({
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">Term:</Label>
+            <Select value={filterTerm || "__all__"} onValueChange={(v) => { setFilterTerm(v === "__all__" ? "" : v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Terms" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Terms</SelectItem>
+                <SelectItem value="First Term">First Term</SelectItem>
+                <SelectItem value="Second Term">Second Term</SelectItem>
+                <SelectItem value="Third Term">Third Term</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">Session:</Label>
+            <Select value={filterSession || "__all__"} onValueChange={(v) => { setFilterSession(v === "__all__" ? "" : v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Sessions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Sessions</SelectItem>
+                {sessionOptions.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-2">
             <Label className="whitespace-nowrap text-sm">Status:</Label>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
