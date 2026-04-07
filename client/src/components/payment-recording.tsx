@@ -154,6 +154,19 @@ export function PaymentRecording({
     }
   }, [isOnline]);
 
+  const { data: academicSessions = [] } = useQuery<{ id: number; name: string }[]>({
+    queryKey: ["/api/student/academic-sessions"],
+  });
+
+  const sessionOptions: string[] = academicSessions.length > 0
+    ? academicSessions.map((s) => s.name)
+    : (() => {
+        const base = currentSession
+          ? parseInt(currentSession.split("/")[0]) || new Date().getFullYear()
+          : new Date().getFullYear();
+        return [`${base - 1}/${base}`, `${base}/${base + 1}`, `${base + 1}/${base + 2}`];
+      })();
+
   const { data: students = [], isLoading: studentsLoading } = useQuery<Student[]>({
     queryKey: ["/api/admin/students", schoolId],
     enabled: !!schoolId,
@@ -662,9 +675,18 @@ export function PaymentRecording({
                       render={({ field }) => (
                         <FormItem className="space-y-1">
                           <FormLabel className="text-xs text-muted-foreground">Session</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g., 2024/2025" {...field} className="h-8 text-sm" />
-                          </FormControl>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Select session" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {sessionOptions.map((s) => (
+                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
