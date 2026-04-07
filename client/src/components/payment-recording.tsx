@@ -129,6 +129,10 @@ export function PaymentRecording({
   const [customPurpose, setCustomPurpose] = useState("");
   const [classSortDir, setClassSortDir] = useState<"asc" | "desc" | null>(null);
   const [classFilter, setClassFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 25;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -181,11 +185,13 @@ export function PaymentRecording({
   });
 
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
-    queryKey: ["/api/payments/records", schoolId, statusFilter],
+    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo],
     queryFn: async () => {
       let url = "/api/payments/records?";
       if (schoolId) url += `schoolId=${schoolId}&`;
       if (statusFilter && statusFilter !== "all") url += `status=${statusFilter}&`;
+      if (dateFrom) url += `startDate=${dateFrom}&`;
+      if (dateTo) url += `endDate=${dateTo}&`;
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
       if (token) {
@@ -395,6 +401,13 @@ export function PaymentRecording({
     if (nameA > nameB) return classSortDir === "asc" ? 1 : -1;
     return 0;
   });
+
+  const totalRecords = sortedRecords.length;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedRecords = sortedRecords.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const showingFrom = totalRecords === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const showingTo = Math.min(safePage * PAGE_SIZE, totalRecords);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -774,11 +787,11 @@ export function PaymentRecording({
       <Separator />
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Label>Filter by Status:</Label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">Status:</Label>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
@@ -789,10 +802,35 @@ export function PaymentRecording({
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetchRecords()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">From:</Label>
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+              className="w-[150px]"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">To:</Label>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+              className="w-[150px]"
+            />
+          </div>
+          {(dateFrom || dateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); setCurrentPage(1); }}>
+              Clear dates
+            </Button>
+          )}
+          <div className="ml-auto">
+            <Button variant="outline" size="sm" onClick={() => refetchRecords()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {pendingPayments.length > 0 && (
@@ -852,14 +890,14 @@ export function PaymentRecording({
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
-                ) : sortedRecords.length === 0 ? (
+                ) : totalRecords === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No payment records found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  sortedRecords.map((record) => (
+                  paginatedRecords.map((record) => (
                     <TableRow key={record.id}>
                       <TableCell className="text-sm">
                         {record.paymentDate
@@ -905,6 +943,35 @@ export function PaymentRecording({
             </Table>
           </CardContent>
         </Card>
+
+        {totalRecords > PAGE_SIZE && (
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-sm text-muted-foreground">
+              Showing {showingFrom}–{showingTo} of {totalRecords}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {safePage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

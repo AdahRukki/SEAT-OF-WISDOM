@@ -193,6 +193,10 @@ export interface IStorage {
     totalPaid: number;
     totalPending: number;
     totalOverdue: number;
+    totalRevenue: number;
+    totalOutstanding: number;
+    collectionRate: number;
+    studentsOwing: number;
   }>;
 
   // Settings operations
@@ -1315,8 +1319,11 @@ export class DatabaseStorage implements IStorage {
     totalPaid: number;
     totalPending: number;
     totalOverdue: number;
+    totalRevenue: number;
+    totalOutstanding: number;
+    collectionRate: number;
+    studentsOwing: number;
   }> {
-    // Get all student fees based on filters
     const studentFeesData = await this.getAllStudentFees(schoolId, term, session);
     
     let totalFees = 0;
@@ -1337,11 +1344,50 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    const revenueConditions: any[] = [eq(feePaymentRecords.status, 'confirmed')];
+    if (schoolId) revenueConditions.push(eq(feePaymentRecords.schoolId, schoolId));
+    if (term) revenueConditions.push(eq(feePaymentRecords.term, term));
+    if (session) revenueConditions.push(eq(feePaymentRecords.session, session));
+
+    const [revenueRow] = await db
+      .select({ total: sql<string>`COALESCE(SUM(${feePaymentRecords.amount}), 0)` })
+      .from(feePaymentRecords)
+      .where(and(...revenueConditions));
+    const totalRevenue = Number(revenueRow?.total || 0);
+
+    const totalOutstanding = Math.max(0, totalFees - totalRevenue);
+    const collectionRate = totalFees > 0 ? Math.round((totalRevenue / totalFees) * 100) : 0;
+
+    const studentConditions: any[] = [eq(students.isActive, true)];
+    if (schoolId) studentConditions.push(eq(students.schoolId, schoolId));
+
+    const allActiveStudents = await db
+      .select({ id: students.id })
+      .from(students)
+      .where(and(...studentConditions));
+
+    const paidStudentConditions: any[] = [eq(feePaymentRecords.status, 'confirmed')];
+    if (schoolId) paidStudentConditions.push(eq(feePaymentRecords.schoolId, schoolId));
+    if (term) paidStudentConditions.push(eq(feePaymentRecords.term, term));
+    if (session) paidStudentConditions.push(eq(feePaymentRecords.session, session));
+
+    const paidStudentRows = await db
+      .selectDistinct({ studentId: feePaymentRecords.studentId })
+      .from(feePaymentRecords)
+      .where(and(...paidStudentConditions));
+
+    const paidStudentIds = new Set(paidStudentRows.map(r => r.studentId));
+    const studentsOwing = allActiveStudents.filter(s => !paidStudentIds.has(s.id)).length;
+
     return {
       totalFees,
       totalPaid,
       totalPending,
-      totalOverdue
+      totalOverdue,
+      totalRevenue,
+      totalOutstanding,
+      collectionRate,
+      studentsOwing,
     };
   }
 

@@ -58,6 +58,7 @@ Preferred communication style: Simple, everyday language.
     -   **Audit Logs**: Full audit trail for all payment actions (recording, confirmation, reversal, allocation).
     -   **Role-based Access**: Bursars and sub-admins can record payments; only admins can upload statements, confirm, and reverse.
     -   **Offline-First Recording**: Bursars can record payments offline with automatic sync when online.
+    -   **Finance Tab UX**: Term/session selectors at top of Finance tab to switch contexts. Summary cards (Total Revenue, Outstanding Fees, Collection Rate, Students Owing) now compute from `fee_payment_records` (confirmed payments) rather than legacy `student_fees` table only. Payment records table has date-range filter (From/To date inputs) and pagination (25 rows/page with Previous/Next navigation). `getFinancialSummary` returns `totalRevenue`, `totalOutstanding`, `collectionRate`, `studentsOwing` in addition to legacy fields.
 -   **Database Relations**: Normalized PostgreSQL schema with Firebase sync, including database-level validation for duplicate subjects.
 
 ### Development Environment

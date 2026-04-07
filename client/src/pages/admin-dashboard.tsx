@@ -4050,6 +4050,35 @@ export default function AdminDashboard() {
 
           {/* Finance Tab */}
           <TabsContent value="finance" className="space-y-6 table-container">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium whitespace-nowrap">Term:</Label>
+                <Select value={selectedFinanceTerm} onValueChange={setSelectedFinanceTerm}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Select term" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['First Term', 'Second Term', 'Third Term'].map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium whitespace-nowrap">Session:</Label>
+                <Select value={selectedFinanceSession} onValueChange={setSelectedFinanceSession}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Select session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {academicSessions.map((s) => (
+                      <SelectItem key={s.id} value={s.sessionYear}>{s.sessionYear}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-2 xl:grid-cols-4' : 'grid-cols-2'}`}>
               {user?.role === 'admin' && (
                 <Card>
@@ -4059,9 +4088,9 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
                     <div className="text-lg sm:text-2xl font-bold truncate">
-                      ₦{financialSummary?.totalPaid?.toLocaleString() || "0.00"}
+                      ₦{(financialSummary?.totalRevenue ?? financialSummary?.totalPaid ?? 0).toLocaleString()}
                     </div>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedFinanceTerm}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedFinanceTerm} confirmed</p>
                   </CardContent>
                 </Card>
               )}
@@ -4074,9 +4103,11 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
                     <div className="text-lg sm:text-2xl font-bold truncate">
-                      ₦{financialSummary?.totalOutstanding?.toLocaleString() || "0.00"}
+                      {financialSummary?.totalFees ? `₦${financialSummary.totalOutstanding.toLocaleString()}` : "N/A"}
                     </div>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">Pending payments</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      {financialSummary?.totalFees ? "Assigned fees minus confirmed" : "No fees assigned"}
+                    </p>
                   </CardContent>
                 </Card>
               )}
@@ -4088,9 +4119,11 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
                   <div className="text-lg sm:text-2xl font-bold">
-                    {financialSummary?.collectionRate ? `${financialSummary.collectionRate}%` : "0%"}
+                    {financialSummary?.totalFees ? `${financialSummary.collectionRate}%` : "—"}
                   </div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Payment success rate</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    {financialSummary?.totalFees ? "Of assigned fees collected" : "No fees assigned"}
+                  </p>
                 </CardContent>
               </Card>
 
@@ -4101,9 +4134,9 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
                   <div className="text-lg sm:text-2xl font-bold">
-                    {financialSummary?.studentsOwing || "0"}
+                    {financialSummary?.studentsOwing ?? "0"}
                   </div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">With outstanding fees</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">No confirmed payments this term</p>
                 </CardContent>
               </Card>
             </div>
