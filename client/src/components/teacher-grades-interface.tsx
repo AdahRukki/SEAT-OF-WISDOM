@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -255,6 +256,38 @@ export function TeacherGradesInterface({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {(studentsLoading || ratingsLoading) ? (
+              <div className="space-y-4">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        <TableHead className="text-center">Attendance & Punctuality</TableHead>
+                        <TableHead className="text-center">Neatness & Organization</TableHead>
+                        <TableHead className="text-center">Respect & Politeness</TableHead>
+                        <TableHead className="text-center">Participation/Teamwork</TableHead>
+                        <TableHead className="text-center">Responsibility</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                          <TableCell className="text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></TableCell>
+                          <TableCell className="text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></TableCell>
+                          <TableCell className="text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></TableCell>
+                          <TableCell className="text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></TableCell>
+                          <TableCell className="text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></TableCell>
+                          <TableCell className="text-center"><Skeleton className="h-8 w-16 mx-auto rounded" /></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : (
             <div className="space-y-4">
                 <div className="overflow-x-auto">
                   <Table>
@@ -324,6 +357,7 @@ export function TeacherGradesInterface({
                   </Table>
                 </div>
             </div>
+            )}
           </CardContent>
         </Card>
       )}

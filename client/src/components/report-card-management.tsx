@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Card,
   CardContent,
@@ -1966,9 +1967,23 @@ export function ReportCardManagement({
           )}
 
           {isLoadingReports ? (
-            <div className="flex items-center justify-center py-10">
-              <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
-              <span className="text-sm text-muted-foreground">Loading reports…</span>
+            <div className="divide-y divide-border rounded-lg border overflow-hidden">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between px-3 py-2.5 gap-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-36" />
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-4 w-16 rounded" />
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Skeleton className="h-7 w-16 rounded" />
+                    <Skeleton className="h-7 w-7 rounded" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : generatedReports.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed border-border rounded-xl">
