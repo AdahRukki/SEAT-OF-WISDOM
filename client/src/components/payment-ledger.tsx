@@ -56,12 +56,12 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
   }, [currentSession]);
 
   const { data: sessions = [] } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ["/api/sessions"],
+    queryKey: ["/api/admin/academic-sessions"],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch("/api/sessions", { credentials: "include", headers });
+      const res = await fetch("/api/admin/academic-sessions", { credentials: "include", headers });
       if (!res.ok) return [];
       return res.json();
     },
