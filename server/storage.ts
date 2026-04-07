@@ -200,6 +200,8 @@ export interface IStorage {
     className: string;
     classId: string;
     totalPaid: number;
+    totalAssigned: number;
+    balance: number;
     paymentCount: number;
     lastPaymentDate: string | null;
   }[]>;
@@ -1386,6 +1388,8 @@ export class DatabaseStorage implements IStorage {
     className: string;
     classId: string;
     totalPaid: number;
+    totalAssigned: number;
+    balance: number;
     paymentCount: number;
     lastPaymentDate: string | null;
   }[]> {
@@ -1415,7 +1419,13 @@ export class DatabaseStorage implements IStorage {
         s.class_id AS "classId",
         COALESCE(SUM(fpr.amount), 0)::numeric AS "totalPaid",
         COUNT(fpr.id)::int AS "paymentCount",
-        MAX(fpr.payment_date) AS "lastPaymentDate"
+        MAX(fpr.payment_date) AS "lastPaymentDate",
+        COALESCE((
+          SELECT SUM(sf.amount) FROM student_fees sf
+          WHERE sf.student_id = s.id
+            ${term ? sql`AND sf.term = ${term}` : sql``}
+            ${session ? sql`AND sf.session = ${session}` : sql``}
+        ), 0)::numeric AS "sfAssigned"
       FROM students s
       JOIN users u ON s.user_id = u.id
       LEFT JOIN classes c ON s.class_id = c.id
@@ -1425,17 +1435,39 @@ export class DatabaseStorage implements IStorage {
       ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
     `);
 
-    return (rows.rows || rows).map((r: any) => ({
-      studentDbId: r.studentDbId,
-      studentId: r.studentId,
-      firstName: r.firstName,
-      lastName: r.lastName,
-      className: r.className || '',
-      classId: r.classId,
-      totalPaid: Number(r.totalPaid) || 0,
-      paymentCount: Number(r.paymentCount) || 0,
-      lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
-    }));
+    const tuitionFeeRows = await db.execute(sql`
+      SELECT ft.id FROM fee_types ft
+      WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.is_active = true
+      LIMIT 1
+    `);
+    const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
+
+    let tuitionMap = new Map<string, number>();
+    if (tuitionFee) {
+      let tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
+      if (tuitionAmts.length === 0) tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id);
+      tuitionMap = new Map(tuitionAmts.map(ta => [ta.classId, Number(ta.amount)]));
+    }
+
+    return (rows.rows || rows).map((r: any) => {
+      const totalPaid = Number(r.totalPaid) || 0;
+      const sfAssigned = Number(r.sfAssigned) || 0;
+      const tuitionAssigned = tuitionMap.get(r.classId) || 0;
+      const totalAssigned = sfAssigned + tuitionAssigned;
+      return {
+        studentDbId: r.studentDbId,
+        studentId: r.studentId,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        className: r.className || '',
+        classId: r.classId,
+        totalPaid,
+        totalAssigned,
+        balance: Math.max(0, totalAssigned - totalPaid),
+        paymentCount: Number(r.paymentCount) || 0,
+        lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
+      };
+    });
   }
 
   async getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{

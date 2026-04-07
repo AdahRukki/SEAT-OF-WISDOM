@@ -26,6 +26,8 @@ interface LedgerEntry {
   className: string;
   classId: string;
   totalPaid: number;
+  totalAssigned: number;
+  balance: number;
   paymentCount: number;
   lastPaymentDate: string | null;
 }
@@ -97,7 +99,9 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
     enabled: !!schoolId,
   });
 
-  const grandTotal = ledger.reduce((sum, entry) => sum + entry.totalPaid, 0);
+  const grandTotalPaid = ledger.reduce((sum, entry) => sum + entry.totalPaid, 0);
+  const grandTotalAssigned = ledger.reduce((sum, entry) => sum + (entry.totalAssigned || 0), 0);
+  const grandBalance = ledger.reduce((sum, entry) => sum + (entry.balance || 0), 0);
   const totalPayments = ledger.reduce((sum, entry) => sum + entry.paymentCount, 0);
 
   return (
@@ -170,6 +174,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 <TableHead>Class</TableHead>
                 <TableHead>SOWA ID</TableHead>
                 <TableHead className="text-right">Total Paid (₦)</TableHead>
+                <TableHead className="text-right">Balance (₦)</TableHead>
                 <TableHead className="text-center">Payments</TableHead>
                 <TableHead>Last Payment</TableHead>
               </TableRow>
@@ -186,6 +191,11 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                   <TableCell className={`text-right font-semibold ${entry.totalPaid > 0 ? "text-green-600" : ""}`}>
                     {entry.totalPaid > 0 ? `₦${entry.totalPaid.toLocaleString()}` : "₦0"}
                   </TableCell>
+                  <TableCell className={`text-right font-semibold ${(entry.balance || 0) > 0 ? "text-red-500" : "text-green-600"}`}>
+                    {entry.totalAssigned > 0
+                      ? `₦${(entry.balance || 0).toLocaleString()}`
+                      : "—"}
+                  </TableCell>
                   <TableCell className="text-center">{entry.paymentCount || "0"}</TableCell>
                   <TableCell className="text-sm">
                     {entry.lastPaymentDate
@@ -199,7 +209,10 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 <TableCell>Grand Total</TableCell>
                 <TableCell />
                 <TableCell />
-                <TableCell className="text-right text-green-700">₦{grandTotal.toLocaleString()}</TableCell>
+                <TableCell className="text-right text-green-700">₦{grandTotalPaid.toLocaleString()}</TableCell>
+                <TableCell className={`text-right ${grandBalance > 0 ? "text-red-600" : "text-green-700"}`}>
+                  {grandTotalAssigned > 0 ? `₦${grandBalance.toLocaleString()}` : "—"}
+                </TableCell>
                 <TableCell className="text-center">{totalPayments}</TableCell>
                 <TableCell />
               </TableRow>
