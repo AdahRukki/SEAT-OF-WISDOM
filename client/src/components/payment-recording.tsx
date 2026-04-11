@@ -92,6 +92,7 @@ interface SchoolClass {
 
 interface SelectedStudentEntry {
   student: Student;
+  amount: number;
 }
 
 interface PaymentRecordingProps {
@@ -146,7 +147,11 @@ export function PaymentRecording({
 
     const saved = localStorage.getItem("pendingPayments");
     if (saved) {
-      setPendingPayments(JSON.parse(saved));
+      const loaded = JSON.parse(saved);
+      setPendingPayments(loaded);
+      if (navigator.onLine && loaded.length > 0) {
+        syncPendingPayments();
+      }
     }
 
     return () => {
@@ -305,19 +310,21 @@ export function PaymentRecording({
     if (!currentPurpose || selectedEntries.length === 0) return;
     const matchedFee = feeTypesData.find(ft => ft.name === currentPurpose);
     if (matchedFee?.isTuition) {
-      let sum = 0;
-      for (const entry of selectedEntries) {
-        const classId = entry.student.classId;
-        if (classId) sum += tuitionAmountMap.get(classId) || 0;
-      }
+      setSelectedEntries(prev => prev.map(e => {
+        const rate = e.student.classId ? (tuitionAmountMap.get(e.student.classId) || 0) : 0;
+        return { ...e, amount: rate };
+      }));
+      const sum = selectedEntries.reduce((acc, e) => {
+        return acc + (tuitionAmountMap.get(e.student.classId || '') || 0);
+      }, 0);
       if (sum > 0) setTotalAmount(sum);
     }
-  }, [selectedEntries, currentPurpose, feeTypesData, tuitionAmountMap]);
+  }, [selectedEntries.length, currentPurpose, feeTypesData, tuitionAmountMap]);
 
-  // Compute per-student share from shared total amount
+  // Allocation tally
   const studentCount = selectedEntries.length;
-  const perStudentBase = studentCount > 0 ? Math.floor(totalAmount / studentCount) : 0;
-  const remainder = studentCount > 0 ? totalAmount - perStudentBase * studentCount : 0;
+  const allocatedTotal = selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const unallocated = totalAmount - allocatedTotal;
 
   const onSubmit = async (commonData: CommonFields) => {
     if (selectedEntries.length === 0) {
@@ -338,10 +345,20 @@ export function PaymentRecording({
       return;
     }
 
-    if (studentCount > 1 && totalAmount < studentCount) {
+    const hasZeroAmount = selectedEntries.some(e => !e.amount || e.amount <= 0);
+    if (hasZeroAmount) {
       toast({
-        title: "Amount Too Low",
-        description: `Total amount must be at least ₦${studentCount} when splitting across ${studentCount} students.`,
+        title: "Missing Amount",
+        description: "Please enter an amount for each student.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (allocatedTotal !== totalAmount) {
+      toast({
+        title: "Allocation Mismatch",
+        description: `Allocated amounts (₦${allocatedTotal.toLocaleString()}) do not match the total (₦${totalAmount.toLocaleString()}).`,
         variant: "destructive",
       });
       return;
@@ -351,10 +368,10 @@ export function PaymentRecording({
     const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
 
     if (!isOnline) {
-      const offlinePayments = selectedEntries.map((entry, idx) => ({
+      const offlinePayments = selectedEntries.map((entry) => ({
         ...dataWithPurpose,
         studentId: entry.student.id,
-        amount: idx === 0 ? perStudentBase + remainder : perStudentBase,
+        amount: entry.amount,
         offlineId: `offline_${Date.now()}_${entry.student.id}`,
         createdAt: new Date().toISOString(),
       }));
@@ -373,12 +390,11 @@ export function PaymentRecording({
 
     for (let idx = 0; idx < selectedEntries.length; idx++) {
       const entry = selectedEntries[idx];
-      const entryAmount = idx === 0 ? perStudentBase + remainder : perStudentBase;
       try {
         await recordPaymentMutation.mutateAsync({
           ...dataWithPurpose,
           studentId: entry.student.id,
-          amount: entryAmount,
+          amount: entry.amount,
         });
         successCount++;
       } catch (err: any) {
@@ -427,8 +443,14 @@ export function PaymentRecording({
 
   const addStudent = (student: Student) => {
     if (selectedEntries.some((e) => e.student.id === student.id)) return;
-    setSelectedEntries([...selectedEntries, { student }]);
+    setSelectedEntries([...selectedEntries, { student, amount: 0 }]);
     setSearchQuery("");
+  };
+
+  const updateStudentAmount = (studentId: string, amount: number) => {
+    setSelectedEntries(prev =>
+      prev.map(e => e.student.id === studentId ? { ...e, amount } : e)
+    );
   };
 
   const removeStudent = (studentId: string) => {
@@ -531,7 +553,7 @@ export function PaymentRecording({
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 <DialogDescription>
-                  Enter the total amount, search and add students — it will be split equally. Fill in the shared payment details below.
+                  Enter the total amount paid, add students, then enter each student's share.
                 </DialogDescription>
               </DialogHeader>
 
@@ -606,17 +628,6 @@ export function PaymentRecording({
                         min={0}
                       />
                     </div>
-                    {studentCount > 1 && totalAmount > 0 && totalAmount < studentCount && (
-                      <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
-                        Amount too low to split across {studentCount} students — minimum ₦{studentCount}.
-                      </div>
-                    )}
-                    {studentCount > 1 && totalAmount >= studentCount && totalAmount > 0 && (
-                      <div className="text-xs text-muted-foreground bg-muted rounded p-2">
-                        ₦{totalAmount.toLocaleString()} ÷ {studentCount} students = ₦{perStudentBase.toLocaleString()} each
-                        {remainder > 0 && ` (₦${remainder} added to first student)`}
-                      </div>
-                    )}
                   </div>
 
                   {/* Selected Students List */}
@@ -630,38 +641,54 @@ export function PaymentRecording({
                         )}
                       </div>
                       <div className="border rounded-md divide-y">
-                        {selectedEntries.map((entry, idx) => {
-                          const share = idx === 0 ? perStudentBase + remainder : perStudentBase;
-                          return (
-                            <div key={entry.student.id} className="p-3 flex items-center gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium text-sm truncate">
-                                  {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {entry.student.studentId} | {entry.student.className || "N/A"}
-                                </div>
+                        {selectedEntries.map((entry) => (
+                          <div key={entry.student.id} className="p-3 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm truncate">
+                                {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
                               </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                {totalAmount > 0 && (
-                                  <span className="text-sm font-medium text-muted-foreground w-28 text-right">
-                                    ₦{share.toLocaleString()}
-                                  </span>
-                                )}
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-9 w-9 text-muted-foreground hover:text-red-500"
-                                  onClick={() => removeStudent(entry.student.id)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
+                              <div className="text-xs text-muted-foreground">
+                                {entry.student.studentId} | {entry.student.className || "N/A"}
                               </div>
                             </div>
-                          );
-                        })}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="relative w-28">
+                                <span className="absolute left-2.5 top-2 text-sm text-muted-foreground">₦</span>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="pl-6 h-8 text-sm"
+                                  value={entry.amount || ""}
+                                  onChange={(e) => updateStudentAmount(entry.student.id, parseFloat(e.target.value) || 0)}
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-muted-foreground hover:text-red-500"
+                                onClick={() => removeStudent(entry.student.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                      {totalAmount > 0 && (
+                        <div className={`text-xs rounded p-2 ${
+                          unallocated === 0
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : unallocated > 0
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : "bg-red-50 text-red-700 border border-red-200"
+                        }`}>
+                          ₦{allocatedTotal.toLocaleString()} allocated of ₦{totalAmount.toLocaleString()} total
+                          {unallocated > 0 && ` — ₦${unallocated.toLocaleString()} remaining`}
+                          {unallocated < 0 && ` — ₦${Math.abs(unallocated).toLocaleString()} over total`}
+                          {unallocated === 0 && " ✓ Fully allocated"}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -957,25 +984,10 @@ export function PaymentRecording({
         </div>
 
         {pendingPayments.length > 0 && (
-          <Card className="border-orange-200 bg-orange-50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-orange-600" />
-                Pending Offline Payments
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-muted-foreground mb-2">
-                {pendingPayments.length} payment(s) waiting to sync
-              </div>
-              {isOnline && (
-                <Button size="sm" variant="outline" onClick={syncPendingPayments}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Sync Now
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+            {pendingPayments.length} offline payment(s) syncing when connected…
+          </div>
         )}
 
         <Card>

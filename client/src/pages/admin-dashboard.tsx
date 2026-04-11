@@ -123,7 +123,8 @@ import {
   XCircle,
   Pencil,
   Printer,
-  Search
+  Search,
+  CloudOff
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -3896,6 +3897,14 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* Global offline students banner */}
+                {offlineStudents.length > 0 && (
+                  <div className="mb-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    {offlineStudents.length} student(s) pending sync — visible in their class once connectivity returns
+                  </div>
+                )}
+
                 {/* Class Selection */}
                 <div className="mb-6">
                   <Label htmlFor="class-select">Select Class to View Students</Label>
@@ -6250,7 +6259,11 @@ export default function AdminDashboard() {
                   className="h-10 w-full sm:w-auto px-6 bg-green-600 hover:bg-green-700"
                 >
                   {createStudentMutation.isPending ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</>
+                    !navigator.onLine ? (
+                      <><CloudOff className="w-4 h-4 mr-2" />Saving offline…</>
+                    ) : (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</>
+                    )
                   ) : (
                     <><UserPlus className="w-4 h-4 mr-2" />Create Student</>
                   )}

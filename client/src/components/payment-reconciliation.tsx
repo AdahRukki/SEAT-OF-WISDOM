@@ -400,9 +400,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       let score = 0;
       const reasons: string[] = [];
 
-      // Exact amount match (50 points)
+      // Exact amount match (30 points)
       if (Math.abs(txAmount - paymentAmount) < 0.01) {
-        score += 50;
+        score += 30;
         reasons.push("Exact amount");
       }
 
@@ -419,14 +419,35 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         reasons.push("Within a week");
       }
 
-      // Depositor name in description (25 points)
+      // Depositor name — tiered scoring (only highest tier fires)
       const depositorName = (payment.depositorName || '').toLowerCase().trim();
       if (depositorName) {
         const txDesc = tx.rawDescription?.toLowerCase() || '';
         const depositorWords = depositorName.split(/\s+/).filter(w => w.length > 2);
-        if (depositorWords.some(w => txDesc.includes(w))) {
-          score += 25;
-          reasons.push("Depositor name match");
+
+        const allMatch = depositorWords.length > 0 && depositorWords.every(w => txDesc.includes(w));
+        const prefixMatch = !allMatch && depositorWords.length > 0 &&
+          depositorWords.every(w => {
+            const prefix = w.substring(0, 5);
+            return prefix.length >= 3 && txDesc.includes(prefix);
+          });
+        const longWordMatch = !allMatch && !prefixMatch &&
+          depositorWords.some(w => w.length > 5 && txDesc.includes(w));
+        const shortWordMatch = !allMatch && !prefixMatch && !longWordMatch &&
+          depositorWords.some(w => w.length >= 3 && txDesc.includes(w));
+
+        if (allMatch) {
+          score += 40;
+          reasons.push("Full depositor name match");
+        } else if (prefixMatch) {
+          score += 30;
+          reasons.push("Partial depositor name match");
+        } else if (longWordMatch) {
+          score += 20;
+          reasons.push("Depositor name word match");
+        } else if (shortWordMatch) {
+          score += 10;
+          reasons.push("Depositor name partial");
         }
       }
 
@@ -437,10 +458,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         reasons.push("Name match");
       }
 
-      // Reference match (10 points)
+      // Reference match (50 points — highly discriminating)
       if (payment.reference && tx.rawDescription?.toLowerCase().includes(payment.reference.toLowerCase())) {
-        score += 10;
-        reasons.push("Reference found");
+        score += 50;
+        reasons.push("Reference match");
       }
 
       if (score > bestScore) {
@@ -778,8 +799,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <div className="font-medium text-green-600">
                                       ₦{parseFloat(suggestion.transaction.amount).toLocaleString()}
                                     </div>
-                                    <div className="text-muted-foreground truncate">
-                                      {suggestion.transaction.rawDescription?.substring(0, 40)}...
+                                    <div className="text-muted-foreground">
+                                      <span className="line-clamp-2">{suggestion.transaction.rawDescription}</span>
+                                      <div className="text-muted-foreground mt-0.5">
+                                        {new Date(suggestion.transaction.transactionDate).toLocaleDateString()}
+                                        {suggestion.transaction.reference && ` | Ref: ${suggestion.transaction.reference}`}
+                                      </div>
                                     </div>
                                   </div>
                                   {/* Quick confirm only for high confidence matches (80%+) */}
@@ -1025,8 +1050,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
           {selectedPayment && (
             <div className="space-y-4">
-              <div className="p-4 border rounded-lg bg-muted/50">
-                <p className="font-medium mb-1">
+              <div className="p-4 border rounded-lg bg-muted/50 space-y-1">
+                <p className="font-semibold">
                   {selectedPayment.student?.user?.lastName} {selectedPayment.student?.user?.firstName}
                 </p>
                 <p className="text-2xl font-bold text-green-600">
@@ -1035,6 +1060,15 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <p className="text-sm text-muted-foreground">
                   {selectedPayment.paymentMethod} | {new Date(selectedPayment.paymentDate).toLocaleDateString()}
                 </p>
+                {selectedPayment.purpose && (
+                  <p className="text-sm"><span className="font-medium">Purpose:</span> {selectedPayment.purpose}</p>
+                )}
+                {selectedPayment.depositorName && (
+                  <p className="text-sm"><span className="font-medium">Depositor:</span> {selectedPayment.depositorName}</p>
+                )}
+                {selectedPayment.reference && (
+                  <p className="text-sm"><span className="font-medium">Ref:</span> {selectedPayment.reference}</p>
+                )}
               </div>
 
               <ArrowRight className="h-6 w-6 mx-auto text-muted-foreground" />
@@ -1052,7 +1086,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           : "hover:border-muted-foreground"
                       }`}
                     >
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center mb-1">
                         <span className="font-medium">
                           ₦{parseFloat(tx.amount).toLocaleString()}
                         </span>
@@ -1060,9 +1094,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           {new Date(tx.transactionDate).toLocaleDateString()}
                         </span>
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
+                      <p className="text-sm text-muted-foreground break-words">
                         {tx.rawDescription}
                       </p>
+                      {tx.reference && (
+                        <p className="text-xs text-muted-foreground mt-1">Ref: {tx.reference}</p>
+                      )}
                     </div>
                   ))}
                 </div>
