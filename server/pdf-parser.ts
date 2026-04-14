@@ -55,7 +55,7 @@ function parseDateString(raw: string): string | null {
   return null;
 }
 
-function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith" | "generic" {
+function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith" | "access" | "generic" {
   const lower = rawText.toLowerCase();
   if (lower.includes("fidelitybank") || lower.includes("fidelity bank") ||
       (lower.includes("pay in") && lower.includes("pay out") && lower.includes("balance"))) {
@@ -63,6 +63,7 @@ function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith"
   }
   if (lower.includes("moniepoint")) return "moniepoint";
   if (lower.includes("zenith bank") || lower.includes("zenith bank plc")) return "zenith";
+  if (lower.includes("access bank")) return "access";
   return "generic";
 }
 
@@ -306,6 +307,40 @@ function parseZenithTransactions(rawText: string): ParsedTransaction[] {
   return transactions;
 }
 
+function parseAccessTransactions(rawText: string): ParsedTransaction[] {
+  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  const transactions: ParsedTransaction[] = [];
+
+  // Each transaction is one line: PostedDate ValueDate Description Debit Credit Balance
+  // Debit and Credit use "----" as a zero/null marker
+  const txRegex = /^(\d{2}-[A-Za-z]{3}-\d{2})\s+(\d{2}-[A-Za-z]{3}-\d{2})\s+(.+)\s+(----|-?[\d,]+\.\d+)\s+(----|-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s*$/;
+
+  const skipRegex = /^(opening balance|closing balance|total withdrawal|total lodgement|transactions|posted date|cleared balance|uncleared balance|currency|account name|account class|account number|branch address)/i;
+
+  for (const line of lines) {
+    if (skipRegex.test(line)) continue;
+
+    const match = line.match(txRegex);
+    if (!match) continue;
+
+    const [, , valueDate, description, debitStr, creditStr] = match;
+
+    const debit  = debitStr  === "----" ? 0 : parseFloat(debitStr.replace(/,/g, ""));
+    const credit = creditStr === "----" ? 0 : parseFloat(creditStr.replace(/,/g, ""));
+
+    if (debit > 0 || credit <= 0) continue;
+
+    const normalizedDate = parseDateString(valueDate);
+    if (!normalizedDate) continue;
+
+    const desc = description.trim();
+    const fingerprint = generateFingerprint(normalizedDate, credit, desc);
+    transactions.push({ date: normalizedDate, credit, rawDescription: desc, fingerprint });
+  }
+
+  return transactions;
+}
+
 export function parseTransactions(rawText: string): ParsedTransaction[] {
   const format = detectBankFormat(rawText);
   if (format === "fidelity") {
@@ -316,6 +351,9 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
   }
   if (format === "zenith") {
     return parseZenithTransactions(rawText);
+  }
+  if (format === "access") {
+    return parseAccessTransactions(rawText);
   }
 
   const columnOrder = detectColumnOrder(rawText);
