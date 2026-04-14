@@ -55,13 +55,14 @@ function parseDateString(raw: string): string | null {
   return null;
 }
 
-function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "generic" {
+function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith" | "generic" {
   const lower = rawText.toLowerCase();
   if (lower.includes("fidelitybank") || lower.includes("fidelity bank") ||
       (lower.includes("pay in") && lower.includes("pay out") && lower.includes("balance"))) {
     return "fidelity";
   }
   if (lower.includes("moniepoint")) return "moniepoint";
+  if (lower.includes("zenith bank") || lower.includes("zenith bank plc")) return "zenith";
   return "generic";
 }
 
@@ -256,6 +257,55 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
   return transactions;
 }
 
+function parseZenithTransactions(rawText: string): ParsedTransaction[] {
+  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  const transactions: ParsedTransaction[] = [];
+
+  const dateLineRegex = /^(\d{2}\/\d{2}\/\d{4})\s+[A-Za-z]/;
+  const amountsLineRegex = /^([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+\d{2}\/\d{2}\/\d{4}\s+[\d,]+\.\d{2}\s*$/;
+
+  let pendingDate: string | null = null;
+  let pendingDescription = "";
+
+  const flush = (debit: number, credit: number) => {
+    if (!pendingDate) return;
+    if (debit > 0 || credit <= 0) {
+      pendingDate = null; pendingDescription = "";
+      return;
+    }
+    const desc = pendingDescription.replace(/\s{2,}/g, " ").trim();
+    const fingerprint = generateFingerprint(pendingDate, credit, desc);
+    transactions.push({ date: pendingDate, credit, rawDescription: desc, fingerprint });
+    pendingDate = null; pendingDescription = "";
+  };
+
+  for (const line of lines) {
+    if (/^(date\s+description|opening balance|closing balance|account name|account no|currency|period)/i.test(line)) continue;
+
+    const amountsMatch = line.match(amountsLineRegex);
+    if (amountsMatch) {
+      const debit  = parseFloat(amountsMatch[1].replace(/,/g, ""));
+      const credit = parseFloat(amountsMatch[2].replace(/,/g, ""));
+      flush(debit, credit);
+      continue;
+    }
+
+    const dateMatch = line.match(dateLineRegex);
+    if (dateMatch) {
+      if (pendingDate) { pendingDate = null; pendingDescription = ""; }
+      pendingDate = dateMatch[1];
+      pendingDescription = line.substring(11).trim();
+      continue;
+    }
+
+    if (pendingDate) {
+      pendingDescription += " " + line;
+    }
+  }
+
+  return transactions;
+}
+
 export function parseTransactions(rawText: string): ParsedTransaction[] {
   const format = detectBankFormat(rawText);
   if (format === "fidelity") {
@@ -263,6 +313,9 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
   }
   if (format === "moniepoint") {
     return parseMoniePointTransactions(rawText);
+  }
+  if (format === "zenith") {
+    return parseZenithTransactions(rawText);
   }
 
   const columnOrder = detectColumnOrder(rawText);
