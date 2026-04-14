@@ -139,7 +139,6 @@ function parseFidelityTransactions(rawText: string): ParsedTransaction[] {
   });
 }
 
-// ─── OUTGOING KEYWORD FILTER ─────────────────────────────────────────────────
 const OUTGOING_KEYWORDS = [
   "trf to", "transfer to", "payment to",
   "w/d", "withdrawal", "charge", "charges", "levy",
@@ -156,8 +155,7 @@ function isOutgoingRow(description: string): boolean {
   return false;
 }
 
-// ─── COLUMN ORDER DETECTION ───────────────────────────────────────────────────
-// Returns "dcb" (Debit before Credit) or "cdb" (Credit before Debit) or null
+// Returns "dcb" (Debit left of Credit) or "cdb" (Credit left of Debit) or null
 type ColumnOrder = "dcb" | "cdb" | null;
 
 function detectColumnOrder(rawText: string): ColumnOrder {
@@ -170,34 +168,26 @@ function detectColumnOrder(rawText: string): ColumnOrder {
   return null;
 }
 
-// ─── CREDIT AMOUNT RESOLVER ───────────────────────────────────────────────────
 function resolveCreditAmount(parsedAmounts: number[], columnOrder: ColumnOrder): number {
   const len = parsedAmounts.length;
   if (len === 0) return 0;
 
-  // PATH A: column order known from header
   if (columnOrder !== null && len >= 3) {
     const debit   = columnOrder === "dcb" ? parsedAmounts[len - 3] : parsedAmounts[len - 2];
     const credit  = columnOrder === "dcb" ? parsedAmounts[len - 2] : parsedAmounts[len - 3];
     const balance = parsedAmounts[len - 1];
-    if (debit > 0)          return 0; // money went out
-    if (credit === 0)       return 0; // nothing came in
-    if (credit === balance) return 0; // balance leaked into credit column
+    if (debit > 0 || credit === 0 || credit === balance) return 0;
     return credit;
   }
 
-  // PATH B: no header — assume [..., debit, credit, balance]
   if (len >= 3) {
     const debit   = parsedAmounts[len - 3];
     const credit  = parsedAmounts[len - 2];
     const balance = parsedAmounts[len - 1];
-    if (debit > 0)          return 0;
-    if (credit === 0)       return 0;
-    if (credit === balance) return 0; // balance leak guard
+    if (debit > 0 || credit === 0 || credit === balance) return 0;
     return credit;
   }
 
-  // PATH C: 2 amounts — assume [credit, balance]; take the smaller
   if (len === 2) {
     const smaller = Math.min(...parsedAmounts);
     const larger  = Math.max(...parsedAmounts);
@@ -205,7 +195,6 @@ function resolveCreditAmount(parsedAmounts: number[], columnOrder: ColumnOrder):
     return smaller;
   }
 
-  // PATH D: 1 amount — accept as credit (keyword filter already ran above)
   if (len === 1) {
     return parsedAmounts[0];
   }
@@ -213,7 +202,6 @@ function resolveCreditAmount(parsedAmounts: number[], columnOrder: ColumnOrder):
   return 0;
 }
 
-// ─── DESCRIPTION EXTRACTION ───────────────────────────────────────────────────
 function extractDescription(line: string): string {
   return line
     .replace(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g, "")
@@ -236,16 +224,13 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
     const line = rawLine.trim();
     if (!line) continue;
 
-    // Must contain at least one date
     const allDateMatches = [...line.matchAll(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g)];
     if (allDateMatches.length === 0) continue;
 
-    // Prefer second date (value date) when two dates appear on the line
     const chosenMatch = allDateMatches.length >= 2 ? allDateMatches[1] : allDateMatches[0];
     const normalizedDate = parseDateString(chosenMatch[0]);
     if (!normalizedDate) continue;
 
-    // Skip outgoing / debit rows
     if (isOutgoingRow(line)) continue;
 
     const rawAmounts = line.match(/[\d,]+\.\d{2}/g);
