@@ -168,7 +168,7 @@ function detectColumnOrder(rawText: string): ColumnOrder {
   return null;
 }
 
-function resolveCreditAmount(parsedAmounts: number[], columnOrder: ColumnOrder): number {
+function resolveCreditAmount(parsedAmounts: number[], columnOrder: ColumnOrder, rawLine = ""): number {
   const len = parsedAmounts.length;
   if (len === 0) return 0;
 
@@ -196,6 +196,7 @@ function resolveCreditAmount(parsedAmounts: number[], columnOrder: ColumnOrder):
   }
 
   if (len === 1) {
+    if (/debit|withdrawal|transfer out/i.test(rawLine)) return 0;
     return parsedAmounts[0];
   }
 
@@ -237,7 +238,7 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
     if (!rawAmounts || rawAmounts.length === 0) continue;
 
     const parsedAmounts = rawAmounts.map(a => parseFloat(a.replace(/,/g, "")));
-    const credit = resolveCreditAmount(parsedAmounts, columnOrder);
+    const credit = resolveCreditAmount(parsedAmounts, columnOrder, line);
     if (credit <= 0) continue;
 
     const description = extractDescription(line);
