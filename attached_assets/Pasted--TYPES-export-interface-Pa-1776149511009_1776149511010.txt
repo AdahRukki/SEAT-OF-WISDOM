@@ -1,0 +1,207 @@
+// ─── TYPES ──────────────────────────────────────────────────────────────────
+export interface ParsedTransaction {
+  date: string;
+  description: string;
+  credit: number;
+  rawLine: string;
+}
+
+// ─── OUTGOING KEYWORD FILTER ─────────────────────────────────────────────────
+// Any line whose narration matches one of these is money going OUT — skip it.
+const OUTGOING_KEYWORDS = [
+  "trf to",
+  "transfer to",
+  "payment to",
+  "w/d",
+  "withdrawal",
+  "charge",
+  "charges",
+  "levy",
+  "stamp duty",
+  "vat on",
+  "sms alert",
+  "maintenance fee",
+  "card maintenance",
+  "commission on turnover",
+  "cot",
+  "interbank transfer",
+  "airtime purchase",
+  "bill payment",
+  "ussd",
+];
+
+function isOutgoingRow(description: string): boolean {
+  const lower = description.toLowerCase();
+  if (OUTGOING_KEYWORDS.some((kw) => lower.includes(kw))) return true;
+
+  // Trailing DR / DBT indicator — strip amounts first so the end-of-string check works
+  const withoutAmounts = description.replace(/[\d,]+\.\d{2}/g, "").trim();
+  if (/\b(dr|dbt)\b\s*$/i.test(withoutAmounts)) return true;
+
+  return false;
+}
+
+// ─── COLUMN ORDER DETECTION ───────────────────────────────────────────────────
+// Reads the header line to learn whether Debit comes before or after Credit.
+// Returns "dcb"  → amounts are ordered  [Debit, Credit, Balance]
+// Returns "cdb"  → amounts are ordered  [Credit, Debit, Balance]
+// Returns null   → no recognisable header found; fall back to Path B heuristics.
+type ColumnOrder = "dcb" | "cdb" | null;
+
+function detectColumnOrder(rawText: string): ColumnOrder {
+  for (const line of rawText.split("\n")) {
+    const lower = line.toLowerCase();
+    if (lower.includes("debit") && lower.includes("credit")) {
+      const debitIdx  = lower.indexOf("debit");
+      const creditIdx = lower.indexOf("credit");
+      return debitIdx < creditIdx ? "dcb" : "cdb";
+    }
+  }
+  return null;
+}
+
+// ─── DATE PARSING ─────────────────────────────────────────────────────────────
+const MONTH_MAP: Record<string, string> = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+};
+
+function parseDateString(raw: string): string | null {
+  // Numeric: DD/MM/YYYY or DD-MM-YYYY or DD/MM/YY
+  const numericMatch = raw.match(/^(\d{1,2})[\/\-](\d{2})[\/\-](\d{2,4})$/);
+  if (numericMatch) {
+    const [, d, m, y] = numericMatch;
+    const year = y.length === 2 ? `20${y}` : y;
+    return `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // Alpha month: DD-Mon-YYYY or DD/Mon/YY
+  const alphaMatch = raw.match(/^(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})$/);
+  if (alphaMatch) {
+    const [, d, mon, y] = alphaMatch;
+    const month = MONTH_MAP[mon.toLowerCase()];
+    if (!month) return null;
+    const year = y.length === 2 ? `20${y}` : y;
+    return `${year}-${month}-${d.padStart(2, "0")}`;
+  }
+
+  return null;
+}
+
+// ─── DESCRIPTION EXTRACTION ───────────────────────────────────────────────────
+// Strips dates and amounts from a line, leaving just the narration text.
+function extractDescription(line: string): string {
+  return line
+    .replace(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g, "")
+    .replace(/[\d,]+\.\d{2}/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// ─── CREDIT AMOUNT RESOLVER ───────────────────────────────────────────────────
+// Given the parsed amounts on a line and the column order, returns the credit
+// value — or 0 if this row should be skipped (debit / balance leak / zero credit).
+function resolveCreditAmount(
+  parsedAmounts: number[],
+  columnOrder: ColumnOrder
+): number {
+  const len = parsedAmounts.length;
+  if (len === 0) return 0;
+
+  // ── PATH A: we know the column order from the header ──
+  if (columnOrder !== null && len >= 3) {
+    const debit   = columnOrder === "dcb" ? parsedAmounts[len - 3] : parsedAmounts[len - 2];
+    const credit  = columnOrder === "dcb" ? parsedAmounts[len - 2] : parsedAmounts[len - 3];
+    const balance = parsedAmounts[len - 1];
+
+    if (debit > 0)         return 0; // money went out
+    if (credit === 0)      return 0; // nothing came in
+    if (credit === balance) return 0; // balance leaked into credit column
+    return credit;
+  }
+
+  // ── PATH B: no header — assume [..., debit, credit, balance] ──
+  if (len >= 3) {
+    const debit   = parsedAmounts[len - 3];
+    const credit  = parsedAmounts[len - 2];
+    const balance = parsedAmounts[len - 1];
+
+    if (debit > 0)         return 0; // outgoing transfer
+    if (credit === 0)      return 0; // zero credit
+    if (credit === balance) return 0; // balance leaked into credit slot
+    return credit;
+  }
+
+  // ── PATH C: 2 amounts — assume [credit, balance] ──
+  // Take the smaller; the balance is almost always the larger.
+  if (len === 2) {
+    const smaller = Math.min(...parsedAmounts);
+    const larger  = Math.max(...parsedAmounts);
+    // Sanity: if they're equal, we can't distinguish — skip.
+    if (smaller === larger) return 0;
+    return smaller;
+  }
+
+  // ── PATH D: 1 amount — only accept if line has no debit indicators ──
+  if (len === 1) {
+    const isDebit = /debit|withdrawal|transfer out/i.test("");
+    // isOutgoingRow already filtered keyword-based debits above; this is a
+    // last-resort guard for lines with a single amount and no other context.
+    return isDebit ? 0 : parsedAmounts[0];
+  }
+
+  return 0;
+}
+
+// ─── MAIN PARSER ─────────────────────────────────────────────────────────────
+export function parseTransactions(rawText: string): ParsedTransaction[] {
+  const results: ParsedTransaction[] = [];
+
+  // Detect column order once for the whole document
+  const columnOrder = detectColumnOrder(rawText);
+
+  for (const rawLine of rawText.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // ── 1. Line must contain at least one date ──
+    const allDateMatches = [
+      ...line.matchAll(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g),
+    ];
+    if (allDateMatches.length === 0) continue;
+
+    // If two dates exist (value date + transaction date), prefer the second
+    const chosenDateRaw =
+      allDateMatches.length >= 2
+        ? allDateMatches[1][0]
+        : allDateMatches[0][0];
+
+    const normalizedDate = parseDateString(chosenDateRaw);
+    if (!normalizedDate) continue;
+
+    // ── 2. Skip outgoing / debit rows by narration keywords ──
+    if (isOutgoingRow(line)) continue;
+
+    // ── 3. Extract all monetary amounts from the line ──
+    const rawAmounts = line.match(/[\d,]+\.\d{2}/g);
+    if (!rawAmounts || rawAmounts.length === 0) continue;
+
+    const parsedAmounts = rawAmounts.map((a) => parseFloat(a.replace(/,/g, "")));
+
+    // ── 4. Resolve the credit amount using column-aware logic ──
+    const credit = resolveCreditAmount(parsedAmounts, columnOrder);
+    if (credit <= 0) continue;
+
+    // ── 5. Build the description ──
+    const description = extractDescription(line);
+
+    results.push({
+      date: normalizedDate,
+      description,
+      credit,
+      rawLine: rawLine, // keep original for admin review / audit trail
+    });
+  }
+
+  return results;
+}
