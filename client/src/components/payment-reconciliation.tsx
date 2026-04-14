@@ -389,19 +389,30 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const findSuggestedMatch = (payment: FeePaymentRecordWithDetails): { transaction: BankTransaction | null; confidence: number; reasons: string[] } => {
     const paymentAmount = parseFloat(payment.amount);
     const paymentDate = new Date(payment.paymentDate);
+    const paymentYear = paymentDate.getFullYear();
+    const paymentMonth = paymentDate.getMonth();
+    const paymentDay = paymentDate.getDate();
+
+    // Gate: only consider transactions from the exact same calendar day
+    const sameDayCandidates = unmatchedTransactions.filter((t) => {
+      const txDate = new Date(t.transactionDate);
+      return (
+        txDate.getFullYear() === paymentYear &&
+        txDate.getMonth() === paymentMonth &&
+        txDate.getDate() === paymentDay
+      );
+    });
+
+    if (sameDayCandidates.length === 0) {
+      return { transaction: null, confidence: 0, reasons: [] };
+    }
     
     let bestMatch: BankTransaction | null = null;
     let bestScore = 0;
     let matchReasons: string[] = [];
 
-    for (const tx of unmatchedTransactions) {
+    for (const tx of sameDayCandidates) {
       const txAmount = parseFloat(tx.amount);
-      const txDate = new Date(tx.transactionDate);
-
-      // Hard date gate: only consider transactions within 1 day of the payment date
-      const dayDiff = Math.abs((txDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (dayDiff > 1) continue;
-
       let score = 0;
       const reasons: string[] = [];
 
@@ -411,14 +422,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         reasons.push("Exact amount");
       }
 
-      // Same day match (30 points)
-      if (dayDiff < 1) {
-        score += 30;
-        reasons.push("Same day");
-      } else {
-        score += 15;
-        reasons.push("Within 1 day");
-      }
+      // Same day (always true for candidates — award points)
+      score += 30;
+      reasons.push("Same day");
 
       // Depositor name — tiered scoring (only highest tier fires)
       const depositorName = (payment.depositorName || '').toLowerCase().trim();
