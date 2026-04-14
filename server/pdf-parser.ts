@@ -247,7 +247,7 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
     transactions.push({
       date: normalizedDate,
       credit,
-      rawDescription: description,
+      rawDescription: line,
       fingerprint,
     });
   }
