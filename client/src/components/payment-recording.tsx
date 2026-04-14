@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Card,
   CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -51,6 +54,8 @@ import {
   Search,
   Wifi,
   WifiOff,
+  AlertCircle,
+  CheckCircle,
   Clock,
   RefreshCw,
   Loader2,
@@ -66,12 +71,6 @@ type RecordPaymentForm = z.infer<typeof recordFeePaymentSchema>;
 
 const commonFieldsSchema = recordFeePaymentSchema.omit({ studentId: true, amount: true });
 type CommonFields = z.infer<typeof commonFieldsSchema>;
-
-const METHOD_LABELS: Record<string, string> = {
-  transfer: "Bank Transfer",
-  pos: "POS",
-  cash: "Cash",
-};
 
 interface Student {
   id: string;
@@ -93,7 +92,6 @@ interface SchoolClass {
 
 interface SelectedStudentEntry {
   student: Student;
-  amount: number;
 }
 
 interface PaymentRecordingProps {
@@ -124,20 +122,10 @@ export function PaymentRecording({
   const [dateTo, setDateTo] = useState("");
   const [nameSearch, setNameSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [filterTerm, setFilterTerm] = useState<string>(currentTerm || "");
-  const [filterSession, setFilterSession] = useState<string>(currentSession || "");
   const PAGE_SIZE = 25;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (currentTerm) setFilterTerm(currentTerm);
-  }, [currentTerm]);
-
-  useEffect(() => {
-    if (currentSession) setFilterSession(currentSession);
-  }, [currentSession]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -148,11 +136,7 @@ export function PaymentRecording({
 
     const saved = localStorage.getItem("pendingPayments");
     if (saved) {
-      const loaded = JSON.parse(saved);
-      setPendingPayments(loaded);
-      if (navigator.onLine && loaded.length > 0) {
-        syncPendingPayments();
-      }
+      setPendingPayments(JSON.parse(saved));
     }
 
     return () => {
@@ -171,12 +155,12 @@ export function PaymentRecording({
     }
   }, [isOnline]);
 
-  const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string }[]>({
-    queryKey: ["/api/admin/academic-sessions"],
+  const { data: academicSessions = [] } = useQuery<{ id: number; name: string }[]>({
+    queryKey: ["/api/student/academic-sessions"],
   });
 
   const sessionOptions: string[] = academicSessions.length > 0
-    ? academicSessions.map((s) => s.sessionYear)
+    ? academicSessions.map((s) => s.name)
     : (() => {
         const base = currentSession
           ? parseInt(currentSession.split("/")[0]) || new Date().getFullYear()
@@ -232,22 +216,18 @@ export function PaymentRecording({
     enabled: !!tuitionFeeType?.id,
   });
 
-  // Fix #1: memoize so the Map reference is stable across renders
-  const tuitionAmountMap = useMemo(
-    () => new Map(tuitionAmounts.map((ta: any) => [ta.classId, Number(ta.amount)])),
-    [tuitionAmounts]
-  );
+  const tuitionAmountMap = new Map(tuitionAmounts.map((ta: any) => [ta.classId, Number(ta.amount)]));
 
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
-    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, filterTerm, filterSession],
+    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, currentTerm, currentSession],
     queryFn: async () => {
       let url = "/api/payments/records?";
       if (schoolId) url += `schoolId=${schoolId}&`;
       if (statusFilter && statusFilter !== "all") url += `status=${statusFilter}&`;
       if (dateFrom) url += `startDate=${dateFrom}&`;
       if (dateTo) url += `endDate=${dateTo}&`;
-      if (filterTerm) url += `term=${encodeURIComponent(filterTerm)}&`;
-      if (filterSession) url += `session=${encodeURIComponent(filterSession)}&`;
+      if (currentTerm) url += `term=${encodeURIComponent(currentTerm)}&`;
+      if (currentSession) url += `session=${encodeURIComponent(currentSession)}&`;
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
       if (token) {
@@ -311,28 +291,23 @@ export function PaymentRecording({
   };
 
   const currentPurpose = form.watch("purpose");
-
-  // Fix #1b: only overwrite amounts that are still 0 (preserve user-typed values)
   useEffect(() => {
     if (!currentPurpose || selectedEntries.length === 0) return;
     const matchedFee = feeTypesData.find(ft => ft.name === currentPurpose);
     if (matchedFee?.isTuition) {
-      setSelectedEntries(prev => prev.map(e => {
-        if (e.amount > 0) return e;
-        const rate = e.student.classId ? (tuitionAmountMap.get(e.student.classId) || 0) : 0;
-        return { ...e, amount: rate };
-      }));
-      const sum = selectedEntries.reduce((acc, e) => {
-        return acc + (tuitionAmountMap.get(e.student.classId || '') || 0);
-      }, 0);
+      let sum = 0;
+      for (const entry of selectedEntries) {
+        const classId = entry.student.classId;
+        if (classId) sum += tuitionAmountMap.get(classId) || 0;
+      }
       if (sum > 0) setTotalAmount(sum);
     }
-  }, [selectedEntries.length, currentPurpose, feeTypesData, tuitionAmountMap]);
+  }, [selectedEntries, currentPurpose, feeTypesData, tuitionAmountMap]);
 
-  // Allocation tally
+  // Compute per-student share from shared total amount
   const studentCount = selectedEntries.length;
-  const allocatedTotal = selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const unallocated = totalAmount - allocatedTotal;
+  const perStudentBase = studentCount > 0 ? Math.floor(totalAmount / studentCount) : 0;
+  const remainder = studentCount > 0 ? totalAmount - perStudentBase * studentCount : 0;
 
   const onSubmit = async (commonData: CommonFields) => {
     if (selectedEntries.length === 0) {
@@ -353,47 +328,23 @@ export function PaymentRecording({
       return;
     }
 
-    // Fix #5: validate custom purpose description
-    if (commonData.purpose === "Other" && !customPurpose.trim()) {
+    if (studentCount > 1 && totalAmount < studentCount) {
       toast({
-        title: "Purpose Required",
-        description: 'Please describe the payment purpose when selecting "Other".',
+        title: "Amount Too Low",
+        description: `Total amount must be at least ₦${studentCount} when splitting across ${studentCount} students.`,
         variant: "destructive",
       });
       return;
     }
 
-    // Fix #2: skip per-student amount checks for single student
-    if (studentCount > 1) {
-      const hasZeroAmount = selectedEntries.some(e => !e.amount || e.amount <= 0);
-      if (hasZeroAmount) {
-        toast({
-          title: "Missing Amount",
-          description: "Please enter an amount for each student.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (allocatedTotal !== totalAmount) {
-        toast({
-          title: "Allocation Mismatch",
-          description: `Allocated amounts (₦${allocatedTotal.toLocaleString()}) do not match the total (₦${totalAmount.toLocaleString()}).`,
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    const resolvedPurpose = commonData.purpose === "Other" ? customPurpose.trim() : commonData.purpose;
+    const resolvedPurpose = commonData.purpose === "Other" ? (customPurpose.trim() || "Other") : commonData.purpose;
     const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
 
     if (!isOnline) {
-      // Fix #2d: single student uses totalAmount directly
-      const offlinePayments = selectedEntries.map((entry) => ({
+      const offlinePayments = selectedEntries.map((entry, idx) => ({
         ...dataWithPurpose,
         studentId: entry.student.id,
-        amount: studentCount === 1 ? totalAmount : entry.amount,
+        amount: idx === 0 ? perStudentBase + remainder : perStudentBase,
         offlineId: `offline_${Date.now()}_${entry.student.id}`,
         createdAt: new Date().toISOString(),
       }));
@@ -412,8 +363,7 @@ export function PaymentRecording({
 
     for (let idx = 0; idx < selectedEntries.length; idx++) {
       const entry = selectedEntries[idx];
-      // Fix #2c: single student uses totalAmount directly
-      const entryAmount = studentCount === 1 ? totalAmount : entry.amount;
+      const entryAmount = idx === 0 ? perStudentBase + remainder : perStudentBase;
       try {
         await recordPaymentMutation.mutateAsync({
           ...dataWithPurpose,
@@ -467,14 +417,8 @@ export function PaymentRecording({
 
   const addStudent = (student: Student) => {
     if (selectedEntries.some((e) => e.student.id === student.id)) return;
-    setSelectedEntries([...selectedEntries, { student, amount: 0 }]);
+    setSelectedEntries([...selectedEntries, { student }]);
     setSearchQuery("");
-  };
-
-  const updateStudentAmount = (studentId: string, amount: number) => {
-    setSelectedEntries(prev =>
-      prev.map(e => e.student.id === studentId ? { ...e, amount } : e)
-    );
   };
 
   const removeStudent = (studentId: string) => {
@@ -539,16 +483,6 @@ export function PaymentRecording({
     }
   };
 
-  // Fix #6: safe date formatter that avoids timezone off-by-one
-  const formatPaymentDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "N/A";
-    return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -586,9 +520,8 @@ export function PaymentRecording({
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
-                {/* UX #1: description matches actual form order */}
                 <DialogDescription>
-                  Add students, select a purpose, then confirm the amount(s).
+                  Enter the total amount, search and add students — it will be split equally. Fill in the shared payment details below.
                 </DialogDescription>
               </DialogHeader>
 
@@ -599,8 +532,7 @@ export function PaymentRecording({
                   <div className="space-y-2">
                     <Label>Add Students</Label>
                     <div className="flex gap-2">
-                      {/* UX #4: clear search when switching class filter */}
-                      <Select value={classFilter} onValueChange={(v) => { setClassFilter(v); setSearchQuery(""); }}>
+                      <Select value={classFilter} onValueChange={setClassFilter}>
                         <SelectTrigger className="w-[160px] flex-shrink-0" aria-label="Filter by class">
                           <SelectValue placeholder="All Classes" />
                         </SelectTrigger>
@@ -628,76 +560,29 @@ export function PaymentRecording({
                         ) : filteredStudents.length === 0 ? (
                           <div className="p-4 text-center text-muted-foreground">No students found</div>
                         ) : (
-                          <>
-                            {/* UX #2: show hint when results are capped */}
-                            {filteredStudents.length > 10 && (
-                              <div className="px-3 py-1.5 text-xs text-muted-foreground border-b bg-muted/30 sticky top-0">
-                                Showing 10 of {filteredStudents.length} — type a name to narrow down
-                              </div>
-                            )}
-                            {filteredStudents.slice(0, 10).map((student) => (
-                              <div
-                                key={student.id}
-                                className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0 flex items-center justify-between"
-                                onClick={() => addStudent(student)}
-                              >
-                                <div>
-                                  <div className="font-medium text-sm">
-                                    {student.user?.lastName || student.lastName} {student.user?.firstName || student.firstName}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    ID: {student.studentId} | {student.className || "N/A"}
-                                  </div>
+                          filteredStudents.slice(0, 10).map((student) => (
+                            <div
+                              key={student.id}
+                              className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0 flex items-center justify-between"
+                              onClick={() => addStudent(student)}
+                            >
+                              <div>
+                                <div className="font-medium text-sm">
+                                  {student.user?.lastName || student.lastName} {student.user?.firstName || student.firstName}
                                 </div>
-                                <Plus className="h-4 w-4 text-primary flex-shrink-0" />
+                                <div className="text-xs text-muted-foreground">
+                                  ID: {student.studentId} | {student.className || "N/A"}
+                                </div>
                               </div>
-                            ))}
-                          </>
+                              <Plus className="h-4 w-4 text-primary flex-shrink-0" />
+                            </div>
+                          ))
                         )}
                       </div>
                     )}
                   </div>
 
-                  {/* UX #1: Purpose moved above Total Amount so tuition auto-fill is immediately visible */}
-                  <FormField
-                    control={form.control}
-                    name="purpose"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Purpose</FormLabel>
-                        <Select onValueChange={(val) => {
-                          field.onChange(val);
-                          if (val !== "Other") setCustomPurpose("");
-                        }} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="What is this payment for?" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {feeTypesData.filter(ft => ft.isActive).map((ft) => (
-                              <SelectItem key={ft.id} value={ft.name}>
-                                {ft.name}{ft.isTuition ? " (Tuition)" : ""}
-                              </SelectItem>
-                            ))}
-                            <SelectItem value="Other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {field.value === "Other" && (
-                          <Input
-                            placeholder="Describe the payment purpose..."
-                            value={customPurpose}
-                            onChange={(e) => setCustomPurpose(e.target.value.slice(0, 100))}
-                            maxLength={100}
-                            className="mt-2"
-                          />
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Total Amount */}
+                  {/* Total Amount (shared across all selected students) */}
                   <div className="space-y-2">
                     <Label>Total Amount (₦)</Label>
                     <div className="relative">
@@ -708,10 +593,20 @@ export function PaymentRecording({
                         className="pl-7"
                         value={totalAmount || ""}
                         onChange={(e) => setTotalAmount(parseFloat(e.target.value) || 0)}
-                        onFocus={(e) => e.target.select()}
                         min={0}
                       />
                     </div>
+                    {studentCount > 1 && totalAmount > 0 && totalAmount < studentCount && (
+                      <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
+                        Amount too low to split across {studentCount} students — minimum ₦{studentCount}.
+                      </div>
+                    )}
+                    {studentCount > 1 && totalAmount >= studentCount && totalAmount > 0 && (
+                      <div className="text-xs text-muted-foreground bg-muted rounded p-2">
+                        ₦{totalAmount.toLocaleString()} ÷ {studentCount} students = ₦{perStudentBase.toLocaleString()} each
+                        {remainder > 0 && ` (₦${remainder} added to first student)`}
+                      </div>
+                    )}
                   </div>
 
                   {/* Selected Students List */}
@@ -725,63 +620,38 @@ export function PaymentRecording({
                         )}
                       </div>
                       <div className="border rounded-md divide-y">
-                        {selectedEntries.map((entry) => (
-                          <div key={entry.student.id} className="p-3 flex items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm truncate">
-                                {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {entry.student.studentId} | {entry.student.className || "N/A"}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {/* Fix #2a: single student shows read-only amount from totalAmount */}
-                              {studentCount === 1 ? (
-                                <span className="text-sm font-medium w-28 text-right pr-2">
-                                  {totalAmount > 0 ? `₦${totalAmount.toLocaleString()}` : "—"}
-                                </span>
-                              ) : (
-                                <div className="relative w-28">
-                                  <span className="absolute left-2.5 top-2 text-sm text-muted-foreground">₦</span>
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    className="pl-6 h-8 text-sm"
-                                    value={entry.amount || ""}
-                                    onChange={(e) => updateStudentAmount(entry.student.id, parseFloat(e.target.value) || 0)}
-                                    onFocus={(e) => e.target.select()}
-                                  />
+                        {selectedEntries.map((entry, idx) => {
+                          const share = idx === 0 ? perStudentBase + remainder : perStudentBase;
+                          return (
+                            <div key={entry.student.id} className="p-3 flex items-center gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm truncate">
+                                  {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
                                 </div>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 text-muted-foreground hover:text-red-500"
-                                onClick={() => removeStudent(entry.student.id)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
+                                <div className="text-xs text-muted-foreground">
+                                  {entry.student.studentId} | {entry.student.className || "N/A"}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {totalAmount > 0 && (
+                                  <span className="text-sm font-medium text-muted-foreground w-28 text-right">
+                                    ₦{share.toLocaleString()}
+                                  </span>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-muted-foreground hover:text-red-500"
+                                  onClick={() => removeStudent(entry.student.id)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                      {/* Fix #2b: hide allocation strip for single student */}
-                      {totalAmount > 0 && studentCount > 1 && (
-                        <div className={`text-xs rounded p-2 ${
-                          unallocated === 0
-                            ? "bg-green-50 text-green-700 border border-green-200"
-                            : unallocated > 0
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : "bg-red-50 text-red-700 border border-red-200"
-                        }`}>
-                          ₦{allocatedTotal.toLocaleString()} allocated of ₦{totalAmount.toLocaleString()} total
-                          {unallocated > 0 && ` — ₦${unallocated.toLocaleString()} remaining`}
-                          {unallocated < 0 && ` — ₦${Math.abs(unallocated).toLocaleString()} over total`}
-                          {unallocated === 0 && " ✓ Fully allocated"}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -877,6 +747,44 @@ export function PaymentRecording({
 
                   <FormField
                     control={form.control}
+                    name="purpose"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Purpose</FormLabel>
+                        <Select onValueChange={(val) => {
+                          field.onChange(val);
+                          if (val !== "Other") setCustomPurpose("");
+                        }} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="What is this payment for?" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {feeTypesData.filter(ft => ft.isActive).map((ft) => (
+                              <SelectItem key={ft.id} value={ft.name}>
+                                {ft.name}{ft.isTuition ? " (Tuition)" : ""}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {field.value === "Other" && (
+                          <Input
+                            placeholder="Describe the payment purpose..."
+                            value={customPurpose}
+                            onChange={(e) => setCustomPurpose(e.target.value.slice(0, 100))}
+                            maxLength={100}
+                            className="mt-2"
+                          />
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="depositorName"
                     render={({ field }) => (
                       <FormItem>
@@ -957,34 +865,6 @@ export function PaymentRecording({
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm">Term:</Label>
-            <Select value={filterTerm || "__all__"} onValueChange={(v) => { setFilterTerm(v === "__all__" ? "" : v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Terms" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Terms</SelectItem>
-                <SelectItem value="First Term">First Term</SelectItem>
-                <SelectItem value="Second Term">Second Term</SelectItem>
-                <SelectItem value="Third Term">Third Term</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm">Session:</Label>
-            <Select value={filterSession || "__all__"} onValueChange={(v) => { setFilterSession(v === "__all__" ? "" : v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="All Sessions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All Sessions</SelectItem>
-                {sessionOptions.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
             <Label className="whitespace-nowrap text-sm">Status:</Label>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[150px]">
@@ -1039,10 +919,25 @@ export function PaymentRecording({
         </div>
 
         {pendingPayments.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
-            {pendingPayments.length} offline payment(s) syncing when connected…
-          </div>
+          <Card className="border-orange-200 bg-orange-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                Pending Offline Payments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm text-muted-foreground mb-2">
+                {pendingPayments.length} payment(s) waiting to sync
+              </div>
+              {isOnline && (
+                <Button size="sm" variant="outline" onClick={syncPendingPayments}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Sync Now
+                </Button>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         <Card>
@@ -1067,36 +962,32 @@ export function PaymentRecording({
                   </TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Purpose</TableHead>
-                  {/* Fix #3: Method column now uses proper labels */}
                   <TableHead>Method</TableHead>
-                  {/* Fix #4: Reference column added */}
-                  <TableHead>Reference</TableHead>
                   <TableHead>Term/Session</TableHead>
                   <TableHead>Status</TableHead>
-                  {/* UX #5: Depositor in own column */}
-                  <TableHead>Depositor</TableHead>
                   <TableHead>Recorded By</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recordsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : totalRecords === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No payment records found
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedRecords.map((record) => (
                     <TableRow key={record.id}>
-                      {/* Fix #6: date parsed with local-time anchor to avoid off-by-one */}
                       <TableCell className="text-sm">
-                        {formatPaymentDate(record.paymentDate)}
+                        {record.paymentDate
+                          ? new Date(record.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                          : "N/A"}
                       </TableCell>
                       <TableCell>
                         <div className="font-medium text-sm">
@@ -1105,6 +996,11 @@ export function PaymentRecording({
                         <div className="text-xs text-muted-foreground">
                           {record.student?.studentId}
                         </div>
+                        {record.depositorName && (
+                          <div className="text-xs text-blue-600 mt-0.5">
+                            via {record.depositorName}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {record.student?.class?.name || <span className="text-muted-foreground">—</span>}
@@ -1115,28 +1011,15 @@ export function PaymentRecording({
                       <TableCell className="text-sm">
                         {record.purpose || <span className="text-muted-foreground">—</span>}
                       </TableCell>
-                      {/* Fix #3: use METHOD_LABELS lookup instead of CSS capitalize */}
-                      <TableCell className="text-sm">
-                        {METHOD_LABELS[record.paymentMethod] ?? record.paymentMethod}
-                      </TableCell>
-                      {/* Fix #4: reference column */}
-                      <TableCell className="text-sm text-muted-foreground font-mono">
-                        {record.reference || <span className="not-italic font-sans">—</span>}
+                      <TableCell className="capitalize text-sm">
+                        {record.paymentMethod}
                       </TableCell>
                       <TableCell className="text-sm">
                         {record.term} / {record.session}
                       </TableCell>
                       <TableCell>{getStatusBadge(record.status)}</TableCell>
-                      {/* UX #5: depositor moved from Student cell to own column */}
                       <TableCell className="text-sm text-muted-foreground">
-                        {record.depositorName || <span>—</span>}
-                      </TableCell>
-                      {/* UX #6: fallback for missing recorded-by user */}
-                      <TableCell className="text-sm text-muted-foreground">
-                        {record.recordedByUser
-                          ? `${record.recordedByUser.firstName} ${record.recordedByUser.lastName}`.trim()
-                          : <span>—</span>
-                        }
+                        {record.recordedByUser?.firstName} {record.recordedByUser?.lastName}
                       </TableCell>
                     </TableRow>
                   ))

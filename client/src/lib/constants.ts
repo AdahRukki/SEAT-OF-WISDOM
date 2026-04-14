@@ -1,1 +1,1 @@
-export const SW_CACHE_NAME = 'sowa-v5';
+export const SW_CACHE_NAME = 'sowa-v4';

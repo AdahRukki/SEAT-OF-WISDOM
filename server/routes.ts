@@ -476,7 +476,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Academic Sessions and Terms Management
-  app.get('/api/admin/academic-sessions', authenticate, requireBursarOrAdmin, async (req, res) => {
+  app.get('/api/admin/academic-sessions', authenticate, requireAdmin, async (req, res) => {
     try {
       const sessions = await storage.getAcademicSessions();
       res.json(sessions);
