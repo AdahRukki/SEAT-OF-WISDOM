@@ -240,12 +240,16 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
     const narrationStart = dateMatch[4].trim();
     i++;
 
-    // Scan forward up to 6 lines for the amounts line
+    // Scan forward up to 6 lines for the amounts line; track the first non-date line
+    // as a fallback narration source for edge cases where narrationStart is empty
     let amountsMatch: RegExpMatchArray | null = null;
+    let fallbackNarration = "";
     let lookahead = 0;
     while (lookahead < 6 && i + lookahead < lines.length) {
-      const m = lines[i + lookahead].match(amountsLineRegex);
+      const candidate = lines[i + lookahead];
+      const m = candidate.match(amountsLineRegex);
       if (m) { amountsMatch = m; i += lookahead + 1; break; }
+      if (!fallbackNarration && lookahead === 0) fallbackNarration = candidate.trim();
       lookahead++;
     }
     if (!amountsMatch) continue;
@@ -255,7 +259,8 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
 
     if (debit > 0 || credit <= 0) continue;
 
-    const desc = narrationStart || lines[i - 1].trim();
+    // Prefer narration from the date line; fall back to the first subsequent line
+    const desc = narrationStart || fallbackNarration;
     const fingerprint = generateFingerprint(formattedDate, credit, desc);
     transactions.push({ date: formattedDate, credit, rawDescription: desc, fingerprint });
   }
@@ -324,7 +329,7 @@ function parseAccessTransactions(rawText: string): ParsedTransaction[] {
   const dateStartRegex = /^\d{2}-[A-Za-z]{3}-\d{2}\s+\d{2}-[A-Za-z]{3}-\d{2}/;
   // Continuation: 10+ spaces before first non-space character
   const continuationRegex = /^\s{10,}\S/;
-  const skipRegex = /^(opening balance|closing balance|total withdrawal|total lodgement|transactions|posted date|cleared balance|uncleared balance|currency|account name|account class|account number|branch address|financial summary|account details|statement period|debit \(ngn\)|credit \(ngn\)|balance \(ngn\))/i;
+  const skipRegex = /^(opening balance|closing balance|clearing balance|total withdrawal|total lodgement|transactions|posted date|cleared balance|uncleared balance|currency|account name|account class|account number|branch address|financial summary|account details|statement period|debit \(ngn\)|credit \(ngn\)|balance \(ngn\))/i;
 
   interface Pending { date: string; desc: string; debit: number; credit: number; }
   let pending: Pending | null = null;
