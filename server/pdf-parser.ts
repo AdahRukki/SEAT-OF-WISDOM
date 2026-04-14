@@ -55,12 +55,13 @@ function parseDateString(raw: string): string | null {
   return null;
 }
 
-function detectBankFormat(rawText: string): "fidelity" | "generic" {
+function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "generic" {
   const lower = rawText.toLowerCase();
   if (lower.includes("fidelitybank") || lower.includes("fidelity bank") ||
       (lower.includes("pay in") && lower.includes("pay out") && lower.includes("balance"))) {
     return "fidelity";
   }
+  if (lower.includes("moniepoint")) return "moniepoint";
   return "generic";
 }
 
@@ -211,10 +212,57 @@ function extractDescription(line: string): string {
     .trim();
 }
 
+function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
+  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  const transactions: ParsedTransaction[] = [];
+
+  const dateLineRegex = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:$/;
+  const amountsLineRegex = /([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/;
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const dateMatch = line.match(dateLineRegex);
+    if (!dateMatch) { i++; continue; }
+
+    const formattedDate = `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
+    i++;
+    i++;
+
+    if (i >= lines.length) break;
+    const narration = lines[i];
+    i++;
+
+    if (i < lines.length && /\*{4,}/.test(lines[i])) i++;
+
+    if (i < lines.length && lines[i].startsWith("/")) i++;
+
+    if (i >= lines.length) break;
+    const amountsLine = lines[i];
+    i++;
+
+    const amountsMatch = amountsLine.match(amountsLineRegex);
+    if (!amountsMatch) continue;
+
+    const debit  = parseFloat(amountsMatch[1].replace(/,/g, ""));
+    const credit = parseFloat(amountsMatch[2].replace(/,/g, ""));
+
+    if (debit > 0 || credit <= 0) continue;
+
+    const fingerprint = generateFingerprint(formattedDate, credit, narration);
+    transactions.push({ date: formattedDate, credit, rawDescription: narration, fingerprint });
+  }
+
+  return transactions;
+}
+
 export function parseTransactions(rawText: string): ParsedTransaction[] {
   const format = detectBankFormat(rawText);
   if (format === "fidelity") {
     return parseFidelityTransactions(rawText);
+  }
+  if (format === "moniepoint") {
+    return parseMoniePointTransactions(rawText);
   }
 
   const columnOrder = detectColumnOrder(rawText);
