@@ -148,11 +148,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (navigator.onLine) {
         try {
-          const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-          });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+          let response: Response;
+          try {
+            response = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data),
+              signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+          } catch (fetchErr: any) {
+            clearTimeout(timeoutId);
+            const isNetworkError = fetchErr?.name === 'AbortError' || fetchErr?.name === 'TypeError';
+            if (isNetworkError) {
+              const offlineResult = await attemptOfflineLogin(data.email, data.password);
+              if (offlineResult) {
+                return { token: offlineResult.token, user: offlineResult.user, offlineMode: true };
+              }
+            }
+            throw fetchErr;
+          }
 
           if (!response.ok) {
             const error = await response.json();

@@ -150,6 +150,7 @@ export async function queuedApiRequest(
   }
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  // If definitely offline, queue immediately (non-GET only)
   if (!navigator.onLine) {
     if (method !== 'GET') {
       const op = enqueue(url, method, options?.body, operationType);
@@ -158,21 +159,41 @@ export async function queuedApiRequest(
     throw new Error('Offline: no cached data available');
   }
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: options?.body instanceof FormData
-      ? options.body
-      : options?.body ? JSON.stringify(options.body) : undefined,
-    credentials: 'include',
-  });
+  // navigator.onLine can lie (e.g. WiFi with no internet) — add a hard 8-second timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status}: ${text}`);
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: options?.body instanceof FormData
+        ? options.body
+        : options?.body ? JSON.stringify(options.body) : undefined,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text}`);
+    }
+
+    return res.json();
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+
+    // Network error or timeout — treat as offline for mutations
+    const isNetworkError = err?.name === 'AbortError' || err?.name === 'TypeError';
+    if (isNetworkError && method !== 'GET') {
+      const op = enqueue(url, method, options?.body, operationType);
+      return { queued: true, offlineId: op.id, message: 'Saved offline. Will sync when connected.' };
+    }
+
+    throw err;
   }
-
-  return res.json();
 }
 
 export function getOfflineStudents(): OfflineStudent[] {
