@@ -2,7 +2,6 @@ import * as XLSX from "xlsx";
 import * as crypto from "crypto";
 import { createRequire } from "module";
 
-// Use createRequire for pdf-parse (CommonJS module in ESM context)
 const require = createRequire(import.meta.url);
 const { PDFParse } = require("pdf-parse");
 
@@ -14,10 +13,8 @@ export interface ParsedTransaction {
 }
 
 export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  // pdf-parse v2 uses class-based API
   const parser = new PDFParse({ data: buffer });
   const result = await parser.getText();
-  
   if (!result.text || result.text.trim().length === 0) {
     throw new Error("Scanned PDF detected - cannot extract text. Please use a text-based PDF or convert to Excel.");
   }
@@ -25,10 +22,7 @@ export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 }
 
 export function normalizeForFingerprint(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 export function generateFingerprint(date: string, amount: number, description: string): string {
@@ -117,7 +111,6 @@ function parseFidelityTransactions(rawText: string): ParsedTransaction[] {
     if (dateMatch) {
       flushTransaction();
       const rest = line.substring(dateMatch[0].length).trim();
-      // Prefer the Value Date (second date on the line) over Transaction Date (first)
       const valueDateMatch = rest.match(/\d{1,2}-[A-Za-z]{3}-\d{2}/);
       currentDate = valueDateMatch ? valueDateMatch[0] : dateMatch[1];
       const restAfterValueDate = valueDateMatch
@@ -146,59 +139,87 @@ function parseFidelityTransactions(rawText: string): ParsedTransaction[] {
   });
 }
 
-// Outgoing-transfer keywords that indicate a debit/outgoing row
-const OUTGOING_KEYWORDS = ["trf to", "payment to", "transfer to"];
+// ─── OUTGOING KEYWORD FILTER ─────────────────────────────────────────────────
+const OUTGOING_KEYWORDS = [
+  "trf to", "transfer to", "payment to",
+  "w/d", "withdrawal", "charge", "charges", "levy",
+  "stamp duty", "vat on", "sms alert", "maintenance fee",
+  "card maintenance", "commission on turnover", "cot",
+  "interbank transfer", "airtime purchase", "bill payment", "ussd",
+];
 
 function isOutgoingRow(description: string): boolean {
   const lower = description.toLowerCase();
   if (OUTGOING_KEYWORDS.some(kw => lower.includes(kw))) return true;
-  // "DR" debit indicator may appear before trailing numeric columns (e.g. "SOME TRF DR 100.00 0.00 500.00").
-  // Strip all decimal amounts first so the end-of-string check still works.
   const withoutAmounts = description.replace(/[\d,]+\.\d{2}/g, "").trim();
-  if (/\bdr\s*$/i.test(withoutAmounts)) return true;
+  if (/\b(dr|dbt)\b\s*$/i.test(withoutAmounts)) return true;
   return false;
 }
 
-// Detect Debit/Credit/Balance column header positions from the raw PDF text
-function detectDebitCreditColumns(rawText: string): { debitPos: number; creditPos: number; balancePos: number } | null {
+// ─── COLUMN ORDER DETECTION ───────────────────────────────────────────────────
+// Returns "dcb" (Debit before Credit) or "cdb" (Credit before Debit) or null
+type ColumnOrder = "dcb" | "cdb" | null;
+
+function detectColumnOrder(rawText: string): ColumnOrder {
   for (const line of rawText.split("\n")) {
     const lower = line.toLowerCase();
     if (lower.includes("debit") && lower.includes("credit")) {
-      const debitPos = lower.indexOf("debit");
-      const creditPos = lower.indexOf("credit");
-      const balancePos = lower.indexOf("balance");
-      if (debitPos >= 0 && creditPos >= 0) {
-        return { debitPos, creditPos, balancePos: balancePos >= 0 ? balancePos : -1 };
-      }
+      return lower.indexOf("debit") < lower.indexOf("credit") ? "dcb" : "cdb";
     }
   }
   return null;
 }
 
-// Given a raw (untrimmed) line and column header positions, extract debit/credit/balance amounts
-// by finding each decimal number's character position and assigning it to the nearest column.
-function extractAmountsByColumnPosition(
-  rawLine: string,
-  cols: { debitPos: number; creditPos: number; balancePos: number }
-): { debit: number; credit: number; balance: number } {
-  const result = { debit: 0, credit: 0, balance: 0 };
-  const amountRegex = /[\d,]+\.\d{2}/g;
-  let m: RegExpExecArray | null;
-  while ((m = amountRegex.exec(rawLine)) !== null) {
-    const value = parseFloat(m[0].replace(/,/g, ""));
-    const pos = m.index + m[0].length / 2; // centre of the number string
-    const distDebit = Math.abs(pos - cols.debitPos);
-    const distCredit = Math.abs(pos - cols.creditPos);
-    const distBalance = cols.balancePos >= 0 ? Math.abs(pos - cols.balancePos) : Infinity;
-    if (distDebit <= distCredit && distDebit <= distBalance) {
-      result.debit = value;
-    } else if (distCredit <= distDebit && distCredit <= distBalance) {
-      result.credit = value;
-    } else {
-      result.balance = value;
-    }
+// ─── CREDIT AMOUNT RESOLVER ───────────────────────────────────────────────────
+function resolveCreditAmount(parsedAmounts: number[], columnOrder: ColumnOrder): number {
+  const len = parsedAmounts.length;
+  if (len === 0) return 0;
+
+  // PATH A: column order known from header
+  if (columnOrder !== null && len >= 3) {
+    const debit   = columnOrder === "dcb" ? parsedAmounts[len - 3] : parsedAmounts[len - 2];
+    const credit  = columnOrder === "dcb" ? parsedAmounts[len - 2] : parsedAmounts[len - 3];
+    const balance = parsedAmounts[len - 1];
+    if (debit > 0)          return 0; // money went out
+    if (credit === 0)       return 0; // nothing came in
+    if (credit === balance) return 0; // balance leaked into credit column
+    return credit;
   }
-  return result;
+
+  // PATH B: no header — assume [..., debit, credit, balance]
+  if (len >= 3) {
+    const debit   = parsedAmounts[len - 3];
+    const credit  = parsedAmounts[len - 2];
+    const balance = parsedAmounts[len - 1];
+    if (debit > 0)          return 0;
+    if (credit === 0)       return 0;
+    if (credit === balance) return 0; // balance leak guard
+    return credit;
+  }
+
+  // PATH C: 2 amounts — assume [credit, balance]; take the smaller
+  if (len === 2) {
+    const smaller = Math.min(...parsedAmounts);
+    const larger  = Math.max(...parsedAmounts);
+    if (smaller === larger) return 0;
+    return smaller;
+  }
+
+  // PATH D: 1 amount — accept as credit (keyword filter already ran above)
+  if (len === 1) {
+    return parsedAmounts[0];
+  }
+
+  return 0;
+}
+
+// ─── DESCRIPTION EXTRACTION ───────────────────────────────────────────────────
+function extractDescription(line: string): string {
+  return line
+    .replace(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g, "")
+    .replace(/[\d,]+\.\d{2}/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export function parseTransactions(rawText: string): ParsedTransaction[] {
@@ -207,9 +228,7 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
     return parseFidelityTransactions(rawText);
   }
 
-  // Detect column layout from header row (may be null for PDFs without explicit headers)
-  const colPositions = detectDebitCreditColumns(rawText);
-
+  const columnOrder = detectColumnOrder(rawText);
   const rawLines = rawText.split("\n");
   const transactions: ParsedTransaction[] = [];
 
@@ -217,63 +236,36 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
     const line = rawLine.trim();
     if (!line) continue;
 
-    // Find all date matches and use the second (Value Date) when present, else the first
+    // Must contain at least one date
     const allDateMatches = [...line.matchAll(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g)];
     if (allDateMatches.length === 0) continue;
 
+    // Prefer second date (value date) when two dates appear on the line
     const chosenMatch = allDateMatches.length >= 2 ? allDateMatches[1] : allDateMatches[0];
     const normalizedDate = parseDateString(chosenMatch[0]);
     if (!normalizedDate) continue;
 
-    // Skip outgoing/debit keyword rows
+    // Skip outgoing / debit rows
     if (isOutgoingRow(line)) continue;
 
-    const amounts = line.match(/[\d,]+\.\d{2}/g);
-    if (!amounts || amounts.length === 0) continue;
+    const rawAmounts = line.match(/[\d,]+\.\d{2}/g);
+    if (!rawAmounts || rawAmounts.length === 0) continue;
 
-    const parsedAmounts = amounts.map(a => parseFloat(a.replace(/,/g, "")));
-
-    let credit = 0;
-
-    if (colPositions) {
-      // Use column-position-based assignment when we have a header
-      const cols = extractAmountsByColumnPosition(rawLine, colPositions);
-      // Skip rows where debit column has a value but credit column is zero
-      if (cols.debit > 0 && cols.credit === 0) continue;
-      credit = cols.credit;
-    } else if (parsedAmounts.length >= 3) {
-      // No header detected: assume [debit, credit, balance] order (most common)
-      // Last amount is balance; second-to-last is credit; third-to-last is debit
-      const debit = parsedAmounts[parsedAmounts.length - 3];
-      const creditCandidate = parsedAmounts[parsedAmounts.length - 2];
-      if (debit > 0 && creditCandidate === 0) continue; // outgoing row
-      credit = creditCandidate;
-    } else if (parsedAmounts.length === 2) {
-      // Assume [credit, balance]: credit is the smaller/first amount
-      const first = parsedAmounts[0];
-      const second = parsedAmounts[1];
-      credit = first < second ? first : second;
-    } else if (parsedAmounts.length === 1) {
-      const lowerLine = line.toLowerCase();
-      const isDebit = lowerLine.includes("debit") ||
-                      lowerLine.includes("withdrawal") ||
-                      lowerLine.includes("transfer out");
-      if (!isDebit && parsedAmounts[0] > 0) {
-        credit = parsedAmounts[0];
-      }
-    }
-
+    const parsedAmounts = rawAmounts.map(a => parseFloat(a.replace(/,/g, "")));
+    const credit = resolveCreditAmount(parsedAmounts, columnOrder);
     if (credit <= 0) continue;
 
-    const fingerprint = generateFingerprint(normalizedDate, credit, line);
+    const description = extractDescription(line);
+    const fingerprint = generateFingerprint(normalizedDate, credit, description);
 
     transactions.push({
       date: normalizedDate,
       credit,
-      rawDescription: line,
-      fingerprint
+      rawDescription: description,
+      fingerprint,
     });
   }
+
   return transactions;
 }
 
@@ -295,46 +287,40 @@ export function parseExcelTransactions(buffer: Buffer): ParsedTransaction[] {
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const data = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-  
+
   const transactions: ParsedTransaction[] = [];
-  
-  // Try to detect column headers
+
   const headers = data[0]?.map(h => String(h || "").toLowerCase()) || [];
-  const dateCol = headers.findIndex(h => h.includes("date"));
-  const descCol = headers.findIndex(h => h.includes("desc") || h.includes("narr") || h.includes("particular"));
+  const dateCol   = headers.findIndex(h => h.includes("date"));
+  const descCol   = headers.findIndex(h => h.includes("desc") || h.includes("narr") || h.includes("particular"));
   const creditCol = headers.findIndex(h => h.includes("credit") || h.includes("deposit") || h.includes("amount"));
-  
-  // Fallback to positional if headers not found
-  const useDateCol = dateCol >= 0 ? dateCol : 0;
-  const useDescCol = descCol >= 0 ? descCol : 1;
+
+  const useDateCol   = dateCol   >= 0 ? dateCol   : 0;
+  const useDescCol   = descCol   >= 0 ? descCol   : 1;
   const useCreditCol = creditCol >= 0 ? creditCol : 2;
-  
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (!row || row.length < 2) continue;
-    
+
     let dateStr = "";
     let credit = 0;
     let rawDescription = "";
-    
-    // Parse date
+
     const dateVal = row[useDateCol];
     if (dateVal) {
       if (typeof dateVal === "number") {
-        // Excel serial date
         const excelDate = new Date((dateVal - 25569) * 86400 * 1000);
         dateStr = excelDate.toLocaleDateString("en-GB");
       } else {
         dateStr = String(dateVal);
       }
     }
-    
-    // Parse description
+
     if (row[useDescCol]) {
       rawDescription = String(row[useDescCol]);
     }
-    
-    // Parse credit amount
+
     const creditVal = row[useCreditCol];
     if (creditVal) {
       const parsed = parseFloat(String(creditVal).replace(/,/g, ""));
@@ -342,20 +328,14 @@ export function parseExcelTransactions(buffer: Buffer): ParsedTransaction[] {
         credit = parsed;
       }
     }
-    
+
     if (!dateStr || credit <= 0) continue;
-    
-    // Check for existing fingerprint or generate new one
+
     const existingFingerprint = row[3] ? String(row[3]) : null;
     const fingerprint = existingFingerprint || generateFingerprint(dateStr, credit, rawDescription);
-    
-    transactions.push({
-      date: dateStr,
-      credit,
-      rawDescription,
-      fingerprint
-    });
+
+    transactions.push({ date: dateStr, credit, rawDescription, fingerprint });
   }
-  
+
   return transactions;
 }
