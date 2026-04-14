@@ -243,11 +243,12 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
 
     const description = extractDescription(line);
     const fingerprint = generateFingerprint(normalizedDate, credit, description);
+    const displayDescription = description.length > 2 ? description : line;
 
     transactions.push({
       date: normalizedDate,
       credit,
-      rawDescription: line,
+      rawDescription: displayDescription,
       fingerprint,
     });
   }
