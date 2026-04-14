@@ -61,9 +61,13 @@ function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith"
       (lower.includes("pay in") && lower.includes("pay out") && lower.includes("balance"))) {
     return "fidelity";
   }
-  if (lower.includes("moniepoint")) return "moniepoint";
+  if (lower.includes("moniepoint") || lower.includes("moniepoint mfb")) return "moniepoint";
   if (lower.includes("zenith bank") || lower.includes("zenith bank plc")) return "zenith";
-  if (lower.includes("access bank")) return "access";
+  // Access Bank: detect by name OR by unique column header combination
+  if (lower.includes("access bank") ||
+      (lower.includes("posted date") && lower.includes("debit (ngn)") && lower.includes("credit (ngn)"))) {
+    return "access";
+  }
   return "generic";
 }
 
@@ -218,7 +222,11 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
   const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
   const transactions: ParsedTransaction[] = [];
 
-  const dateLineRegex = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:$/;
+  // Real format: "2026-01-15T12:   PURCHASE FOR OTUYA/ERIC/NDUDI First Bank of Nigeria"
+  // The date fragment and narration are on the SAME line — remove the $ anchor
+  const dateLineRegex = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\s*(.*)/;
+  // Amounts line ends with three decimal numbers: Debit  Credit  Balance
+  // No ^ anchor because the reference code precedes the amounts on the same line
   const amountsLineRegex = /([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/;
 
   let i = 0;
@@ -228,22 +236,18 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
     if (!dateMatch) { i++; continue; }
 
     const formattedDate = `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
-    i++;
-    i++;
-
-    if (i >= lines.length) break;
-    const narration = lines[i];
+    // Narration text starts on the same line as the date (everything after "T12: ")
+    const narrationStart = dateMatch[4].trim();
     i++;
 
-    if (i < lines.length && /\*{4,}/.test(lines[i])) i++;
-
-    if (i < lines.length && lines[i].startsWith("/")) i++;
-
-    if (i >= lines.length) break;
-    const amountsLine = lines[i];
-    i++;
-
-    const amountsMatch = amountsLine.match(amountsLineRegex);
+    // Scan forward up to 6 lines for the amounts line
+    let amountsMatch: RegExpMatchArray | null = null;
+    let lookahead = 0;
+    while (lookahead < 6 && i + lookahead < lines.length) {
+      const m = lines[i + lookahead].match(amountsLineRegex);
+      if (m) { amountsMatch = m; i += lookahead + 1; break; }
+      lookahead++;
+    }
     if (!amountsMatch) continue;
 
     const debit  = parseFloat(amountsMatch[1].replace(/,/g, ""));
@@ -251,8 +255,9 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
 
     if (debit > 0 || credit <= 0) continue;
 
-    const fingerprint = generateFingerprint(formattedDate, credit, narration);
-    transactions.push({ date: formattedDate, credit, rawDescription: narration, fingerprint });
+    const desc = narrationStart || lines[i - 1].trim();
+    const fingerprint = generateFingerprint(formattedDate, credit, desc);
+    transactions.push({ date: formattedDate, credit, rawDescription: desc, fingerprint });
   }
 
   return transactions;
@@ -308,35 +313,54 @@ function parseZenithTransactions(rawText: string): ParsedTransaction[] {
 }
 
 function parseAccessTransactions(rawText: string): ParsedTransaction[] {
-  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  // Keep raw (un-trimmed) lines so we can detect continuation lines by leading spaces
+  const rawLines = rawText.split("\n");
   const transactions: ParsedTransaction[] = [];
 
-  // Each transaction is one line: PostedDate ValueDate Description Debit Credit Balance
-  // Debit and Credit use "----" as a zero/null marker
-  const txRegex = /^(\d{2}-[A-Za-z]{3}-\d{2})\s+(\d{2}-[A-Za-z]{3}-\d{2})\s+(.+)\s+(----|-?[\d,]+\.\d+)\s+(----|-?[\d,]+\.\d+)\s+(-?[\d,]+\.\d+)\s*$/;
+  // Transaction start: line begins with two DD-MON-YY dates.
+  // Real null marker is "-" (single dash), NOT "----".
+  // Lazy (.+?) for description so the trailing amounts are captured separately.
+  const txStartRegex = /^(\d{2}-[A-Za-z]{3}-\d{2})\s+(\d{2}-[A-Za-z]{3}-\d{2})\s+(.+?)\s+(-|[\d,]+\.\d+)\s+(-|[\d,]+\.\d+)\s+([\d,]+\.\d+)\s*$/;
+  const dateStartRegex = /^\d{2}-[A-Za-z]{3}-\d{2}\s+\d{2}-[A-Za-z]{3}-\d{2}/;
+  // Continuation: 10+ spaces before first non-space character
+  const continuationRegex = /^\s{10,}\S/;
+  const skipRegex = /^(opening balance|closing balance|total withdrawal|total lodgement|transactions|posted date|cleared balance|uncleared balance|currency|account name|account class|account number|branch address|financial summary|account details|statement period|debit \(ngn\)|credit \(ngn\)|balance \(ngn\))/i;
 
-  const skipRegex = /^(opening balance|closing balance|total withdrawal|total lodgement|transactions|posted date|cleared balance|uncleared balance|currency|account name|account class|account number|branch address)/i;
+  interface Pending { date: string; desc: string; debit: number; credit: number; }
+  let pending: Pending | null = null;
 
-  for (const line of lines) {
-    if (skipRegex.test(line)) continue;
+  const flush = () => {
+    if (!pending) return;
+    if (pending.debit > 0 || pending.credit <= 0) { pending = null; return; }
+    const fp = generateFingerprint(pending.date, pending.credit, pending.desc);
+    transactions.push({ date: pending.date, credit: pending.credit, rawDescription: pending.desc, fingerprint: fp });
+    pending = null;
+  };
 
-    const match = line.match(txRegex);
-    if (!match) continue;
+  for (const rawLine of rawLines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (skipRegex.test(line)) { flush(); continue; }
 
-    const [, , valueDate, description, debitStr, creditStr] = match;
+    if (dateStartRegex.test(line)) {
+      flush();
+      const match = line.match(txStartRegex);
+      if (!match) continue;
+      const [, , valueDate, desc, debitStr, creditStr] = match;
+      const debit  = debitStr  === "-" ? 0 : parseFloat(debitStr.replace(/,/g, ""));
+      const credit = creditStr === "-" ? 0 : parseFloat(creditStr.replace(/,/g, ""));
+      const normalizedDate = parseDateString(valueDate);
+      if (!normalizedDate) continue;
+      pending = { date: normalizedDate, desc: desc.trim(), debit, credit };
+      continue;
+    }
 
-    const debit  = debitStr  === "----" ? 0 : parseFloat(debitStr.replace(/,/g, ""));
-    const credit = creditStr === "----" ? 0 : parseFloat(creditStr.replace(/,/g, ""));
-
-    if (debit > 0 || credit <= 0) continue;
-
-    const normalizedDate = parseDateString(valueDate);
-    if (!normalizedDate) continue;
-
-    const desc = description.trim();
-    const fingerprint = generateFingerprint(normalizedDate, credit, desc);
-    transactions.push({ date: normalizedDate, credit, rawDescription: desc, fingerprint });
+    // Continuation line: append trimmed text to pending description
+    if (pending && continuationRegex.test(rawLine)) {
+      pending.desc += " " + line;
+    }
   }
+  flush();
 
   return transactions;
 }
