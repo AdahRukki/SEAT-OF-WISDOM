@@ -377,105 +377,98 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     });
   };
 
-  const findMatchingTransactions = (payment: FeePaymentRecordWithDetails) => {
+  // Score a single transaction against a payment (raw score, uncapped)
+  const scoreTransaction = (payment: FeePaymentRecordWithDetails, tx: BankTransaction): { score: number; reasons: string[] } => {
     const paymentAmount = parseFloat(payment.amount);
-    return unmatchedTransactions.filter((t) => {
-      const txAmount = parseFloat(t.amount);
-      return Math.abs(txAmount - paymentAmount) < 0.01;
-    });
-  };
-
-  // Auto-suggest matching: find best matches based on amount and date
-  const findSuggestedMatch = (payment: FeePaymentRecordWithDetails): { transaction: BankTransaction | null; confidence: number; reasons: string[] } => {
-    const paymentAmount = parseFloat(payment.amount);
+    const txAmount = parseFloat(tx.amount);
     const paymentDate = new Date(payment.paymentDate);
-    
-    let bestMatch: BankTransaction | null = null;
-    let bestScore = 0;
-    let matchReasons: string[] = [];
+    const txDate = new Date(tx.transactionDate);
+    let score = 0;
+    const reasons: string[] = [];
 
-    for (const tx of unmatchedTransactions) {
-      const txAmount = parseFloat(tx.amount);
-      const txDate = new Date(tx.transactionDate);
-      let score = 0;
-      const reasons: string[] = [];
-
-      // Exact amount match (30 points)
-      if (Math.abs(txAmount - paymentAmount) < 0.01) {
-        score += 30;
-        reasons.push("Exact amount");
-      }
-
-      // Same day match (30 points)
-      const dayDiff = Math.abs((txDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (dayDiff < 1) {
-        score += 30;
-        reasons.push("Same day");
-      } else if (dayDiff <= 3) {
-        score += 15;
-        reasons.push("Within 3 days");
-      } else if (dayDiff <= 7) {
-        score += 5;
-        reasons.push("Within a week");
-      }
-
-      // Depositor name — tiered scoring (only highest tier fires)
-      const depositorName = (payment.depositorName || '').toLowerCase().trim();
-      if (depositorName) {
-        const txDesc = tx.rawDescription?.toLowerCase() || '';
-        const depositorWords = depositorName.split(/\s+/).filter(w => w.length > 2);
-
-        const allMatch = depositorWords.length > 0 && depositorWords.every(w => txDesc.includes(w));
-        const prefixMatch = !allMatch && depositorWords.length > 0 &&
-          depositorWords.every(w => {
-            const prefix = w.substring(0, 5);
-            return prefix.length >= 3 && txDesc.includes(prefix);
-          });
-        const longWordMatch = !allMatch && !prefixMatch &&
-          depositorWords.some(w => w.length > 5 && txDesc.includes(w));
-        const shortWordMatch = !allMatch && !prefixMatch && !longWordMatch &&
-          depositorWords.some(w => w.length >= 3 && txDesc.includes(w));
-
-        if (allMatch) {
-          score += 40;
-          reasons.push("Full depositor name match");
-        } else if (prefixMatch) {
-          score += 30;
-          reasons.push("Partial depositor name match");
-        } else if (longWordMatch) {
-          score += 20;
-          reasons.push("Depositor name word match");
-        } else if (shortWordMatch) {
-          score += 10;
-          reasons.push("Depositor name partial");
-        }
-      }
-
-      // Student name in description (20 points)
-      const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
-      if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
-        score += 20;
-        reasons.push("Name match");
-      }
-
-      // Reference match (50 points — highly discriminating)
-      if (payment.reference && tx.rawDescription?.toLowerCase().includes(payment.reference.toLowerCase())) {
-        score += 50;
-        reasons.push("Reference match");
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = tx;
-        matchReasons = reasons;
-      }
+    // Amount matching — graduated (exact: 30pts, close ≤2%: 20pts, approx ≤10%: 10pts)
+    const amountDiff = Math.abs(txAmount - paymentAmount);
+    const amountPct = paymentAmount > 0 ? amountDiff / paymentAmount : 1;
+    if (amountDiff < 0.01) {
+      score += 30;
+      reasons.push("Exact amount");
+    } else if (amountPct <= 0.02) {
+      score += 20;
+      reasons.push("Close amount");
+    } else if (amountPct <= 0.10) {
+      score += 10;
+      reasons.push("Approximate amount");
     }
 
-    return { 
-      transaction: bestMatch, 
-      confidence: Math.min(bestScore, 100),
-      reasons: matchReasons 
-    };
+    // Date matching
+    const dayDiff = Math.abs((txDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (dayDiff < 1) {
+      score += 30;
+      reasons.push("Same day");
+    } else if (dayDiff <= 3) {
+      score += 15;
+      reasons.push("Within 3 days");
+    } else if (dayDiff <= 7) {
+      score += 5;
+      reasons.push("Within a week");
+    }
+
+    // Depositor name — tiered scoring (only highest tier fires)
+    const depositorName = (payment.depositorName || '').toLowerCase().trim();
+    if (depositorName) {
+      const txDesc = tx.rawDescription?.toLowerCase() || '';
+      const depositorWords = depositorName.split(/\s+/).filter(w => w.length > 2);
+      const allMatch = depositorWords.length > 0 && depositorWords.every(w => txDesc.includes(w));
+      const prefixMatch = !allMatch && depositorWords.length > 0 &&
+        depositorWords.every(w => { const prefix = w.substring(0, 5); return prefix.length >= 3 && txDesc.includes(prefix); });
+      const longWordMatch = !allMatch && !prefixMatch &&
+        depositorWords.some(w => w.length > 5 && txDesc.includes(w));
+      const shortWordMatch = !allMatch && !prefixMatch && !longWordMatch &&
+        depositorWords.some(w => w.length >= 3 && txDesc.includes(w));
+
+      if (allMatch) { score += 40; reasons.push("Full depositor name"); }
+      else if (prefixMatch) { score += 30; reasons.push("Partial depositor name"); }
+      else if (longWordMatch) { score += 20; reasons.push("Depositor name word"); }
+      else if (shortWordMatch) { score += 10; reasons.push("Depositor name partial"); }
+    }
+
+    // Student name in description (20 points)
+    const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
+    if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
+      score += 20;
+      reasons.push("Student name");
+    }
+
+    // Reference match (50 points — highly discriminating)
+    if (payment.reference && tx.rawDescription?.toLowerCase().includes(payment.reference.toLowerCase())) {
+      score += 50;
+      reasons.push("Reference match");
+    }
+
+    return { score, reasons };
+  };
+
+  // Rank ALL unmatched transactions for a payment by score (highest first)
+  const rankTransactions = (payment: FeePaymentRecordWithDetails) => {
+    return unmatchedTransactions
+      .map(tx => ({ ...tx, ...scoreTransaction(payment, tx) }))
+      .sort((a, b) => b.score - a.score);
+  };
+
+  // Find best suggested match for the card view summary
+  const findSuggestedMatch = (payment: FeePaymentRecordWithDetails): { transaction: BankTransaction | null; confidence: number; reasons: string[] } => {
+    const ranked = rankTransactions(payment);
+    if (ranked.length === 0) return { transaction: null, confidence: 0, reasons: [] };
+    const best = ranked[0];
+    return { transaction: best, confidence: Math.min(best.score, 100), reasons: best.reasons };
+  };
+
+  // Simple amount-only check for right-column highlighting (keeps existing UX)
+  const hasAmountMatch = (tx: BankTransaction) => {
+    return pendingPayments.some(p => Math.abs(parseFloat(p.amount) - parseFloat(tx.amount)) < 0.01);
+  };
+  const amountMatchingPayments = (tx: BankTransaction) => {
+    return pendingPayments.filter(p => Math.abs(parseFloat(p.amount) - parseFloat(tx.amount)) < 0.01);
   };
 
   const handleOpenAllocateDialog = (tx: BankTransaction) => {
@@ -727,7 +720,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                     {pendingPayments.map((payment) => {
                       const suggestion = findSuggestedMatch(payment);
-                      const matchingTxs = findMatchingTransactions(payment);
                       
                       return (
                         <Card 
@@ -768,7 +760,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   size="sm"
                                   className="text-xs h-7"
                                   onClick={() => handleConfirmClick(payment)}
-                                  disabled={matchingTxs.length === 0}
+                                  disabled={unmatchedTransactions.length === 0}
                                 >
                                   <Link className="h-3 w-3 mr-1" />
                                   Match
@@ -833,11 +825,11 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                               </div>
                             )}
                             
-                            {matchingTxs.length === 0 && (
+                            {suggestion.confidence === 0 && unmatchedTransactions.length > 0 && (
                               <div className="mt-2 pt-2 border-t">
                                 <p className="text-xs text-orange-600 flex items-center gap-1">
                                   <AlertTriangle className="h-3 w-3" />
-                                  No matching transactions found
+                                  No close match found — click Match to browse all transactions
                                 </p>
                               </div>
                             )}
@@ -885,10 +877,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 ) : (
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                     {filteredTx.map((tx) => {
-                      // Check if any payment matches this transaction
-                      const matchingPayments = pendingPayments.filter(p => 
-                        Math.abs(parseFloat(p.amount) - parseFloat(tx.amount)) < 0.01
-                      );
+                      const matchingPayments = amountMatchingPayments(tx);
                       
                       return (
                         <Card 
