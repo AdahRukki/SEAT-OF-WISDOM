@@ -146,16 +146,77 @@ function parseFidelityTransactions(rawText: string): ParsedTransaction[] {
   });
 }
 
+// Outgoing-transfer keywords that indicate a debit/outgoing row
+const OUTGOING_KEYWORDS = ["trf to", "payment to", "transfer to"];
+
+function isOutgoingRow(description: string): boolean {
+  const lower = description.toLowerCase();
+  if (OUTGOING_KEYWORDS.some(kw => lower.includes(kw))) return true;
+  // "DR" debit indicator may appear before trailing numeric columns (e.g. "SOME TRF DR 100.00 0.00 500.00").
+  // Strip all decimal amounts first so the end-of-string check still works.
+  const withoutAmounts = description.replace(/[\d,]+\.\d{2}/g, "").trim();
+  if (/\bdr\s*$/i.test(withoutAmounts)) return true;
+  return false;
+}
+
+// Detect Debit/Credit/Balance column header positions from the raw PDF text
+function detectDebitCreditColumns(rawText: string): { debitPos: number; creditPos: number; balancePos: number } | null {
+  for (const line of rawText.split("\n")) {
+    const lower = line.toLowerCase();
+    if (lower.includes("debit") && lower.includes("credit")) {
+      const debitPos = lower.indexOf("debit");
+      const creditPos = lower.indexOf("credit");
+      const balancePos = lower.indexOf("balance");
+      if (debitPos >= 0 && creditPos >= 0) {
+        return { debitPos, creditPos, balancePos: balancePos >= 0 ? balancePos : -1 };
+      }
+    }
+  }
+  return null;
+}
+
+// Given a raw (untrimmed) line and column header positions, extract debit/credit/balance amounts
+// by finding each decimal number's character position and assigning it to the nearest column.
+function extractAmountsByColumnPosition(
+  rawLine: string,
+  cols: { debitPos: number; creditPos: number; balancePos: number }
+): { debit: number; credit: number; balance: number } {
+  const result = { debit: 0, credit: 0, balance: 0 };
+  const amountRegex = /[\d,]+\.\d{2}/g;
+  let m: RegExpExecArray | null;
+  while ((m = amountRegex.exec(rawLine)) !== null) {
+    const value = parseFloat(m[0].replace(/,/g, ""));
+    const pos = m.index + m[0].length / 2; // centre of the number string
+    const distDebit = Math.abs(pos - cols.debitPos);
+    const distCredit = Math.abs(pos - cols.creditPos);
+    const distBalance = cols.balancePos >= 0 ? Math.abs(pos - cols.balancePos) : Infinity;
+    if (distDebit <= distCredit && distDebit <= distBalance) {
+      result.debit = value;
+    } else if (distCredit <= distDebit && distCredit <= distBalance) {
+      result.credit = value;
+    } else {
+      result.balance = value;
+    }
+  }
+  return result;
+}
+
 export function parseTransactions(rawText: string): ParsedTransaction[] {
   const format = detectBankFormat(rawText);
   if (format === "fidelity") {
     return parseFidelityTransactions(rawText);
   }
 
-  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  // Detect column layout from header row (may be null for PDFs without explicit headers)
+  const colPositions = detectDebitCreditColumns(rawText);
+
+  const rawLines = rawText.split("\n");
   const transactions: ParsedTransaction[] = [];
 
-  for (const line of lines) {
+  for (const rawLine of rawLines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
     // Find all date matches and use the second (Value Date) when present, else the first
     const allDateMatches = [...line.matchAll(/\d{1,2}[\/\-](\d{2}|[A-Za-z]{3})[\/\-]\d{2,4}/g)];
     if (allDateMatches.length === 0) continue;
@@ -164,34 +225,39 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
     const normalizedDate = parseDateString(chosenMatch[0]);
     if (!normalizedDate) continue;
 
+    // Skip outgoing/debit keyword rows
+    if (isOutgoingRow(line)) continue;
+
     const amounts = line.match(/[\d,]+\.\d{2}/g);
     if (!amounts || amounts.length === 0) continue;
 
     const parsedAmounts = amounts.map(a => parseFloat(a.replace(/,/g, "")));
-    
+
     let credit = 0;
-    
-    if (parsedAmounts.length >= 2) {
-      const lastAmount = parsedAmounts[parsedAmounts.length - 1];
-      const secondLast = parsedAmounts[parsedAmounts.length - 2];
-      
-      if (lastAmount > secondLast * 10 && secondLast > 0) {
-        credit = secondLast;
-      } else {
-        for (let i = parsedAmounts.length - 1; i >= 0; i--) {
-          if (parsedAmounts[i] > 0 && parsedAmounts[i] < 10000000) {
-            credit = parsedAmounts[i];
-            break;
-          }
-        }
-      }
+
+    if (colPositions) {
+      // Use column-position-based assignment when we have a header
+      const cols = extractAmountsByColumnPosition(rawLine, colPositions);
+      // Skip rows where debit column has a value but credit column is zero
+      if (cols.debit > 0 && cols.credit === 0) continue;
+      credit = cols.credit;
+    } else if (parsedAmounts.length >= 3) {
+      // No header detected: assume [debit, credit, balance] order (most common)
+      // Last amount is balance; second-to-last is credit; third-to-last is debit
+      const debit = parsedAmounts[parsedAmounts.length - 3];
+      const creditCandidate = parsedAmounts[parsedAmounts.length - 2];
+      if (debit > 0 && creditCandidate === 0) continue; // outgoing row
+      credit = creditCandidate;
+    } else if (parsedAmounts.length === 2) {
+      // Assume [credit, balance]: credit is the smaller/first amount
+      const first = parsedAmounts[0];
+      const second = parsedAmounts[1];
+      credit = first < second ? first : second;
     } else if (parsedAmounts.length === 1) {
       const lowerLine = line.toLowerCase();
-      const isDebit = lowerLine.includes("debit") || 
-                      lowerLine.includes("withdrawal") || 
-                      lowerLine.includes("transfer out") ||
-                      lowerLine.includes("payment to");
-      
+      const isDebit = lowerLine.includes("debit") ||
+                      lowerLine.includes("withdrawal") ||
+                      lowerLine.includes("transfer out");
       if (!isDebit && parsedAmounts[0] > 0) {
         credit = parsedAmounts[0];
       }

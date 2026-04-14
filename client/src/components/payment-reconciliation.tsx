@@ -397,6 +397,11 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     for (const tx of unmatchedTransactions) {
       const txAmount = parseFloat(tx.amount);
       const txDate = new Date(tx.transactionDate);
+
+      // Hard date gate: only consider transactions within 1 day of the payment date
+      const dayDiff = Math.abs((txDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (dayDiff > 1) continue;
+
       let score = 0;
       const reasons: string[] = [];
 
@@ -407,16 +412,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       }
 
       // Same day match (30 points)
-      const dayDiff = Math.abs((txDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
       if (dayDiff < 1) {
         score += 30;
         reasons.push("Same day");
-      } else if (dayDiff <= 3) {
+      } else {
         score += 15;
-        reasons.push("Within 3 days");
-      } else if (dayDiff <= 7) {
-        score += 5;
-        reasons.push("Within a week");
+        reasons.push("Within 1 day");
       }
 
       // Depositor name — tiered scoring (only highest tier fires)
@@ -459,9 +460,17 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       }
 
       // Reference match (50 points — highly discriminating)
-      if (payment.reference && tx.rawDescription?.toLowerCase().includes(payment.reference.toLowerCase())) {
-        score += 50;
-        reasons.push("Reference match");
+      // Only trigger when reference is at least 5 characters and matches as a whole word
+      if (payment.reference && payment.reference.length >= 5) {
+        const refLower = payment.reference.toLowerCase();
+        const descLower = tx.rawDescription?.toLowerCase() || '';
+        // Whole-word match: reference must be surrounded by word boundaries (non-alphanumeric chars or string edges)
+        const escapedRef = refLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wholeWordRegex = new RegExp(`(?<![a-z0-9])${escapedRef}(?![a-z0-9])`);
+        if (wholeWordRegex.test(descLower)) {
+          score += 50;
+          reasons.push("Reference match");
+        }
       }
 
       if (score > bestScore) {
@@ -470,6 +479,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         matchReasons = reasons;
       }
     }
+
+    // Only return a suggestion if we actually found a match (bestScore > 0 means at least one tx passed the date gate)
+    if (!bestMatch) return { transaction: null, confidence: 0, reasons: [] };
 
     return { 
       transaction: bestMatch, 
