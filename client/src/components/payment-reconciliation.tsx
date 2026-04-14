@@ -1029,7 +1029,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                         <TableCell className="font-medium text-green-600">
                           ₦{parseFloat(tx.amount).toLocaleString()}
                         </TableCell>
-                        <TableCell className="max-w-[300px] truncate">
+                        <TableCell className="max-w-[300px] break-words text-sm">
                           {tx.rawDescription}
                         </TableCell>
                         <TableCell>{tx.reference || "-"}</TableCell>
@@ -1242,7 +1242,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                     </p>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2 truncate">
+                <p className="text-sm text-muted-foreground mt-2 break-words">
                   {transactionToAllocate.rawDescription}
                 </p>
               </div>
