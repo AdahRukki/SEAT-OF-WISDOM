@@ -281,7 +281,19 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
 
     if (debit > 0 || credit <= 0) continue;
 
-    const desc = narration.trim();
+    // If no narration was captured (e.g. the only pre-amounts line was a card mask),
+    // extract the reference prefix from the amounts line itself as a fallback description.
+    // This avoids empty-string fingerprints that collide for same-date / same-amount credits.
+    let desc = narration.trim();
+    if (!desc && amountsMatch.input) {
+      const rawAmounts = amountsMatch.input;
+      // Strip the trailing "Debit Credit Balance" numbers to get the reference prefix
+      const prefixEnd = rawAmounts.lastIndexOf(amountsMatch[1]);
+      const prefix = prefixEnd > 0 ? rawAmounts.substring(0, prefixEnd).trim() : "";
+      // Use the last segment of the reference (after the last "|" or space) as a short key
+      desc = prefix.replace(/\|/g, " ").replace(/\s{2,}/g, " ").trim().substring(0, 80);
+    }
+
     const fingerprint = generateFingerprint(formattedDate, credit, desc);
     transactions.push({ date: formattedDate, credit, rawDescription: desc, fingerprint });
   }
