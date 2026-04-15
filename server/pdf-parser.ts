@@ -222,12 +222,17 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
   const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
   const transactions: ParsedTransaction[] = [];
 
-  // Real format: "2026-01-15T12:   PURCHASE FOR OTUYA/ERIC/NDUDI First Bank of Nigeria"
-  // The date fragment and narration are on the SAME line — remove the $ anchor
-  const dateLineRegex = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\s*(.*)/;
-  // Amounts line ends with three decimal numbers: Debit  Credit  Balance
-  // No ^ anchor because the reference code precedes the amounts on the same line
+  // Verified from real pdf-parse output: date IS always on its own line e.g. "2026-01-15T12:"
+  const dateLineRegex = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:$/;
+  // Amounts: line ends with three decimal numbers (Debit Credit Balance)
   const amountsLineRegex = /([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/;
+
+  // Lines to skip when accumulating narration (they are not descriptive text)
+  const isSkipLine = (l: string) =>
+    /^\d{2}:\d{2}/.test(l) ||     // time continuation e.g. "21:45" or compact "40:45 REF..."
+    /^[\d*]+$/.test(l) ||          // pure card mask line e.g. "506105*********0775" (only digits+stars)
+    l.startsWith("/") ||            // reference continuation e.g. "/PUR|..."
+    /^--\s*\d+/.test(l);           // page marker e.g. "-- 1 of 15 --"
 
   let i = 0;
   while (i < lines.length) {
@@ -236,22 +241,39 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
     if (!dateMatch) { i++; continue; }
 
     const formattedDate = `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
-    // Narration text starts on the same line as the date (everything after "T12: ")
-    const narrationStart = dateMatch[4].trim();
-    i++;
+    i++; // advance past date line
 
-    // Scan forward up to 6 lines for the amounts line; track the first non-date line
-    // as a fallback narration source for edge cases where narrationStart is empty
+    // Inner scan: accumulate narration and find the amounts line
+    let narration = "";
     let amountsMatch: RegExpMatchArray | null = null;
-    let fallbackNarration = "";
-    let lookahead = 0;
-    while (lookahead < 6 && i + lookahead < lines.length) {
-      const candidate = lines[i + lookahead];
+
+    while (i < lines.length) {
+      const candidate = lines[i];
+
+      // Stop if we hit the next date line (compact debit had time+amounts on one line,
+      // which we already consumed as the amounts line; or the transaction has no amounts)
+      if (dateLineRegex.test(candidate)) break;
+
+      // Check for amounts at end of line (compact debits also match here and get skipped)
       const m = candidate.match(amountsLineRegex);
-      if (m) { amountsMatch = m; i += lookahead + 1; break; }
-      if (!fallbackNarration && lookahead === 0) fallbackNarration = candidate.trim();
-      lookahead++;
+      if (m) {
+        amountsMatch = m;
+        i++;
+        break;
+      }
+
+      // Skip non-narration lines
+      if (isSkipLine(candidate)) {
+        i++;
+        continue;
+      }
+
+      // Accumulate narration text
+      if (!narration) narration = candidate;
+      else narration += " " + candidate;
+      i++;
     }
+
     if (!amountsMatch) continue;
 
     const debit  = parseFloat(amountsMatch[1].replace(/,/g, ""));
@@ -259,8 +281,7 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
 
     if (debit > 0 || credit <= 0) continue;
 
-    // Prefer narration from the date line; fall back to the first subsequent line
-    const desc = narrationStart || fallbackNarration;
+    const desc = narration.trim();
     const fingerprint = generateFingerprint(formattedDate, credit, desc);
     transactions.push({ date: formattedDate, credit, rawDescription: desc, fingerprint });
   }
@@ -318,54 +339,95 @@ function parseZenithTransactions(rawText: string): ParsedTransaction[] {
 }
 
 function parseAccessTransactions(rawText: string): ParsedTransaction[] {
-  // Keep raw (un-trimmed) lines so we can detect continuation lines by leading spaces
+  // Verified from real pdf-parse output: columns are TAB-separated (\t), NOT spaces.
+  // Transactions can span 1 to 4+ lines. Three formats verified in real data:
+  //   Format 1 (single line): Date\tDate\tDesc\tDebit\tCredit\tBalance
+  //   Format 2 (two lines):   Date\tDate\tPartialDesc  /  Continuation\tDebit\tCredit\tBalance
+  //   Format 3 (multi-line):  Date\tDate  /  DescLine1  /  DescLine2  /  Debit\tCredit\tBalance
+  // The null marker for zero amounts is "-" (single dash).
+  // Detection: split each line by \t; last 3 tab-fields are [Debit, Credit, Balance].
   const rawLines = rawText.split("\n");
   const transactions: ParsedTransaction[] = [];
 
-  // Transaction start: line begins with two DD-MON-YY dates.
-  // Real null marker is "-" (single dash), NOT "----".
-  // Lazy (.+?) for description so the trailing amounts are captured separately.
-  const txStartRegex = /^(\d{2}-[A-Za-z]{3}-\d{2})\s+(\d{2}-[A-Za-z]{3}-\d{2})\s+(.+?)\s+(-|[\d,]+\.\d+)\s+(-|[\d,]+\.\d+)\s+([\d,]+\.\d+)\s*$/;
-  const dateStartRegex = /^\d{2}-[A-Za-z]{3}-\d{2}\s+\d{2}-[A-Za-z]{3}-\d{2}/;
-  // Continuation: 10+ spaces before first non-space character
-  const continuationRegex = /^\s{10,}\S/;
-  const skipRegex = /^(opening balance|closing balance|clearing balance|total withdrawal|total lodgement|transactions|posted date|cleared balance|uncleared balance|currency|account name|account class|account number|branch address|financial summary|account details|statement period|debit \(ngn\)|credit \(ngn\)|balance \(ngn\))/i;
+  const dateFmt     = /^\d{2}-[A-Za-z]{3}-\d{2}$/;
+  const posAmount   = /^[\d,]+\.\d+$/;       // positive decimal number
+  const amountOrNull = /^-$|^[\d,]+\.\d+$/;  // "-" or positive decimal
+  const pageMarker  = /^--\s*\d+.*--$/i;
 
-  interface Pending { date: string; desc: string; debit: number; credit: number; }
+  const skipPatterns = /^(opening balance|closing balance|clearing balance|total withdrawal|total lodgement|transactions|posted date|cleared balance|uncleared balance|currency|account name|account class|account number|branch address|financial summary|account details|statement period)/i;
+  const descSkip    = /^(opening balance|closing balance|clearing balance)/i;
+
+  // True if last 3 tab-parts of the parts array look like [Debit, Credit, Balance]
+  const hasAmounts = (parts: string[]): boolean =>
+    parts.length >= 3 &&
+    posAmount.test(parts[parts.length - 1]) &&
+    amountOrNull.test(parts[parts.length - 2]) &&
+    amountOrNull.test(parts[parts.length - 3]);
+
+  interface Pending { date: string; descParts: string[]; }
   let pending: Pending | null = null;
 
-  const flush = () => {
+  const tryEmit = (parts: string[], extraDescParts: string[]) => {
     if (!pending) return;
-    if (pending.debit > 0 || pending.credit <= 0) { pending = null; return; }
-    const fp = generateFingerprint(pending.date, pending.credit, pending.desc);
-    transactions.push({ date: pending.date, credit: pending.credit, rawDescription: pending.desc, fingerprint: fp });
+    const debitStr  = parts[parts.length - 3];
+    const creditStr = parts[parts.length - 2];
+    const debit  = debitStr  === "-" ? 0 : parseFloat(debitStr.replace(/,/g, ""));
+    const credit = creditStr === "-" ? 0 : parseFloat(creditStr.replace(/,/g, ""));
+    if (credit > 0 && debit === 0) {
+      const desc = [...pending.descParts, ...extraDescParts]
+        .filter(Boolean).map(s => s.trim()).join(" ").trim();
+      if (!descSkip.test(desc)) {
+        const fp = generateFingerprint(pending.date, credit, desc);
+        transactions.push({ date: pending.date, credit, rawDescription: desc, fingerprint: fp });
+      }
+    }
     pending = null;
   };
 
   for (const rawLine of rawLines) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (skipRegex.test(line)) { flush(); continue; }
+    if (pageMarker.test(line)) continue;
+    if (skipPatterns.test(line)) { pending = null; continue; }
 
-    if (dateStartRegex.test(line)) {
-      flush();
-      const match = line.match(txStartRegex);
-      if (!match) continue;
-      const [, , valueDate, desc, debitStr, creditStr] = match;
-      const debit  = debitStr  === "-" ? 0 : parseFloat(debitStr.replace(/,/g, ""));
-      const credit = creditStr === "-" ? 0 : parseFloat(creditStr.replace(/,/g, ""));
+    // Split by tab; empty fields filtered out
+    const parts = rawLine.split("\t").map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) continue;
+
+    // Date-start line: first two fields are DD-MON-YY dates
+    if (parts.length >= 2 && dateFmt.test(parts[0]) && dateFmt.test(parts[1])) {
+      // Abandon any pending transaction that never got its amounts line
+      pending = null;
+      const valueDate = parts[1];
       const normalizedDate = parseDateString(valueDate);
       if (!normalizedDate) continue;
-      pending = { date: normalizedDate, desc: desc.trim(), debit, credit };
+
+      if (hasAmounts(parts)) {
+        // All fields on one line — emit immediately
+        const lineDescParts = parts.slice(2, parts.length - 3);
+        pending = { date: normalizedDate, descParts: [] };
+        tryEmit(parts, lineDescParts);
+      } else {
+        // Amounts will come on a subsequent line; save any partial description
+        const descStart = parts.slice(2).join(" ").trim();
+        pending = { date: normalizedDate, descParts: descStart ? [descStart] : [] };
+      }
       continue;
     }
 
-    // Continuation line: append trimmed text to pending description
-    if (pending && continuationRegex.test(rawLine)) {
-      pending.desc += " " + line;
+    // Non-date line
+    if (!pending) continue;
+
+    if (hasAmounts(parts)) {
+      // This line completes the current transaction; everything before the last 3 fields
+      // is additional description (e.g. "A/school fees bal/35085505237")
+      const lineDescParts = parts.slice(0, parts.length - 3).filter(Boolean);
+      tryEmit(parts, lineDescParts);
+    } else {
+      // Pure continuation description line (no tabs, no amounts)
+      pending.descParts.push(line);
     }
   }
-  flush();
 
   return transactions;
 }
