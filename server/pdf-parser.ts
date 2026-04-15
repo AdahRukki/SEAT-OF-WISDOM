@@ -56,15 +56,26 @@ function parseDateString(raw: string): string | null {
 }
 
 function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith" | "access" | "generic" {
-  const lower = rawText.toLowerCase();
-  if (lower.includes("fidelitybank") || lower.includes("fidelity bank") ||
+  // Use the first 2000 characters (header/summary) for bank NAME checks to avoid
+  // false positives from narrations mentioning other banks (e.g. "PURCHASE FOR ... Fidelity Bank").
+  const header = rawText.substring(0, 2000).toLowerCase();
+  const lower  = rawText.toLowerCase(); // full text for structural/format checks only
+
+  // Fidelity: unique brand in header, OR structural "Pay In / Pay Out" column headers
+  if (header.includes("fidelitybank") || header.includes("fidelity bank") ||
       (lower.includes("pay in") && lower.includes("pay out") && lower.includes("balance"))) {
     return "fidelity";
   }
-  if (lower.includes("moniepoint") || lower.includes("moniepoint mfb")) return "moniepoint";
-  if (lower.includes("zenith bank") || lower.includes("zenith bank plc")) return "zenith";
-  // Access Bank: detect by name OR by unique column header combination
-  if (lower.includes("access bank") ||
+  // MoniePoint: does NOT put "Moniepoint" in its account header — it appears only in
+  // narrations. Detect by their unique ISO-timestamp date format "2026-01-15T12:" which
+  // only MoniePoint statements contain.
+  if (/\d{4}-\d{2}-\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
+
+  // Zenith: bank name in account header
+  if (header.includes("zenith bank") || header.includes("zenith bank plc")) return "zenith";
+
+  // Access Bank: name in header OR unique tab-separated column headers anywhere
+  if (header.includes("access bank") ||
       (lower.includes("posted date") && lower.includes("debit (ngn)") && lower.includes("credit (ngn)"))) {
     return "access";
   }

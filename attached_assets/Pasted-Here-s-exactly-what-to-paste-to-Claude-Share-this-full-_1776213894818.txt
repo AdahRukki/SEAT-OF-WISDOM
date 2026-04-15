@@ -1,0 +1,77 @@
+Here's exactly what to paste to Claude. Share this full message:
+
+Paste this to Claude:
+
+I have a Node.js PDF bank statement parser. Two parsers are broken. I've confirmed the exact text that pdf-parse extracts from each PDF. Please rewrite both functions.
+
+MONIEPOINT — exact pdf-parse output (each line in brackets):
+
+[2026-01-15T12:]
+[21:45]
+[PURCHASE FOR OTUYA/ERIC/NDUDI First Bank of Nigeria]
+[506105*********0775]
+[/PUR|202601150200506100772MP1B2QW00000000000413150000]
+[PUR|202601150200506100772MP1B2QW00000000000413150000_BUSINESS_CREDIT_0 0.00 131,400.00 296,299.50]
+[2026-01-15T13:]
+[17:48]
+[PURCHASE FOR DIGITAL/OPAY OPay 507872******4791]
+[/PUR|2026011502005078747912MP1B2QW00000000000519590000 PUR|2026011502005078747912MP1B2QW00000000000519590000_BUSINESS_CREDIT_0 0.00 195,800.00 492,099.50]
+[2026-01-15T18:]
+[50:19]
+[FAITH ELOHOR]
+[ADAH|TRF|2MPThf0e0|2011858498601775104_debit TRF|2MPThf0e0|2011858498601775104_DEBIT_0 490,020.00 0.00 2,079.50]
+[2026-01-19T14:]
+[40:45 TRF|2MPThf0e0|2013245246932197376_VAT_OUTPUT_debit TRF|2MPThf0e0|2013245246932197376_DEBIT_1 1.50 0.00 8,538.00]
+[2026-01-19T14:]
+[43:10 BPT|2MPThl321|2013245851587514368_debit BPT|2MPThl321|2013245851587514368_DEBIT_0 1,010.00 0.00 7,528.00]
+
+Rules for MoniePoint:
+
+Date line: always its own line, format YYYY-MM-DDTHH: (ends with colon)
+Next lines before amounts: time (HH:MM), optional narration text, optional pure card number (506105*****0775), optional reference starting with /
+SOMETIMES the time and reference and amounts are all on one line (compact debit): [40:45 TRF|... 1.50 0.00 8,538.00]
+Amounts line ends with 3 decimal numbers: Debit Credit Balance
+I only want credits where Debit=0 and Credit>0
+ACCESS BANK — exact pdf-parse output (columns separated by real TAB \t characters):
+
+[Posted Date \t Value Date \t Description \t Debit (NGN) \t Credit (NGN) \t Balance (NGN)]
+[26-JAN-26 \t 26-JAN-26 \t NDIBE BEATRICE CHIKA/MOB/UTO/FAITH ELOHOR]
+[A/school fees bal/35085505237 \t - \t 0.00 \t 14,298,930.00]
+[26-JAN-26 \t 26-JAN-26]
+[IKEMEONU OBUMNAEME]
+[MICHAEL/MOB/UTO/FAITH ELOHOR A/omechala s]
+[scho/35085551942]
+[- \t 90,000.00 \t 14,388,930.00]
+[26-JAN-26 \t 26-JAN-26 \t Opening Balance \t - \t 14,249,930.16 \t 14,261,930.00]
+[26-JAN-26 \t 25-JAN-26 \t Transfer from FAITH ADANNE OKAFOR \t - \t 23,500.00 \t 14,462,430.00]
+[26-JAN-26 \t 26-JAN-26 \t TRSF/FAITH ELOHOR ADAH/192***5748/CHINYERE]
+[UDO \t - \t 43,500.00 \t 15,045,430.00]
+
+Rules for Access Bank:
+
+Columns are real \t tab characters
+A transaction can span 1–4+ lines
+The LAST 3 tab-fields of the final line are always: Debit, Credit, Balance
+Debit or Credit can be - (meaning zero) or a number like 23,500.00
+I only want credits where Debit=- and Credit>0
+Skip Opening Balance / Closing Balance rows
+My TypeScript types:
+
+interface ParsedTransaction {
+  date: string;        // "DD/MM/YYYY"
+  credit: number;
+  rawDescription: string;
+  fingerprint: string;
+}
+function generateFingerprint(date: string, credit: number, desc: string): string {
+  // already exists, just call it
+}
+function parseDateString(s: string): string | null {
+  // converts "26-JAN-26" → "26/01/2026", already exists
+}
+
+Please write:
+
+function parseMoniePointTransactions(rawText: string): ParsedTransaction[]
+function parseAccessTransactions(rawText: string): ParsedTransaction[]
+Just the two functions. No explanation needed.
