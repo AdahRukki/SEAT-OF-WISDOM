@@ -90,6 +90,7 @@ function PortalRoutes() {
     return (
       <Switch>
         <Route path="login" component={Login} />
+        <Route path="/portal/login" component={Login} />
         <Route path="" component={Login} />
         <Route component={Login} />
       </Switch>
@@ -99,6 +100,7 @@ function PortalRoutes() {
   return (
     <Switch>
       <Route path="login" component={Login} />
+      <Route path="/portal/login" component={Login} />
       {(user?.role === 'admin' || user?.role === 'sub-admin') ? (
         <>
           <Route path="" component={AdminDashboard} />
