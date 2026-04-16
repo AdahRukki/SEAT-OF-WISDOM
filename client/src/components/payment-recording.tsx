@@ -59,8 +59,9 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Eye,
 } from "lucide-react";
-import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeeType } from "@shared/schema";
+import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeePaymentStudentSplit, type FeeType } from "@shared/schema";
 
 type RecordPaymentForm = z.infer<typeof recordFeePaymentSchema>;
 
@@ -72,6 +73,18 @@ const METHOD_LABELS: Record<string, string> = {
   pos: "POS",
   cash: "Cash",
 };
+
+// Safe date formatter that avoids timezone off-by-one
+function formatPaymentDate(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return "—";
+  const s = typeof dateStr === "string" ? dateStr : dateStr.toISOString();
+  const parsed = new Date(s.includes("T") ? s : `${s}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  const day = parsed.getDate().toString().padStart(2, "0");
+  const month = parsed.toLocaleString("en-US", { month: "short" }).toLowerCase();
+  const year = parsed.getFullYear();
+  return `${day}-${month}-${year}`;
+}
 
 interface Student {
   id: string;
@@ -126,6 +139,7 @@ export function PaymentRecording({
   const [currentPage, setCurrentPage] = useState(1);
   const [filterTerm, setFilterTerm] = useState<string>(currentTerm || "");
   const [filterSession, setFilterSession] = useState<string>(currentSession || "");
+  const [viewingRecord, setViewingRecord] = useState<FeePaymentRecordWithDetails | null>(null);
   const PAGE_SIZE = 25;
 
   const { toast } = useToast();
@@ -552,17 +566,6 @@ export function PaymentRecording({
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
-  };
-
-  // Fix #6: safe date formatter that avoids timezone off-by-one
-  const formatPaymentDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "—";
-    const parsed = new Date(dateStr.includes("T") ? dateStr : `${dateStr}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return "—";
-    const day = parsed.getDate().toString().padStart(2, "0");
-    const month = parsed.toLocaleString("en-US", { month: "short" }).toLowerCase();
-    const year = parsed.getFullYear();
-    return `${day}-${month}-${year}`;
   };
 
   return (
@@ -1046,18 +1049,19 @@ export function PaymentRecording({
                   {/* UX #5: Depositor in own column */}
                   <TableHead>Depositor</TableHead>
                   <TableHead>Recorded By</TableHead>
+                  <TableHead className="w-[60px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recordsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8">
+                    <TableCell colSpan={12} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : totalRecords === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                       No payment records found
                     </TableCell>
                   </TableRow>
@@ -1116,6 +1120,18 @@ export function PaymentRecording({
                           : <span>—</span>
                         }
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setViewingRecord(record)}
+                          title="View details"
+                          data-testid={`button-view-payment-${record.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -1155,6 +1171,129 @@ export function PaymentRecording({
           </div>
         )}
       </div>
+
+      <PaymentDetailsDialog
+        record={viewingRecord}
+        onClose={() => setViewingRecord(null)}
+      />
     </div>
   );
 }
+
+function PaymentDetailsDialog({
+  record,
+  onClose,
+}: {
+  record: FeePaymentRecordWithDetails | null;
+  onClose: () => void;
+}) {
+  const isSplit = !!record && !record.student;
+
+  const { data: splits, isLoading: splitsLoading } = useQuery<
+    (FeePaymentStudentSplit & {
+      student?: { studentId: string; user?: { firstName: string; lastName: string }; class?: { name: string } };
+    })[]
+  >({
+    queryKey: ["/api/payments/records", record?.id, "splits"],
+    enabled: !!record && isSplit,
+  });
+
+  if (!record) return null;
+
+  const dateStr = formatPaymentDate(record.paymentDate);
+  const statusLabel =
+    record.status === "confirmed" ? "Confirmed" : record.status === "reversed" ? "Reversed" : "Pending";
+
+  return (
+    <Dialog open={!!record} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Payment Details</DialogTitle>
+          <DialogDescription>Full information for this payment record.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 text-sm">
+          <DetailRow label="Date" value={dateStr} />
+          <DetailRow label="Amount" value={`₦${parseFloat(record.amount).toLocaleString()}`} bold />
+          <DetailRow label="Purpose" value={record.purpose || "—"} />
+          <DetailRow label="Method" value={METHOD_LABELS[record.paymentMethod] ?? record.paymentMethod} />
+          <DetailRow label="Reference" value={record.reference || "—"} mono />
+          <DetailRow label="Term / Session" value={`${record.term || "—"} / ${record.session || "—"}`} />
+          <DetailRow label="Status" value={statusLabel} />
+          <DetailRow label="Depositor" value={record.depositorName || "—"} />
+          <DetailRow
+            label="Recorded By"
+            value={
+              record.recordedByUser
+                ? `${record.recordedByUser.firstName} ${record.recordedByUser.lastName}`.trim()
+                : "—"
+            }
+          />
+          {record.notes && <DetailRow label="Notes" value={record.notes} />}
+
+          <Separator />
+
+          {record.student ? (
+            <>
+              <div className="text-xs uppercase text-muted-foreground tracking-wide">Student</div>
+              <div className="border rounded-md p-3">
+                <div className="font-medium">
+                  {record.student.user?.lastName} {record.student.user?.firstName}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  ID: {record.student.studentId} · {record.student.class?.name || "No class"}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="text-xs uppercase text-muted-foreground tracking-wide">Split Between Students</div>
+                <Badge variant="secondary" className="text-xs">
+                  {splits?.length ?? record.splitCount ?? "…"} students
+                </Badge>
+              </div>
+              {splitsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : splits && splits.length > 0 ? (
+                <div className="border rounded-md divide-y max-h-60 overflow-y-auto">
+                  {splits.map((s) => (
+                    <div key={s.id} className="p-3 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {s.student?.user?.lastName} {s.student?.user?.firstName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {s.student?.studentId || "—"} · {s.student?.class?.name || "No class"}
+                        </div>
+                      </div>
+                      <div className="font-medium text-sm flex-shrink-0 pl-3">
+                        ₦{parseFloat(s.amount).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">No split details available.</div>
+              )}
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ label, value, bold, mono }: { label: string; value: string; bold?: boolean; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`text-right ${bold ? "font-semibold" : ""} ${mono ? "font-mono text-xs" : ""}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
