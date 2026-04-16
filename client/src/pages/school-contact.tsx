@@ -223,10 +223,6 @@ export default function SchoolContact() {
                       <span>Monday - Friday:</span>
                       <span>8:00 AM - 5:00 PM</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Lunch Break:</span>
-                      <span>1:00 PM - 2:00 PM</span>
-                    </div>
                   </div>
                 </div>
                 <div>
