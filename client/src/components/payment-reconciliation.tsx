@@ -122,6 +122,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [allocations, setAllocations] = useState<Allocation[]>([{ studentId: "", amount: 0 }]);
   const [studentSearch, setStudentSearch] = useState("");
   const [txSearch, setTxSearch] = useState("");
+  const [unmatchedSearch, setUnmatchedSearch] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -982,17 +983,28 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </TabsContent>
 
         <TabsContent value="transactions" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h4 className="text-lg font-medium">Unmatched Transactions</h4>
               <p className="text-sm text-muted-foreground">
                 Bank transactions not yet linked to any payment
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetchTransactions()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2 flex-1 min-w-0 max-w-sm">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search description, reference..."
+                  value={unmatchedSearch}
+                  onChange={(e) => setUnmatchedSearch(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <Button variant="outline" size="sm" onClick={() => refetchTransactions()}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {transactionsLoading ? (
@@ -1021,7 +1033,17 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {unmatchedTransactions.map((tx) => (
+                    {(unmatchedSearch.trim()
+                      ? unmatchedTransactions.filter(tx => {
+                          const q = unmatchedSearch.toLowerCase();
+                          return (
+                            tx.rawDescription?.toLowerCase().includes(q) ||
+                            tx.reference?.toLowerCase().includes(q) ||
+                            tx.amount?.toString().includes(q)
+                          );
+                        })
+                      : unmatchedTransactions
+                    ).map((tx) => (
                       <TableRow key={tx.id}>
                         <TableCell>
                           {new Date(tx.transactionDate).toLocaleDateString()}
