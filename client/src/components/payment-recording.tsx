@@ -803,53 +803,7 @@ export function PaymentRecording({
 
                   <Separator />
 
-                  {/* Term & Session (compact) */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField
-                      control={form.control}
-                      name="term"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs text-muted-foreground">Term</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
-                            <FormControl>
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue placeholder="Select term" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="First Term">First Term</SelectItem>
-                              <SelectItem value="Second Term">Second Term</SelectItem>
-                              <SelectItem value="Third Term">Third Term</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="session"
-                      render={({ field }) => (
-                        <FormItem className="space-y-1">
-                          <FormLabel className="text-xs text-muted-foreground">Session</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
-                            <FormControl>
-                              <SelectTrigger className="h-8 text-sm">
-                                <SelectValue placeholder="Select session" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {sessionOptions.map((s) => (
-                                <SelectItem key={s} value={s}>{s}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  {/* Term & Session are auto-filled from currently active academic info */}
 
                   {/* Payment Details */}
                   <div className="grid grid-cols-2 gap-4">
