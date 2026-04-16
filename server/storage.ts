@@ -3044,11 +3044,30 @@ export class DatabaseStorage implements IStorage {
     return paymentRecord;
   }
 
-  async getSplitsForPaymentRecord(paymentRecordId: string): Promise<FeePaymentStudentSplit[]> {
-    return await db
-      .select()
+  async getSplitsForPaymentRecord(paymentRecordId: string): Promise<any[]> {
+    const rows = await db
+      .select({
+        split: feePaymentStudentSplits,
+        student: students,
+        user: users,
+        class: classes,
+      })
       .from(feePaymentStudentSplits)
+      .leftJoin(students, eq(feePaymentStudentSplits.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
       .where(eq(feePaymentStudentSplits.paymentRecordId, paymentRecordId));
+
+    return rows.map((r) => ({
+      ...r.split,
+      student: r.student
+        ? {
+            ...r.student,
+            user: r.user ?? undefined,
+            class: r.class ?? undefined,
+          }
+        : null,
+    }));
   }
 
   async getFeePaymentRecords(filters: { 
