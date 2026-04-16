@@ -1263,7 +1263,7 @@ function PaymentDetailsDialog({
                     <div key={s.id} className="p-3 flex items-center justify-between">
                       <div className="min-w-0">
                         <div className="font-medium text-sm truncate">
-                          {s.student?.user?.lastName} {s.student?.user?.firstName}
+                          {s.student?.user ? `${s.student.user.lastName} ${s.student.user.firstName}` : "—"}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {s.student?.studentId || "—"} · {s.student?.class?.name || "No class"}
