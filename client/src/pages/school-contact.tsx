@@ -153,7 +153,6 @@ export default function SchoolContact() {
           </div>
         </div>
       </nav>
-
       {/* Hero Section */}
       <section className="relative py-20 lg:py-28 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800">
         <div className="absolute inset-0 bg-black/20"></div>
@@ -167,7 +166,6 @@ export default function SchoolContact() {
           </p>
         </div>
       </section>
-
       {/* Contact Information */}
       <section className="py-20 bg-white dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -229,7 +227,7 @@ export default function SchoolContact() {
                   <h4 className="font-semibold mb-3">Weekends</h4>
                   <div className="space-y-2 text-gray-600 dark:text-gray-300">
                     <div className="flex justify-between">
-                      <span>Saturday:</span>
+                      <span>Saturday and Sunday:</span>
                       <span>9:00 AM - 1:00 PM</span>
                     </div>
                     <div className="flex justify-between">
@@ -243,7 +241,6 @@ export default function SchoolContact() {
           </Card>
         </div>
       </section>
-
       {/* Contact Form */}
       <section className="py-20 bg-gray-50 dark:bg-gray-800">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -415,7 +412,6 @@ export default function SchoolContact() {
           )}
         </div>
       </section>
-
       {/* Branch Locations */}
       <section id="branches" className="py-20 bg-white dark:bg-gray-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -535,7 +531,6 @@ export default function SchoolContact() {
           </div>
         </div>
       </section>
-
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
