@@ -242,7 +242,7 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
   const isSkipLine = (l: string) =>
     /^\d{2}:\d{2}/.test(l) ||     // time continuation e.g. "21:45" or compact "40:45 REF..."
     /^[\d*]+$/.test(l) ||          // pure card mask line e.g. "506105*********0775" (only digits+stars)
-    l.startsWith("/") ||            // reference continuation e.g. "/PUR|..."
+    (l.startsWith("/") && l.includes("|")) || // internal reference codes e.g. "/PUR|..." "/NIP|..." (NOT "/JOHN DOE")
     /^--\s*\d+/.test(l);           // page marker e.g. "-- 1 of 15 --"
 
   let i = 0;
@@ -301,8 +301,8 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
       // Strip the trailing "Debit Credit Balance" numbers to get the reference prefix
       const prefixEnd = rawAmounts.lastIndexOf(amountsMatch[1]);
       const prefix = prefixEnd > 0 ? rawAmounts.substring(0, prefixEnd).trim() : "";
-      // Use the last segment of the reference (after the last "|" or space) as a short key
-      desc = prefix.replace(/\|/g, " ").replace(/\s{2,}/g, " ").trim().substring(0, 80);
+      // Use the reference prefix as fallback (pipe chars replaced with spaces for readability)
+      desc = prefix.replace(/\|/g, " ").replace(/\s{2,}/g, " ").trim();
     }
 
     const fingerprint = generateFingerprint(formattedDate, credit, desc);
