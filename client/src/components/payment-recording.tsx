@@ -80,10 +80,10 @@ function formatPaymentDate(dateStr: string | Date | null | undefined): string {
   const s = typeof dateStr === "string" ? dateStr : dateStr.toISOString();
   const parsed = new Date(s.includes("T") ? s : `${s}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return "—";
-  const day = parsed.getDate().toString().padStart(2, "0");
-  const month = parsed.toLocaleString("en-US", { month: "short" }).toLowerCase();
+  const day = parsed.getDate();
+  const month = parsed.toLocaleString("en-GB", { month: "short" });
   const year = parsed.getFullYear();
-  return `${day}-${month}-${year}`;
+  return `${day} ${month} ${year}`;
 }
 
 interface Student {
