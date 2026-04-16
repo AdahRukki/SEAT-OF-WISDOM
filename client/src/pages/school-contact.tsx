@@ -485,25 +485,25 @@ export default function SchoolContact() {
               </div>
             </Card>
 
-            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-cable">
+            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-akwuofor">
               <div className="mb-4">
                 <div className="mx-auto bg-orange-100 dark:bg-orange-900 rounded-full p-3 w-16 h-16 flex items-center justify-center">
                   <MapPin className="h-8 w-8 text-orange-600 dark:text-orange-400" />
                 </div>
               </div>
-              <CardTitle className="text-lg mb-2">CABLE POINT</CardTitle>
+              <CardTitle className="text-lg mb-2">AKWUOFOR</CardTitle>
               <CardDescription className="mb-4">
-                Cable Point, Asaba<br />
+                Akwuofor along Amusement Park, Koka<br />
                 Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                 <p>07062492861, 09112024868</p>
                 <a 
-                  href="https://maps.google.com/?q=Cable+Point,+Asaba,+Delta+State,+Nigeria" 
+                  href="https://maps.google.com/?q=Akwuofor+along+Amusement+Park,+Koka,+Delta+State,+Nigeria" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm mt-2"
-                  data-testid="link-maps-cable"
+                  data-testid="link-maps-akwuofor"
                 >
                   View on Google Maps
                   <ExternalLink className="ml-1 h-3 w-3" />
@@ -511,25 +511,25 @@ export default function SchoolContact() {
               </div>
             </Card>
 
-            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-okpanam">
+            <Card className="p-6 text-center hover:shadow-lg transition-shadow" data-testid="card-branch-akwuose">
               <div className="mb-4">
                 <div className="mx-auto bg-purple-100 dark:bg-purple-900 rounded-full p-3 w-16 h-16 flex items-center justify-center">
                   <MapPin className="h-8 w-8 text-purple-600 dark:text-purple-400" />
                 </div>
               </div>
-              <CardTitle className="text-lg mb-2">OKPANAM</CardTitle>
+              <CardTitle className="text-lg mb-2">AKWUOSE</CardTitle>
               <CardDescription className="mb-4">
-                Okpanam, Asaba<br />
+                Akwuose behind Mama's Mart, along Ibusa Road<br />
                 Delta State, Nigeria
               </CardDescription>
               <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                 <p>07062492861, 09112024868</p>
                 <a 
-                  href="https://maps.google.com/?q=Okpanam,+Asaba,+Delta+State,+Nigeria" 
+                  href="https://maps.google.com/?q=Akwuose+behind+Mama%27s+Mart+along+Ibusa+Road,+Delta+State,+Nigeria" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center text-blue-600 hover:text-blue-700 text-sm mt-2"
-                  data-testid="link-maps-okpanam"
+                  data-testid="link-maps-akwuose"
                 >
                   View on Google Maps
                   <ExternalLink className="ml-1 h-3 w-3" />
