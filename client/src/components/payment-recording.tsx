@@ -541,12 +541,13 @@ export function PaymentRecording({
 
   // Fix #6: safe date formatter that avoids timezone off-by-one
   const formatPaymentDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "N/A";
-    return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
+    if (!dateStr) return "—";
+    const parsed = new Date(dateStr.includes("T") ? dateStr : `${dateStr}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    const day = parsed.getDate().toString().padStart(2, "0");
+    const month = parsed.toLocaleString("en-US", { month: "short" }).toLowerCase();
+    const year = parsed.getFullYear();
+    return `${day}-${month}-${year}`;
   };
 
   return (
