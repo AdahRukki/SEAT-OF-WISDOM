@@ -389,18 +389,27 @@ export function PaymentRecording({
     const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
 
     if (!isOnline) {
-      // Fix #2d: single student uses totalAmount directly
+      if (studentCount > 1) {
+        // Multi-student payments must be online — they require a single atomic DB record
+        toast({
+          title: "Connection Required",
+          description: "Split payments for multiple students require an internet connection. Please reconnect and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Single-student offline flow
       const offlinePayments = selectedEntries.map((entry) => ({
         ...dataWithPurpose,
         studentId: entry.student.id,
-        amount: studentCount === 1 ? totalAmount : entry.amount,
+        amount: totalAmount,
         offlineId: `offline_${Date.now()}_${entry.student.id}`,
         createdAt: new Date().toISOString(),
       }));
       setPendingPayments([...pendingPayments, ...offlinePayments]);
       toast({
-        title: "Payments Saved Offline",
-        description: `${offlinePayments.length} payment(s) will be synced when you're back online.`,
+        title: "Payment Saved Offline",
+        description: "Payment will be synced when you're back online.",
       });
       closeAndReset();
       return;

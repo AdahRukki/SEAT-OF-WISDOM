@@ -3124,18 +3124,17 @@ export class DatabaseStorage implements IStorage {
     // Enrich multi-student records with splitCount
     const multiIds = result.filter(r => !r.student).map(r => r.id);
     if (multiIds.length > 0) {
-      const splitCounts = await db.execute(sql`
+      const splitCountRows = await db.execute(sql`
         SELECT payment_record_id AS id, COUNT(*)::int AS cnt
         FROM fee_payment_student_splits
         WHERE payment_record_id = ANY(${multiIds}::uuid[])
         GROUP BY payment_record_id
       `);
-      const splitCountMap = new Map(
-        ((splitCounts as any).rows || splitCounts).map((r: any) => [r.id, r.cnt])
-      );
+      const rawRows = ((splitCountRows as any).rows ?? splitCountRows) as { id: string; cnt: number }[];
+      const splitCountMap = new Map(rawRows.map(r => [r.id, r.cnt]));
       result.forEach(r => {
         if (!r.student) {
-          (r as any).splitCount = splitCountMap.get(r.id) ?? 0;
+          r.splitCount = splitCountMap.get(r.id) ?? 0;
         }
       });
     }
