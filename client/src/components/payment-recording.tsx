@@ -407,43 +407,49 @@ export function PaymentRecording({
     }
 
     setIsSubmitting(true);
-    let successCount = 0;
-    const errors: string[] = [];
 
-    for (let idx = 0; idx < selectedEntries.length; idx++) {
-      const entry = selectedEntries[idx];
-      // Fix #2c: single student uses totalAmount directly
-      const entryAmount = studentCount === 1 ? totalAmount : entry.amount;
-      try {
+    try {
+      if (studentCount > 1) {
+        // Multi-student: send a single request with splits
+        await apiRequest("/api/payments/record/multi", {
+          method: "POST",
+          body: {
+            ...dataWithPurpose,
+            schoolId: schoolId || selectedEntries[0]?.student?.schoolId || selectedEntries[0]?.student?.class?.schoolId,
+            amount: totalAmount,
+            entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
+          },
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        toast({
+          title: "Payment Recorded",
+          description: `Split payment of ₦${totalAmount.toLocaleString()} recorded for ${studentCount} students.`,
+        });
+        closeAndReset();
+      } else {
+        // Single student
+        const entry = selectedEntries[0];
         await recordPaymentMutation.mutateAsync({
           ...dataWithPurpose,
           studentId: entry.student.id,
-          amount: entryAmount,
+          amount: totalAmount,
         });
-        successCount++;
-      } catch (err: any) {
-        errors.push(`${entry.student.user?.lastName || entry.student.lastName} ${entry.student.user?.firstName || entry.student.firstName}: ${err.message || "Failed"}`);
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        toast({
+          title: "Payment Recorded",
+          description: `Payment of ₦${totalAmount.toLocaleString()} recorded successfully.`,
+        });
+        closeAndReset();
       }
-    }
-
-    setIsSubmitting(false);
-
-    if (successCount > 0) {
+    } catch (err: any) {
       toast({
-        title: successCount === selectedEntries.length ? "Payments Recorded" : "Partially Recorded",
-        description: `${successCount} of ${selectedEntries.length} payment(s) recorded successfully.${errors.length > 0 ? ` ${errors.length} failed.` : ""}`,
-        variant: errors.length > 0 ? "destructive" : "default",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-    } else {
-      toast({
-        title: "All Payments Failed",
-        description: errors.join("; "),
+        title: "Payment Failed",
+        description: err.message || "Failed to record payment. Please try again.",
         variant: "destructive",
       });
     }
 
-    if (successCount > 0) closeAndReset();
+    setIsSubmitting(false);
   };
 
   const closeAndReset = () => {
@@ -1100,12 +1106,20 @@ export function PaymentRecording({
                         {formatPaymentDate(record.paymentDate)}
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium text-sm">
-                          {record.student?.user?.lastName} {record.student?.user?.firstName}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {record.student?.studentId}
-                        </div>
+                        {record.student ? (
+                          <>
+                            <div className="font-medium text-sm">
+                              {record.student.user?.lastName} {record.student.user?.firstName}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {record.student.studentId}
+                            </div>
+                          </>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            Split: {(record as any).splitCount ?? "N"} students
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {record.student?.class?.name || <span className="text-muted-foreground">—</span>}

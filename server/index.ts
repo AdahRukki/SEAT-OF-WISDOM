@@ -21,6 +21,14 @@ async function runMigrations() {
         session VARCHAR(20),
         created_at TIMESTAMP DEFAULT NOW()
       );
+      ALTER TABLE fee_payment_records ALTER COLUMN student_id DROP NOT NULL;
+      CREATE TABLE IF NOT EXISTS fee_payment_student_splits (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        payment_record_id UUID NOT NULL REFERENCES fee_payment_records(id) ON DELETE CASCADE,
+        student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        amount DECIMAL(12,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
     `);
     log("Database migrations applied successfully");
   } catch (err) {

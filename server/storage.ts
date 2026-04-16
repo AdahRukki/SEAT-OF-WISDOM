@@ -23,6 +23,7 @@ import {
   notifications,
   publishedScores,
   feePaymentRecords,
+  feePaymentStudentSplits,
   paymentAuditLogs,
   paymentAllocations,
   bankStatements,
@@ -75,6 +76,7 @@ import {
   type FeePaymentRecord,
   type InsertFeePaymentRecord,
   type FeePaymentRecordWithDetails,
+  type FeePaymentStudentSplit,
   type PaymentAuditLog,
   type InsertPaymentAuditLog,
   type BankStatement,
@@ -191,6 +193,8 @@ export interface IStorage {
   recordPayment(paymentData: InsertPayment): Promise<Payment>;
   getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string, classId?: string): Promise<PaymentWithDetails[]>;
   getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
+  createFeePaymentWithSplits(record: Omit<InsertFeePaymentRecord, 'studentId'> & { studentId?: string | null }, splits: Array<{ studentId: string; amount: number }>): Promise<FeePaymentRecord>;
+  getSplitsForPaymentRecord(paymentRecordId: string): Promise<FeePaymentStudentSplit[]>;
   
   getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
     studentDbId: string;
@@ -1417,9 +1421,49 @@ export class DatabaseStorage implements IStorage {
         u.last_name AS "lastName",
         c.name AS "className",
         s.class_id AS "classId",
-        COALESCE(SUM(fpr.amount), 0)::numeric AS "totalPaid",
-        COUNT(fpr.id)::int AS "paymentCount",
-        MAX(fpr.payment_date) AS "lastPaymentDate",
+        (
+          COALESCE((
+            SELECT SUM(fpr.amount) FROM fee_payment_records fpr
+            WHERE fpr.student_id = s.id AND ${paymentJoinClause}
+          ), 0)
+          +
+          COALESCE((
+            SELECT SUM(fpss.amount) FROM fee_payment_student_splits fpss
+            JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+            WHERE fpss.student_id = s.id
+              AND fpr2.school_id = ${schoolId}
+              AND fpr2.status = 'confirmed'
+              ${term ? sql`AND fpr2.term = ${term}` : sql``}
+              ${session ? sql`AND fpr2.session = ${session}` : sql``}
+          ), 0)
+        )::numeric AS "totalPaid",
+        (
+          COALESCE((
+            SELECT COUNT(fpr.id) FROM fee_payment_records fpr
+            WHERE fpr.student_id = s.id AND ${paymentJoinClause}
+          ), 0)
+          +
+          COALESCE((
+            SELECT COUNT(fpss.id) FROM fee_payment_student_splits fpss
+            JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+            WHERE fpss.student_id = s.id
+              AND fpr2.school_id = ${schoolId}
+              AND fpr2.status = 'confirmed'
+              ${term ? sql`AND fpr2.term = ${term}` : sql``}
+              ${session ? sql`AND fpr2.session = ${session}` : sql``}
+          ), 0)
+        )::int AS "paymentCount",
+        GREATEST(
+          (SELECT MAX(fpr.payment_date) FROM fee_payment_records fpr
+           WHERE fpr.student_id = s.id AND ${paymentJoinClause}),
+          (SELECT MAX(fpr2.payment_date) FROM fee_payment_student_splits fpss
+           JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+           WHERE fpss.student_id = s.id
+             AND fpr2.school_id = ${schoolId}
+             AND fpr2.status = 'confirmed'
+             ${term ? sql`AND fpr2.term = ${term}` : sql``}
+             ${session ? sql`AND fpr2.session = ${session}` : sql``})
+        ) AS "lastPaymentDate",
         COALESCE((
           SELECT SUM(sf.amount) FROM student_fees sf
           WHERE sf.student_id = s.id
@@ -1429,7 +1473,6 @@ export class DatabaseStorage implements IStorage {
       FROM students s
       JOIN users u ON s.user_id = u.id
       LEFT JOIN classes c ON s.class_id = c.id
-      LEFT JOIN fee_payment_records fpr ON fpr.student_id = s.id AND ${paymentJoinClause}
       WHERE ${studentWhereClause}
       GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id
       ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
@@ -1508,11 +1551,21 @@ export class DatabaseStorage implements IStorage {
     `);
 
     const paymentsRows = await db.execute(sql`
-      SELECT fpr.student_id AS "studentId", COALESCE(SUM(fpr.amount), 0)::numeric AS "totalPaid"
-      FROM fee_payment_records fpr
-      WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'
-        AND fpr.term = ${term} AND fpr.session = ${session}
-      GROUP BY fpr.student_id
+      SELECT student_id AS "studentId", COALESCE(SUM(amount), 0)::numeric AS "totalPaid"
+      FROM (
+        SELECT fpr.student_id, fpr.amount
+        FROM fee_payment_records fpr
+        WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'
+          AND fpr.term = ${term} AND fpr.session = ${session}
+          AND fpr.student_id IS NOT NULL
+        UNION ALL
+        SELECT fpss.student_id, fpss.amount
+        FROM fee_payment_student_splits fpss
+        JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+        WHERE fpr2.school_id = ${schoolId} AND fpr2.status = 'confirmed'
+          AND fpr2.term = ${term} AND fpr2.session = ${session}
+      ) combined
+      GROUP BY student_id
     `);
 
     const tuitionFeeRows = await db.execute(sql`
@@ -2948,6 +3001,39 @@ export class DatabaseStorage implements IStorage {
     return record;
   }
 
+  async createFeePaymentWithSplits(
+    record: Omit<InsertFeePaymentRecord, 'studentId'> & { studentId?: string | null },
+    splits: Array<{ studentId: string; amount: number }>
+  ): Promise<FeePaymentRecord> {
+    console.log('[createFeePaymentWithSplits] Recording multi-student payment with', splits.length, 'splits');
+    const [paymentRecord] = await db
+      .insert(feePaymentRecords)
+      .values({
+        ...record,
+        studentId: null,
+        status: 'recorded',
+      } as any)
+      .returning();
+
+    await db.insert(feePaymentStudentSplits).values(
+      splits.map(s => ({
+        paymentRecordId: paymentRecord.id,
+        studentId: s.studentId,
+        amount: s.amount.toString(),
+      }))
+    );
+
+    console.log('[createFeePaymentWithSplits] Created payment record:', paymentRecord.id, 'with splits for', splits.length, 'students');
+    return paymentRecord;
+  }
+
+  async getSplitsForPaymentRecord(paymentRecordId: string): Promise<FeePaymentStudentSplit[]> {
+    return await db
+      .select()
+      .from(feePaymentStudentSplits)
+      .where(eq(feePaymentStudentSplits.paymentRecordId, paymentRecordId));
+  }
+
   async getFeePaymentRecords(filters: { 
     schoolId?: string; 
     studentId?: string; 
@@ -3010,13 +3096,32 @@ export class DatabaseStorage implements IStorage {
 
     const result: FeePaymentRecordWithDetails[] = records.map(row => ({
       ...row.record,
-      student: {
-        ...row.student!,
+      student: row.student ? {
+        ...row.student,
         user: row.user!,
         class: row.class!,
-      },
+      } : null,
       recordedByUser: row.recordedByUser as User | undefined,
     }));
+
+    // Enrich multi-student records with splitCount
+    const multiIds = result.filter(r => !r.student).map(r => r.id);
+    if (multiIds.length > 0) {
+      const splitCounts = await db.execute(sql`
+        SELECT payment_record_id AS id, COUNT(*)::int AS cnt
+        FROM fee_payment_student_splits
+        WHERE payment_record_id = ANY(${multiIds}::uuid[])
+        GROUP BY payment_record_id
+      `);
+      const splitCountMap = new Map(
+        ((splitCounts as any).rows || splitCounts).map((r: any) => [r.id, r.cnt])
+      );
+      result.forEach(r => {
+        if (!r.student) {
+          (r as any).splitCount = splitCountMap.get(r.id) ?? 0;
+        }
+      });
+    }
 
     console.log('[getFeePaymentRecords] Found', result.length, 'records');
     return result;

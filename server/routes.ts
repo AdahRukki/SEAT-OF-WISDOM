@@ -28,6 +28,7 @@ import {
   insertNotificationSchema,
   insertContactSubmissionSchema,
   recordFeePaymentSchema,
+  recordMultiStudentPaymentSchema,
   multiStudentAllocationSchema,
   users,
   students,
@@ -3388,6 +3389,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid payment data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to record payment" });
+    }
+  });
+
+  app.post("/api/payments/record/multi", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    try {
+      console.log('[POST /api/payments/record/multi] User:', user.id, 'Role:', user.role);
+      const validatedData = recordMultiStudentPaymentSchema.parse(req.body);
+      const { schoolId, entries, amount, paymentMethod, paymentDate, purpose, depositorName, reference, term, session, notes } = validatedData;
+
+      if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "You can only record payments for your school's students" });
+      }
+
+      const paymentRecord = await storage.createFeePaymentWithSplits(
+        {
+          schoolId,
+          amount: amount.toString(),
+          paymentMethod,
+          paymentDate: new Date(paymentDate),
+          purpose: purpose || undefined,
+          depositorName,
+          reference,
+          term,
+          session,
+          notes,
+          recordedBy: user.id,
+        },
+        entries.map(e => ({ studentId: e.studentId, amount: e.amount }))
+      );
+
+      await storage.createPaymentAuditLog({
+        action: 'record_payment',
+        entityType: 'payment_record',
+        entityId: paymentRecord.id,
+        userId: user.id,
+        schoolId: schoolId || undefined,
+        newData: { ...paymentRecord, splitCount: entries.length, entries },
+        ipAddress: req.ip || req.socket.remoteAddress,
+      });
+
+      console.log('[POST /api/payments/record/multi] Multi-payment recorded:', paymentRecord.id, 'splits:', entries.length);
+      res.status(201).json(paymentRecord);
+    } catch (error: any) {
+      console.error("[POST /api/payments/record/multi] Error:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid payment data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to record multi-student payment" });
+    }
+  });
+
+  app.get("/api/payments/records/:id/splits", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const splits = await storage.getSplitsForPaymentRecord(id);
+      res.json(splits);
+    } catch (error) {
+      console.error("[GET /api/payments/records/:id/splits] Error:", error);
+      res.status(500).json({ error: "Failed to fetch payment splits" });
     }
   });
 

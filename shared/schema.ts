@@ -372,7 +372,7 @@ export const bankTransactions = pgTable("bank_transactions", {
 // Fee Payment Records table (payments recorded by bursar/admin)
 export const feePaymentRecords = pgTable("fee_payment_records", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").references(() => students.id, { onDelete: "cascade" }),
   schoolId: uuid("school_id").references(() => schools.id),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   paymentMethod: varchar("payment_method", { length: 30 }).notNull(), // transfer, pos, cash
@@ -401,6 +401,15 @@ export const paymentAllocations = pgTable("payment_allocations", {
   bankTransactionId: uuid("bank_transaction_id").notNull().references(() => bankTransactions.id, { onDelete: "cascade" }),
   allocatedAmount: decimal("allocated_amount", { precision: 12, scale: 2 }).notNull(),
   allocatedBy: uuid("allocated_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Fee Payment Student Splits table (for multi-student payment splitting)
+export const feePaymentStudentSplits = pgTable("fee_payment_student_splits", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentRecordId: uuid("payment_record_id").notNull().references(() => feePaymentRecords.id, { onDelete: "cascade" }),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -642,6 +651,18 @@ export const feePaymentRecordsRelations = relations(feePaymentRecords, ({ one, m
     references: [users.id],
   }),
   allocations: many(paymentAllocations),
+  splits: many(feePaymentStudentSplits),
+}));
+
+export const feePaymentStudentSplitsRelations = relations(feePaymentStudentSplits, ({ one }) => ({
+  paymentRecord: one(feePaymentRecords, {
+    fields: [feePaymentStudentSplits.paymentRecordId],
+    references: [feePaymentRecords.id],
+  }),
+  student: one(students, {
+    fields: [feePaymentStudentSplits.studentId],
+    references: [students.id],
+  }),
 }));
 
 export const paymentAllocationsRelations = relations(paymentAllocations, ({ one }) => ({
@@ -1096,15 +1117,40 @@ export type InsertPaymentAuditLog = z.infer<typeof insertPaymentAuditLogSchema>;
 export type ConfirmPayment = z.infer<typeof confirmPaymentSchema>;
 export type ReversePayment = z.infer<typeof reversePaymentSchema>;
 
+// Fee Payment Student Split types
+export type FeePaymentStudentSplit = typeof feePaymentStudentSplits.$inferSelect;
+
+// Schema for recording a multi-student payment (single record with per-student splits)
+export const recordMultiStudentPaymentSchema = z.object({
+  amount: z.coerce.number().positive("Total amount must be positive"),
+  paymentMethod: z.enum(["transfer", "pos", "cash"]),
+  paymentDate: z.string().min(1, "Payment date is required"),
+  purpose: z.string().max(100).optional(),
+  depositorName: z.string().min(1, "Depositor name is required").max(150),
+  reference: z.string().optional(),
+  term: z.string().optional(),
+  session: z.string().optional(),
+  notes: z.string().optional(),
+  schoolId: z.string().min(1, "School is required"),
+  entries: z.array(z.object({
+    studentId: z.string().min(1, "Student is required"),
+    amount: z.coerce.number().positive("Amount must be positive"),
+  })).min(2, "Multi-student payment requires at least 2 students"),
+});
+
+export type RecordMultiStudentPayment = z.infer<typeof recordMultiStudentPaymentSchema>;
+
 // Fee Payment Record with relations
 export type FeePaymentRecordWithDetails = FeePaymentRecord & {
-  student: Student & {
+  student?: (Student & {
     user: User;
     class: Class;
-  };
+  }) | null;
   recordedByUser?: User;
   confirmedByUser?: User;
   allocations?: PaymentAllocation[];
+  splits?: FeePaymentStudentSplit[];
+  splitCount?: number;
 };
 
 // Bank Transaction with relations
