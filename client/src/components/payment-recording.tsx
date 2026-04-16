@@ -60,6 +60,7 @@ import {
   ArrowUp,
   ArrowDown,
   Eye,
+  EyeOff,
 } from "lucide-react";
 import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeePaymentStudentSplit, type FeeType } from "@shared/schema";
 
@@ -123,6 +124,7 @@ export function PaymentRecording({
   userRole,
 }: PaymentRecordingProps) {
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
+  const [isBodyVisible, setIsBodyVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
   const [totalAmount, setTotalAmount] = useState<number>(0);
@@ -570,14 +572,26 @@ export function PaymentRecording({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-medium">Payment Recording</h3>
-          <p className="text-sm text-muted-foreground">
-            Record student fee payments for verification and reconciliation
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsBodyVisible((v) => !v)}
+            aria-label={isBodyVisible ? "Hide payment records" : "Show payment records"}
+            data-testid="button-toggle-payment-body"
+          >
+            {isBodyVisible ? (
+              <>
+                <EyeOff className="h-4 w-4 mr-2" /> Hide
+              </>
+            ) : (
+              <>
+                <Eye className="h-4 w-4 mr-2" /> Show
+              </>
+            )}
+          </Button>
           {pendingPayments.length > 0 && (
             <Badge variant="outline" className="bg-orange-50 text-orange-700">
               <Clock className="h-3 w-3 mr-1" />
@@ -925,6 +939,8 @@ export function PaymentRecording({
         </div>
       </div>
 
+      {isBodyVisible && (
+      <>
       <Separator />
 
       <div className="space-y-4">
@@ -1171,6 +1187,8 @@ export function PaymentRecording({
           </div>
         )}
       </div>
+      </>
+      )}
 
       <PaymentDetailsDialog
         record={viewingRecord}
