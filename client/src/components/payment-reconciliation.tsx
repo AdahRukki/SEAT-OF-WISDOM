@@ -287,6 +287,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       setIsConfirmDialogOpen(false);
       setSelectedPayment(null);
       setSelectedTransaction(null);
+      setMatchSearch("");
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
@@ -389,6 +390,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
   const handleConfirmClick = (payment: FeePaymentRecordWithDetails) => {
     setSelectedPayment(payment);
+    setSelectedTransaction(null);
+    setMatchSearch("");
     setIsConfirmDialogOpen(true);
   };
 
@@ -868,6 +871,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                       onClick={() => {
                                         setSelectedPayment(payment);
                                         setSelectedTransaction(suggestion.transaction);
+                                        setMatchSearch("");
                                         setIsConfirmDialogOpen(true);
                                       }}
                                     >
@@ -1219,7 +1223,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsConfirmDialogOpen(false)}>
+            <Button variant="outline" onClick={() => { setIsConfirmDialogOpen(false); setMatchSearch(""); }}>
               Cancel
             </Button>
             <Button
