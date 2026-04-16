@@ -415,7 +415,7 @@ export function PaymentRecording({
           method: "POST",
           body: {
             ...dataWithPurpose,
-            schoolId: schoolId || selectedEntries[0]?.student?.schoolId || selectedEntries[0]?.student?.class?.schoolId,
+            schoolId: schoolId,
             amount: totalAmount,
             entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
           },

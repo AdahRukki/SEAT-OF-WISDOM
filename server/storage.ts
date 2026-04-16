@@ -1453,7 +1453,18 @@ export class DatabaseStorage implements IStorage {
               ${session ? sql`AND fpr2.session = ${session}` : sql``}
           ), 0)
         )::int AS "paymentCount",
-        GREATEST(
+        COALESCE(
+          GREATEST(
+            (SELECT MAX(fpr.payment_date) FROM fee_payment_records fpr
+             WHERE fpr.student_id = s.id AND ${paymentJoinClause}),
+            (SELECT MAX(fpr2.payment_date) FROM fee_payment_student_splits fpss
+             JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+             WHERE fpss.student_id = s.id
+               AND fpr2.school_id = ${schoolId}
+               AND fpr2.status = 'confirmed'
+               ${term ? sql`AND fpr2.term = ${term}` : sql``}
+               ${session ? sql`AND fpr2.session = ${session}` : sql``})
+          ),
           (SELECT MAX(fpr.payment_date) FROM fee_payment_records fpr
            WHERE fpr.student_id = s.id AND ${paymentJoinClause}),
           (SELECT MAX(fpr2.payment_date) FROM fee_payment_student_splits fpss
@@ -3011,18 +3022,23 @@ export class DatabaseStorage implements IStorage {
       studentId: undefined,
       status: 'recorded',
     };
-    const [paymentRecord] = await db
-      .insert(feePaymentRecords)
-      .values(insertData)
-      .returning();
 
-    await db.insert(feePaymentStudentSplits).values(
-      splits.map(s => ({
-        paymentRecordId: paymentRecord.id,
-        studentId: s.studentId,
-        amount: s.amount.toString(),
-      }))
-    );
+    const paymentRecord = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(feePaymentRecords)
+        .values(insertData)
+        .returning();
+
+      await tx.insert(feePaymentStudentSplits).values(
+        splits.map(s => ({
+          paymentRecordId: created.id,
+          studentId: s.studentId,
+          amount: s.amount.toString(),
+        }))
+      );
+
+      return created;
+    });
 
     console.log('[createFeePaymentWithSplits] Created payment record:', paymentRecord.id, 'with splits for', splits.length, 'students');
     return paymentRecord;

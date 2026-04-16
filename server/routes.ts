@@ -3460,8 +3460,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/payments/records/:id/splits", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
     try {
       const { id } = req.params;
+      // Enforce school ownership before returning split data
+      const parentRecord = await storage.getFeePaymentRecordById(id);
+      if (!parentRecord) {
+        return res.status(404).json({ error: "Payment record not found" });
+      }
+      if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && parentRecord.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "You do not have access to this payment record" });
+      }
       const splits = await storage.getSplitsForPaymentRecord(id);
       res.json(splits);
     } catch (error) {
