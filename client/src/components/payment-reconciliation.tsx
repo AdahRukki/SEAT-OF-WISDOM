@@ -64,6 +64,40 @@ import {
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails, BankTransactionWithDetails } from "@shared/schema";
 
+// "12 Jan 2025" — timezone-safe for YYYY-MM-DD strings and Date objects.
+function formatRecoDate(value: string | Date | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "N/A";
+  let d: Date;
+  if (typeof value === "string") {
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+    if (dateOnly) {
+      const [y, m, day] = value.split("-").map(Number);
+      d = new Date(y, m - 1, day);
+    } else {
+      d = new Date(value);
+    }
+  } else {
+    d = value;
+  }
+  if (isNaN(d.getTime())) return "N/A";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function sameCalendarDay(a: string | Date, b: string | Date): boolean {
+  const da = typeof a === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a)
+    ? (() => { const [y, m, d] = a.split("-").map(Number); return new Date(y, m - 1, d); })()
+    : new Date(a);
+  const db = typeof b === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b)
+    ? (() => { const [y, m, d] = b.split("-").map(Number); return new Date(y, m - 1, d); })()
+    : new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
 interface BankStatement {
   id: string;
   fileName: string;
@@ -123,6 +157,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [studentSearch, setStudentSearch] = useState("");
   const [txSearch, setTxSearch] = useState("");
   const [unmatchedSearch, setUnmatchedSearch] = useState("");
+  const [matchSearch, setMatchSearch] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -382,7 +417,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     const paymentAmount = parseFloat(payment.amount);
     return unmatchedTransactions.filter((t) => {
       const txAmount = parseFloat(t.amount);
-      return Math.abs(txAmount - paymentAmount) < 0.01;
+      if (Math.abs(txAmount - paymentAmount) >= 0.01) return false;
+      return sameCalendarDay(t.transactionDate, payment.paymentDate);
     });
   };
 
@@ -669,7 +705,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                         </TableCell>
                         <TableCell>
                           {statement.dateRangeStart && statement.dateRangeEnd
-                            ? `${new Date(statement.dateRangeStart).toLocaleDateString()} - ${new Date(statement.dateRangeEnd).toLocaleDateString()}`
+                            ? `${formatRecoDate(statement.dateRangeStart)} - ${formatRecoDate(statement.dateRangeEnd)}`
                             : "N/A"}
                         </TableCell>
                         <TableCell>
@@ -683,9 +719,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {statement.createdAt
-                            ? new Date(statement.createdAt).toLocaleDateString()
-                            : "N/A"}
+                          {formatRecoDate(statement.createdAt)}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -773,7 +807,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 </div>
                                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                                   <Calendar className="h-3 w-3" />
-                                  {new Date(payment.paymentDate).toLocaleDateString()}
+                                  {formatRecoDate(payment.paymentDate)}
                                   <Badge variant="secondary" className="text-xs ml-1">{payment.paymentMethod}</Badge>
                                 </div>
                                 {payment.reference && (
@@ -821,7 +855,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <div className="text-muted-foreground">
                                       <span>{suggestion.transaction.rawDescription}</span>
                                       <div className="text-muted-foreground mt-0.5">
-                                        {new Date(suggestion.transaction.transactionDate).toLocaleDateString()}
+                                        {formatRecoDate(suggestion.transaction.transactionDate)}
                                         {suggestion.transaction.reference && ` | Ref: ${suggestion.transaction.reference}`}
                                       </div>
                                     </div>
@@ -926,7 +960,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 </div>
                                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                                   <Calendar className="h-3 w-3" />
-                                  {new Date(tx.transactionDate).toLocaleDateString()}
+                                  {formatRecoDate(tx.transactionDate)}
                                 </div>
                                 <div className="text-xs text-muted-foreground mt-1 break-words">
                                   {tx.rawDescription}
@@ -1046,7 +1080,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                     ).map((tx) => (
                       <TableRow key={tx.id}>
                         <TableCell>
-                          {new Date(tx.transactionDate).toLocaleDateString()}
+                          {formatRecoDate(tx.transactionDate)}
                         </TableCell>
                         <TableCell className="font-medium text-green-600">
                           ₦{parseFloat(tx.amount).toLocaleString()}
@@ -1079,7 +1113,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </TabsContent>
       </Tabs>
 
-      <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+      <Dialog open={isConfirmDialogOpen} onOpenChange={(open) => { setIsConfirmDialogOpen(open); if (!open) setMatchSearch(""); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Confirm Payment Match</DialogTitle>
@@ -1098,7 +1132,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   ₦{parseFloat(selectedPayment.amount).toLocaleString()}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {selectedPayment.paymentMethod} | {new Date(selectedPayment.paymentDate).toLocaleDateString()}
+                  {selectedPayment.paymentMethod} | {formatRecoDate(selectedPayment.paymentDate)}
                 </p>
                 {selectedPayment.purpose && (
                   <p className="text-sm"><span className="font-medium">Purpose:</span> {selectedPayment.purpose}</p>
@@ -1115,34 +1149,71 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
               <div className="space-y-2">
                 <Label>Select Matching Transaction:</Label>
-                <div className="max-h-[200px] overflow-y-auto space-y-2">
-                  {findMatchingTransactions(selectedPayment).map((tx) => (
-                    <div
-                      key={tx.id}
-                      onClick={() => setSelectedTransaction(tx)}
-                      className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                        selectedTransaction?.id === tx.id
-                          ? "border-primary bg-primary/5"
-                          : "hover:border-muted-foreground"
-                      }`}
-                    >
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="font-medium">
-                          ₦{parseFloat(tx.amount).toLocaleString()}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {new Date(tx.transactionDate).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground break-words">
-                        {tx.rawDescription}
-                      </p>
-                      {tx.reference && (
-                        <p className="text-xs text-muted-foreground mt-1">Ref: {tx.reference}</p>
-                      )}
-                    </div>
-                  ))}
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search description or reference..."
+                    value={matchSearch}
+                    onChange={(e) => setMatchSearch(e.target.value)}
+                    className="pl-8 h-8 text-sm"
+                    data-testid="input-match-search"
+                  />
                 </div>
+                {(() => {
+                  const baseMatches = findMatchingTransactions(selectedPayment);
+                  const q = matchSearch.trim().toLowerCase();
+                  const filtered = q
+                    ? baseMatches.filter(
+                        (tx) =>
+                          tx.rawDescription?.toLowerCase().includes(q) ||
+                          tx.reference?.toLowerCase().includes(q),
+                      )
+                    : baseMatches;
+                  if (baseMatches.length === 0) {
+                    return (
+                      <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
+                        No transactions match on this date and amount.
+                      </div>
+                    );
+                  }
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
+                        No transactions match your search.
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="max-h-[200px] overflow-y-auto space-y-2">
+                      {filtered.map((tx) => (
+                        <div
+                          key={tx.id}
+                          onClick={() => setSelectedTransaction(tx)}
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedTransaction?.id === tx.id
+                              ? "border-primary bg-primary/5"
+                              : "hover:border-muted-foreground"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-medium">
+                              ₦{parseFloat(tx.amount).toLocaleString()}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              {formatRecoDate(tx.transactionDate)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground break-words">
+                            {tx.rawDescription}
+                          </p>
+                          {tx.reference && (
+                            <p className="text-xs text-muted-foreground mt-1">Ref: {tx.reference}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1247,7 +1318,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       ₦{parseFloat(transactionToAllocate.amount).toLocaleString()}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(transactionToAllocate.transactionDate).toLocaleDateString()}
+                      {formatRecoDate(transactionToAllocate.transactionDate)}
                     </p>
                   </div>
                   <div className="text-right">
