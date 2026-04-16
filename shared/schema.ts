@@ -330,6 +330,24 @@ export const contactSubmissions = pgTable("contact_submissions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Admissions Applications table (public website applications)
+export const admissionsApplications = pgTable("admissions_applications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentName: varchar("student_name", { length: 200 }).notNull(),
+  dateOfBirth: varchar("date_of_birth", { length: 20 }).notNull(),
+  gender: varchar("gender", { length: 20 }).notNull(),
+  level: varchar("level", { length: 30 }).notNull(),
+  preferredBranch: varchar("preferred_branch", { length: 50 }).notNull(),
+  previousSchool: varchar("previous_school", { length: 200 }),
+  parentName: varchar("parent_name", { length: 200 }).notNull(),
+  parentPhone: varchar("parent_phone", { length: 30 }).notNull(),
+  parentEmail: varchar("parent_email", { length: 255 }),
+  homeAddress: text("home_address").notNull(),
+  specialNeeds: text("special_needs"),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // ============================================
 // PAYMENT TRACKING & RECONCILIATION SYSTEM
 // ============================================
@@ -996,6 +1014,16 @@ export const insertContactSubmissionSchema = createInsertSchema(contactSubmissio
 
 export type ContactSubmission = typeof contactSubmissions.$inferSelect;
 export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSchema>;
+
+// Admissions application schema and types
+export const insertAdmissionsApplicationSchema = createInsertSchema(admissionsApplications).omit({
+  id: true,
+  isRead: true,
+  createdAt: true,
+});
+
+export type AdmissionsApplication = typeof admissionsApplications.$inferSelect;
+export type InsertAdmissionsApplication = z.infer<typeof insertAdmissionsApplicationSchema>;
 
 // ============================================
 // PAYMENT TRACKING SCHEMAS & TYPES

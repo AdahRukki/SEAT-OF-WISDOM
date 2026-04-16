@@ -27,6 +27,7 @@ import {
   insertNewsSchema,
   insertNotificationSchema,
   insertContactSubmissionSchema,
+  insertAdmissionsApplicationSchema,
   recordFeePaymentSchema,
   recordMultiStudentPaymentSchema,
   multiStudentAllocationSchema,
@@ -34,13 +35,14 @@ import {
   students,
   classes,
   contactSubmissions,
+  admissionsApplications,
   bankStatements,
   bankTransactions,
   feePaymentRecords
 } from "@shared/schema";
-import { sendContactFormNotification } from "./resend";
+import { sendContactFormNotification, sendAdmissionsApplicationNotification } from "./resend";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 
@@ -4007,6 +4009,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid form data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to submit contact form" });
+    }
+  });
+
+  // Public admissions application submission
+  app.post("/api/public/admissions", async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertAdmissionsApplicationSchema.parse(req.body);
+
+      const [application] = await db.insert(admissionsApplications).values(validatedData).returning();
+
+      try {
+        await sendAdmissionsApplicationNotification({
+          studentName: validatedData.studentName,
+          dateOfBirth: validatedData.dateOfBirth,
+          gender: validatedData.gender,
+          level: validatedData.level,
+          preferredBranch: validatedData.preferredBranch,
+          previousSchool: validatedData.previousSchool || undefined,
+          parentName: validatedData.parentName,
+          parentPhone: validatedData.parentPhone,
+          parentEmail: validatedData.parentEmail || undefined,
+          homeAddress: validatedData.homeAddress,
+          specialNeeds: validatedData.specialNeeds || undefined,
+        });
+        console.log("Admissions application email notification sent successfully");
+      } catch (emailError) {
+        console.error("Failed to send admissions email notification:", emailError);
+      }
+
+      res.json({ success: true, message: "Your application has been received. Our admissions team will contact you shortly.", id: application.id });
+    } catch (error: any) {
+      console.error("Admissions application submission error:", error);
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid form data", details: error.errors });
+      }
+      res.status(500).json({ error: "Failed to submit application" });
+    }
+  });
+
+  // Admin: list contact submissions
+  app.get("/api/admin/contact-submissions", authenticate, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const rows = await db.select().from(contactSubmissions).orderBy(desc(contactSubmissions.createdAt));
+      res.json(rows);
+    } catch (error: any) {
+      console.error("List contact submissions error:", error);
+      res.status(500).json({ error: "Failed to fetch contact submissions" });
+    }
+  });
+
+  // Admin: mark contact submission as read/unread
+  app.patch("/api/admin/contact-submissions/:id/read", authenticate, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const isRead = req.body?.isRead === false ? false : true;
+      const [row] = await db.update(contactSubmissions)
+        .set({ isRead })
+        .where(eq(contactSubmissions.id, id))
+        .returning();
+      if (!row) return res.status(404).json({ error: "Not found" });
+      res.json(row);
+    } catch (error: any) {
+      console.error("Mark contact submission read error:", error);
+      res.status(500).json({ error: "Failed to update contact submission" });
+    }
+  });
+
+  // Admin: list admissions applications
+  app.get("/api/admin/admissions", authenticate, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const rows = await db.select().from(admissionsApplications).orderBy(desc(admissionsApplications.createdAt));
+      res.json(rows);
+    } catch (error: any) {
+      console.error("List admissions applications error:", error);
+      res.status(500).json({ error: "Failed to fetch admissions applications" });
+    }
+  });
+
+  // Admin: mark admissions application as read/unread
+  app.patch("/api/admin/admissions/:id/read", authenticate, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const isRead = req.body?.isRead === false ? false : true;
+      const [row] = await db.update(admissionsApplications)
+        .set({ isRead })
+        .where(eq(admissionsApplications.id, id))
+        .returning();
+      if (!row) return res.status(404).json({ error: "Not found" });
+      res.json(row);
+    } catch (error: any) {
+      console.error("Mark admissions application read error:", error);
+      res.status(500).json({ error: "Failed to update admissions application" });
     }
   });
 

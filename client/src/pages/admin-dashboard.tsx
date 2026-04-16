@@ -124,9 +124,11 @@ import {
   Pencil,
   Printer,
   Search,
-  CloudOff
+  CloudOff,
+  Inbox
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
+import { InquiriesManagement } from "@/components/inquiries-management";
 import { ReportCardManagement } from "@/components/report-card-management";
 import { TeacherGradesInterface } from "@/components/teacher-grades-interface";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -3621,7 +3623,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className={`grid w-full gap-0.5 h-auto p-1 bg-muted/60 ${user?.role === 'sub-admin' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4 sm:grid-cols-4 md:grid-cols-8'}`}>
+          <TabsList className={`grid w-full gap-0.5 h-auto p-1 bg-muted/60 ${user?.role === 'sub-admin' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-9'}`}>
             {user?.role === 'admin' && (
               <TabsTrigger value="overview" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <LayoutDashboard className="h-4 w-4 shrink-0" />
@@ -3660,6 +3662,12 @@ export default function AdminDashboard() {
               <TabsTrigger value="news" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Bell className="h-4 w-4 shrink-0" />
                 <span>News</span>
+              </TabsTrigger>
+            )}
+            {user?.role === 'admin' && (
+              <TabsTrigger value="inquiries" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <Inbox className="h-4 w-4 shrink-0" />
+                <span>Inquiries</span>
               </TabsTrigger>
             )}
           </TabsList>
@@ -5436,6 +5444,13 @@ export default function AdminDashboard() {
               <NewsManagement />
               <Separator />
               <NotificationsManagement />
+            </TabsContent>
+          )}
+
+          {/* Inquiries Tab - Main Admin Only */}
+          {user.role === 'admin' && (
+            <TabsContent value="inquiries" className="space-y-6">
+              <InquiriesManagement />
             </TabsContent>
           )}
 

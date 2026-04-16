@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +12,80 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { GraduationCap, FileText, Calendar, DollarSign, Clock, CheckCircle, Phone, Mail, MapPin, Menu } from "lucide-react";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { GraduationCap, FileText, Calendar, DollarSign, Clock, CheckCircle, Phone, Mail, MapPin, Menu, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import academyLogo from "@assets/academy-logo.png";
+
+const admissionsFormSchema = z.object({
+  studentName: z.string().min(2, "Student name is required"),
+  dateOfBirth: z.string().min(1, "Date of birth is required"),
+  gender: z.string().min(1, "Please select a gender"),
+  level: z.string().min(1, "Please select an education level"),
+  preferredBranch: z.string().min(1, "Please select a preferred branch"),
+  previousSchool: z.string().optional(),
+  parentName: z.string().min(2, "Parent/guardian name is required"),
+  parentPhone: z.string().min(7, "Phone number is required"),
+  parentEmail: z.string().email("Please enter a valid email").optional().or(z.literal("")),
+  homeAddress: z.string().min(5, "Home address is required"),
+  specialNeeds: z.string().optional(),
+});
+
+type AdmissionsFormData = z.infer<typeof admissionsFormSchema>;
 
 export default function SchoolAdmissions() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const { toast } = useToast();
+
+  const form = useForm<AdmissionsFormData>({
+    resolver: zodResolver(admissionsFormSchema),
+    defaultValues: {
+      studentName: "",
+      dateOfBirth: "",
+      gender: "",
+      level: "",
+      preferredBranch: "",
+      previousSchool: "",
+      parentName: "",
+      parentPhone: "",
+      parentEmail: "",
+      homeAddress: "",
+      specialNeeds: "",
+    },
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async (data: AdmissionsFormData) => {
+      const payload = {
+        ...data,
+        previousSchool: data.previousSchool || undefined,
+        parentEmail: data.parentEmail || undefined,
+        specialNeeds: data.specialNeeds || undefined,
+      };
+      return apiRequest("/api/public/admissions", { method: "POST", body: payload });
+    },
+    onSuccess: () => {
+      setSubmitted(true);
+      toast({
+        title: "Application Submitted!",
+        description: "We've received your application. Our admissions team will contact you within 2-3 business days.",
+      });
+      form.reset();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit application. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: AdmissionsFormData) => {
+    submitMutation.mutate(data);
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
@@ -325,118 +398,243 @@ export default function SchoolAdmissions() {
             </p>
           </div>
 
+          {submitted ? (
+            <Card className="p-12 text-center" data-testid="card-application-success">
+              <div className="mx-auto bg-green-100 dark:bg-green-900 rounded-full p-4 w-20 h-20 flex items-center justify-center mb-6">
+                <CheckCircle className="h-12 w-12 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Application Submitted Successfully!</h3>
+              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
+                Thank you for applying to Seat of Wisdom Academy. Our admissions team will contact you within 2-3 business days.
+              </p>
+              <Button onClick={() => setSubmitted(false)} variant="outline" data-testid="button-submit-another">
+                Submit Another Application
+              </Button>
+            </Card>
+          ) : (
           <Card className="p-8" data-testid="card-application-form">
-            <form className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="student-name">Student Full Name *</Label>
-                  <Input id="student-name" placeholder="Enter student's full name" data-testid="input-student-name" />
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="studentName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Student Full Name *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter student's full name" {...field} data-testid="input-student-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="dateOfBirth"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Date of Birth *</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} data-testid="input-date-of-birth" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-                <div>
-                  <Label htmlFor="date-of-birth">Date of Birth *</Label>
-                  <Input id="date-of-birth" type="date" data-testid="input-date-of-birth" />
-                </div>
-              </div>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="gender">Gender *</Label>
-                  <Select>
-                    <SelectTrigger data-testid="select-gender">
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="gender"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gender *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-gender">
+                              <SelectValue placeholder="Select gender" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Male">Male</SelectItem>
+                            <SelectItem value="Female">Female</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="level"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Applying for Level *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-level">
+                              <SelectValue placeholder="Select education level" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Play Class">Play Class</SelectItem>
+                            <SelectItem value="KG1">Kindergarten 1 (KG1)</SelectItem>
+                            <SelectItem value="KG2">Kindergarten 2 (KG2)</SelectItem>
+                            <SelectItem value="KG3">Kindergarten 3 (KG3)</SelectItem>
+                            <SelectItem value="Basic 1">Basic 1</SelectItem>
+                            <SelectItem value="Basic 2">Basic 2</SelectItem>
+                            <SelectItem value="Basic 3">Basic 3</SelectItem>
+                            <SelectItem value="Basic 4">Basic 4</SelectItem>
+                            <SelectItem value="Basic 5">Basic 5</SelectItem>
+                            <SelectItem value="JSS1">Junior Secondary 1 (JSS1)</SelectItem>
+                            <SelectItem value="JSS2">Junior Secondary 2 (JSS2)</SelectItem>
+                            <SelectItem value="JSS3">Junior Secondary 3 (JSS3)</SelectItem>
+                            <SelectItem value="SS1">Senior Secondary 1 (SS1)</SelectItem>
+                            <SelectItem value="SS2">Senior Secondary 2 (SS2)</SelectItem>
+                            <SelectItem value="SS3">Senior Secondary 3 (SS3)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-                <div>
-                  <Label htmlFor="level">Applying for Level *</Label>
-                  <Select>
-                    <SelectTrigger data-testid="select-level">
-                      <SelectValue placeholder="Select education level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="playclass">Play Class</SelectItem>
-                      <SelectItem value="kg1">Kindergarten 1 (KG1)</SelectItem>
-                      <SelectItem value="kg2">Kindergarten 2 (KG2)</SelectItem>
-                      <SelectItem value="kg3">Kindergarten 3 (KG3)</SelectItem>
-                      <SelectItem value="basic1">Basic 1</SelectItem>
-                      <SelectItem value="basic2">Basic 2</SelectItem>
-                      <SelectItem value="basic3">Basic 3</SelectItem>
-                      <SelectItem value="basic4">Basic 4</SelectItem>
-                      <SelectItem value="basic5">Basic 5</SelectItem>
-                      <SelectItem value="jss1">Junior Secondary 1 (JSS1)</SelectItem>
-                      <SelectItem value="jss2">Junior Secondary 2 (JSS2)</SelectItem>
-                      <SelectItem value="jss3">Junior Secondary 3 (JSS3)</SelectItem>
-                      <SelectItem value="ss1">Senior Secondary 1 (SS1)</SelectItem>
-                      <SelectItem value="ss2">Senior Secondary 2 (SS2)</SelectItem>
-                      <SelectItem value="ss3">Senior Secondary 3 (SS3)</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="preferredBranch"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Preferred Branch *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-branch">
+                              <SelectValue placeholder="Select branch" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Bonsaac, Asaba">Bonsaac, Asaba</SelectItem>
+                            <SelectItem value="Ikpoto Powerline, Asaba">Ikpoto Powerline, Asaba</SelectItem>
+                            <SelectItem value="Akwuofor along Amusement Park, Koka">Akwuofor along Amusement Park, Koka</SelectItem>
+                            <SelectItem value="Akwuose behind Mama's Mart, along Ibusa Road">Akwuose behind Mama's Mart, along Ibusa Road</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="previousSchool"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Previous School</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Name of previous school" {...field} data-testid="input-previous-school" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              </div>
 
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="branch">Preferred Branch *</Label>
-                  <Select>
-                    <SelectTrigger data-testid="select-branch">
-                      <SelectValue placeholder="Select branch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="bonsaac">Bonsaac, Asaba</SelectItem>
-                      <SelectItem value="ikpoto">Ikpoto Powerline, Asaba</SelectItem>
-                      <SelectItem value="akwuofor">Akwuofor along Amusement Park, Koka</SelectItem>
-                      <SelectItem value="akwuose">Akwuose behind Mama's Mart along Ibusa Road</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <FormField
+                  control={form.control}
+                  name="parentName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Parent/Guardian Name *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter parent/guardian full name" {...field} data-testid="input-parent-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <FormField
+                    control={form.control}
+                    name="parentPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="+234 xxx xxx xxxx" {...field} data-testid="input-parent-phone" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="parentEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email Address</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="parent@example.com" {...field} data-testid="input-parent-email" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-                <div>
-                  <Label htmlFor="previous-school">Previous School</Label>
-                  <Input id="previous-school" placeholder="Name of previous school" data-testid="input-previous-school" />
+
+                <FormField
+                  control={form.control}
+                  name="homeAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Home Address *</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Enter complete home address" rows={3} {...field} data-testid="textarea-address" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="specialNeeds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Special Needs or Medical Conditions</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Please describe any special needs, medical conditions, or dietary requirements" rows={3} {...field} data-testid="textarea-special-needs" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="pt-6 border-t">
+                  <Button type="submit" size="lg" className="w-full bg-blue-600 hover:bg-blue-700 text-white" disabled={submitMutation.isPending} data-testid="button-submit-application">
+                    {submitMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        Submit Application
+                        <FileText className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 text-center">
+                    By submitting this form, you agree to our terms and conditions. 
+                    Our admissions team will contact you within 2-3 business days.
+                  </p>
                 </div>
-              </div>
-
-              <div>
-                <Label htmlFor="parent-name">Parent/Guardian Name *</Label>
-                <Input id="parent-name" placeholder="Enter parent/guardian full name" data-testid="input-parent-name" />
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="parent-phone">Phone Number *</Label>
-                  <Input id="parent-phone" placeholder="+256 xxx xxx xxx" data-testid="input-parent-phone" />
-                </div>
-                <div>
-                  <Label htmlFor="parent-email">Email Address</Label>
-                  <Input id="parent-email" type="email" placeholder="parent@example.com" data-testid="input-parent-email" />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="address">Home Address *</Label>
-                <Textarea id="address" placeholder="Enter complete home address" rows={3} data-testid="textarea-address" />
-              </div>
-
-              <div>
-                <Label htmlFor="special-needs">Special Needs or Medical Conditions</Label>
-                <Textarea id="special-needs" placeholder="Please describe any special needs, medical conditions, or dietary requirements" rows={3} data-testid="textarea-special-needs" />
-              </div>
-
-              <div className="pt-6 border-t">
-                <Button type="submit" size="lg" className="w-full bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-submit-application">
-                  Submit Application
-                  <FileText className="ml-2 h-4 w-4" />
-                </Button>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 text-center">
-                  By submitting this form, you agree to our terms and conditions. 
-                  Our admissions team will contact you within 2-3 business days.
-                </p>
-              </div>
-            </form>
+              </form>
+            </Form>
           </Card>
+          )}
         </div>
       </section>
 

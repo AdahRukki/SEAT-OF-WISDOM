@@ -29,6 +29,22 @@ async function runMigrations() {
         amount DECIMAL(12,2) NOT NULL,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS admissions_applications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_name VARCHAR(200) NOT NULL,
+        date_of_birth VARCHAR(20) NOT NULL,
+        gender VARCHAR(20) NOT NULL,
+        level VARCHAR(30) NOT NULL,
+        preferred_branch VARCHAR(50) NOT NULL,
+        previous_school VARCHAR(200),
+        parent_name VARCHAR(200) NOT NULL,
+        parent_phone VARCHAR(30) NOT NULL,
+        parent_email VARCHAR(255),
+        home_address TEXT NOT NULL,
+        special_needs TEXT,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
     `);
     log("Database migrations applied successfully");
   } catch (err) {
