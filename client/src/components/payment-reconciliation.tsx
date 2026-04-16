@@ -818,7 +818,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                       ₦{parseFloat(suggestion.transaction.amount).toLocaleString()}
                                     </div>
                                     <div className="text-muted-foreground">
-                                      <span className="line-clamp-2">{suggestion.transaction.rawDescription}</span>
+                                      <span>{suggestion.transaction.rawDescription}</span>
                                       <div className="text-muted-foreground mt-0.5">
                                         {new Date(suggestion.transaction.transactionDate).toLocaleDateString()}
                                         {suggestion.transaction.reference && ` | Ref: ${suggestion.transaction.reference}`}
@@ -927,7 +927,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   <Calendar className="h-3 w-3" />
                                   {new Date(tx.transactionDate).toLocaleDateString()}
                                 </div>
-                                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                <div className="text-xs text-muted-foreground mt-1 break-words">
                                   {tx.rawDescription}
                                 </div>
                                 {tx.reference && (
