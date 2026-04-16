@@ -586,6 +586,7 @@ export default function AdminDashboard() {
   const [assignFeeClassIds, setAssignFeeClassIds] = useState<string[]>([]);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
+  const [showFinanceDetails, setShowFinanceDetails] = useState(true);
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
 
   // Fee type form
@@ -4520,50 +4521,62 @@ export default function AdminDashboard() {
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Payment Ledger</CardTitle>
-                <CardDescription>
-                  Complete financial roll-call showing all students and their payment totals
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PaymentLedger
-                  schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-                  currentTerm={selectedFinanceTerm}
-                  currentSession={selectedFinanceSession}
-                />
-              </CardContent>
-            </Card>
-
-            {user?.role === 'admin' && (
-            <Card id="broadsheet-print-area">
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-start justify-between gap-3">
                 <div>
-                  <CardTitle>Payment Broadsheet</CardTitle>
+                  <CardTitle>Payment Ledger & Broadsheet</CardTitle>
                   <CardDescription>
-                    Per-class student fee summary for the selected term and session
+                    Complete financial roll-call and class broadsheet for the selected term and session
                   </CardDescription>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.print()}
-                  className="print:hidden"
-                >
-                  <Printer className="h-4 w-4 mr-1" />
-                  Print
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowFinanceDetails((v) => !v)}
+                  >
+                    {showFinanceDetails ? "Hide" : "Show"} Details
+                  </Button>
+                  {showFinanceDetails && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.print()}
+                      className="print:hidden"
+                    >
+                      <Printer className="h-4 w-4 mr-1" />
+                      Print
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent>
-                <BroadsheetTable
-                  schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-                  term={selectedFinanceTerm}
-                  session={selectedFinanceSession}
-                  schoolName={schools.find(s => s.id === (user?.role === 'admin' ? selectedSchoolId : user?.schoolId))?.name || ''}
-                />
-              </CardContent>
+              {showFinanceDetails && (
+                <CardContent className="space-y-4">
+                  <PaymentLedger
+                    schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                    currentTerm={selectedFinanceTerm}
+                    currentSession={selectedFinanceSession}
+                  />
+                  {user?.role === 'admin' && (
+                    <div id="broadsheet-print-area">
+                      <CardHeader className="px-0 pt-0 pb-4 flex flex-row items-center justify-between">
+                        <div>
+                          <CardTitle>Payment Broadsheet</CardTitle>
+                          <CardDescription>
+                            Per-class student fee summary for the selected term and session
+                          </CardDescription>
+                        </div>
+                      </CardHeader>
+                      <BroadsheetTable
+                        schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                        term={selectedFinanceTerm}
+                        session={selectedFinanceSession}
+                        schoolName={schools.find(s => s.id === (user?.role === 'admin' ? selectedSchoolId : user?.schoolId))?.name || ''}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              )}
             </Card>
-            )}
 
             {/* Bank Statement Upload & Reconciliation (Admin Only) */}
             {user?.role === 'admin' && (
