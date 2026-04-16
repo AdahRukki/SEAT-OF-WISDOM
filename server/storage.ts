@@ -193,7 +193,7 @@ export interface IStorage {
   recordPayment(paymentData: InsertPayment): Promise<Payment>;
   getPayments(studentId?: string, studentFeeId?: string, schoolId?: string, term?: string, session?: string, classId?: string): Promise<PaymentWithDetails[]>;
   getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
-  createFeePaymentWithSplits(record: Omit<InsertFeePaymentRecord, 'studentId'> & { studentId?: string | null }, splits: Array<{ studentId: string; amount: number }>): Promise<FeePaymentRecord>;
+  createFeePaymentWithSplits(record: Omit<InsertFeePaymentRecord, 'studentId'>, splits: Array<{ studentId: string; amount: number }>): Promise<FeePaymentRecord>;
   getSplitsForPaymentRecord(paymentRecordId: string): Promise<FeePaymentStudentSplit[]>;
   
   getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
@@ -3002,17 +3002,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFeePaymentWithSplits(
-    record: Omit<InsertFeePaymentRecord, 'studentId'> & { studentId?: string | null },
+    record: Omit<InsertFeePaymentRecord, 'studentId'>,
     splits: Array<{ studentId: string; amount: number }>
   ): Promise<FeePaymentRecord> {
     console.log('[createFeePaymentWithSplits] Recording multi-student payment with', splits.length, 'splits');
+    const insertData: InsertFeePaymentRecord = {
+      ...record,
+      studentId: undefined,
+      status: 'recorded',
+    };
     const [paymentRecord] = await db
       .insert(feePaymentRecords)
-      .values({
-        ...record,
-        studentId: null,
-        status: 'recorded',
-      } as any)
+      .values(insertData)
       .returning();
 
     await db.insert(feePaymentStudentSplits).values(
@@ -3155,11 +3156,11 @@ export class DatabaseStorage implements IStorage {
 
     const result: FeePaymentRecordWithDetails = {
       ...row.record,
-      student: {
-        ...row.student!,
+      student: row.student ? {
+        ...row.student,
         user: row.user!,
         class: row.class!,
-      },
+      } : null,
       allocations,
     };
 

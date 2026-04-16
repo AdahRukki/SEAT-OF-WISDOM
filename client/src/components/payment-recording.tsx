@@ -411,7 +411,7 @@ export function PaymentRecording({
     try {
       if (studentCount > 1) {
         // Multi-student: send a single request with splits
-        await apiRequest("/api/payments/record/multi", {
+        await apiRequest("/api/payments/records/multi", {
           method: "POST",
           body: {
             ...dataWithPurpose,
@@ -1117,7 +1117,7 @@ export function PaymentRecording({
                           </>
                         ) : (
                           <Badge variant="secondary" className="text-xs">
-                            Split: {(record as any).splitCount ?? "N"} students
+                            Split: {record.splitCount ?? "N"} students
                           </Badge>
                         )}
                       </TableCell>

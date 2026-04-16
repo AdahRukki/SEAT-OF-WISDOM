@@ -3392,15 +3392,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/payments/record/multi", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+  app.post("/api/payments/records/multi", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
     const user = (req as any).user;
     try {
-      console.log('[POST /api/payments/record/multi] User:', user.id, 'Role:', user.role);
+      console.log('[POST /api/payments/records/multi] User:', user.id, 'Role:', user.role);
       const validatedData = recordMultiStudentPaymentSchema.parse(req.body);
       const { schoolId, entries, amount, paymentMethod, paymentDate, purpose, depositorName, reference, term, session, notes } = validatedData;
 
       if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
         return res.status(403).json({ error: "You can only record payments for your school's students" });
+      }
+
+      // Validate split amounts sum to total (within 1 penny tolerance)
+      const splitSum = entries.reduce((acc, e) => acc + e.amount, 0);
+      if (Math.abs(splitSum - amount) > 0.01) {
+        return res.status(400).json({ error: `Split amounts (₦${splitSum.toLocaleString()}) must equal total amount (₦${amount.toLocaleString()})` });
+      }
+
+      // Validate all student IDs belong to the specified school
+      for (const entry of entries) {
+        const student = await storage.getStudent(entry.studentId);
+        if (!student) {
+          return res.status(404).json({ error: `Student not found: ${entry.studentId}` });
+        }
+        const studentClass = await storage.getClassById(student.classId);
+        if (studentClass?.schoolId !== schoolId) {
+          return res.status(403).json({ error: `Student ${entry.studentId} does not belong to the specified school` });
+        }
       }
 
       const paymentRecord = await storage.createFeePaymentWithSplits(
@@ -3430,10 +3448,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ipAddress: req.ip || req.socket.remoteAddress,
       });
 
-      console.log('[POST /api/payments/record/multi] Multi-payment recorded:', paymentRecord.id, 'splits:', entries.length);
+      console.log('[POST /api/payments/records/multi] Multi-payment recorded:', paymentRecord.id, 'splits:', entries.length);
       res.status(201).json(paymentRecord);
     } catch (error: any) {
-      console.error("[POST /api/payments/record/multi] Error:", error);
+      console.error("[POST /api/payments/records/multi] Error:", error);
       if (error.name === "ZodError") {
         return res.status(400).json({ error: "Invalid payment data", details: error.errors });
       }
