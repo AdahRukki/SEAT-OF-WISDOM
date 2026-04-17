@@ -27,6 +27,24 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Eye, Search, Loader2 } from "lucide-react";
 
+function formatLedgerDate(value: string | Date | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  let d: Date;
+  if (typeof value === "string") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [y, m, day] = value.split("-").map(Number);
+      d = new Date(y, m - 1, day);
+    } else {
+      const normalized = value.includes("T") ? value : value.replace(" ", "T");
+      d = new Date(normalized);
+    }
+  } else {
+    d = value;
+  }
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 interface LedgerEntry {
   studentDbId: string;
   studentId: string;
@@ -272,9 +290,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                   </TableCell>
                   <TableCell className="text-center">{entry.paymentCount || "0"}</TableCell>
                   <TableCell className="text-sm">
-                    {entry.lastPaymentDate
-                      ? new Date(entry.lastPaymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-                      : "—"}
+                    {formatLedgerDate(entry.lastPaymentDate)}
                   </TableCell>
                   <TableCell>
                     <Button
@@ -347,9 +363,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                       {studentRecords.map((rec) => (
                         <TableRow key={rec.id}>
                           <TableCell className="text-sm">
-                            {rec.paymentDate
-                              ? new Date(rec.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-                              : "—"}
+                            {formatLedgerDate(rec.paymentDate)}
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
                             ₦{parseFloat(rec.amount).toLocaleString()}
