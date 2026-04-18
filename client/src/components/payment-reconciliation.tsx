@@ -22,13 +22,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -43,7 +36,6 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Upload,
@@ -56,13 +48,12 @@ import {
   RefreshCw,
   ArrowRight,
   RotateCcw,
-  Plus,
   Sparkles,
   Calendar,
   Trash2,
   Search,
 } from "lucide-react";
-import type { FeePaymentRecordWithDetails, BankTransactionWithDetails } from "@shared/schema";
+import type { FeePaymentRecordWithDetails } from "@shared/schema";
 
 // "12 Jan 2025" — timezone-safe for YYYY-MM-DD strings and Date objects.
 function formatRecoDate(value: string | Date | null | undefined): string {
@@ -90,16 +81,6 @@ function toLocalDate(value: string | Date): Date {
     return new Date(y, m - 1, d);
   }
   return new Date(value);
-}
-
-function sameCalendarDay(a: string | Date, b: string | Date): boolean {
-  const da = toLocalDate(a);
-  const db = toLocalDate(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
 }
 
 function calendarDayDiff(a: string | Date, b: string | Date): number {
@@ -138,22 +119,6 @@ interface PaymentReconciliationProps {
   schoolId?: string;
 }
 
-interface Student {
-  id: string;
-  studentId: string;
-  user: {
-    firstName: string;
-    lastName: string;
-  };
-}
-
-interface Allocation {
-  studentId: string;
-  amount: number;
-  term?: string;
-  session?: string;
-}
-
 export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -163,10 +128,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [isReverseDialogOpen, setIsReverseDialogOpen] = useState(false);
   const [reversalReason, setReversalReason] = useState("");
   const [deleteStatementId, setDeleteStatementId] = useState<string | null>(null);
-  const [isAllocateDialogOpen, setIsAllocateDialogOpen] = useState(false);
-  const [transactionToAllocate, setTransactionToAllocate] = useState<BankTransaction | null>(null);
-  const [allocations, setAllocations] = useState<Allocation[]>([{ studentId: "", amount: 0 }]);
-  const [studentSearch, setStudentSearch] = useState("");
+  const [isMatchTxDialogOpen, setIsMatchTxDialogOpen] = useState(false);
+  const [transactionToMatch, setTransactionToMatch] = useState<BankTransaction | null>(null);
+  const [selectedMatchPaymentId, setSelectedMatchPaymentId] = useState<string | null>(null);
   const [txSearch, setTxSearch] = useState("");
   const [unmatchedSearch, setUnmatchedSearch] = useState("");
   const [matchSearch, setMatchSearch] = useState("");
@@ -216,18 +180,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       if (!res.ok) throw new Error("Failed to fetch pending payments");
       return res.json();
     },
-  });
-
-  const { data: students = [] } = useQuery<Student[]>({
-    queryKey: ["/api/admin/students", schoolId],
-    queryFn: async () => {
-      let url = "/api/admin/students";
-      if (schoolId) url += `?schoolId=${schoolId}`;
-      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch students");
-      return res.json();
-    },
-    enabled: isAllocateDialogOpen,
   });
 
   const uploadMutation = useMutation({
@@ -342,37 +294,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       toast({
         title: "Reversal Failed",
         description: error.message || "Failed to reverse payment",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const allocationMutation = useMutation({
-    mutationFn: async ({ transactionId, allocations }: { transactionId: string; allocations: Allocation[] }) => {
-      const res = await apiRequest(`/api/admin/bank-transactions/${transactionId}/allocate`, {
-        method: "POST",
-        body: { allocations },
-      });
-      return res;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Allocation Complete",
-        description: "The transaction has been allocated to multiple students.",
-      });
-      setIsAllocateDialogOpen(false);
-      setTransactionToAllocate(null);
-      setAllocations([{ studentId: "", amount: 0 }]);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Allocation Failed",
-        description: error.message || "Failed to allocate transaction",
         variant: "destructive",
       });
     },
@@ -621,54 +542,38 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     return candidates;
   }, [pendingPayments, paymentSuggestions]);
 
-  const handleOpenAllocateDialog = (tx: BankTransaction) => {
-    setTransactionToAllocate(tx);
-    setAllocations([{ studentId: "", amount: 0 }]);
-    setIsAllocateDialogOpen(true);
+  const handleOpenMatchTxDialog = (tx: BankTransaction) => {
+    setTransactionToMatch(tx);
+    setSelectedMatchPaymentId(null);
+    setIsMatchTxDialogOpen(true);
   };
 
-  const addAllocation = () => {
-    setAllocations([...allocations, { studentId: "", amount: 0 }]);
-  };
-
-  const removeAllocation = (index: number) => {
-    if (allocations.length > 1) {
-      setAllocations(allocations.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateAllocation = (index: number, field: keyof Allocation, value: string | number) => {
-    const newAllocations = [...allocations];
-    newAllocations[index] = { ...newAllocations[index], [field]: value };
-    setAllocations(newAllocations);
-  };
-
-  const getTotalAllocated = () => {
-    return allocations.reduce((sum, a) => sum + (a.amount || 0), 0);
-  };
-
-  const handleSubmitAllocation = () => {
-    if (!transactionToAllocate) return;
-    const validAllocations = allocations.filter(a => a.studentId && a.amount > 0);
-    if (validAllocations.length === 0) {
-      toast({
-        title: "Invalid Allocation",
-        description: "Add at least one valid allocation with student and amount",
-        variant: "destructive",
-      });
-      return;
-    }
-    allocationMutation.mutate({
-      transactionId: transactionToAllocate.id,
-      allocations: validAllocations,
+  // Candidate recorded payments for the open Match-Transaction dialog:
+  // unconfirmed payments with the SAME amount and date within ±1 day.
+  const matchTxCandidates = useMemo(() => {
+    if (!transactionToMatch) return [] as FeePaymentRecordWithDetails[];
+    const txAmount = parseFloat(transactionToMatch.amount);
+    if (isNaN(txAmount)) return [];
+    return pendingPayments.filter((p) => {
+      const pAmount = parseFloat(p.amount);
+      if (isNaN(pAmount) || Math.abs(pAmount - txAmount) >= 0.01) return false;
+      return calendarDayDiff(p.paymentDate, transactionToMatch.transactionDate) <= 1;
     });
-  };
+  }, [transactionToMatch, pendingPayments]);
 
-  const filteredStudents = students.filter(s =>
-    s.user?.lastName?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-    s.user?.firstName?.toLowerCase().includes(studentSearch.toLowerCase()) ||
-    s.studentId?.toLowerCase().includes(studentSearch.toLowerCase())
-  );
+  const handleConfirmMatchTx = () => {
+    if (!transactionToMatch || !selectedMatchPaymentId) return;
+    confirmMutation.mutate(
+      { paymentId: selectedMatchPaymentId, bankTransactionId: transactionToMatch.id },
+      {
+        onSuccess: () => {
+          setIsMatchTxDialogOpen(false);
+          setTransactionToMatch(null);
+          setSelectedMatchPaymentId(null);
+        },
+      },
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -1075,10 +980,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   size="sm"
                                   variant="outline"
                                   className="text-xs h-7"
-                                  onClick={() => handleOpenAllocateDialog(tx)}
+                                  onClick={() => handleOpenMatchTxDialog(tx)}
                                 >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Allocate
+                                  <Link className="h-3 w-3 mr-1" />
+                                  Match
                                 </Button>
                               </div>
                             </div>
@@ -1215,9 +1120,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleOpenAllocateDialog(tx)}
+                            onClick={() => handleOpenMatchTxDialog(tx)}
                           >
-                            Allocate
+                            <Link className="h-3 w-3 mr-1" />
+                            Match
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -1417,148 +1323,145 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isAllocateDialogOpen} onOpenChange={setIsAllocateDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <Dialog
+        open={isMatchTxDialogOpen}
+        onOpenChange={(open) => {
+          setIsMatchTxDialogOpen(open);
+          if (!open) {
+            setTransactionToMatch(null);
+            setSelectedMatchPaymentId(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Allocate Transaction to Students</DialogTitle>
+            <DialogTitle>Match Recorded Payment</DialogTitle>
             <DialogDescription>
-              Split this bank transaction across multiple students
+              Pick the recorded payment that this bank transaction settles. Only payments with the same amount within ±1 day are shown.
             </DialogDescription>
           </DialogHeader>
 
-          {transactionToAllocate && (
+          {transactionToMatch && (
             <div className="space-y-4">
               <div className="p-4 border rounded-lg bg-muted/50">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start gap-3">
                   <div>
                     <p className="text-2xl font-bold text-green-600">
-                      ₦{parseFloat(transactionToAllocate.amount).toLocaleString()}
+                      ₦{parseFloat(transactionToMatch.amount).toLocaleString()}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {formatRecoDate(transactionToAllocate.transactionDate)}
+                      {formatRecoDate(transactionToMatch.transactionDate)}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">Allocated: ₦{getTotalAllocated().toLocaleString()}</p>
-                    <p className={`text-xs ${
-                      Math.abs(getTotalAllocated() - parseFloat(transactionToAllocate.amount)) < 0.01
-                        ? "text-green-600"
-                        : "text-orange-600"
-                    }`}>
-                      {Math.abs(getTotalAllocated() - parseFloat(transactionToAllocate.amount)) < 0.01
-                        ? "Fully allocated"
-                        : `Remaining: ₦${(parseFloat(transactionToAllocate.amount) - getTotalAllocated()).toLocaleString()}`
-                      }
-                    </p>
-                  </div>
+                  {transactionToMatch.reference && (
+                    <Badge variant="outline" className="text-xs">
+                      Ref: {transactionToMatch.reference}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground mt-2 break-words">
-                  {transactionToAllocate.rawDescription}
+                  {transactionToMatch.rawDescription}
                 </p>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Allocations</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addAllocation}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Student
-                  </Button>
+                  <Label className="text-sm">Candidate Payments</Label>
+                  <Badge variant="secondary">{matchTxCandidates.length}</Badge>
                 </div>
 
-                {allocations.map((allocation, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-end p-3 border rounded-lg">
-                    <div className="col-span-6">
-                      <Label className="text-xs">Student</Label>
-                      <Select
-                        value={allocation.studentId}
-                        onValueChange={(val) => updateAllocation(index, "studentId", val)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select student..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="p-2">
-                            <Input
-                              placeholder="Search students..."
-                              value={studentSearch}
-                              onChange={(e) => setStudentSearch(e.target.value)}
-                              className="mb-2"
+                {matchTxCandidates.length === 0 ? (
+                  <div className="text-center py-8 text-sm text-muted-foreground border rounded-lg">
+                    <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-orange-500" />
+                    <p>No matching recorded payments within ±1 day at this amount.</p>
+                    <p className="text-xs mt-1">Record the payment first or check a wider date window.</p>
+                  </div>
+                ) : (
+                  <div className="max-h-[320px] overflow-y-auto space-y-2 border rounded-lg p-2">
+                    {matchTxCandidates.map((p) => {
+                      const isSelected = selectedMatchPaymentId === p.id;
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => setSelectedMatchPaymentId(p.id)}
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                            isSelected
+                              ? "border-primary bg-primary/5"
+                              : "hover:border-muted-foreground"
+                          }`}
+                          data-testid={`match-candidate-${p.id}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <span className="font-medium text-sm">
+                                  {p.student?.user?.lastName || "Unknown"} {p.student?.user?.firstName || ""}
+                                </span>
+                                <Badge variant="outline" className="text-xs">
+                                  {p.student?.studentId || "N/A"}
+                                </Badge>
+                              </div>
+                              <div className="text-lg font-bold text-green-600">
+                                ₦{parseFloat(p.amount).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1 flex-wrap">
+                                <Calendar className="h-3 w-3" />
+                                {formatRecoDate(p.paymentDate)}
+                                <Badge variant="secondary" className="text-xs ml-1">
+                                  {p.paymentMethod}
+                                </Badge>
+                              </div>
+                              {p.depositorName && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Depositor: {p.depositorName}
+                                </div>
+                              )}
+                              {p.reference && (
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Ref: {p.reference}
+                                </div>
+                              )}
+                            </div>
+                            <div
+                              className={`h-4 w-4 rounded-full border-2 mt-1 flex-shrink-0 ${
+                                isSelected ? "border-primary bg-primary" : "border-muted-foreground/40"
+                              }`}
                             />
                           </div>
-                          {filteredStudents.slice(0, 20).map((student) => (
-                            <SelectItem key={student.id} value={student.id}>
-                              {student.user?.lastName} {student.user?.firstName} ({student.studentId})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="col-span-3">
-                      <Label className="text-xs">Amount (₦)</Label>
-                      <Input
-                        type="number"
-                        value={allocation.amount || ""}
-                        onChange={(e) => updateAllocation(index, "amount", parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="text-xs">Term</Label>
-                      <Select
-                        value={allocation.term || ""}
-                        onValueChange={(val) => updateAllocation(index, "term", val)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Term" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="First Term">First</SelectItem>
-                          <SelectItem value="Second Term">Second</SelectItem>
-                          <SelectItem value="Third Term">Third</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="col-span-1">
-                      {allocations.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeAllocation(index)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
+                )}
               </div>
             </div>
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAllocateDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsMatchTxDialogOpen(false);
+                setTransactionToMatch(null);
+                setSelectedMatchPaymentId(null);
+              }}
+            >
               Cancel
             </Button>
             <Button
-              onClick={handleSubmitAllocation}
-              disabled={
-                allocationMutation.isPending ||
-                !transactionToAllocate ||
-                Math.abs(getTotalAllocated() - parseFloat(transactionToAllocate?.amount || "0")) > 0.01
-              }
+              onClick={handleConfirmMatchTx}
+              disabled={!selectedMatchPaymentId || confirmMutation.isPending}
+              data-testid="button-confirm-match-tx"
             >
-              {allocationMutation.isPending ? (
+              {confirmMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Allocating...
+                  Confirming...
                 </>
               ) : (
                 <>
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  Confirm Allocation
+                  Confirm Match
                 </>
               )}
             </Button>
