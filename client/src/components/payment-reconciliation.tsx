@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -84,18 +84,30 @@ function formatRecoDate(value: string | Date | null | undefined): string {
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+function toLocalDate(value: string | Date): Date {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(value);
+}
+
 function sameCalendarDay(a: string | Date, b: string | Date): boolean {
-  const da = typeof a === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a)
-    ? (() => { const [y, m, d] = a.split("-").map(Number); return new Date(y, m - 1, d); })()
-    : new Date(a);
-  const db = typeof b === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b)
-    ? (() => { const [y, m, d] = b.split("-").map(Number); return new Date(y, m - 1, d); })()
-    : new Date(b);
+  const da = toLocalDate(a);
+  const db = toLocalDate(b);
   return (
     da.getFullYear() === db.getFullYear() &&
     da.getMonth() === db.getMonth() &&
     da.getDate() === db.getDate()
   );
+}
+
+function calendarDayDiff(a: string | Date, b: string | Date): number {
+  const da = toLocalDate(a);
+  const db = toLocalDate(b);
+  const startA = new Date(da.getFullYear(), da.getMonth(), da.getDate()).getTime();
+  const startB = new Date(db.getFullYear(), db.getMonth(), db.getDate()).getTime();
+  return Math.round(Math.abs(startA - startB) / 86400000);
 }
 
 interface BankStatement {
@@ -158,6 +170,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [txSearch, setTxSearch] = useState("");
   const [unmatchedSearch, setUnmatchedSearch] = useState("");
   const [matchSearch, setMatchSearch] = useState("");
+  const [isBulkMatchDialogOpen, setIsBulkMatchDialogOpen] = useState(false);
+  const [bulkMatchProgress, setBulkMatchProgress] = useState<{ current: number; total: number } | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -416,125 +430,196 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     });
   };
 
+  const runBulkAutoMatch = async () => {
+    const items = highConfidenceCandidates;
+    if (items.length === 0) return;
+    setBulkMatchProgress({ current: 0, total: items.length });
+    let succeeded = 0;
+    const failed: Array<{ paymentId: string; reason: string }> = [];
+    for (let i = 0; i < items.length; i++) {
+      const { payment, transaction } = items[i];
+      try {
+        await apiRequest(`/api/admin/payments/${payment.id}/confirm`, {
+          method: "POST",
+          body: { bankTransactionId: transaction.id },
+        });
+        succeeded++;
+      } catch (err: any) {
+        failed.push({ paymentId: payment.id, reason: err?.message || "Unknown error" });
+      }
+      setBulkMatchProgress({ current: i + 1, total: items.length });
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
+    toast({
+      title: "Bulk Match Complete",
+      description: failed.length === 0
+        ? `Confirmed ${succeeded} payment${succeeded === 1 ? "" : "s"}.`
+        : `Confirmed ${succeeded}, failed ${failed.length}. See console for details.`,
+      variant: failed.length === 0 ? "default" : "destructive",
+    });
+    if (failed.length > 0) console.warn("Bulk auto-match failures:", failed);
+    setBulkMatchProgress(null);
+    setIsBulkMatchDialogOpen(false);
+  };
+
+  // Unified scorer used in both directions (payment->tx and tx->payment).
+  // Returns 0 score when payment and tx are more than 1 calendar day apart.
+  const scoreMatch = (
+    payment: FeePaymentRecordWithDetails,
+    tx: BankTransaction,
+  ): { score: number; reasons: string[] } => {
+    const dayDiff = calendarDayDiff(tx.transactionDate, payment.paymentDate);
+    if (dayDiff > 1) return { score: 0, reasons: [] };
+
+    const paymentAmount = parseFloat(payment.amount);
+    const txAmount = parseFloat(tx.amount);
+    if (isNaN(paymentAmount) || isNaN(txAmount)) return { score: 0, reasons: [] };
+    let score = 0;
+    const reasons: string[] = [];
+
+    // Exact amount match (30 points)
+    if (Math.abs(txAmount - paymentAmount) < 0.01) {
+      score += 30;
+      reasons.push("Exact amount");
+    }
+
+    // Date proximity: same day (30) or ±1 day (15)
+    if (dayDiff === 0) {
+      score += 30;
+      reasons.push("Same day");
+    } else {
+      score += 15;
+      reasons.push("±1 day");
+    }
+
+    // Depositor name — tiered scoring (only highest tier fires)
+    const depositorName = (payment.depositorName || '').toLowerCase().trim();
+    if (depositorName) {
+      const txDesc = tx.rawDescription?.toLowerCase() || '';
+      const depositorWords = depositorName.split(/\s+/).filter(w => w.length > 2);
+
+      const allMatch = depositorWords.length > 0 && depositorWords.every(w => txDesc.includes(w));
+      const prefixMatch = !allMatch && depositorWords.length > 0 &&
+        depositorWords.every(w => {
+          const prefix = w.substring(0, 5);
+          return prefix.length >= 3 && txDesc.includes(prefix);
+        });
+      const longWordMatch = !allMatch && !prefixMatch &&
+        depositorWords.some(w => w.length > 5 && txDesc.includes(w));
+      const shortWordMatch = !allMatch && !prefixMatch && !longWordMatch &&
+        depositorWords.some(w => w.length >= 3 && txDesc.includes(w));
+
+      if (allMatch) {
+        score += 40;
+        reasons.push("Full depositor name match");
+      } else if (prefixMatch) {
+        score += 30;
+        reasons.push("Partial depositor name match");
+      } else if (longWordMatch) {
+        score += 20;
+        reasons.push("Depositor name word match");
+      } else if (shortWordMatch) {
+        score += 10;
+        reasons.push("Depositor name partial");
+      }
+    }
+
+    // Student name in description (20 points)
+    const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
+    if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
+      score += 20;
+      reasons.push("Name match");
+    }
+
+    // Reference match — whole-word (50) or substring (35)
+    if (payment.reference && payment.reference.length >= 5) {
+      const refLower = payment.reference.toLowerCase();
+      const descLower = tx.rawDescription?.toLowerCase() || '';
+      const escapedRef = refLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const wholeWordRegex = new RegExp(`(?<![a-z0-9])${escapedRef}(?![a-z0-9])`);
+      if (wholeWordRegex.test(descLower)) {
+        score += 50;
+        reasons.push("Reference match");
+      } else if (refLower.length >= 6 && descLower.includes(refLower)) {
+        score += 35;
+        reasons.push("Reference substring");
+      }
+    }
+
+    return { score: Math.min(score, 100), reasons };
+  };
+
   const findMatchingTransactions = (payment: FeePaymentRecordWithDetails) => {
     const paymentAmount = parseFloat(payment.amount);
     return unmatchedTransactions.filter((t) => {
       const txAmount = parseFloat(t.amount);
       if (Math.abs(txAmount - paymentAmount) >= 0.01) return false;
-      return sameCalendarDay(t.transactionDate, payment.paymentDate);
+      return calendarDayDiff(t.transactionDate, payment.paymentDate) <= 1;
     });
   };
 
-  // Auto-suggest matching: find best matches based on amount and date
-  const findSuggestedMatch = (payment: FeePaymentRecordWithDetails): { transaction: BankTransaction | null; confidence: number; reasons: string[] } => {
-    const paymentAmount = parseFloat(payment.amount);
-    const paymentDate = new Date(payment.paymentDate);
-    const paymentYear = paymentDate.getFullYear();
-    const paymentMonth = paymentDate.getMonth();
-    const paymentDay = paymentDate.getDate();
-
-    // Gate: only consider transactions from the exact same calendar day
-    const sameDayCandidates = unmatchedTransactions.filter((t) => {
-      const txDate = new Date(t.transactionDate);
-      return (
-        txDate.getFullYear() === paymentYear &&
-        txDate.getMonth() === paymentMonth &&
-        txDate.getDate() === paymentDay
-      );
-    });
-
-    if (sameDayCandidates.length === 0) {
-      return { transaction: null, confidence: 0, reasons: [] };
-    }
-    
-    let bestMatch: BankTransaction | null = null;
-    let bestScore = 0;
-    let matchReasons: string[] = [];
-
-    for (const tx of sameDayCandidates) {
-      const txAmount = parseFloat(tx.amount);
-      let score = 0;
-      const reasons: string[] = [];
-
-      // Exact amount match (30 points)
-      if (Math.abs(txAmount - paymentAmount) < 0.01) {
-        score += 30;
-        reasons.push("Exact amount");
-      }
-
-      // Same day (always true for candidates — award points)
-      score += 30;
-      reasons.push("Same day");
-
-      // Depositor name — tiered scoring (only highest tier fires)
-      const depositorName = (payment.depositorName || '').toLowerCase().trim();
-      if (depositorName) {
-        const txDesc = tx.rawDescription?.toLowerCase() || '';
-        const depositorWords = depositorName.split(/\s+/).filter(w => w.length > 2);
-
-        const allMatch = depositorWords.length > 0 && depositorWords.every(w => txDesc.includes(w));
-        const prefixMatch = !allMatch && depositorWords.length > 0 &&
-          depositorWords.every(w => {
-            const prefix = w.substring(0, 5);
-            return prefix.length >= 3 && txDesc.includes(prefix);
-          });
-        const longWordMatch = !allMatch && !prefixMatch &&
-          depositorWords.some(w => w.length > 5 && txDesc.includes(w));
-        const shortWordMatch = !allMatch && !prefixMatch && !longWordMatch &&
-          depositorWords.some(w => w.length >= 3 && txDesc.includes(w));
-
-        if (allMatch) {
-          score += 40;
-          reasons.push("Full depositor name match");
-        } else if (prefixMatch) {
-          score += 30;
-          reasons.push("Partial depositor name match");
-        } else if (longWordMatch) {
-          score += 20;
-          reasons.push("Depositor name word match");
-        } else if (shortWordMatch) {
-          score += 10;
-          reasons.push("Depositor name partial");
+  // Memoized suggestion maps so we run the scorer once per data change,
+  // not on every keystroke in the search inputs.
+  const paymentSuggestions = useMemo(() => {
+    const map = new Map<string, { transaction: BankTransaction | null; confidence: number; reasons: string[] }>();
+    for (const p of pendingPayments) {
+      let bestMatch: BankTransaction | null = null;
+      let bestScore = 0;
+      let bestReasons: string[] = [];
+      for (const tx of unmatchedTransactions) {
+        const { score, reasons } = scoreMatch(p, tx);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = tx;
+          bestReasons = reasons;
         }
       }
+      map.set(p.id, { transaction: bestMatch, confidence: bestScore, reasons: bestReasons });
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPayments, unmatchedTransactions]);
 
-      // Student name in description (20 points)
-      const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
-      if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
-        score += 20;
-        reasons.push("Name match");
+  const paymentMatchableMap = useMemo(() => {
+    const map = new Map<string, BankTransaction[]>();
+    for (const p of pendingPayments) {
+      map.set(p.id, findMatchingTransactions(p));
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPayments, unmatchedTransactions]);
+
+  // Per-transaction list of payments that score >= 50 (medium+ confidence).
+  const transactionSuggestions = useMemo(() => {
+    const map = new Map<string, Array<{ payment: FeePaymentRecordWithDetails; score: number; reasons: string[] }>>();
+    for (const tx of unmatchedTransactions) {
+      const matches: Array<{ payment: FeePaymentRecordWithDetails; score: number; reasons: string[] }> = [];
+      for (const p of pendingPayments) {
+        const { score, reasons } = scoreMatch(p, tx);
+        if (score >= 50) matches.push({ payment: p, score, reasons });
       }
+      matches.sort((a, b) => b.score - a.score);
+      map.set(tx.id, matches);
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPayments, unmatchedTransactions]);
 
-      // Reference match (50 points — highly discriminating)
-      // Only trigger when reference is at least 5 characters and matches as a whole word
-      if (payment.reference && payment.reference.length >= 5) {
-        const refLower = payment.reference.toLowerCase();
-        const descLower = tx.rawDescription?.toLowerCase() || '';
-        // Whole-word match: reference must be surrounded by word boundaries (non-alphanumeric chars or string edges)
-        const escapedRef = refLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const wholeWordRegex = new RegExp(`(?<![a-z0-9])${escapedRef}(?![a-z0-9])`);
-        if (wholeWordRegex.test(descLower)) {
-          score += 50;
-          reasons.push("Reference match");
-        }
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = tx;
-        matchReasons = reasons;
+  // Bulk auto-match candidates: payments with a >= 90% suggestion.
+  const highConfidenceCandidates = useMemo(() => {
+    const candidates: Array<{ payment: FeePaymentRecordWithDetails; transaction: BankTransaction; confidence: number }> = [];
+    for (const p of pendingPayments) {
+      const s = paymentSuggestions.get(p.id);
+      if (s && s.transaction && s.confidence >= 90) {
+        candidates.push({ payment: p, transaction: s.transaction, confidence: s.confidence });
       }
     }
-
-    // Only return a suggestion if we actually found a match (bestScore > 0 means at least one tx passed the date gate)
-    if (!bestMatch) return { transaction: null, confidence: 0, reasons: [] };
-
-    return { 
-      transaction: bestMatch, 
-      confidence: Math.min(bestScore, 100),
-      reasons: matchReasons 
-    };
-  };
+    return candidates;
+  }, [pendingPayments, paymentSuggestions]);
 
   const handleOpenAllocateDialog = (tx: BankTransaction) => {
     setTransactionToAllocate(tx);
@@ -751,7 +836,18 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 Match recorded payments with bank transactions side by side
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              {highConfidenceCandidates.length > 0 && (
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={() => setIsBulkMatchDialogOpen(true)}
+                  data-testid="button-bulk-automatch"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Auto-match {highConfidenceCandidates.length} High Confidence
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => { refetchPayments(); refetchTransactions(); }}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh All
@@ -782,8 +878,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 ) : (
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                     {pendingPayments.map((payment) => {
-                      const suggestion = findSuggestedMatch(payment);
-                      const matchingTxs = findMatchingTransactions(payment);
+                      const suggestion = paymentSuggestions.get(payment.id) || { transaction: null, confidence: 0, reasons: [] };
+                      const matchingTxs = paymentMatchableMap.get(payment.id) || [];
                       
                       return (
                         <Card 
@@ -894,7 +990,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                               <div className="mt-2 pt-2 border-t">
                                 <p className="text-xs text-orange-600 flex items-center gap-1">
                                   <AlertTriangle className="h-3 w-3" />
-                                  No matching transactions found
+                                  No matching transactions within ±1 day
                                 </p>
                               </div>
                             )}
@@ -942,19 +1038,18 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 ) : (
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                     {filteredTx.map((tx) => {
-                      // Check if any payment matches this transaction
-                      const matchingPayments = pendingPayments.filter(p => 
-                        Math.abs(parseFloat(p.amount) - parseFloat(tx.amount)) < 0.01
-                      );
-                      
+                      const scoredMatches = transactionSuggestions.get(tx.id) || [];
+                      const topScore = scoredMatches[0]?.score || 0;
+                      const cardClass = topScore >= 80
+                        ? "border-green-300 bg-green-50/50"
+                        : topScore >= 50
+                          ? "border-yellow-300 bg-yellow-50/50"
+                          : "";
+
                       return (
                         <Card 
                           key={tx.id} 
-                          className={`overflow-hidden ${
-                            matchingPayments.length > 0 
-                              ? "border-blue-300 bg-blue-50/50" 
-                              : ""
-                          }`}
+                          className={`overflow-hidden ${cardClass}`}
                         >
                           <CardContent className="p-3">
                             <div className="flex items-start justify-between gap-2">
@@ -988,22 +1083,40 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                               </div>
                             </div>
                             
-                            {matchingPayments.length > 0 && (
+                            {scoredMatches.length > 0 && (
                               <div className="mt-2 pt-2 border-t border-dashed">
                                 <div className="flex items-center gap-1 mb-1">
-                                  <Sparkles className="h-3 w-3 text-blue-500" />
-                                  <span className="text-xs font-medium text-blue-700">
-                                    {matchingPayments.length} matching payment{matchingPayments.length > 1 ? 's' : ''}
+                                  <Sparkles className={`h-3 w-3 ${topScore >= 80 ? 'text-green-500' : 'text-yellow-500'}`} />
+                                  <span className={`text-xs font-medium ${topScore >= 80 ? 'text-green-700' : 'text-yellow-700'}`}>
+                                    {topScore >= 80 ? 'High Confidence Match' : 'Suggested Match'} ({topScore}%)
+                                    {scoredMatches.length > 1 && ` — ${scoredMatches.length} candidates`}
                                   </span>
                                 </div>
-                                {matchingPayments.slice(0, 2).map(p => (
-                                  <div key={p.id} className="text-xs bg-white/80 p-1 rounded border mb-1">
-                                    <span className="font-medium">
-                                      {p.student?.user?.lastName || 'Unknown'} {p.student?.user?.firstName || ''}
-                                    </span>
-                                    <span className="text-muted-foreground ml-1">
-                                      ({p.student?.studentId || 'N/A'})
-                                    </span>
+                                {scoredMatches.slice(0, 2).map(({ payment: p, score, reasons }) => (
+                                  <div key={p.id} className="text-xs bg-white/80 p-2 rounded border mb-1">
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <div className="flex-1 min-w-0">
+                                        <span className="font-medium">
+                                          {p.student?.user?.lastName || 'Unknown'} {p.student?.user?.firstName || ''}
+                                        </span>
+                                        <span className="text-muted-foreground ml-1">
+                                          ({p.student?.studentId || 'N/A'})
+                                        </span>
+                                        <span className="text-muted-foreground ml-1">
+                                          • ₦{parseFloat(p.amount).toLocaleString()} • {formatRecoDate(p.paymentDate)}
+                                        </span>
+                                      </div>
+                                      <Badge variant="outline" className={`text-[10px] ${score >= 80 ? 'bg-green-50 text-green-700 border-green-300' : 'bg-yellow-50 text-yellow-700 border-yellow-300'}`}>
+                                        {score}%
+                                      </Badge>
+                                    </div>
+                                    <div className="flex gap-1 mt-1 flex-wrap">
+                                      {reasons.map((reason, i) => (
+                                        <Badge key={i} variant="outline" className="text-[10px] bg-white">
+                                          {reason}
+                                        </Badge>
+                                      ))}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -1176,7 +1289,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   if (baseMatches.length === 0) {
                     return (
                       <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
-                        No transactions match on this date and amount.
+                        No transactions match within ±1 day at this amount.
                       </div>
                     );
                   }
@@ -1446,6 +1559,95 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <>
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Confirm Allocation
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isBulkMatchDialogOpen}
+        onOpenChange={(open) => { if (!bulkMatchProgress) setIsBulkMatchDialogOpen(open); }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Auto-match High Confidence Payments</DialogTitle>
+            <DialogDescription>
+              These payments have a confidence score of 90% or higher. Each will be confirmed individually with a full audit log entry. This cannot be undone in bulk.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 border rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">Payments</p>
+                <p className="text-2xl font-bold">{highConfidenceCandidates.length}</p>
+              </div>
+              <div className="p-3 border rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground">Total Amount</p>
+                <p className="text-2xl font-bold text-green-600">
+                  ₦{highConfidenceCandidates.reduce((s, c) => s + parseFloat(c.payment.amount), 0).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div className="max-h-[200px] overflow-y-auto border rounded-lg divide-y">
+              {highConfidenceCandidates.map((c) => (
+                <div key={c.payment.id} className="p-2 text-xs flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0 truncate">
+                    <span className="font-medium">
+                      {c.payment.student?.user?.lastName} {c.payment.student?.user?.firstName}
+                    </span>
+                    <span className="text-muted-foreground ml-1">
+                      ({c.payment.student?.studentId})
+                    </span>
+                  </div>
+                  <span className="font-mono text-green-600">
+                    ₦{parseFloat(c.payment.amount).toLocaleString()}
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-300">
+                    {c.confidence}%
+                  </Badge>
+                </div>
+              ))}
+            </div>
+            {bulkMatchProgress && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Confirming…</span>
+                  <span>{bulkMatchProgress.current} / {bulkMatchProgress.total}</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-green-600 h-2 transition-all"
+                    style={{ width: `${(bulkMatchProgress.current / bulkMatchProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsBulkMatchDialogOpen(false)}
+              disabled={!!bulkMatchProgress}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={runBulkAutoMatch}
+              disabled={!!bulkMatchProgress || highConfidenceCandidates.length === 0}
+              className="bg-green-600 hover:bg-green-700"
+              data-testid="button-confirm-bulk-automatch"
+            >
+              {bulkMatchProgress ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Confirming…
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Confirm All
                 </>
               )}
             </Button>
