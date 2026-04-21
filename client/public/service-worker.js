@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sowa-v5'; // IMPORTANT: Keep in sync with client/src/lib/constants.ts SW_CACHE_NAME
+const CACHE_NAME = '__SW_CACHE_VERSION__';
 const APP_SHELL = [
   '/',
   '/portal/login',
@@ -18,7 +18,7 @@ self.addEventListener('install', (event) => {
       );
     })
   );
-  self.skipWaiting();
+  // Do NOT call skipWaiting() here — wait for the user to confirm the update.
 });
 
 self.addEventListener('activate', (event) => {
@@ -30,6 +30,13 @@ self.addEventListener('activate', (event) => {
     )
   );
   self.clients.claim();
+});
+
+// Listen for SKIP_WAITING message from the client (sent when user taps "Update now")
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -108,35 +115,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation requests (HTML pages): cache-first (app shell), then network.
-  // Always serve the cached app shell so the SPA loads even when offline.
+  // Navigation requests (HTML pages): network-first so users always get fresh HTML.
+  // Fall back to the cached app shell when offline.
   const isNavigation = request.mode === 'navigate' ||
     request.headers.get('accept')?.includes('text/html');
 
   if (isNavigation) {
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) =>
-        Promise.all([cache.match(request), cache.match('/')])
-          .then(([cachedRoute, cachedShell]) => {
-            const appShell = cachedRoute || cachedShell;
-            // Background-refresh the cache for next visit
-            fetch(request)
-              .then((response) => {
-                if (response && response.status === 200) {
-                  cache.put(request, response.clone());
-                }
-              })
-              .catch(() => {});
-            // Serve cached shell immediately if available
-            if (appShell) return appShell;
-            // First visit (nothing cached yet) — go to network
-            return fetch(request).then((response) => {
-              if (response && response.status === 200) {
-                cache.put(request, response.clone());
-              }
-              return response;
-            });
+        fetch(request)
+          .then((response) => {
+            if (response && response.status === 200) {
+              cache.put(request, response.clone());
+            }
+            return response;
           })
+          .catch(() =>
+            cache.match(request)
+              .then((cached) => cached || cache.match('/'))
+          )
       )
     );
     return;

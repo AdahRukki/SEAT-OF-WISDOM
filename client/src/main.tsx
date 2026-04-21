@@ -29,9 +29,33 @@ Promise.race([ensureFirebaseReady(), timeoutPromise])
     renderApp();
   });
 
-// Register service worker for offline support
+// Register service worker and wire up update detection
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/service-worker.js')
-    .then(() => console.log('✓ Service worker registered'))
+    .then((registration) => {
+      console.log('✓ Service worker registered');
+
+      const notifyUpdate = () => {
+        window.dispatchEvent(new Event('sw-update-ready'));
+      };
+
+      // If there is already a waiting SW on page load, notify immediately
+      if (registration.waiting && navigator.serviceWorker.controller) {
+        notifyUpdate();
+      }
+
+      // Watch for a new SW that finishes installing while this page is open
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        if (!newWorker) return;
+
+        newWorker.addEventListener('statechange', () => {
+          // 'installed' + an existing controller means a new version is waiting
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            notifyUpdate();
+          }
+        });
+      });
+    })
     .catch((err) => console.warn('Service worker registration failed:', err));
 }

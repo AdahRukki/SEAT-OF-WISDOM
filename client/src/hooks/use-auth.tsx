@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, ReactNode, useRef, useC
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { prefetchAllData } from "@/lib/prefetch-data";
 import { cacheAuthCredentials, attemptOfflineLogin, updateCachedUser, clearOfflineAuth } from "@/lib/offline-auth";
-import { SW_CACHE_NAME } from "@/lib/constants";
 import type { User, LoginData } from "@shared/schema";
 
 interface AuthUser {
@@ -270,16 +269,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     
     if ('caches' in window) {
-      caches.open(SW_CACHE_NAME).then(cache => {
-        cache.keys().then(requests => {
-          requests.forEach(request => {
-            const url = new URL(request.url);
-            if (url.pathname.startsWith('/api/')) {
-              cache.delete(request);
-            }
-          });
-        });
-      }).catch(() => {});
+      caches.keys().then(names =>
+        names.forEach(name =>
+          caches.open(name).then(cache =>
+            cache.keys().then(requests =>
+              requests.forEach(request => {
+                const url = new URL(request.url);
+                if (url.pathname.startsWith('/api/')) {
+                  cache.delete(request);
+                }
+              })
+            )
+          )
+        )
+      ).catch(() => {});
     }
     
     if ('indexedDB' in window) {

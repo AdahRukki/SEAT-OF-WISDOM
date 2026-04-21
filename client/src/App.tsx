@@ -19,6 +19,8 @@ import SchoolContact from "@/pages/school-contact";
 import NewsPage from "@/pages/news";
 import NewsDetailPage from "@/pages/news-detail";
 import { useEffect } from "react";
+import { usePwaUpdate } from "@/hooks/use-pwa-update";
+import { RefreshCw } from "lucide-react";
 
 // Portal Routes Component for authenticated users
 function PortalRoutes() {
@@ -120,6 +122,26 @@ function PortalRoutes() {
   );
 }
 
+// Lightweight banner shown when a new app version is ready to install
+function UpdateBanner() {
+  const { updateReady, applyUpdate } = usePwaUpdate();
+
+  if (!updateReady) return null;
+
+  return (
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-lg bg-blue-600 px-4 py-3 text-white shadow-lg text-sm max-w-xs w-full">
+      <RefreshCw className="h-4 w-4 shrink-0" />
+      <span className="flex-1">New version available</span>
+      <button
+        onClick={applyUpdate}
+        className="font-semibold underline underline-offset-2 hover:no-underline whitespace-nowrap"
+      >
+        Update now
+      </button>
+    </div>
+  );
+}
+
 // Main App Routes Component
 function AppRoutes() {
   return (
@@ -154,6 +176,7 @@ function App() {
         <AuthProvider>
           <Toaster />
           <AppRoutes />
+          <UpdateBanner />
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
