@@ -54,6 +54,7 @@ interface LedgerEntry {
   classId: string;
   totalPaid: number;
   totalAssigned: number;
+  tuitionAssigned: number;
   balance: number;
   paymentCount: number;
   lastPaymentDate: string | null;
@@ -175,6 +176,11 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
   const grandTotalAssigned = filteredLedger.reduce((sum, entry) => sum + (entry.totalAssigned || 0), 0);
   const grandBalance = filteredLedger.reduce((sum, entry) => sum + (entry.balance || 0), 0);
   const totalPayments = filteredLedger.reduce((sum, entry) => sum + entry.paymentCount, 0);
+  const grandMiscellaneous = filteredLedger.reduce((sum, entry) => {
+    if (!entry.tuitionAssigned) return sum;
+    return sum + Math.max(0, entry.totalPaid - entry.tuitionAssigned);
+  }, 0);
+  const anyTuitionAssigned = filteredLedger.some((e) => !!e.tuitionAssigned);
 
   const getStatusBadge = (status: string) => {
     if (status === "confirmed") return <Badge className="bg-green-100 text-green-800 text-[10px]">Confirmed</Badge>;
@@ -265,6 +271,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 <TableHead>Class</TableHead>
                 <TableHead>SOWA ID</TableHead>
                 <TableHead className="text-right">Total Paid (₦)</TableHead>
+                <TableHead className="text-right">Miscellaneous (₦)</TableHead>
                 <TableHead className="text-right">Balance (₦)</TableHead>
                 <TableHead className="text-center">Payments</TableHead>
                 <TableHead>Last Payment</TableHead>
@@ -282,6 +289,11 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                   <TableCell className="text-sm font-mono">{entry.studentId}</TableCell>
                   <TableCell className={`text-right font-semibold ${entry.totalPaid > 0 ? "text-green-600" : ""}`}>
                     {entry.totalPaid > 0 ? `₦${entry.totalPaid.toLocaleString()}` : "₦0"}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold text-blue-600">
+                    {entry.tuitionAssigned
+                      ? `₦${Math.max(0, entry.totalPaid - entry.tuitionAssigned).toLocaleString()}`
+                      : "—"}
                   </TableCell>
                   <TableCell className={`text-right font-semibold ${(entry.balance || 0) > 0 ? "text-red-500" : "text-green-600"}`}>
                     {entry.totalAssigned > 0
@@ -311,6 +323,9 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 <TableCell />
                 <TableCell />
                 <TableCell className="text-right text-green-700">₦{grandTotalPaid.toLocaleString()}</TableCell>
+                <TableCell className="text-right text-blue-700">
+                  {anyTuitionAssigned ? `₦${grandMiscellaneous.toLocaleString()}` : "—"}
+                </TableCell>
                 <TableCell className={`text-right ${grandBalance > 0 ? "text-red-600" : "text-green-700"}`}>
                   {grandTotalAssigned > 0 ? `₦${grandBalance.toLocaleString()}` : "—"}
                 </TableCell>

@@ -1393,6 +1393,7 @@ export class DatabaseStorage implements IStorage {
     classId: string;
     totalPaid: number;
     totalAssigned: number;
+    tuitionAssigned: number;
     balance: number;
     paymentCount: number;
     lastPaymentDate: string | null;
@@ -1516,6 +1517,7 @@ export class DatabaseStorage implements IStorage {
         classId: r.classId,
         totalPaid,
         totalAssigned,
+        tuitionAssigned,
         balance: Math.max(0, totalAssigned - totalPaid),
         paymentCount: Number(r.paymentCount) || 0,
         lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
