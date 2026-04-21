@@ -1140,7 +1140,11 @@ export default function StudentDashboard() {
     const schoolLogo = school?.logoUrl || currentLogoUrl || '';
     const principalSignature = school?.principalSignature || '';
 
-    const safe = (v: any) => (v == null ? '' : String(v).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' } as any)[c]));
+    const HTML_ESCAPES: Record<string, string> = { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' };
+    const safe = (v: unknown): string => {
+      if (v == null) return '';
+      return String(v).replace(/[<>&"]/g, c => HTML_ESCAPES[c] ?? c);
+    };
 
     return `<!DOCTYPE html>
 <html><head><title>Receipt ${safe(receiptNumber)}</title>
@@ -1457,9 +1461,9 @@ export default function StudentDashboard() {
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 gap-1 h-auto p-1">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 h-auto">Overview</TabsTrigger>
-            <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-2 h-auto">Fees</TabsTrigger>
-            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-2 h-auto">Profile</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 py-2 min-h-[44px] h-auto">Overview</TabsTrigger>
+            <TabsTrigger value="finance" className="text-xs sm:text-sm px-2 py-2 min-h-[44px] h-auto">Fees</TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 py-2 min-h-[44px] h-auto">Profile</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
@@ -1869,24 +1873,24 @@ export default function StudentDashboard() {
                               </Badge>
                             </td>
                             <td className="px-4 py-3 text-sm">
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <Button
-                                  size="sm"
                                   variant="outline"
+                                  className="min-h-[44px] px-3"
                                   onClick={() => handleViewReceipt(record)}
                                   data-testid={`button-view-receipt-${record.id}`}
                                   title="View receipt"
                                 >
-                                  <Eye className="h-3.5 w-3.5 sm:mr-1" />
+                                  <Eye className="h-4 w-4 sm:mr-1.5" />
                                   <span className="hidden md:inline">View</span>
                                 </Button>
                                 <Button
-                                  size="sm"
+                                  className="min-h-[44px] px-3"
                                   onClick={() => handleDownloadReceipt(record)}
                                   data-testid={`button-download-receipt-${record.id}`}
                                   title="Download receipt as PDF"
                                 >
-                                  <Download className="h-3.5 w-3.5 sm:mr-1" />
+                                  <Download className="h-4 w-4 sm:mr-1.5" />
                                   <span className="hidden md:inline">PDF</span>
                                 </Button>
                               </div>
@@ -1929,21 +1933,19 @@ export default function StudentDashboard() {
                         )}
                         <div className="flex gap-2">
                           <Button
-                            size="sm"
                             variant="outline"
-                            className="flex-1 h-8 text-xs"
+                            className="flex-1 min-h-[44px] text-sm"
                             onClick={() => handleViewReceipt(record)}
                             data-testid={`button-view-receipt-mobile-${record.id}`}
                           >
-                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                            <Eye className="h-4 w-4 mr-1.5" /> View
                           </Button>
                           <Button
-                            size="sm"
-                            className="flex-1 h-8 text-xs"
+                            className="flex-1 min-h-[44px] text-sm"
                             onClick={() => handleDownloadReceipt(record)}
                             data-testid={`button-download-receipt-mobile-${record.id}`}
                           >
-                            <Download className="h-3.5 w-3.5 mr-1" /> PDF
+                            <Download className="h-4 w-4 mr-1.5" /> PDF
                           </Button>
                         </div>
                       </div>
@@ -2165,8 +2167,8 @@ export default function StudentDashboard() {
               <span className="text-base sm:text-lg">Payment Receipt</span>
               <div className="flex gap-2">
                 <Button
-                  size="sm"
                   variant="outline"
+                  className="min-h-[44px] px-3"
                   onClick={() => {
                     if (!receiptHtml) return;
                     const w = window.open('', '_blank');
@@ -2183,7 +2185,7 @@ export default function StudentDashboard() {
                   <span className="hidden sm:inline">Print</span>
                 </Button>
                 <Button
-                  size="sm"
+                  className="min-h-[44px] px-3"
                   onClick={() => {
                     if (activeReceiptRecord) handleDownloadReceipt(activeReceiptRecord);
                   }}
