@@ -1575,6 +1575,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Student routes
+  app.get('/api/student/school', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+      const student = await storage.getStudentByUserId(user.id);
+      if (!student || !student.class?.schoolId) {
+        return res.status(404).json({ error: "Student school not found" });
+      }
+      const schools = await storage.getAllSchools();
+      const school = schools.find(s => s.id === student.class.schoolId);
+      if (!school) {
+        return res.status(404).json({ error: "School not found" });
+      }
+      res.json({
+        id: school.id,
+        name: school.name,
+        address: school.address,
+        phone: school.phone,
+        email: school.email,
+        logoUrl: school.logoUrl,
+        principalSignature: school.principalSignature,
+      });
+    } catch (error) {
+      console.error("Get student school error:", error);
+      res.status(500).json({ error: "Failed to fetch student school" });
+    }
+  });
+
   app.get('/api/student/profile', authenticate, async (req, res) => {
     try {
       const user = (req as any).user;

@@ -16,8 +16,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { GraduationCap, LogOut, BookOpen, Trophy, User, Lock, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle, Bell, Download, Eye } from "lucide-react";
+import { GraduationCap, LogOut, BookOpen, Trophy, User, Lock, EyeOff, CreditCard, DollarSign, Receipt, AlertCircle, Bell, Download, Eye, Printer } from "lucide-react";
 import html2pdf from "html2pdf.js";
+import { numberToNairaWords } from "@/lib/number-to-words";
 // Logo is now loaded dynamically via useLogo hook
 import { apiRequest } from "@/lib/queryClient";
 import type { StudentWithDetails, Assessment, Subject, Class } from "@shared/schema";
@@ -47,10 +48,26 @@ export default function StudentDashboard() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [reportHtml, setReportHtml] = useState("");
+  const [showReceiptDialog, setShowReceiptDialog] = useState(false);
+  const [receiptHtml, setReceiptHtml] = useState("");
+  const [activeReceiptRecord, setActiveReceiptRecord] = useState<any>(null);
 
   // Queries
   const { data: profile } = useQuery<StudentWithDetails>({ 
     queryKey: ['/api/student/profile'] 
+  });
+
+  const { data: school } = useQuery<{
+    id: string;
+    name: string;
+    address: string | null;
+    phone: string | null;
+    email: string | null;
+    logoUrl: string | null;
+    principalSignature: string | null;
+  }>({
+    queryKey: ['/api/student/school'],
+    enabled: !!profile,
   });
 
   const { data: academicInfo } = useQuery<{
@@ -1058,6 +1075,236 @@ export default function StudentDashboard() {
     `;
   };
 
+  // Generate receipt HTML for a single confirmed payment record
+  const generateReceiptHtml = (record: any): string | null => {
+    if (!profile || !record) return null;
+
+    // Compute running balance AS OF this payment by merging confirmed records
+    // and legacy payments into one date-sorted timeline, then summing only
+    // entries up to (and including) this receipt.
+    const thisDateMs = new Date(record.paymentDate || record.createdAt || 0).getTime();
+    const thisIdStr = String(record.id || '');
+
+    type TimelineEntry = { ts: number; id: string; source: 'confirmed' | 'legacy'; amount: number };
+    const timeline: TimelineEntry[] = [
+      ...confirmedPaymentRecords.map((r: any) => ({
+        ts: new Date(r.paymentDate || r.createdAt || 0).getTime(),
+        id: String(r.id),
+        source: 'confirmed' as const,
+        amount: Number(r.amount || 0),
+      })),
+      ...paymentHistory.map((p: any) => ({
+        ts: new Date(p.paymentDate || p.createdAt || 0).getTime(),
+        id: String(p.id),
+        source: 'legacy' as const,
+        amount: Number(p.amount || 0),
+      })),
+    ].sort((a, b) => {
+      if (a.ts !== b.ts) return a.ts - b.ts;
+      // Stable secondary sort: confirmed before legacy at same timestamp, then by id
+      if (a.source !== b.source) return a.source === 'confirmed' ? -1 : 1;
+      return a.id.localeCompare(b.id);
+    });
+
+    // Sum every entry whose timestamp is strictly before this receipt's
+    // timestamp, plus this receipt itself, plus any same-timestamp confirmed
+    // entries that sort before this one.
+    const termTotalPaidUpTo = timeline.reduce((sum, e) => {
+      if (e.ts < thisDateMs) return sum + e.amount;
+      if (e.ts === thisDateMs) {
+        if (e.source === 'confirmed' && e.id <= thisIdStr) return sum + e.amount;
+      }
+      return sum;
+    }, 0);
+
+    const termTotalFees = studentFees.reduce((s, f) => s + Number(f.amount || 0), 0);
+    const termBalanceUpTo = Math.max(0, termTotalFees - termTotalPaidUpTo);
+    const fullyPaid = termBalanceUpTo === 0 && termTotalFees > 0;
+
+    const paymentDateObj = record.paymentDate ? new Date(record.paymentDate) : new Date();
+    const paymentDateStr = paymentDateObj.toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'long', year: 'numeric'
+    });
+    const yyyymmdd = `${paymentDateObj.getFullYear()}${String(paymentDateObj.getMonth() + 1).padStart(2, '0')}${String(paymentDateObj.getDate()).padStart(2, '0')}`;
+    const shortId = String(record.id || '').replace(/-/g, '').slice(0, 6).toUpperCase() || 'XXXXXX';
+    const receiptNumber = `RCPT-${yyyymmdd}-${shortId}`;
+    const studentName = `${user?.firstName || ''} ${user?.middleName ? user.middleName + ' ' : ''}${user?.lastName || ''}`.trim();
+    const amountFigures = `₦${Number(record.amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const amountWords = numberToNairaWords(record.amount);
+    const generatedAt = new Date().toLocaleString('en-GB');
+
+    const schoolName = school?.name || 'Seat of Wisdom Academy';
+    const schoolAddress = school?.address || '';
+    const schoolPhone = school?.phone || '';
+    const schoolEmail = school?.email || '';
+    const schoolLogo = school?.logoUrl || currentLogoUrl || '';
+    const principalSignature = school?.principalSignature || '';
+
+    const safe = (v: any) => (v == null ? '' : String(v).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' } as any)[c]));
+
+    return `<!DOCTYPE html>
+<html><head><title>Receipt ${safe(receiptNumber)}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  @page{size:A4 portrait;margin:5mm}
+  @media print{html,body{width:210mm;height:297mm;margin:0;padding:0}.receipt{box-shadow:none!important;border-radius:0!important;margin:0!important}}
+  body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f1f5f9;color:#0f172a;line-height:1.4;padding:8px}
+  .receipt{width:210mm;max-width:210mm;min-height:200mm;margin:0 auto;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.08);border-radius:8px;padding:18mm 14mm;position:relative;overflow:hidden}
+  .receipt::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#1e40af 0%,#3b82f6 50%,#10b981 100%)}
+  .header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:14px}
+  .logo{width:64px;height:64px;border-radius:50%;background:#fff;border:2px solid #1e40af;padding:4px;flex-shrink:0;object-fit:contain}
+  .school-info{flex:1;text-align:center}
+  .school-name{font-size:20px;font-weight:800;color:#1e3a8a;letter-spacing:.5px}
+  .school-meta{font-size:10px;color:#475569;margin-top:3px;line-height:1.5}
+  .receipt-meta{text-align:right;font-size:10px;color:#475569;min-width:140px}
+  .receipt-meta .label{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8}
+  .receipt-meta .num{font-size:11px;font-weight:700;color:#1e3a8a;font-family:monospace;margin-top:2px}
+  .title-bar{background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+  .title-bar h2{font-size:15px;letter-spacing:1px;font-weight:700}
+  .title-bar .term{font-size:11px;opacity:.95;font-weight:500}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .panel{border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;background:#f8fafc}
+  .panel h3{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:6px;font-weight:700}
+  .row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px dashed #e2e8f0}
+  .row:last-child{border-bottom:none}
+  .row .k{color:#64748b;font-weight:500}
+  .row .v{color:#0f172a;font-weight:600;text-align:right;max-width:60%;word-break:break-word}
+  .amount-block{background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%);border:2px solid #16a34a;border-radius:8px;padding:14px;margin-bottom:14px;text-align:center}
+  .amount-figures{font-size:28px;font-weight:800;color:#15803d;letter-spacing:.5px}
+  .amount-words{font-size:11px;color:#166534;margin-top:4px;font-style:italic;font-weight:600}
+  .balance-summary{border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:14px}
+  .balance-summary .bs-row{display:flex;justify-content:space-between;padding:8px 12px;font-size:11px;border-bottom:1px solid #e2e8f0}
+  .balance-summary .bs-row:last-child{border-bottom:none;background:${fullyPaid ? '#dcfce7' : '#fef2f2'};font-weight:700}
+  .balance-summary .bs-row .k{color:#475569;font-weight:600}
+  .balance-summary .bs-row .v{color:#0f172a;font-weight:700;font-family:monospace}
+  .balance-summary .bs-row.outstanding .v{color:${fullyPaid ? '#15803d' : '#b91c1c'}}
+  .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:18px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:9px;color:#64748b}
+  .footer .left{flex:1;line-height:1.5}
+  .footer .sig{text-align:center;min-width:140px}
+  .footer .sig img{max-height:38px;display:block;margin:0 auto 2px}
+  .footer .sig .line{border-top:1px solid #94a3b8;padding-top:3px;font-size:9px;color:#475569}
+  .stamp{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:64px;font-weight:900;color:rgba(34,197,94,.08);letter-spacing:6px;pointer-events:none;text-transform:uppercase}
+  .badge-paid{display:inline-block;background:#16a34a;color:#fff;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.5px}
+  .badge-due{display:inline-block;background:#dc2626;color:#fff;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.5px}
+</style></head>
+<body>
+<div class="receipt">
+  ${fullyPaid ? '<div class="stamp">PAID</div>' : ''}
+  <div class="header">
+    ${schoolLogo ? `<img src="${safe(schoolLogo)}" alt="logo" class="logo" crossorigin="anonymous"/>` : ''}
+    <div class="school-info">
+      <div class="school-name">${safe(schoolName)}</div>
+      <div class="school-meta">
+        ${safe(schoolAddress)}${schoolAddress && (schoolPhone || schoolEmail) ? ' &middot; ' : ''}${safe(schoolPhone)}${schoolPhone && schoolEmail ? ' &middot; ' : ''}${safe(schoolEmail)}
+      </div>
+    </div>
+    <div class="receipt-meta">
+      <div class="label">Receipt No.</div>
+      <div class="num">${safe(receiptNumber)}</div>
+      <div class="label" style="margin-top:6px">Date</div>
+      <div style="font-weight:600;color:#0f172a">${safe(paymentDateStr)}</div>
+    </div>
+  </div>
+  <div class="title-bar">
+    <h2>PAYMENT RECEIPT</h2>
+    <div class="term">${safe(record.term || selectedTerm)}, ${safe(record.session || selectedSession)}</div>
+  </div>
+  <div class="grid-2">
+    <div class="panel">
+      <h3>Student</h3>
+      <div class="row"><span class="k">Name</span><span class="v">${safe(studentName)}</span></div>
+      <div class="row"><span class="k">Student ID</span><span class="v">${safe(profile.studentId)}</span></div>
+      <div class="row"><span class="k">Class</span><span class="v">${safe(profile.class?.name || '')}</span></div>
+      <div class="row"><span class="k">Branch</span><span class="v">${safe(schoolName)}</span></div>
+    </div>
+    <div class="panel">
+      <h3>Payment</h3>
+      <div class="row"><span class="k">Method</span><span class="v" style="text-transform:capitalize">${safe(record.paymentMethod || '')}</span></div>
+      <div class="row"><span class="k">Purpose</span><span class="v">${safe(record.purpose || 'School Fees')}</span></div>
+      ${record.reference ? `<div class="row"><span class="k">Reference</span><span class="v">${safe(record.reference)}</span></div>` : ''}
+      ${record.depositorName ? `<div class="row"><span class="k">Depositor</span><span class="v">${safe(record.depositorName)}</span></div>` : ''}
+      <div class="row"><span class="k">Status</span><span class="v"><span class="badge-paid">Confirmed</span></span></div>
+    </div>
+  </div>
+  <div class="amount-block">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#15803d;margin-bottom:4px;font-weight:700">Amount Paid</div>
+    <div class="amount-figures">${amountFigures}</div>
+    <div class="amount-words">${safe(amountWords)}</div>
+  </div>
+  <div class="balance-summary">
+    <div class="bs-row"><span class="k">Total Fees for Term</span><span class="v">₦${termTotalFees.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+    <div class="bs-row"><span class="k">Total Paid (incl. this receipt)</span><span class="v">₦${termTotalPaidUpTo.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+    <div class="bs-row outstanding"><span class="k">Outstanding Balance</span><span class="v">${fullyPaid ? '<span class="badge-paid">FULLY PAID</span>' : '₦' + termBalanceUpTo.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+  </div>
+  <div class="footer">
+    <div class="left">
+      <strong>This is a computer-generated receipt and is valid without a signature.</strong><br/>
+      Generated: ${safe(generatedAt)}<br/>
+      Generated from ${safe(schoolName)} portal.
+    </div>
+    <div class="sig">
+      ${principalSignature ? `<img src="${safe(principalSignature)}" alt="signature" crossorigin="anonymous"/>` : '<div style="height:38px"></div>'}
+      <div class="line">Principal's Signature</div>
+    </div>
+  </div>
+</div>
+</body></html>`;
+  };
+
+  const handleViewReceipt = (record: any) => {
+    const html = generateReceiptHtml(record);
+    if (!html) {
+      toast({ title: "Cannot generate receipt", description: "Please try again in a moment.", variant: "destructive" });
+      return;
+    }
+    setActiveReceiptRecord(record);
+    setReceiptHtml(html);
+    setShowReceiptDialog(true);
+  };
+
+  const handleDownloadReceipt = (record: any) => {
+    const html = generateReceiptHtml(record);
+    if (!html) {
+      toast({ title: "Cannot generate receipt", description: "Please try again in a moment.", variant: "destructive" });
+      return;
+    }
+
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    container.style.position = 'fixed';
+    container.style.left = '-99999px';
+    container.style.top = '0';
+    document.body.appendChild(container);
+
+    const element = container.querySelector('.receipt') as HTMLElement | null;
+    if (!element) {
+      document.body.removeChild(container);
+      toast({ title: "Download failed", variant: "destructive" });
+      return;
+    }
+
+    const paymentDateObj = record.paymentDate ? new Date(record.paymentDate) : new Date();
+    const dateStr = `${paymentDateObj.getFullYear()}-${String(paymentDateObj.getMonth() + 1).padStart(2, '0')}-${String(paymentDateObj.getDate()).padStart(2, '0')}`;
+    const shortId = String(record.id || '').replace(/-/g, '').slice(0, 4).toLowerCase() || 'rcpt';
+    const filename = `Receipt-${profile?.studentId || 'student'}-${dateStr}-${shortId}.pdf`;
+
+    const opt = {
+      margin: 5,
+      filename,
+      image: { type: 'jpeg' as const, quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: true },
+      jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+      document.body.removeChild(container);
+      toast({ title: "Receipt downloaded", description: filename });
+    }).catch(() => {
+      document.body.removeChild(container);
+      toast({ title: "Download failed", description: "Please try again.", variant: "destructive" });
+    });
+  };
+
   const handlePrintDetailedReport = async () => {
     const reportHTML = generateReportHtml();
     if (!reportHTML) return;
@@ -1518,8 +1765,8 @@ export default function StudentDashboard() {
                     </Select>
                   </div>
 
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
+                  <div className="border rounded-lg overflow-x-auto">
+                    <table className="w-full min-w-[560px]">
                       <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Fee Type</th>
@@ -1586,8 +1833,9 @@ export default function StudentDashboard() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full">
+                  {/* Desktop / tablet table */}
+                  <div className="hidden sm:block border rounded-lg overflow-x-auto">
+                    <table className="w-full min-w-[640px]">
                       <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Date</th>
@@ -1595,17 +1843,18 @@ export default function StudentDashboard() {
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Purpose</th>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Method</th>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-gray-900 dark:text-white">Receipt</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {confirmedPaymentRecords.map((record: any) => (
                           <tr key={record.id}>
-                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">
                               {record.paymentDate
                                 ? new Date(record.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
                                 : "N/A"}
                             </td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">
                               ₦{Number(record.amount).toLocaleString()}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
@@ -1619,10 +1868,86 @@ export default function StudentDashboard() {
                                 Confirmed
                               </Badge>
                             </td>
+                            <td className="px-4 py-3 text-sm">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleViewReceipt(record)}
+                                  data-testid={`button-view-receipt-${record.id}`}
+                                  title="View receipt"
+                                >
+                                  <Eye className="h-3.5 w-3.5 sm:mr-1" />
+                                  <span className="hidden md:inline">View</span>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleDownloadReceipt(record)}
+                                  data-testid={`button-download-receipt-${record.id}`}
+                                  title="Download receipt as PDF"
+                                >
+                                  <Download className="h-3.5 w-3.5 sm:mr-1" />
+                                  <span className="hidden md:inline">PDF</span>
+                                </Button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile card list */}
+                  <div className="sm:hidden space-y-3">
+                    {confirmedPaymentRecords.map((record: any) => (
+                      <div
+                        key={record.id}
+                        className="border rounded-lg p-3 bg-white dark:bg-gray-900"
+                        data-testid={`receipt-card-${record.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="min-w-0">
+                            <div className="text-base font-semibold text-gray-900 dark:text-white">
+                              ₦{Number(record.amount).toLocaleString()}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                              {record.paymentDate
+                                ? new Date(record.paymentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                                : "N/A"}
+                              {" · "}
+                              <span className="capitalize">{record.paymentMethod}</span>
+                            </div>
+                          </div>
+                          <Badge className="bg-green-100 text-green-800 border-green-200 text-[10px] shrink-0">
+                            Confirmed
+                          </Badge>
+                        </div>
+                        {record.purpose && (
+                          <div className="text-xs text-gray-600 dark:text-gray-300 mb-2 truncate">
+                            {record.purpose}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 h-8 text-xs"
+                            onClick={() => handleViewReceipt(record)}
+                            data-testid={`button-view-receipt-mobile-${record.id}`}
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="flex-1 h-8 text-xs"
+                            onClick={() => handleDownloadReceipt(record)}
+                            data-testid={`button-download-receipt-mobile-${record.id}`}
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1" /> PDF
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -1826,6 +2151,62 @@ export default function StudentDashboard() {
                   border: 'none'
                 }}
                 title="Report Card Preview"
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Receipt Preview Dialog */}
+      <Dialog open={showReceiptDialog} onOpenChange={setShowReceiptDialog}>
+        <DialogContent className="max-w-[900px] w-[95vw] max-h-[95vh] overflow-hidden p-0">
+          <DialogHeader className="p-3 sm:p-4 border-b sticky top-0 bg-white dark:bg-gray-900 z-10">
+            <DialogTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span className="text-base sm:text-lg">Payment Receipt</span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (!receiptHtml) return;
+                    const w = window.open('', '_blank');
+                    if (w) {
+                      w.document.open();
+                      w.document.write(receiptHtml);
+                      w.document.close();
+                      setTimeout(() => w.print(), 400);
+                    }
+                  }}
+                  data-testid="button-print-receipt"
+                >
+                  <Printer className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Print</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (activeReceiptRecord) handleDownloadReceipt(activeReceiptRecord);
+                  }}
+                  data-testid="button-download-receipt-dialog"
+                >
+                  <Download className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Download PDF</span>
+                </Button>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          {receiptHtml && (
+            <div className="flex-1 overflow-auto bg-gray-100 p-2 sm:p-4">
+              <iframe
+                srcDoc={receiptHtml}
+                className="w-full bg-white shadow-lg mx-auto"
+                style={{
+                  width: '100%',
+                  height: 'calc(95vh - 80px)',
+                  border: 'none',
+                }}
+                title="Payment Receipt Preview"
               />
             </div>
           )}
