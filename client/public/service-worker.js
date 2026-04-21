@@ -1,20 +1,43 @@
 const CACHE_NAME = '__SW_CACHE_VERSION__';
-const APP_SHELL = [
-  '/',
-  '/portal/login',
+
+// Hashed entry JS/CSS bundles that index.html directly references. These are
+// REQUIRED for the login page to render offline; if any of them fail to
+// cache, install rejects and the browser will retry on the next page load.
+// Injected by `swVersionPlugin` in vite.config.ts (empty list in dev).
+const CRITICAL_ASSETS = __SW_CRITICAL_ASSETS__;
+
+// Other built JS/CSS/font assets (lazy-loaded chunks). Best-effort: a single
+// failure does not abort install; missing items will be lazy-cached on first
+// online use via the fetch handler.
+const OPTIONAL_ASSETS = __SW_OPTIONAL_ASSETS__;
+
+// HTML shell + static icons + bootstrap config that the login page depends on.
+// `/` and `/portal/login` are critical (the SPA needs the cached HTML shell to
+// render offline). The icons and bootstrap API response are best-effort.
+const CRITICAL_SHELL = ['/', '/portal/login'];
+const OPTIONAL_SHELL = [
   '/manifest.json',
   '/favicon.png',
   '/icon-192.png',
   '/icon-512.png',
+  '/api/firebase-config',
 ];
 
 self.addEventListener('install', (event) => {
+  const required = CRITICAL_SHELL.concat(CRITICAL_ASSETS);
+  const optional = OPTIONAL_SHELL.concat(OPTIONAL_ASSETS);
+
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return Promise.allSettled(
-        APP_SHELL.map(url =>
-          cache.add(url).catch(() => {})
-        )
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Strict: cache.addAll is atomic — if any required URL fails to fetch
+      // or returns a non-2xx, the whole call rejects, install fails, and the
+      // browser retries the SW install on the next page load. This guarantees
+      // that an "installed" SW can actually render the login page offline.
+      await cache.addAll(required);
+
+      // Best-effort for everything else.
+      await Promise.allSettled(
+        optional.map(url => cache.add(url).catch(() => {}))
       );
     })
   );
