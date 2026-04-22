@@ -357,6 +357,7 @@ export const bankStatements = pgTable("bank_statements", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   fileName: varchar("file_name", { length: 255 }).notNull(),
   fileType: varchar("file_type", { length: 20 }).notNull(), // pdf, csv, excel
+  bankFormat: varchar("bank_format", { length: 20 }), // moniepoint, zenith, access, fidelity, generic
   uploadedBy: uuid("uploaded_by").notNull().references(() => users.id),
   schoolId: uuid("school_id").references(() => schools.id),
   dateRangeStart: timestamp("date_range_start"),

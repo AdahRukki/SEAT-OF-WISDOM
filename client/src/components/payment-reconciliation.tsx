@@ -402,10 +402,17 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     let score = 0;
     const reasons: string[] = [];
 
-    // Exact amount match (30 points)
-    if (Math.abs(txAmount - paymentAmount) < 0.01) {
+    // Exact amount match (30 points). Moniepoint POS deducts ₦100 per
+    // transaction, so a ₦5,000 payment lands as ₦4,900 in the bank statement.
+    // For Moniepoint transactions, treat any difference of ≤ ₦100 as exact.
+    const isMoniepoint = (tx as any).bankFormat === 'moniepoint';
+    const amountDiff = Math.abs(txAmount - paymentAmount);
+    if (amountDiff < 0.01) {
       score += 30;
       reasons.push("Exact amount");
+    } else if (isMoniepoint && amountDiff <= 100.01) {
+      score += 30;
+      reasons.push("Exact amount (±₦100 POS fee)");
     }
 
     // Date proximity: same day (30) or ±1 day (15)

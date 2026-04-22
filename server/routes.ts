@@ -6,7 +6,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import path from "path";
 import express from "express";
-import { extractTextFromPDF, parseTransactions, parseExcelTransactions, generateFingerprint, ParsedTransaction } from "./pdf-parser";
+import { extractTextFromPDF, parseTransactions, parseExcelTransactions, generateFingerprint, detectBankFormat, ParsedTransaction } from "./pdf-parser";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
@@ -3636,6 +3636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let transactions: ParsedTransaction[] = [];
       let fileType = "excel";
+      let bankFormat: string | undefined = undefined;
 
       // Handle PDF files - convert to transactions
       if (file.mimetype === "application/pdf") {
@@ -3643,8 +3644,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileType = "pdf";
         try {
           const text = await extractTextFromPDF(file.buffer);
+          bankFormat = detectBankFormat(text);
           transactions = parseTransactions(text);
-          console.log('[Upload] Extracted', transactions.length, 'transactions from PDF');
+          console.log('[Upload] Extracted', transactions.length, 'transactions from PDF (format:', bankFormat + ')');
         } catch (pdfError: any) {
           console.error('[Upload] PDF extraction error:', pdfError.message);
           return res.status(400).json({ 
@@ -3683,6 +3685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const statement = await storage.uploadBankStatement({
         fileName: file.originalname,
         fileType,
+        bankFormat,
         uploadedBy: user.id,
         schoolId: schoolId || undefined,
         dateRangeStart,

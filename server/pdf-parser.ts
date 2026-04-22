@@ -55,7 +55,7 @@ function parseDateString(raw: string): string | null {
   return null;
 }
 
-function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith" | "access" | "generic" {
+export function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith" | "access" | "generic" {
   // Bank-NAME checks must run against the REAL account header only — the text
   // above the "TRANSACTIONS" marker. Otherwise narrations like
   // "TRSF .../Zenith Bank _ personal@621" or "MOBILE TRF FROM ACCESS/..."

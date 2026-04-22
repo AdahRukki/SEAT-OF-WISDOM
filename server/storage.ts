@@ -315,7 +315,7 @@ export interface IStorage {
   createPaymentAuditLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog>;
 
   // Bank Statement Upload & Management
-  uploadBankStatement(data: { fileName: string; fileType: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement>;
+  uploadBankStatement(data: { fileName: string; fileType: string; bankFormat?: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement>;
   getBankStatements(schoolId?: string): Promise<BankStatement[]>;
   updateBankStatementCounts(id: string, totalTransactions: number, newTransactions: number, duplicatesSkipped: number): Promise<BankStatement>;
 
@@ -3370,14 +3370,15 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
-  async uploadBankStatement(data: { fileName: string; fileType: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement> {
-    console.log('[uploadBankStatement] Creating bank statement record:', data.fileName);
+  async uploadBankStatement(data: { fileName: string; fileType: string; bankFormat?: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement> {
+    console.log('[uploadBankStatement] Creating bank statement record:', data.fileName, 'format:', data.bankFormat);
     
     const [statement] = await db
       .insert(bankStatements)
       .values({
         fileName: data.fileName,
         fileType: data.fileType,
+        bankFormat: data.bankFormat,
         uploadedBy: data.uploadedBy,
         schoolId: data.schoolId,
         dateRangeStart: data.dateRangeStart,
@@ -3460,14 +3461,19 @@ export class DatabaseStorage implements IStorage {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
-    const transactions = await db
-      .select()
+    const rows = await db
+      .select({
+        tx: bankTransactions,
+        bankFormat: bankStatements.bankFormat,
+      })
       .from(bankTransactions)
+      .leftJoin(bankStatements, eq(bankTransactions.statementId, bankStatements.id))
       .where(whereClause)
       .orderBy(desc(bankTransactions.transactionDate));
 
+    const transactions = rows.map(r => ({ ...r.tx, bankFormat: r.bankFormat ?? null }));
     console.log('[getBankTransactions] Found', transactions.length, 'transactions');
-    return transactions;
+    return transactions as BankTransaction[];
   }
 
   async getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]> {
@@ -3478,14 +3484,19 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(bankTransactions.schoolId, schoolId));
     }
     
-    const transactions = await db
-      .select()
+    const rows = await db
+      .select({
+        tx: bankTransactions,
+        bankFormat: bankStatements.bankFormat,
+      })
       .from(bankTransactions)
+      .leftJoin(bankStatements, eq(bankTransactions.statementId, bankStatements.id))
       .where(and(...conditions))
       .orderBy(desc(bankTransactions.transactionDate));
 
+    const transactions = rows.map(r => ({ ...r.tx, bankFormat: r.bankFormat ?? null }));
     console.log('[getUnmatchedBankTransactions] Found', transactions.length, 'unmatched transactions');
-    return transactions;
+    return transactions as BankTransaction[];
   }
 
   async updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction> {
