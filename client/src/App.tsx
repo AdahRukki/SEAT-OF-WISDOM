@@ -21,6 +21,7 @@ import NewsDetailPage from "@/pages/news-detail";
 import { useEffect } from "react";
 import { usePwaUpdate } from "@/hooks/use-pwa-update";
 import { RefreshCw } from "lucide-react";
+import { OfflineBanner } from "@/components/offline-banner";
 
 // Portal Routes Component for authenticated users
 function PortalRoutes() {
@@ -175,6 +176,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <Toaster />
+          <OfflineBanner />
           <AppRoutes />
           <UpdateBanner />
         </AuthProvider>

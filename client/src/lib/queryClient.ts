@@ -9,6 +9,30 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function dispatchOffline() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('app:api-offline'));
+  }
+}
+
+function dispatchOnline() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('app:api-online'));
+  }
+}
+
+// Detects the offline stub returned by the service worker (503 + JSON marker).
+async function isOfflineStub(res: Response): Promise<boolean> {
+  if (res.status !== 503) return false;
+  try {
+    const clone = res.clone();
+    const data = await clone.json();
+    return data && (data.offline === true || data.error === 'offline');
+  } catch {
+    return false;
+  }
+}
+
 function clearAuthOnly() {
   localStorage.removeItem('auth_token');
   localStorage.removeItem('firebase_token');
@@ -38,12 +62,26 @@ export async function apiRequest(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: isFormData ? options.body as FormData : (options?.body ? JSON.stringify(options.body) : undefined),
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: isFormData ? options.body as FormData : (options?.body ? JSON.stringify(options.body) : undefined),
+      credentials: "include",
+    });
+  } catch (err) {
+    if (err instanceof TypeError) {
+      dispatchOffline();
+    }
+    throw err;
+  }
+
+  if (await isOfflineStub(res)) {
+    dispatchOffline();
+  } else if (res.ok) {
+    dispatchOnline();
+  }
 
   if (res.status === 401) {
     clearAuthOnly();
@@ -78,9 +116,16 @@ export const getQueryFn: <T>(options: {
       // Only swallow genuine network/offline errors (TypeError: Failed to fetch).
       // Rethrow anything unexpected so real bugs are not silently hidden.
       if (err instanceof TypeError) {
+        dispatchOffline();
         return undefined as T;
       }
       throw err;
+    }
+
+    if (await isOfflineStub(res)) {
+      dispatchOffline();
+    } else if (res.ok) {
+      dispatchOnline();
     }
 
     if (res.status === 401) {
