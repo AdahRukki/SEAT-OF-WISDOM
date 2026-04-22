@@ -1121,7 +1121,9 @@ export type BankStatement = typeof bankStatements.$inferSelect;
 export type InsertBankStatement = z.infer<typeof insertBankStatementSchema>;
 
 // Bank Transaction types
-export type BankTransaction = typeof bankTransactions.$inferSelect;
+export type BankTransaction = typeof bankTransactions.$inferSelect & {
+  bankFormat?: string | null;
+};
 export type InsertBankTransaction = z.infer<typeof insertBankTransactionSchema>;
 
 // Fee Payment Record types

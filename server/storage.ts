@@ -3471,9 +3471,9 @@ export class DatabaseStorage implements IStorage {
       .where(whereClause)
       .orderBy(desc(bankTransactions.transactionDate));
 
-    const transactions = rows.map(r => ({ ...r.tx, bankFormat: r.bankFormat ?? null }));
+    const transactions: BankTransaction[] = rows.map(r => ({ ...r.tx, bankFormat: r.bankFormat ?? null }));
     console.log('[getBankTransactions] Found', transactions.length, 'transactions');
-    return transactions as BankTransaction[];
+    return transactions;
   }
 
   async getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]> {
@@ -3494,9 +3494,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(bankTransactions.transactionDate));
 
-    const transactions = rows.map(r => ({ ...r.tx, bankFormat: r.bankFormat ?? null }));
+    const transactions: BankTransaction[] = rows.map(r => ({ ...r.tx, bankFormat: r.bankFormat ?? null }));
     console.log('[getUnmatchedBankTransactions] Found', transactions.length, 'unmatched transactions');
-    return transactions as BankTransaction[];
+    return transactions;
   }
 
   async updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction> {
