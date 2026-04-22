@@ -1222,6 +1222,19 @@ function PaymentDetailsDialog({
   const statusLabel =
     record.status === "confirmed" ? "Confirmed" : record.status === "reversed" ? "Reversed" : "Pending";
 
+  const reversedAtStr = record.reversedAt
+    ? new Date(record.reversedAt).toLocaleString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+  const reverserName = record.reversedByUser
+    ? `${record.reversedByUser.firstName} ${record.reversedByUser.lastName}`.trim()
+    : "—";
+
   return (
     <Dialog open={!!record} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-lg">
@@ -1248,6 +1261,30 @@ function PaymentDetailsDialog({
             }
           />
           {record.notes && <DetailRow label="Notes" value={record.notes} />}
+
+          {record.status === "reversed" && (
+            <>
+              <Separator />
+              <div className="space-y-2" data-testid="payment-reversal-section">
+                <div className="text-xs uppercase text-red-700 dark:text-red-400 tracking-wide font-medium">
+                  Reversal
+                </div>
+                <div className="rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-3 space-y-2">
+                  <div>
+                    <div className="text-muted-foreground text-xs mb-1">Reason</div>
+                    <div
+                      className="whitespace-pre-wrap break-words text-foreground"
+                      data-testid="payment-reversal-reason"
+                    >
+                      {record.reversalReason || "—"}
+                    </div>
+                  </div>
+                  <DetailRow label="Reversed by" value={reverserName} />
+                  <DetailRow label="Reversed at" value={reversedAtStr} />
+                </div>
+              </div>
+            </>
+          )}
 
           <Separator />
 

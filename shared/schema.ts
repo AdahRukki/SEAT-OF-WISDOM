@@ -1176,6 +1176,7 @@ export type FeePaymentRecordWithDetails = FeePaymentRecord & {
   }) | null;
   recordedByUser?: User;
   confirmedByUser?: User;
+  reversedByUser?: User;
   allocations?: PaymentAllocation[];
   splits?: FeePaymentStudentSplit[];
   splitCount?: number;

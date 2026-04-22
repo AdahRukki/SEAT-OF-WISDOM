@@ -3110,6 +3110,7 @@ export class DatabaseStorage implements IStorage {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const recorderUsers = alias(users, 'recorder_users');
+    const reverserUsers = alias(users, 'reverser_users');
 
     const records = await db
       .select({
@@ -3123,12 +3124,19 @@ export class DatabaseStorage implements IStorage {
           lastName: recorderUsers.lastName,
           email: recorderUsers.email,
         },
+        reversedByUser: {
+          id: reverserUsers.id,
+          firstName: reverserUsers.firstName,
+          lastName: reverserUsers.lastName,
+          email: reverserUsers.email,
+        },
       })
       .from(feePaymentRecords)
       .leftJoin(students, eq(feePaymentRecords.studentId, students.id))
       .leftJoin(users, eq(students.userId, users.id))
       .leftJoin(classes, eq(students.classId, classes.id))
       .leftJoin(recorderUsers, eq(feePaymentRecords.recordedBy, recorderUsers.id))
+      .leftJoin(reverserUsers, eq(feePaymentRecords.reversedBy, reverserUsers.id))
       .where(whereClause)
       .orderBy(desc(feePaymentRecords.createdAt));
 
@@ -3140,6 +3148,8 @@ export class DatabaseStorage implements IStorage {
         class: row.class!,
       } : null,
       recordedByUser: row.recordedByUser as User | undefined,
+      // Only attach reverser when the join produced a row (id is non-null).
+      reversedByUser: row.reversedByUser?.id ? (row.reversedByUser as User) : undefined,
     }));
 
     // Enrich multi-student records with splitCount
@@ -3168,17 +3178,34 @@ export class DatabaseStorage implements IStorage {
   async getFeePaymentRecordById(id: string): Promise<FeePaymentRecordWithDetails | undefined> {
     console.log('[getFeePaymentRecordById] Fetching record:', id);
     
+    const recorderUsers = alias(users, 'recorder_users_single');
+    const reverserUsers = alias(users, 'reverser_users_single');
+
     const [row] = await db
       .select({
         record: feePaymentRecords,
         student: students,
         user: users,
         class: classes,
+        recordedByUser: {
+          id: recorderUsers.id,
+          firstName: recorderUsers.firstName,
+          lastName: recorderUsers.lastName,
+          email: recorderUsers.email,
+        },
+        reversedByUser: {
+          id: reverserUsers.id,
+          firstName: reverserUsers.firstName,
+          lastName: reverserUsers.lastName,
+          email: reverserUsers.email,
+        },
       })
       .from(feePaymentRecords)
       .leftJoin(students, eq(feePaymentRecords.studentId, students.id))
       .leftJoin(users, eq(students.userId, users.id))
       .leftJoin(classes, eq(students.classId, classes.id))
+      .leftJoin(recorderUsers, eq(feePaymentRecords.recordedBy, recorderUsers.id))
+      .leftJoin(reverserUsers, eq(feePaymentRecords.reversedBy, reverserUsers.id))
       .where(eq(feePaymentRecords.id, id));
 
     if (!row || !row.record) {
@@ -3198,6 +3225,8 @@ export class DatabaseStorage implements IStorage {
         user: row.user!,
         class: row.class!,
       } : null,
+      recordedByUser: row.recordedByUser?.id ? (row.recordedByUser as User) : undefined,
+      reversedByUser: row.reversedByUser?.id ? (row.reversedByUser as User) : undefined,
       allocations,
     };
 
