@@ -2,6 +2,7 @@ import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import type { IncomingMessage, ServerResponse } from "http";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
@@ -60,13 +61,14 @@ function collectCriticalAssetsFromHtml(distRoot: string): string[] {
 
 function applySwReplacements(
   content: string,
+  version: string,
   criticalAssets: string[],
   optionalAssets: string[]
 ): string {
   // String.replace can interpret $-sequences in the replacement; use a
   // function form so JSON output is inserted verbatim.
   return content
-    .replace('__SW_CACHE_VERSION__', () => buildVersion)
+    .replace('__SW_CACHE_VERSION__', () => version)
     .replace('__SW_CRITICAL_ASSETS__', () => JSON.stringify(criticalAssets))
     .replace('__SW_OPTIONAL_ASSETS__', () => JSON.stringify(optionalAssets));
 }
@@ -83,7 +85,17 @@ const swVersionPlugin = (): Plugin => ({
         const swPath = path.resolve(import.meta.dirname, 'client/public/service-worker.js');
         try {
           const content = fs.readFileSync(swPath, 'utf-8');
-          const transformed = applySwReplacements(content, [], []);
+          // Derive the dev cache version from a hash of the SW source itself
+          // so it stays stable across dev-server restarts. Otherwise every
+          // restart would mint a new version, the browser would see a new SW
+          // and prompt the user to update on every page load.
+          const hash = crypto
+            .createHash('sha256')
+            .update(content)
+            .digest('hex')
+            .slice(0, 12);
+          const devVersion = `sowa-dev-${hash}`;
+          const transformed = applySwReplacements(content, devVersion, [], []);
           res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
           res.setHeader('Service-Worker-Allowed', '/');
           res.end(transformed);
@@ -109,7 +121,7 @@ const swVersionPlugin = (): Plugin => ({
     const optional = allAssets.filter(a => !criticalSet.has(a));
 
     const content = fs.readFileSync(swOut, 'utf-8');
-    const transformed = applySwReplacements(content, critical, optional);
+    const transformed = applySwReplacements(content, buildVersion, critical, optional);
 
     // Build-time assertion: every placeholder must be resolved, and the
     // critical asset list must be non-empty in production. This catches
