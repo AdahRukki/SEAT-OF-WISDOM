@@ -4384,7 +4384,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-2 xl:grid-cols-4' : 'grid-cols-2'}`}>
+            <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-2 xl:grid-cols-5' : 'grid-cols-2'}`}>
               {user?.role === 'admin' && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
@@ -4444,6 +4444,23 @@ export default function AdminDashboard() {
                   <p className="text-[10px] sm:text-xs text-muted-foreground">No confirmed payments this term</p>
                 </CardContent>
               </Card>
+
+              {user?.role === 'admin' && (
+                <Card data-testid="card-pos-fees">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+                    <CardTitle className="text-xs sm:text-sm font-medium">POS Fees Absorbed</CardTitle>
+                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent className="p-3 sm:p-6 pt-0">
+                    <div className="text-lg sm:text-2xl font-bold truncate" data-testid="text-total-pos-fees">
+                      ₦{(financialSummary?.totalPosFees ?? 0).toLocaleString()}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      Moniepoint POS fees ({selectedFinanceTerm})
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Fee Types Management - Admin Only */}

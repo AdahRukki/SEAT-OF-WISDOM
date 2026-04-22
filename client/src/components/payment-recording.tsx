@@ -1108,7 +1108,19 @@ export function PaymentRecording({
                         {record.student?.class?.name || <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="font-medium">
-                        ₦{parseFloat(record.amount).toLocaleString()}
+                        <div className="flex flex-col gap-1">
+                          <span>₦{parseFloat(record.amount).toLocaleString()}</span>
+                          {record.posFee && record.posFee > 0 && (
+                            <Badge
+                              variant="outline"
+                              className="bg-amber-50 text-amber-700 border-amber-300 text-[10px] w-fit"
+                              title={`Bank credited ₦${(parseFloat(record.amount) - record.posFee).toLocaleString()} after Moniepoint POS fee`}
+                              data-testid={`badge-pos-fee-${record.id}`}
+                            >
+                              −₦{record.posFee.toLocaleString()} POS fee
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm">
                         {record.purpose || <span className="text-muted-foreground">—</span>}

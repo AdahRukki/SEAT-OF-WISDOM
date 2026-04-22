@@ -1183,6 +1183,7 @@ export type FeePaymentRecordWithDetails = FeePaymentRecord & {
   allocations?: PaymentAllocation[];
   splits?: FeePaymentStudentSplit[];
   splitCount?: number;
+  posFee?: number;
 };
 
 // Bank Transaction with relations

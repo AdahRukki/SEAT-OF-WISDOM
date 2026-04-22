@@ -236,6 +236,7 @@ export interface IStorage {
     totalOutstanding: number;
     collectionRate: number;
     studentsOwing: number;
+    totalPosFees: number;
   }>;
 
   // Settings operations
@@ -1652,6 +1653,7 @@ export class DatabaseStorage implements IStorage {
     totalOutstanding: number;
     collectionRate: number;
     studentsOwing: number;
+    totalPosFees: number;
   }> {
     const revenueConditions: any[] = [eq(feePaymentRecords.status, 'confirmed')];
     if (schoolId) revenueConditions.push(eq(feePaymentRecords.schoolId, schoolId));
@@ -1722,6 +1724,22 @@ export class DatabaseStorage implements IStorage {
     const totalOutstanding = Math.max(0, totalTuitionOwed - tuitionPaid);
     const collectionRate = totalTuitionOwed > 0 ? Math.round((tuitionPaid / totalTuitionOwed) * 100) : 0;
 
+    // Sum POS fees absorbed for Moniepoint-matched allocations.
+    // Fee per allocation = |bankTransactionAmount - allocatedAmount|.
+    const posFeeRows = await db.execute(sql`
+      SELECT COALESCE(SUM(ABS(bt.amount - pa.allocated_amount)), 0) AS total
+      FROM payment_allocations pa
+      JOIN bank_transactions bt ON bt.id = pa.bank_transaction_id
+      JOIN bank_statements bs ON bs.id = bt.statement_id
+      JOIN fee_payment_records fpr ON fpr.id = pa.payment_record_id
+      WHERE bs.bank_format = 'moniepoint'
+        AND fpr.status = 'confirmed'
+        ${schoolId ? sql`AND fpr.school_id = ${schoolId}` : sql``}
+        ${term ? sql`AND fpr.term = ${term}` : sql``}
+        ${session ? sql`AND fpr.session = ${session}` : sql``}
+    `);
+    const totalPosFees = Number(((posFeeRows as any).rows ?? posFeeRows)[0]?.total || 0);
+
     return {
       totalFees: totalTuitionOwed,
       totalPaid: tuitionPaid,
@@ -1731,6 +1749,7 @@ export class DatabaseStorage implements IStorage {
       totalOutstanding,
       collectionRate,
       studentsOwing,
+      totalPosFees,
     };
   }
 
@@ -3152,6 +3171,27 @@ export class DatabaseStorage implements IStorage {
       reversedByUser: row.reversedByUser?.id ? (row.reversedByUser as User) : undefined,
     }));
 
+    // Enrich records with Moniepoint POS fee absorbed (per matched allocation).
+    if (result.length > 0) {
+      const allIds = result.map(r => r.id);
+      const posFeeRows = await db.execute(sql`
+        SELECT pa.payment_record_id AS "paymentRecordId",
+               COALESCE(SUM(ABS(bt.amount - pa.allocated_amount)), 0) AS "posFee"
+        FROM payment_allocations pa
+        JOIN bank_transactions bt ON bt.id = pa.bank_transaction_id
+        JOIN bank_statements bs ON bs.id = bt.statement_id
+        WHERE bs.bank_format = 'moniepoint'
+          AND pa.payment_record_id IN (${sql.join(allIds.map(id => sql`${id}`), sql`, `)})
+        GROUP BY pa.payment_record_id
+      `);
+      const posRows = ((posFeeRows as any).rows ?? posFeeRows) as { paymentRecordId: string; posFee: string | number }[];
+      const posFeeMap = new Map(posRows.map(r => [r.paymentRecordId, Number(r.posFee)]));
+      result.forEach(r => {
+        const fee = posFeeMap.get(r.id);
+        if (fee && fee > 0) r.posFee = fee;
+      });
+    }
+
     // Enrich multi-student records with splitCount
     const multiIds = result.filter(r => !r.student).map(r => r.id);
     if (multiIds.length > 0) {
@@ -3229,6 +3269,17 @@ export class DatabaseStorage implements IStorage {
       reversedByUser: row.reversedByUser?.id ? (row.reversedByUser as User) : undefined,
       allocations,
     };
+
+    // Compute Moniepoint POS fee absorbed for this record (if any).
+    const posFeeRows = await db.execute(sql`
+      SELECT COALESCE(SUM(ABS(bt.amount - pa.allocated_amount)), 0) AS "posFee"
+      FROM payment_allocations pa
+      JOIN bank_transactions bt ON bt.id = pa.bank_transaction_id
+      JOIN bank_statements bs ON bs.id = bt.statement_id
+      WHERE bs.bank_format = 'moniepoint' AND pa.payment_record_id = ${id}
+    `);
+    const posFee = Number(((posFeeRows as any).rows ?? posFeeRows)[0]?.posFee || 0);
+    if (posFee > 0) result.posFee = posFee;
 
     console.log('[getFeePaymentRecordById] Found record:', id);
     return result;
