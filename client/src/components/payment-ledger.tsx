@@ -353,6 +353,52 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 <span>Term: <strong className="text-foreground">{selectedTerm || "All"}</strong></span>
                 <span>Session: <strong className="text-foreground">{selectedSession || "All"}</strong></span>
               </div>
+              {(() => {
+                const totalPaid = selectedStudent.totalPaid || 0;
+                const tuitionAssigned = selectedStudent.tuitionAssigned || 0;
+                const tuitionPaid = Math.min(totalPaid, tuitionAssigned);
+                const nonTuitionPaid = Math.max(0, totalPaid - tuitionAssigned);
+                const tuitionOutstanding = Math.max(0, tuitionAssigned - tuitionPaid);
+                if (!tuitionAssigned && totalPaid === 0) return null;
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pb-2 border-b" data-testid="fee-breakdown">
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <div className="text-xs text-muted-foreground">Tuition paid</div>
+                      <div className="text-base font-semibold text-blue-700" data-testid="text-tuition-paid">
+                        ₦{tuitionPaid.toLocaleString()}
+                      </div>
+                      {tuitionAssigned > 0 && (
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          of ₦{tuitionAssigned.toLocaleString()} assigned
+                          {tuitionOutstanding > 0 && (
+                            <span className="text-red-500"> · ₦{tuitionOutstanding.toLocaleString()} outstanding</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <div className="text-xs text-muted-foreground">Non-tuition paid</div>
+                      <div className="text-base font-semibold text-amber-700" data-testid="text-nontuition-paid">
+                        ₦{nonTuitionPaid.toLocaleString()}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Other fees &amp; miscellaneous
+                      </div>
+                    </div>
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <div className="text-xs text-muted-foreground">Total paid</div>
+                      <div className="text-base font-semibold text-green-700" data-testid="text-total-paid">
+                        ₦{totalPaid.toLocaleString()}
+                      </div>
+                      {tuitionAssigned > 0 && totalPaid > 0 && (
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          {Math.round((tuitionPaid / totalPaid) * 100)}% tuition · {Math.round((nonTuitionPaid / totalPaid) * 100)}% other
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               {recordsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
