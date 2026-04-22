@@ -56,9 +56,14 @@ function parseDateString(raw: string): string | null {
 }
 
 function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith" | "access" | "generic" {
-  // Use the first 2000 characters (header/summary) for bank NAME checks to avoid
-  // false positives from narrations mentioning other banks (e.g. "PURCHASE FOR ... Fidelity Bank").
-  const header = rawText.substring(0, 2000).toLowerCase();
+  // Bank-NAME checks must run against the REAL account header only — the text
+  // above the "TRANSACTIONS" marker. Otherwise narrations like
+  // "TRSF .../Zenith Bank _ personal@621" or "MOBILE TRF FROM ACCESS/..."
+  // misclassify a statement as Zenith / Access when it's actually a
+  // structurally Access-style export from a different bank.
+  const txMarker = rawText.search(/\bTRANSACTIONS\b/i);
+  const headerEnd = txMarker > 0 ? Math.min(txMarker, 2000) : Math.min(rawText.length, 2000);
+  const header = rawText.substring(0, headerEnd).toLowerCase();
   const lower  = rawText.toLowerCase(); // full text for structural/format checks only
 
   // Fidelity: unique brand in header, OR structural "Pay In / Pay Out" column headers
@@ -71,10 +76,14 @@ function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "zenith"
   // only MoniePoint statements contain.
   if (/\d{4}-\d{2}-\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
 
-  // Zenith: bank name in account header
+  // Zenith: bank name must appear in the actual account header (above
+  // "TRANSACTIONS"), not in transaction narrations.
   if (header.includes("zenith bank") || header.includes("zenith bank plc")) return "zenith";
 
-  // Access Bank: name in header OR unique tab-separated column headers anywhere
+  // Access-style structural format (Zenith and some other banks export the
+  // same shape): tab-separated columns with Posted Date + Debit (NGN) +
+  // Credit (NGN). The Access parser handles D-MON-YY dates and "-" null
+  // markers, which fits this layout regardless of which bank emitted it.
   if (header.includes("access bank") ||
       (lower.includes("posted date") && lower.includes("debit (ngn)") && lower.includes("credit (ngn)"))) {
     return "access";
