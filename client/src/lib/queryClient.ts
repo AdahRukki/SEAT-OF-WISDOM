@@ -1,6 +1,20 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { enqueueOperation } from "./offline-queue";
+
+export class OfflineQueuedError extends Error {
+  queued = true;
+  constructor(message = "Saved offline — will retry when connected.") {
+    super(message);
+    this.name = "OfflineQueuedError";
+  }
+}
+
+function isWriteMethod(method: string): boolean {
+  const m = method.toUpperCase();
+  return m === "POST" || m === "PUT" || m === "PATCH" || m === "DELETE";
+}
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -73,12 +87,20 @@ export async function apiRequest(
   } catch (err) {
     if (err instanceof TypeError) {
       dispatchOffline();
+      if (isWriteMethod(method) && !isFormData) {
+        enqueueOperation(url, method, options?.body, 'generic');
+        throw new OfflineQueuedError();
+      }
     }
     throw err;
   }
 
   if (await isOfflineStub(res)) {
     dispatchOffline();
+    if (isWriteMethod(method) && !isFormData) {
+      enqueueOperation(url, method, options?.body, 'generic');
+      throw new OfflineQueuedError();
+    }
   } else if (res.ok) {
     dispatchOnline();
   }

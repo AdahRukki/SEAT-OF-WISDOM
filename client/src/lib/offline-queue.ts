@@ -26,7 +26,19 @@ export interface OfflineStudent {
   queueOperationId: string;
 }
 
-type SyncListener = (status: { syncing: boolean; pendingCount: number; justSynced: boolean; studentsChanged?: boolean }) => void;
+export interface SyncStatus {
+  syncing: boolean;
+  pendingCount: number;
+  justSynced: boolean;
+  studentsChanged?: boolean;
+  succeededCount?: number;
+  failedCount?: number;
+  droppedCount?: number;
+  stillPendingFailures?: number;
+  networkFailures?: number;
+}
+
+type SyncListener = (status: SyncStatus) => void;
 
 const listeners: SyncListener[] = [];
 let isSyncing = false;
@@ -39,7 +51,7 @@ export function addSyncListener(fn: SyncListener) {
   };
 }
 
-function notify(status: { syncing: boolean; pendingCount: number; justSynced: boolean; studentsChanged?: boolean }) {
+function notify(status: SyncStatus) {
   listeners.forEach(fn => fn(status));
 }
 
@@ -67,6 +79,10 @@ export function getPendingCount(): number {
   return getQueue().length;
 }
 
+export function enqueueOperation(url: string, method: string, body: unknown, type = 'generic'): QueuedOperation {
+  return enqueue(url, method, body, type);
+}
+
 function enqueue(url: string, method: string, body: unknown, type = 'generic'): QueuedOperation {
   const op: QueuedOperation = {
     id: generateId(),
@@ -84,7 +100,9 @@ function enqueue(url: string, method: string, body: unknown, type = 'generic'): 
   return op;
 }
 
-async function replayOperation(op: QueuedOperation, token: string | null): Promise<boolean> {
+type ReplayResult = 'success' | 'server-failure' | 'network-failure';
+
+async function replayOperation(op: QueuedOperation, token: string | null): Promise<ReplayResult> {
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -96,14 +114,30 @@ async function replayOperation(op: QueuedOperation, token: string | null): Promi
       credentials: 'include',
     });
 
-    return res.ok || res.status === 404;
+    if (res.ok || res.status === 404) return 'success';
+
+    // Treat the service worker's offline stub as a network failure so we
+    // don't burn through the retry budget when there's actually no connection.
+    if (res.status === 503) {
+      try {
+        const data = await res.clone().json();
+        if (data && (data.offline === true || data.error === 'offline')) {
+          return 'network-failure';
+        }
+      } catch {
+        // fall through
+      }
+    }
+
+    return 'server-failure';
   } catch {
-    return false;
+    return 'network-failure';
   }
 }
 
-export async function processOfflineQueue(): Promise<void> {
-  if (isSyncing || !navigator.onLine) return;
+export async function processOfflineQueue(opts: { force?: boolean } = {}): Promise<void> {
+  if (isSyncing) return;
+  if (!opts.force && !navigator.onLine) return;
   const queue = getQueue();
   if (queue.length === 0) return;
 
@@ -114,26 +148,52 @@ export async function processOfflineQueue(): Promise<void> {
   const remaining: QueuedOperation[] = [];
 
   let studentsChanged = false;
+  let succeededCount = 0;
+  let droppedCount = 0;
+  let stillPendingFailures = 0;
+  let networkFailures = 0;
   for (const op of queue) {
-    const success = await replayOperation(op, token);
-    if (success) {
+    const result = await replayOperation(op, token);
+    if (result === 'success') {
+      succeededCount += 1;
       if (op.type === 'create-student') {
         removeOfflineStudentByQueueId(op.id);
         studentsChanged = true;
       }
-    } else {
+    } else if (result === 'server-failure') {
       op.retryCount += 1;
-      if (op.retryCount < 5) remaining.push(op);
+      if (op.retryCount < 5) {
+        remaining.push(op);
+        stillPendingFailures += 1;
+      } else {
+        droppedCount += 1;
+      }
+    } else {
+      // Network failure: keep the item in the queue without consuming its
+      // retry budget so we don't lose work when there's no connectivity.
+      remaining.push(op);
+      networkFailures += 1;
     }
   }
 
   saveQueue(remaining);
   isSyncing = false;
-  notify({ syncing: false, pendingCount: remaining.length, justSynced: true, studentsChanged });
+  const failedCount = droppedCount + stillPendingFailures + networkFailures;
+  notify({
+    syncing: false,
+    pendingCount: remaining.length,
+    justSynced: true,
+    studentsChanged,
+    succeededCount,
+    failedCount,
+    droppedCount,
+    stillPendingFailures,
+    networkFailures,
+  });
 
   setTimeout(() => {
     notify({ syncing: false, pendingCount: remaining.length, justSynced: false });
-  }, 3000);
+  }, 4000);
 }
 
 export async function queuedApiRequest(
@@ -233,6 +293,9 @@ function removeOfflineStudentByQueueId(queueOperationId: string): void {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    setTimeout(processOfflineQueue, 1000);
+    setTimeout(() => processOfflineQueue(), 1000);
+  });
+  window.addEventListener('app:api-online', () => {
+    setTimeout(() => processOfflineQueue(), 500);
   });
 }
