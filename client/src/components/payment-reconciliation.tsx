@@ -113,6 +113,7 @@ interface BankTransaction {
   reference: string | null;
   status: string;
   matchConfidence: number | null;
+  bankFormat?: string | null;
 }
 
 interface PaymentReconciliationProps {
