@@ -3323,24 +3323,44 @@ export class DatabaseStorage implements IStorage {
 
   async confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord> {
     console.log('[confirmFeePayment] Confirming payment:', paymentId);
-    
-    const [record] = await db
-      .update(feePaymentRecords)
-      .set({
-        status: 'confirmed',
-        confirmedBy,
-        confirmedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(feePaymentRecords.id, paymentId))
-      .returning();
 
-    if (!record) {
-      throw new Error('Payment record not found');
-    }
+    return await db.transaction(async (tx) => {
+      const [record] = await tx
+        .update(feePaymentRecords)
+        .set({
+          status: 'confirmed',
+          confirmedBy,
+          confirmedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(feePaymentRecords.id, paymentId))
+        .returning();
 
-    console.log('[confirmFeePayment] Payment confirmed:', paymentId);
-    return record;
+      if (!record) {
+        throw new Error('Payment record not found');
+      }
+
+      const existing = await tx
+        .select({ id: paymentAllocations.id })
+        .from(paymentAllocations)
+        .where(and(
+          eq(paymentAllocations.paymentRecordId, paymentId),
+          eq(paymentAllocations.bankTransactionId, bankTransactionId),
+        ))
+        .limit(1);
+
+      if (existing.length === 0) {
+        await tx.insert(paymentAllocations).values({
+          paymentRecordId: paymentId,
+          bankTransactionId,
+          allocatedAmount: record.amount,
+          allocatedBy: confirmedBy,
+        });
+      }
+
+      console.log('[confirmFeePayment] Payment confirmed:', paymentId);
+      return record;
+    });
   }
 
   async unconfirmFeePayment(paymentId: string): Promise<{ payment: FeePaymentRecord; bankTransactionIds: string[] }> {
