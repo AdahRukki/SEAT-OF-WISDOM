@@ -3192,6 +3192,41 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
+    // Enrich confirmed/reversed records with their first matched bank transaction
+    const matchableIds = result.filter(r => r.status !== 'recorded').map(r => r.id);
+    if (matchableIds.length > 0) {
+      const matchRows = await db
+        .select({
+          paymentRecordId: paymentAllocations.paymentRecordId,
+          id: bankTransactions.id,
+          transactionDate: bankTransactions.transactionDate,
+          amount: bankTransactions.amount,
+          reference: bankTransactions.reference,
+          rawDescription: bankTransactions.rawDescription,
+          createdAt: paymentAllocations.createdAt,
+        })
+        .from(paymentAllocations)
+        .innerJoin(bankTransactions, eq(paymentAllocations.bankTransactionId, bankTransactions.id))
+        .where(inArray(paymentAllocations.paymentRecordId, matchableIds))
+        .orderBy(desc(paymentAllocations.createdAt));
+      const matchMap = new Map<string, typeof matchRows[number]>();
+      for (const row of matchRows) {
+        if (!matchMap.has(row.paymentRecordId)) matchMap.set(row.paymentRecordId, row);
+      }
+      result.forEach(r => {
+        const m = matchMap.get(r.id);
+        if (m) {
+          r.matchedTransaction = {
+            id: m.id,
+            transactionDate: m.transactionDate,
+            amount: m.amount,
+            reference: m.reference,
+            rawDescription: m.rawDescription,
+          };
+        }
+      });
+    }
+
     // Enrich multi-student records with splitCount
     const multiIds = result.filter(r => !r.student).map(r => r.id);
     if (multiIds.length > 0) {

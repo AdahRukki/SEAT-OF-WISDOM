@@ -172,13 +172,18 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     },
   });
 
+  const [reconcileStatus, setReconcileStatus] = useState<"recorded" | "confirmed" | "reversed" | "all">("recorded");
+
   const { data: pendingPayments = [], isLoading: paymentsLoading, refetch: refetchPayments } = useQuery<FeePaymentRecordWithDetails[]>({
-    queryKey: ["/api/payments/records", schoolId, "recorded"],
+    queryKey: ["/api/payments/records", schoolId, reconcileStatus],
     queryFn: async () => {
-      let url = "/api/payments/records?status=recorded";
-      if (schoolId) url += `&schoolId=${schoolId}`;
+      const params = new URLSearchParams();
+      if (reconcileStatus !== "all") params.set("status", reconcileStatus);
+      if (schoolId) params.set("schoolId", schoolId);
+      const qs = params.toString();
+      const url = `/api/payments/records${qs ? `?${qs}` : ""}`;
       const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch pending payments");
+      if (!res.ok) throw new Error("Failed to fetch payments");
       return res.json();
     },
   });
@@ -783,16 +788,46 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Column: Recorded Payments */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b">
+                <div className="flex items-center gap-2 pb-2 border-b flex-wrap">
                   <h5 className="font-semibold text-blue-700">Recorded Payments</h5>
                   <Badge variant="secondary">{pendingPayments.length}</Badge>
+                  <div className="ml-auto flex gap-1 flex-wrap">
+                    {(["recorded", "confirmed", "reversed", "all"] as const).map((s) => {
+                      const labels: Record<typeof s, string> = {
+                        recorded: "Pending",
+                        confirmed: "Confirmed",
+                        reversed: "Reversed",
+                        all: "All",
+                      };
+                      return (
+                        <Button
+                          key={s}
+                          size="sm"
+                          variant={reconcileStatus === s ? "default" : "outline"}
+                          className="text-xs h-7"
+                          onClick={() => setReconcileStatus(s)}
+                          data-testid={`button-reconcile-status-${s}`}
+                        >
+                          {labels[s]}
+                        </Button>
+                      );
+                    })}
+                  </div>
                 </div>
                 
                 {pendingPayments.length === 0 ? (
                   <Card>
                     <CardContent className="text-center py-6 text-muted-foreground">
                       <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                      <p className="text-sm">No pending payments</p>
+                      <p className="text-sm">
+                        {reconcileStatus === "recorded"
+                          ? "No pending payments"
+                          : reconcileStatus === "confirmed"
+                            ? "No confirmed payments"
+                            : reconcileStatus === "reversed"
+                              ? "No reversed payments"
+                              : "No payments"}
+                      </p>
                     </CardContent>
                   </Card>
                 ) : (
@@ -835,30 +870,83 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   </div>
                                 )}
                               </div>
-                              <div className="flex flex-col gap-1">
-                                <Button
-                                  size="sm"
-                                  className="text-xs h-7"
-                                  onClick={() => handleConfirmClick(payment)}
-                                  disabled={matchingTxs.length === 0}
-                                >
-                                  <Link className="h-3 w-3 mr-1" />
-                                  Match
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-xs h-7 text-red-600 hover:text-red-700"
-                                  onClick={() => handleReverseClick(payment)}
-                                >
-                                  <RotateCcw className="h-3 w-3 mr-1" />
-                                  Reverse
-                                </Button>
+                              <div className="flex flex-col gap-1 items-end">
+                                {payment.status === "recorded" && (
+                                  <Button
+                                    size="sm"
+                                    className="text-xs h-7"
+                                    onClick={() => handleConfirmClick(payment)}
+                                    disabled={matchingTxs.length === 0}
+                                  >
+                                    <Link className="h-3 w-3 mr-1" />
+                                    Match
+                                  </Button>
+                                )}
+                                {payment.status === "confirmed" && (
+                                  <Badge className="bg-green-600 hover:bg-green-600 text-xs">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Confirmed
+                                  </Badge>
+                                )}
+                                {payment.status === "reversed" && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    <RotateCcw className="h-3 w-3 mr-1" />
+                                    Reversed
+                                  </Badge>
+                                )}
+                                {payment.status !== "reversed" && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-xs h-7 text-red-600 hover:text-red-700"
+                                    onClick={() => handleReverseClick(payment)}
+                                  >
+                                    <RotateCcw className="h-3 w-3 mr-1" />
+                                    Reverse
+                                  </Button>
+                                )}
                               </div>
                             </div>
-                            
+
+                            {/* Matched bank transaction (confirmed payments) */}
+                            {payment.status === "confirmed" && payment.matchedTransaction && (
+                              <div className="mt-2 pt-2 border-t border-dashed">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <Link className="h-3 w-3 text-green-600" />
+                                  <span className="text-xs font-medium text-green-700">Matched bank transaction</span>
+                                </div>
+                                <div className="text-xs bg-green-50 p-2 rounded border border-green-200">
+                                  <div className="font-medium text-green-700">
+                                    ₦{parseFloat(payment.matchedTransaction.amount).toLocaleString()}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {formatRecoDate(payment.matchedTransaction.transactionDate)}
+                                    {payment.matchedTransaction.reference && ` | Ref: ${payment.matchedTransaction.reference}`}
+                                  </div>
+                                  {payment.matchedTransaction.rawDescription && (
+                                    <div className="text-muted-foreground mt-0.5 break-words">
+                                      {payment.matchedTransaction.rawDescription}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Reversal info */}
+                            {payment.status === "reversed" && (
+                              <div className="mt-2 pt-2 border-t border-dashed">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <RotateCcw className="h-3 w-3 text-red-600" />
+                                  <span className="text-xs font-medium text-red-700">Reversal</span>
+                                </div>
+                                <div className="text-xs bg-red-50 p-2 rounded border border-red-200 text-red-900">
+                                  {payment.reversalReason || "No reason provided"}
+                                </div>
+                              </div>
+                            )}
+
                             {/* Auto-suggest section */}
-                            {suggestion.transaction && suggestion.confidence >= 50 && (
+                            {payment.status === "recorded" && suggestion.transaction && suggestion.confidence >= 50 && (
                               <div className="mt-2 pt-2 border-t border-dashed">
                                 <div className="flex items-center gap-1 mb-1">
                                   <Sparkles className={`h-3 w-3 ${suggestion.confidence >= 80 ? 'text-green-500' : 'text-yellow-500'}`} />

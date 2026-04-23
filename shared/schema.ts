@@ -1184,6 +1184,13 @@ export type FeePaymentRecordWithDetails = FeePaymentRecord & {
   splits?: FeePaymentStudentSplit[];
   splitCount?: number;
   posFee?: number;
+  matchedTransaction?: {
+    id: string;
+    transactionDate: Date | string;
+    amount: string;
+    reference: string | null;
+    rawDescription: string | null;
+  };
 };
 
 // Bank Transaction with relations
