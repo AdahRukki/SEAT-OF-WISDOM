@@ -486,7 +486,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     const paymentAmount = parseFloat(payment.amount);
     return unmatchedTransactions.filter((t) => {
       const txAmount = parseFloat(t.amount);
-      if (Math.abs(txAmount - paymentAmount) >= 0.01) return false;
+      // Moniepoint POS deducts a flat ₦100 fee, so the bank credit is ₦100
+      // less than the recorded payment. Allow that gap for Moniepoint only.
+      const tolerance = t.bankFormat === 'moniepoint' ? 100.01 : 0.01;
+      if (Math.abs(txAmount - paymentAmount) >= tolerance) return false;
       return calendarDayDiff(t.transactionDate, payment.paymentDate) <= 1;
     });
   };
@@ -562,9 +565,13 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     if (!transactionToMatch) return [] as FeePaymentRecordWithDetails[];
     const txAmount = parseFloat(transactionToMatch.amount);
     if (isNaN(txAmount)) return [];
+    // Moniepoint POS deducts a flat ₦100 fee, so a ₦4,900 bank credit can
+    // legitimately match a ₦5,000 recorded payment. Allow that gap for
+    // Moniepoint only; every other bank stays strict-equal.
+    const tolerance = transactionToMatch.bankFormat === 'moniepoint' ? 100.01 : 0.01;
     return pendingPayments.filter((p) => {
       const pAmount = parseFloat(p.amount);
-      if (isNaN(pAmount) || Math.abs(pAmount - txAmount) >= 0.01) return false;
+      if (isNaN(pAmount) || Math.abs(pAmount - txAmount) >= tolerance) return false;
       return calendarDayDiff(p.paymentDate, transactionToMatch.transactionDate) <= 1;
     });
   }, [transactionToMatch, pendingPayments]);
@@ -1145,7 +1152,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       </Tabs>
 
       <Dialog open={isConfirmDialogOpen} onOpenChange={(open) => { setIsConfirmDialogOpen(open); if (!open) setMatchSearch(""); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className="max-w-2xl"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Confirm Payment Match</DialogTitle>
             <DialogDescription>
@@ -1341,7 +1351,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Match Recorded Payment</DialogTitle>
             <DialogDescription>
