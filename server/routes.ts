@@ -3876,6 +3876,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Unconfirm payment (admin only) - reverts a confirmed payment back to recorded
+  app.post("/api/admin/payments/:id/unconfirm", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const paymentId = req.params.id;
+
+      console.log('[POST /api/admin/payments/:id/unconfirm] User:', user.id, 'Payment:', paymentId);
+
+      const paymentBefore = await storage.getFeePaymentRecordById(paymentId);
+      if (!paymentBefore) {
+        return res.status(404).json({ error: "Payment record not found" });
+      }
+      if (paymentBefore.status !== 'confirmed') {
+        return res.status(400).json({ error: "Only confirmed payments can be unconfirmed" });
+      }
+
+      const { payment, bankTransactionIds } = await storage.unconfirmFeePayment(paymentId);
+
+      await storage.createPaymentAuditLog({
+        action: 'unconfirm_payment',
+        entityType: 'payment_record',
+        entityId: paymentId,
+        userId: user.id,
+        schoolId: payment.schoolId || undefined,
+        previousData: { status: paymentBefore.status, bankTransactionIds },
+        newData: { status: 'recorded', releasedBankTransactionIds: bankTransactionIds },
+      });
+
+      console.log('[POST /api/admin/payments/:id/unconfirm] Payment unconfirmed:', paymentId);
+      res.json(payment);
+    } catch (error: any) {
+      console.error("[POST /api/admin/payments/:id/unconfirm] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to unconfirm payment" });
+    }
+  });
+
   // Reverse payment (admin only)
   app.post("/api/admin/payments/:id/reverse", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
     try {
