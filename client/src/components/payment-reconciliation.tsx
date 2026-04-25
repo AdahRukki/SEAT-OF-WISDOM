@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Card,
   CardContent,
@@ -140,6 +141,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('auth_token');
@@ -938,21 +941,23 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                       <CheckCircle className="h-3 w-3 mr-1" />
                                       Confirmed
                                     </Badge>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-xs h-7"
-                                      onClick={() => {
-                                        if (window.confirm("Move this payment back to Pending and release the matched bank transaction?")) {
-                                          unconfirmMutation.mutate({ paymentId: payment.id });
-                                        }
-                                      }}
-                                      disabled={unconfirmMutation.isPending}
-                                      data-testid={`button-unconfirm-${payment.id}`}
-                                    >
-                                      <RotateCcw className="h-3 w-3 mr-1" />
-                                      Unconfirm
-                                    </Button>
+                                    {isAdmin && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs h-7"
+                                        onClick={() => {
+                                          if (window.confirm("Move this payment back to Pending and release the matched bank transaction?")) {
+                                            unconfirmMutation.mutate({ paymentId: payment.id });
+                                          }
+                                        }}
+                                        disabled={unconfirmMutation.isPending}
+                                        data-testid={`button-unconfirm-${payment.id}`}
+                                      >
+                                        <RotateCcw className="h-3 w-3 mr-1" />
+                                        Unconfirm
+                                      </Button>
+                                    )}
                                   </>
                                 )}
                                 {payment.status === "reversed" && (
@@ -961,7 +966,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     Reversed
                                   </Badge>
                                 )}
-                                {payment.status !== "reversed" && (
+                                {payment.status !== "reversed" && isAdmin && (
                                   <Button
                                     size="sm"
                                     variant="ghost"
