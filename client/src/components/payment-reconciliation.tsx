@@ -214,7 +214,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
   // Backwards-compatible alias for downstream code (sidebar count, loading states, refetch buttons).
   const pendingPayments = recordedPayments;
-  const paymentsLoading = recordedPaymentsLoading || filteredPaymentsLoading;
+  // Drive the left-column spinner from the dataset that actually feeds it so a
+  // background refetch of the recorded dataset does not blank a non-recorded view.
+  const paymentsLoading = filteredPaymentsLoading;
   const refetchPayments = () => {
     refetchRecordedPayments();
     if (filteredEnabled) refetchFilteredPayments();
