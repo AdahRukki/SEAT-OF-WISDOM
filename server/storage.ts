@@ -3366,49 +3366,64 @@ export class DatabaseStorage implements IStorage {
   async unconfirmFeePayment(paymentId: string): Promise<{ payment: FeePaymentRecord; bankTransactionIds: string[] }> {
     console.log('[unconfirmFeePayment] Unconfirming payment:', paymentId);
 
-    const allocs = await db
-      .select({ bankTransactionId: paymentAllocations.bankTransactionId })
-      .from(paymentAllocations)
-      .where(eq(paymentAllocations.paymentRecordId, paymentId));
-    const bankTransactionIds = allocs.map(a => a.bankTransactionId);
+    return await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({ status: feePaymentRecords.status })
+        .from(feePaymentRecords)
+        .where(eq(feePaymentRecords.id, paymentId))
+        .limit(1);
 
-    if (bankTransactionIds.length > 0) {
-      await db
-        .delete(paymentAllocations)
+      if (!current) {
+        throw new Error('Payment record not found');
+      }
+      if (current.status !== 'confirmed') {
+        throw new Error(`Cannot unconfirm a payment with status '${current.status}'`);
+      }
+
+      const allocs = await tx
+        .select({ bankTransactionId: paymentAllocations.bankTransactionId })
+        .from(paymentAllocations)
         .where(eq(paymentAllocations.paymentRecordId, paymentId));
+      const bankTransactionIds = allocs.map(a => a.bankTransactionId);
 
-      for (const txId of bankTransactionIds) {
-        const remaining = await db
-          .select({ id: paymentAllocations.id })
-          .from(paymentAllocations)
-          .where(eq(paymentAllocations.bankTransactionId, txId))
-          .limit(1);
-        if (remaining.length === 0) {
-          await db
-            .update(bankTransactions)
-            .set({ status: 'unmatched', matchConfidence: 0, updatedAt: new Date() })
-            .where(eq(bankTransactions.id, txId));
+      if (bankTransactionIds.length > 0) {
+        await tx
+          .delete(paymentAllocations)
+          .where(eq(paymentAllocations.paymentRecordId, paymentId));
+
+        for (const txId of bankTransactionIds) {
+          const remaining = await tx
+            .select({ id: paymentAllocations.id })
+            .from(paymentAllocations)
+            .where(eq(paymentAllocations.bankTransactionId, txId))
+            .limit(1);
+          if (remaining.length === 0) {
+            await tx
+              .update(bankTransactions)
+              .set({ status: 'unmatched', matchConfidence: 0, updatedAt: new Date() })
+              .where(eq(bankTransactions.id, txId));
+          }
         }
       }
-    }
 
-    const [record] = await db
-      .update(feePaymentRecords)
-      .set({
-        status: 'recorded',
-        confirmedBy: null,
-        confirmedAt: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(feePaymentRecords.id, paymentId))
-      .returning();
+      const [record] = await tx
+        .update(feePaymentRecords)
+        .set({
+          status: 'recorded',
+          confirmedBy: null,
+          confirmedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(feePaymentRecords.id, paymentId))
+        .returning();
 
-    if (!record) {
-      throw new Error('Payment record not found');
-    }
+      if (!record) {
+        throw new Error('Payment record not found');
+      }
 
-    console.log('[unconfirmFeePayment] Payment unconfirmed:', paymentId);
-    return { payment: record, bankTransactionIds };
+      console.log('[unconfirmFeePayment] Payment unconfirmed:', paymentId);
+      return { payment: record, bankTransactionIds };
+    });
   }
 
   async reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<FeePaymentRecord> {
