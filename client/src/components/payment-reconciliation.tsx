@@ -192,7 +192,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   });
 
   // Display dataset for the left column, switches with the status filter pills.
-  const { data: filteredPayments = [], isLoading: filteredPaymentsLoading, refetch: refetchFilteredPayments } = useQuery<FeePaymentRecordWithDetails[]>({
+  // Skipped when the filter is "recorded" because it would duplicate the recordedPayments query above.
+  const filteredEnabled = reconcileStatus !== "recorded";
+  const { data: filteredPaymentsData = [], isLoading: filteredPaymentsLoadingRaw, refetch: refetchFilteredPayments } = useQuery<FeePaymentRecordWithDetails[]>({
     queryKey: ["/api/payments/records", schoolId, reconcileStatus],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -204,14 +206,18 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       if (!res.ok) throw new Error("Failed to fetch payments");
       return res.json();
     },
+    enabled: filteredEnabled,
   });
+
+  const filteredPayments = filteredEnabled ? filteredPaymentsData : recordedPayments;
+  const filteredPaymentsLoading = filteredEnabled ? filteredPaymentsLoadingRaw : recordedPaymentsLoading;
 
   // Backwards-compatible alias for downstream code (sidebar count, loading states, refetch buttons).
   const pendingPayments = recordedPayments;
   const paymentsLoading = recordedPaymentsLoading || filteredPaymentsLoading;
   const refetchPayments = () => {
     refetchRecordedPayments();
-    refetchFilteredPayments();
+    if (filteredEnabled) refetchFilteredPayments();
   };
 
   const uploadMutation = useMutation({
