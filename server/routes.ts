@@ -3846,11 +3846,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Payment record not found" });
       }
 
-      // Confirm the payment
+      // Confirm the payment (atomically updates payment status, allocation, and bank tx status)
       const payment = await storage.confirmFeePayment(paymentId, bankTransactionId, user.id);
-
-      // Update bank transaction status to confirmed
-      await storage.updateBankTransactionStatus(bankTransactionId, 'confirmed', 100);
 
       // Create audit log
       await storage.createPaymentAuditLog({

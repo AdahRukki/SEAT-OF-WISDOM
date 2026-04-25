@@ -3358,6 +3358,13 @@ export class DatabaseStorage implements IStorage {
         });
       }
 
+      // Atomically flip the bank transaction to confirmed so we cannot end up
+      // with a confirmed payment linked to an unmatched/incorrect-status transaction.
+      await tx
+        .update(bankTransactions)
+        .set({ status: 'confirmed', matchConfidence: 100, updatedAt: new Date() })
+        .where(eq(bankTransactions.id, bankTransactionId));
+
       console.log('[confirmFeePayment] Payment confirmed:', paymentId);
       return record;
     });
