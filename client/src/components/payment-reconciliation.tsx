@@ -850,7 +850,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
               {/* Left Column: Recorded Payments */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b flex-wrap">
-                  <h5 className="font-semibold text-blue-700">Recorded Payments</h5>
+                  <h5 className="font-semibold text-blue-700">
+                    {reconcileStatus === "recorded" ? "Recorded Payments"
+                      : reconcileStatus === "confirmed" ? "Confirmed Payments"
+                      : reconcileStatus === "reversed" ? "Reversed Payments"
+                      : "All Payments"}
+                  </h5>
                   <Badge variant="secondary">{filteredPayments.length}</Badge>
                   <div className="ml-auto flex gap-1 flex-wrap">
                     {(["recorded", "confirmed", "reversed", "all"] as const).map((s) => {
