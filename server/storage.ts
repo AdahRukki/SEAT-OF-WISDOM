@@ -3158,7 +3158,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(recorderUsers, eq(feePaymentRecords.recordedBy, recorderUsers.id))
       .leftJoin(reverserUsers, eq(feePaymentRecords.reversedBy, reverserUsers.id))
       .where(whereClause)
-      .orderBy(desc(feePaymentRecords.createdAt));
+      .orderBy(desc(feePaymentRecords.paymentDate), desc(feePaymentRecords.createdAt));
 
     const result: FeePaymentRecordWithDetails[] = records.map(row => ({
       ...row.record,
