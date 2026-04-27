@@ -25,9 +25,10 @@ export function normalizeForFingerprint(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-export function generateFingerprint(date: string, amount: number, description: string): string {
+export function generateFingerprint(date: string, amount: number, description: string, dedupeKey?: string): string {
   const normalizedDesc = normalizeForFingerprint(description);
-  const data = `${date}|${amount.toFixed(2)}|${normalizedDesc}`;
+  const suffix = dedupeKey ? `|${dedupeKey}` : "";
+  const data = `${date}|${amount.toFixed(2)}|${normalizedDesc}${suffix}`;
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
@@ -323,51 +324,132 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
 
 function parseZenithTransactions(rawText: string): ParsedTransaction[] {
   const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
-  const transactions: ParsedTransaction[] = [];
 
-  const dateLineRegex = /^(\d{2}\/\d{2}\/\d{4})\s+[A-Za-z]/;
-  const amountsLineRegex = /^([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+\d{2}\/\d{2}\/\d{4}\s+[\d,]+\.\d{2}\s*$/;
+  // Collect raw rows first; fingerprints are assigned in a second pass so we
+  // can keep the legacy `(date, amount, description)` formula for the common
+  // case and only fold in the row's running balance when that triple actually
+  // collides with another row in the same statement. That keeps re-uploads of
+  // statements imported before this fix from creating duplicates.
+  type Pending = { date: string; credit: number; description: string; balance: string };
+  const pending: Pending[] = [];
+
+  // Single-line full row: "DD/MM/YYYY <desc> debit credit DD/MM/YYYY balance"
+  const fullRowRegex = /^(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+\d{2}\/\d{2}\/\d{4}\s+([\d,]+\.\d{2})\s*$/;
+  // Date+description line with NO trailing amounts (continuations follow).
+  // Allow ANY non-whitespace char after the date so descriptions like
+  // ":ISW INFLOW" or "/SOMETHING" are not silently skipped.
+  const dateLineRegex = /^(\d{2}\/\d{2}\/\d{4})\s+(\S)/;
+  // Pure amounts line: "debit credit DD/MM/YYYY balance"
+  const amountsLineRegex = /^([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+\d{2}\/\d{2}\/\d{4}\s+([\d,]+\.\d{2})\s*$/;
+  // Continuation line ending with amounts: "<desc fragment> debit credit DD/MM/YYYY balance"
+  const trailingAmountsRegex = /^(.+?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+\d{2}\/\d{2}\/\d{4}\s+([\d,]+\.\d{2})\s*$/;
+  // Header, summary totals and marketing footer rows that must never become transactions
+  const skipPatterns = /^(date\s+description|opening balance|closing balance|account name|account no|currency|period|totals\b|total\s*\(|alertz|how to verify|text\s+'verify|to avoid|we implore|please pay|through any|www\.|page\s+\d+\s+of|--\s+\d+\s+of)/i;
 
   let pendingDate: string | null = null;
   let pendingDescription = "";
+  let pendingAmounts: { debit: number; credit: number; balance: string } | null = null;
 
-  const flush = (debit: number, credit: number) => {
-    if (!pendingDate) return;
+  const flush = () => {
+    if (!pendingDate || !pendingAmounts) {
+      pendingDate = null; pendingDescription = ""; pendingAmounts = null;
+      return;
+    }
+    const { debit, credit, balance } = pendingAmounts;
     if (debit > 0 || credit <= 0) {
-      pendingDate = null; pendingDescription = "";
+      pendingDate = null; pendingDescription = ""; pendingAmounts = null;
       return;
     }
     const desc = pendingDescription.replace(/\s{2,}/g, " ").trim();
-    const fingerprint = generateFingerprint(pendingDate, credit, desc);
-    transactions.push({ date: pendingDate, credit, rawDescription: desc, fingerprint });
-    pendingDate = null; pendingDescription = "";
+    pending.push({ date: pendingDate, credit, description: desc, balance });
+    pendingDate = null; pendingDescription = ""; pendingAmounts = null;
   };
 
   for (const line of lines) {
-    if (/^(date\s+description|opening balance|closing balance|account name|account no|currency|period)/i.test(line)) continue;
+    if (skipPatterns.test(line)) continue;
 
-    const amountsMatch = line.match(amountsLineRegex);
-    if (amountsMatch) {
-      const debit  = parseFloat(amountsMatch[1].replace(/,/g, ""));
-      const credit = parseFloat(amountsMatch[2].replace(/,/g, ""));
-      flush(debit, credit);
+    // 1. Complete one-line row — flush any prior pending tx, start a new one.
+    //    The amounts are captured immediately but flushing waits in case the
+    //    next lines are description wraps that belong to this row.
+    const fullMatch = line.match(fullRowRegex);
+    if (fullMatch) {
+      flush();
+      pendingDate = fullMatch[1];
+      pendingDescription = fullMatch[2];
+      pendingAmounts = {
+        debit: parseFloat(fullMatch[3].replace(/,/g, "")),
+        credit: parseFloat(fullMatch[4].replace(/,/g, "")),
+        balance: fullMatch[5],
+      };
       continue;
     }
 
+    // 2. Pure amounts line — completes a pending date-line transaction.
+    const amountsMatch = line.match(amountsLineRegex);
+    if (amountsMatch) {
+      if (pendingAmounts) flush();
+      pendingAmounts = {
+        debit: parseFloat(amountsMatch[1].replace(/,/g, "")),
+        credit: parseFloat(amountsMatch[2].replace(/,/g, "")),
+        balance: amountsMatch[3],
+      };
+      flush();
+      continue;
+    }
+
+    // 3. Date+description line with no trailing amounts.
     const dateMatch = line.match(dateLineRegex);
     if (dateMatch) {
-      if (pendingDate) { pendingDate = null; pendingDescription = ""; }
+      flush();
       pendingDate = dateMatch[1];
       pendingDescription = line.substring(11).trim();
       continue;
     }
 
+    // 4. Continuation line that also ends with the four amount fields.
+    //    Only consume as such when we're mid-transaction without amounts yet,
+    //    otherwise it's just a description wrap of an already-amount-bearing row.
+    if (pendingDate && !pendingAmounts) {
+      const trailing = line.match(trailingAmountsRegex);
+      if (trailing) {
+        const leadingDesc = trailing[1].trim();
+        if (leadingDesc) pendingDescription += " " + leadingDesc;
+        pendingAmounts = {
+          debit: parseFloat(trailing[2].replace(/,/g, "")),
+          credit: parseFloat(trailing[3].replace(/,/g, "")),
+          balance: trailing[4],
+        };
+        flush();
+        continue;
+      }
+    }
+
+    // 5. Pure description wrap — append to the current pending transaction.
     if (pendingDate) {
       pendingDescription += " " + line;
     }
   }
 
-  return transactions;
+  flush();
+
+  // Second pass: only the rows whose (date, amount, normalized description)
+  // triple collides with another row in this statement get the balance-based
+  // disambiguator. Solo rows keep the legacy fingerprint formula so any rows
+  // already imported prior to this fix still match on re-upload.
+  const collisionKey = (p: Pending) =>
+    `${p.date}|${p.credit.toFixed(2)}|${normalizeForFingerprint(p.description)}`;
+  const collisionCounts = new Map<string, number>();
+  for (const p of pending) {
+    const key = collisionKey(p);
+    collisionCounts.set(key, (collisionCounts.get(key) ?? 0) + 1);
+  }
+  return pending.map<ParsedTransaction>(p => {
+    const isCollision = (collisionCounts.get(collisionKey(p)) ?? 0) > 1;
+    const fingerprint = isCollision
+      ? generateFingerprint(p.date, p.credit, p.description, p.balance)
+      : generateFingerprint(p.date, p.credit, p.description);
+    return { date: p.date, credit: p.credit, rawDescription: p.description, fingerprint };
+  });
 }
 
 function parseAccessTransactions(rawText: string): ParsedTransaction[] {
