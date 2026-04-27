@@ -82,6 +82,7 @@ import {
   type BankStatement,
   type InsertBankStatement,
   type BankTransaction,
+  type BankTransactionWithDetails,
   type InsertBankTransaction,
   calculateGrade
 } from "@shared/schema";
@@ -324,6 +325,7 @@ export interface IStorage {
   // Bank Transactions
   createBankTransaction(data: InsertBankTransaction): Promise<BankTransaction>;
   getBankTransactions(filters: { schoolId?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<BankTransaction[]>;
+  getBankTransactionsWithAllocations(filters: { schoolId?: string; status?: string }): Promise<BankTransactionWithDetails[]>;
   getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]>;
   updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction>;
   checkTransactionFingerprint(fingerprint: string): Promise<boolean>;
@@ -3673,6 +3675,112 @@ export class DatabaseStorage implements IStorage {
 
     const transactions: BankTransaction[] = rows.map(r => ({ ...r.tx, bankFormat: r.bankFormat ?? null }));
     console.log('[getUnmatchedBankTransactions] Found', transactions.length, 'unmatched transactions');
+    return transactions;
+  }
+
+  async getBankTransactionsWithAllocations(filters: { schoolId?: string; status?: string }): Promise<BankTransactionWithDetails[]> {
+    console.log('[getBankTransactionsWithAllocations] Fetching with filters:', filters);
+
+    const conditions = [];
+    if (filters.schoolId) {
+      conditions.push(eq(bankTransactions.schoolId, filters.schoolId));
+    }
+    if (filters.status === 'matched') {
+      conditions.push(inArray(bankTransactions.status, ['suggested', 'partially_reconciled']));
+    } else if (filters.status && filters.status !== 'all') {
+      conditions.push(eq(bankTransactions.status, filters.status));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const rows = await db
+      .select({
+        tx: bankTransactions,
+        bankFormat: bankStatements.bankFormat,
+      })
+      .from(bankTransactions)
+      .leftJoin(bankStatements, eq(bankTransactions.statementId, bankStatements.id))
+      .where(whereClause)
+      .orderBy(desc(bankTransactions.transactionDate));
+
+    const transactions: BankTransactionWithDetails[] = rows.map(r => ({
+      ...r.tx,
+      bankFormat: r.bankFormat ?? null,
+      allocations: [],
+    }));
+
+    if (transactions.length === 0) {
+      console.log('[getBankTransactionsWithAllocations] Found 0 transactions');
+      return transactions;
+    }
+
+    // Skip the allocation join when the caller only wants unmatched rows —
+    // by definition they have no allocations.
+    if (filters.status === 'unmatched') {
+      console.log('[getBankTransactionsWithAllocations] Found', transactions.length, 'transactions (no enrichment)');
+      return transactions;
+    }
+
+    const txIds = transactions.map(t => t.id);
+    // Select ONLY the fields needed for the right-column allocation summary.
+    // Never select users.password or other credential fields.
+    const allocRows = await db
+      .select({
+        allocationId: paymentAllocations.id,
+        bankTransactionId: paymentAllocations.bankTransactionId,
+        paymentRecordId: paymentAllocations.paymentRecordId,
+        allocatedAmount: paymentAllocations.allocatedAmount,
+        allocatedBy: paymentAllocations.allocatedBy,
+        allocCreatedAt: paymentAllocations.createdAt,
+        paymentAmount: feePaymentRecords.amount,
+        paymentDate: feePaymentRecords.paymentDate,
+        paymentStatus: feePaymentRecords.status,
+        studentId: students.id,
+        studentDisplayId: students.studentId,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+      })
+      .from(paymentAllocations)
+      .innerJoin(feePaymentRecords, eq(paymentAllocations.paymentRecordId, feePaymentRecords.id))
+      .leftJoin(students, eq(feePaymentRecords.studentId, students.id))
+      .leftJoin(users, eq(students.userId, users.id))
+      .where(inArray(paymentAllocations.bankTransactionId, txIds));
+
+    const allocMap = new Map<string, BankTransactionWithDetails['allocations']>();
+    for (const r of allocRows) {
+      const list = allocMap.get(r.bankTransactionId) ?? [];
+      list!.push({
+        id: r.allocationId,
+        paymentRecordId: r.paymentRecordId,
+        bankTransactionId: r.bankTransactionId,
+        allocatedAmount: r.allocatedAmount,
+        allocatedBy: r.allocatedBy,
+        createdAt: r.allocCreatedAt,
+        paymentRecord: {
+          id: r.paymentRecordId,
+          amount: r.paymentAmount,
+          paymentDate: r.paymentDate,
+          status: r.paymentStatus,
+          student: r.studentId
+            ? {
+                id: r.studentId,
+                studentId: r.studentDisplayId,
+                user: {
+                  firstName: r.userFirstName ?? '',
+                  lastName: r.userLastName ?? '',
+                },
+              }
+            : (null as any),
+        },
+      } as any);
+      allocMap.set(r.bankTransactionId, list);
+    }
+
+    transactions.forEach(t => {
+      t.allocations = allocMap.get(t.id) ?? [];
+    });
+
+    console.log('[getBankTransactionsWithAllocations] Found', transactions.length, 'transactions');
     return transactions;
   }
 

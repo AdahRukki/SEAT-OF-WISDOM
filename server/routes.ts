@@ -3827,6 +3827,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get bank transactions filtered by status, enriched with linked payment allocations (admin only)
+  app.get("/api/admin/bank-transactions", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { schoolId, status } = req.query;
+
+      console.log('[GET /api/admin/bank-transactions] User:', user.id, 'School:', schoolId, 'Status:', status);
+
+      const transactions = await storage.getBankTransactionsWithAllocations({
+        schoolId: schoolId as string | undefined,
+        status: status as string | undefined,
+      });
+
+      console.log('[GET /api/admin/bank-transactions] Found', transactions.length, 'transactions');
+      res.json(transactions);
+    } catch (error) {
+      console.error("[GET /api/admin/bank-transactions] Error:", error);
+      res.status(500).json({ error: "Failed to fetch bank transactions" });
+    }
+  });
+
   // Confirm payment (admin only - link to bank transaction)
   app.post("/api/admin/payments/:id/confirm", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
     try {

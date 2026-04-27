@@ -117,6 +117,30 @@ interface BankTransaction {
   bankFormat?: string | null;
 }
 
+interface BankTransactionAllocation {
+  id: string;
+  paymentRecordId: string;
+  bankTransactionId: string;
+  allocatedAmount: string;
+  paymentRecord?: {
+    id: string;
+    amount: string;
+    paymentDate: string | Date;
+    status: string;
+    student?: {
+      studentId: string;
+      user?: {
+        firstName: string;
+        lastName: string;
+      };
+    } | null;
+  };
+}
+
+interface BankTransactionWithAllocations extends BankTransaction {
+  allocations?: BankTransactionAllocation[];
+}
+
 interface PaymentReconciliationProps {
   schoolId?: string;
 }
@@ -176,6 +200,29 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   });
 
   const [reconcileStatus, setReconcileStatus] = useState<"recorded" | "confirmed" | "reversed" | "all">("recorded");
+  const [bankTxStatus, setBankTxStatus] = useState<"unmatched" | "matched" | "confirmed" | "all">("unmatched");
+
+  // Display dataset for the right column. Only fires when not "unmatched", since
+  // the existing unmatchedTransactions query already covers that case.
+  const enrichedTxEnabled = bankTxStatus !== "unmatched";
+  const { data: enrichedTransactionsData = [], isLoading: enrichedTxLoadingRaw, refetch: refetchEnrichedTransactions } = useQuery<BankTransactionWithAllocations[]>({
+    queryKey: ["/api/admin/bank-transactions", schoolId, bankTxStatus],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("status", bankTxStatus);
+      if (schoolId) params.set("schoolId", schoolId);
+      const url = `/api/admin/bank-transactions?${params.toString()}`;
+      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch bank transactions");
+      return res.json();
+    },
+    enabled: enrichedTxEnabled,
+  });
+
+  const displayedTransactions: BankTransactionWithAllocations[] = enrichedTxEnabled
+    ? enrichedTransactionsData
+    : unmatchedTransactions;
+  const displayedTxLoading = enrichedTxEnabled ? enrichedTxLoadingRaw : transactionsLoading;
 
   // Recorded-only dataset drives all matching mechanics (suggestions, bulk auto-match, match dialog).
   const { data: recordedPayments = [], isLoading: recordedPaymentsLoading, refetch: refetchRecordedPayments } = useQuery<FeePaymentRecordWithDetails[]>({
@@ -242,6 +289,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       setSelectedFile(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
     },
     onError: (error: Error) => {
       toast({
@@ -267,6 +315,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       setDeleteStatementId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
     },
     onError: (error: Error) => {
       toast({
@@ -296,6 +345,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       setMatchSearch("");
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
@@ -324,6 +374,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
@@ -439,6 +490,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     }
     queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
     queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
     queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
     queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
     queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
@@ -834,7 +886,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   Auto-match {highConfidenceCandidates.length} High Confidence
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => { refetchPayments(); refetchTransactions(); }}>
+              <Button variant="outline" size="sm" onClick={() => { refetchPayments(); refetchTransactions(); if (enrichedTxEnabled) refetchEnrichedTransactions(); }}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh All
               </Button>
@@ -1097,9 +1149,23 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
               {/* Right Column: Bank Transactions */}
               <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b">
+                <div className="flex items-center gap-2 pb-2 border-b flex-wrap">
                   <h5 className="font-semibold text-purple-700">Bank Transactions</h5>
-                  <Badge variant="secondary">{unmatchedTransactions.length}</Badge>
+                  <Badge variant="secondary">{displayedTransactions.length}</Badge>
+                  <div className="ml-auto flex flex-wrap gap-1" data-testid="bank-tx-status-filter">
+                    {(["unmatched", "matched", "confirmed", "all"] as const).map((s) => (
+                      <Button
+                        key={s}
+                        size="sm"
+                        variant={bankTxStatus === s ? "default" : "outline"}
+                        className="h-7 px-2 text-xs capitalize"
+                        onClick={() => setBankTxStatus(s)}
+                        data-testid={`bank-tx-status-${s}`}
+                      >
+                        {s}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1110,9 +1176,15 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                     className="pl-8 h-8 text-sm"
                   />
                 </div>
-                {(() => {
+                {displayedTxLoading ? (
+                  <Card>
+                    <CardContent className="text-center py-6 text-muted-foreground">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                    </CardContent>
+                  </Card>
+                ) : (() => {
                   const filteredTx = txSearch.trim()
-                    ? unmatchedTransactions.filter((t) => {
+                    ? displayedTransactions.filter((t) => {
                         const q = txSearch.toLowerCase();
                         return (
                           t.rawDescription?.toLowerCase().includes(q) ||
@@ -1120,35 +1192,60 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           t.amount?.toString().includes(q)
                         );
                       })
-                    : unmatchedTransactions;
+                    : displayedTransactions;
+                  const emptyCopy = (() => {
+                    if (displayedTransactions.length > 0) return "No transactions match your search";
+                    if (bankTxStatus === "unmatched") return "All transactions matched";
+                    if (bankTxStatus === "matched") return "No matched transactions yet";
+                    if (bankTxStatus === "confirmed") return "No confirmed transactions yet";
+                    return "No bank transactions found";
+                  })();
                   return filteredTx.length === 0 ? (
                   <Card>
                     <CardContent className="text-center py-6 text-muted-foreground">
                       <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                      <p className="text-sm">{unmatchedTransactions.length === 0 ? "All transactions matched" : "No transactions match your search"}</p>
+                      <p className="text-sm">{emptyCopy}</p>
                     </CardContent>
                   </Card>
                 ) : (
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                     {filteredTx.map((tx) => {
-                      const scoredMatches = transactionSuggestions.get(tx.id) || [];
+                      const isUnmatched = tx.status === "unmatched";
+                      const scoredMatches = isUnmatched ? (transactionSuggestions.get(tx.id) || []) : [];
                       const topScore = scoredMatches[0]?.score || 0;
-                      const cardClass = topScore >= 80
-                        ? "border-green-300 bg-green-50/50"
-                        : topScore >= 50
-                          ? "border-yellow-300 bg-yellow-50/50"
-                          : "";
+                      const cardClass = isUnmatched
+                        ? topScore >= 80
+                          ? "border-green-300 bg-green-50/50"
+                          : topScore >= 50
+                            ? "border-yellow-300 bg-yellow-50/50"
+                            : ""
+                        : tx.status === "confirmed"
+                          ? "border-green-300 bg-green-50/40"
+                          : "border-blue-300 bg-blue-50/40";
+                      const statusBadge = (() => {
+                        if (tx.status === "confirmed") return { label: "Confirmed", cls: "bg-green-50 text-green-700 border-green-300" };
+                        if (tx.status === "suggested") return { label: "Matched", cls: "bg-blue-50 text-blue-700 border-blue-300" };
+                        if (tx.status === "partially_reconciled") return { label: "Partially Matched", cls: "bg-blue-50 text-blue-700 border-blue-300" };
+                        return { label: "Unmatched", cls: "bg-yellow-50 text-yellow-700 border-yellow-300" };
+                      })();
+                      const allocations = tx.allocations ?? [];
 
                       return (
                         <Card 
                           key={tx.id} 
                           className={`overflow-hidden ${cardClass}`}
+                          data-testid={`bank-tx-card-${tx.id}`}
                         >
                           <CardContent className="p-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
-                                <div className="text-xl font-bold text-green-600">
-                                  ₦{parseFloat(tx.amount).toLocaleString()}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="text-xl font-bold text-green-600">
+                                    ₦{parseFloat(tx.amount).toLocaleString()}
+                                  </div>
+                                  <Badge variant="outline" className={`text-[10px] ${statusBadge.cls}`}>
+                                    {statusBadge.label}
+                                  </Badge>
                                 </div>
                                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                                   <Calendar className="h-3 w-3" />
@@ -1163,20 +1260,57 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   </div>
                                 )}
                               </div>
-                              <div>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-xs h-7"
-                                  onClick={() => handleOpenMatchTxDialog(tx)}
-                                >
-                                  <Link className="h-3 w-3 mr-1" />
-                                  Match
-                                </Button>
-                              </div>
+                              {isUnmatched && (
+                                <div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs h-7"
+                                    onClick={() => handleOpenMatchTxDialog(tx)}
+                                  >
+                                    <Link className="h-3 w-3 mr-1" />
+                                    Match
+                                  </Button>
+                                </div>
+                              )}
                             </div>
-                            
-                            {scoredMatches.length > 0 && (
+
+                            {!isUnmatched && allocations.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-dashed space-y-1">
+                                <div className="text-[11px] font-medium text-muted-foreground">
+                                  Linked payment{allocations.length > 1 ? "s" : ""} ({allocations.length})
+                                </div>
+                                {allocations.map((alloc) => {
+                                  const stu = alloc.paymentRecord?.student;
+                                  const name = stu?.user
+                                    ? `${stu.user.lastName} ${stu.user.firstName}`.trim()
+                                    : "Multi-student / Unassigned";
+                                  return (
+                                    <div key={alloc.id} className="text-xs bg-white/80 p-2 rounded border">
+                                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                                        <div className="flex-1 min-w-0">
+                                          <span className="font-medium">{name}</span>
+                                          {stu?.studentId && (
+                                            <span className="text-muted-foreground ml-1">({stu.studentId})</span>
+                                          )}
+                                          <span className="text-muted-foreground ml-1">
+                                            • ₦{parseFloat(alloc.allocatedAmount).toLocaleString()}
+                                            {alloc.paymentRecord?.paymentDate && ` • ${formatRecoDate(alloc.paymentRecord.paymentDate)}`}
+                                          </span>
+                                        </div>
+                                        {alloc.paymentRecord?.status && (
+                                          <Badge variant="outline" className="text-[10px] capitalize">
+                                            {alloc.paymentRecord.status}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {isUnmatched && scoredMatches.length > 0 && (
                               <div className="mt-2 pt-2 border-t border-dashed">
                                 <div className="flex items-center gap-1 mb-1">
                                   <Sparkles className={`h-3 w-3 ${topScore >= 80 ? 'text-green-500' : 'text-yellow-500'}`} />
