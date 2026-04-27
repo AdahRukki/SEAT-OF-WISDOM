@@ -1204,3 +1204,29 @@ export type BankTransactionWithDetails = BankTransaction & {
     };
   })[];
 };
+
+// Trimmed allocation shape used by the Reconciliation right-column display.
+// Selects only the fields needed to render the linked-payment summary, and
+// allows `student` to be null because feePaymentRecords.studentId is a
+// left-joined nullable relation in our queries.
+export type BankTransactionAllocationSummary = PaymentAllocation & {
+  paymentRecord: {
+    id: string;
+    amount: string;
+    paymentDate: Date;
+    status: string;
+    student: {
+      id: string;
+      studentId: string;
+      user: {
+        firstName: string;
+        lastName: string;
+      };
+    } | null;
+  };
+};
+
+export type BankTransactionWithAllocationSummaries = BankTransaction & {
+  bankFormat?: string | null;
+  allocations: BankTransactionAllocationSummary[];
+};

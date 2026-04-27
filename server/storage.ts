@@ -83,6 +83,8 @@ import {
   type InsertBankStatement,
   type BankTransaction,
   type BankTransactionWithDetails,
+  type BankTransactionAllocationSummary,
+  type BankTransactionWithAllocationSummaries,
   type InsertBankTransaction,
   calculateGrade
 } from "@shared/schema";
@@ -325,7 +327,7 @@ export interface IStorage {
   // Bank Transactions
   createBankTransaction(data: InsertBankTransaction): Promise<BankTransaction>;
   getBankTransactions(filters: { schoolId?: string; status?: string; startDate?: Date; endDate?: Date }): Promise<BankTransaction[]>;
-  getBankTransactionsWithAllocations(filters: { schoolId?: string; status?: string }): Promise<BankTransactionWithDetails[]>;
+  getBankTransactionsWithAllocations(filters: { schoolId?: string; status?: string }): Promise<BankTransactionWithAllocationSummaries[]>;
   getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]>;
   updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction>;
   checkTransactionFingerprint(fingerprint: string): Promise<boolean>;
@@ -3678,7 +3680,7 @@ export class DatabaseStorage implements IStorage {
     return transactions;
   }
 
-  async getBankTransactionsWithAllocations(filters: { schoolId?: string; status?: string }): Promise<BankTransactionWithDetails[]> {
+  async getBankTransactionsWithAllocations(filters: { schoolId?: string; status?: string }): Promise<BankTransactionWithAllocationSummaries[]> {
     console.log('[getBankTransactionsWithAllocations] Fetching with filters:', filters);
 
     const conditions = [];
@@ -3703,7 +3705,7 @@ export class DatabaseStorage implements IStorage {
       .where(whereClause)
       .orderBy(desc(bankTransactions.transactionDate));
 
-    const transactions: BankTransactionWithDetails[] = rows.map(r => ({
+    const transactions: BankTransactionWithAllocationSummaries[] = rows.map(r => ({
       ...r.tx,
       bankFormat: r.bankFormat ?? null,
       allocations: [],
@@ -3746,10 +3748,21 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(students.userId, users.id))
       .where(inArray(paymentAllocations.bankTransactionId, txIds));
 
-    const allocMap = new Map<string, BankTransactionWithDetails['allocations']>();
+    const allocMap = new Map<string, BankTransactionAllocationSummary[]>();
     for (const r of allocRows) {
       const list = allocMap.get(r.bankTransactionId) ?? [];
-      list!.push({
+      const studentSummary: BankTransactionAllocationSummary['paymentRecord']['student'] =
+        r.studentId && r.studentDisplayId
+          ? {
+              id: r.studentId,
+              studentId: r.studentDisplayId,
+              user: {
+                firstName: r.userFirstName ?? '',
+                lastName: r.userLastName ?? '',
+              },
+            }
+          : null;
+      const summary: BankTransactionAllocationSummary = {
         id: r.allocationId,
         paymentRecordId: r.paymentRecordId,
         bankTransactionId: r.bankTransactionId,
@@ -3761,18 +3774,10 @@ export class DatabaseStorage implements IStorage {
           amount: r.paymentAmount,
           paymentDate: r.paymentDate,
           status: r.paymentStatus,
-          student: r.studentId
-            ? {
-                id: r.studentId,
-                studentId: r.studentDisplayId,
-                user: {
-                  firstName: r.userFirstName ?? '',
-                  lastName: r.userLastName ?? '',
-                },
-              }
-            : (null as any),
+          student: studentSummary,
         },
-      } as any);
+      };
+      list.push(summary);
       allocMap.set(r.bankTransactionId, list);
     }
 
