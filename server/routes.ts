@@ -3949,8 +3949,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Payment record not found" });
       }
 
-      // Reverse the payment
-      const payment = await storage.reverseFeePayment(paymentId, user.id, reason.trim());
+      // Reverse the payment (also frees any linked bank transactions)
+      const { payment, bankTransactionIds } = await storage.reverseFeePayment(paymentId, user.id, reason.trim());
 
       // Create audit log
       await storage.createPaymentAuditLog({
@@ -3959,12 +3959,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: paymentId,
         userId: user.id,
         schoolId: payment.schoolId || undefined,
-        previousData: { status: paymentBefore.status },
-        newData: { 
+        previousData: { status: paymentBefore.status, bankTransactionIds },
+        newData: {
           status: 'reversed',
           reversedBy: user.id,
           reversedAt: new Date().toISOString(),
           reversalReason: reason.trim(),
+          releasedBankTransactionIds: bankTransactionIds,
         },
       });
 

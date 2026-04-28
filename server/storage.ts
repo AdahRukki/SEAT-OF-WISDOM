@@ -313,7 +313,7 @@ export interface IStorage {
   getFeePaymentRecordById(id: string): Promise<FeePaymentRecordWithDetails | undefined>;
   confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord>;
   unconfirmFeePayment(paymentId: string): Promise<{ payment: FeePaymentRecord; bankTransactionIds: string[] }>;
-  reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<FeePaymentRecord>;
+  reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<{ payment: FeePaymentRecord; bankTransactionIds: string[] }>;
   createMultiStudentAllocation(bankTransactionId: string, allocations: Array<{ studentId: string; amount: number; term?: string; session?: string; notes?: string; }>, allocatedBy: string): Promise<{ paymentRecords: FeePaymentRecord[]; allocations: any[] }>;
   
   // Audit logging
@@ -3437,27 +3437,58 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<FeePaymentRecord> {
+  async reverseFeePayment(paymentId: string, reversedBy: string, reason: string): Promise<{ payment: FeePaymentRecord; bankTransactionIds: string[] }> {
     console.log('[reverseFeePayment] Reversing payment:', paymentId, 'Reason:', reason);
-    
-    const [record] = await db
-      .update(feePaymentRecords)
-      .set({
-        status: 'reversed',
-        reversedBy,
-        reversedAt: new Date(),
-        reversalReason: reason,
-        updatedAt: new Date(),
-      })
-      .where(eq(feePaymentRecords.id, paymentId))
-      .returning();
 
-    if (!record) {
-      throw new Error('Payment record not found');
-    }
+    return await db.transaction(async (tx) => {
+      // Free any linked bank transactions so the bank credit can be re-allocated.
+      // Mirrors unconfirmFeePayment so reverse and unconfirm leave bank-side state
+      // consistent: drop allocations, then reset orphaned bank tx rows to unmatched.
+      const allocs = await tx
+        .select({ bankTransactionId: paymentAllocations.bankTransactionId })
+        .from(paymentAllocations)
+        .where(eq(paymentAllocations.paymentRecordId, paymentId));
+      const bankTransactionIds = allocs.map(a => a.bankTransactionId);
 
-    console.log('[reverseFeePayment] Payment reversed:', paymentId);
-    return record;
+      if (bankTransactionIds.length > 0) {
+        await tx
+          .delete(paymentAllocations)
+          .where(eq(paymentAllocations.paymentRecordId, paymentId));
+
+        for (const txId of bankTransactionIds) {
+          const remaining = await tx
+            .select({ id: paymentAllocations.id })
+            .from(paymentAllocations)
+            .where(eq(paymentAllocations.bankTransactionId, txId))
+            .limit(1);
+          if (remaining.length === 0) {
+            await tx
+              .update(bankTransactions)
+              .set({ status: 'unmatched', matchConfidence: 0, updatedAt: new Date() })
+              .where(eq(bankTransactions.id, txId));
+          }
+        }
+      }
+
+      const [record] = await tx
+        .update(feePaymentRecords)
+        .set({
+          status: 'reversed',
+          reversedBy,
+          reversedAt: new Date(),
+          reversalReason: reason,
+          updatedAt: new Date(),
+        })
+        .where(eq(feePaymentRecords.id, paymentId))
+        .returning();
+
+      if (!record) {
+        throw new Error('Payment record not found');
+      }
+
+      console.log('[reverseFeePayment] Payment reversed:', paymentId, 'released bank tx:', bankTransactionIds.length);
+      return { payment: record, bankTransactionIds };
+    });
   }
 
   async createMultiStudentAllocation(bankTransactionId: string, allocations: Array<{ studentId: string; amount: number; term?: string; session?: string; notes?: string; }>, allocatedBy: string): Promise<{ paymentRecords: FeePaymentRecord[]; allocations: any[] }> {
