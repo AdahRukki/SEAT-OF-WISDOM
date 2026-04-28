@@ -172,16 +172,6 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
       )
     : ledger;
 
-  const grandTotalPaid = filteredLedger.reduce((sum, entry) => sum + entry.totalPaid, 0);
-  const grandTotalAssigned = filteredLedger.reduce((sum, entry) => sum + (entry.totalAssigned || 0), 0);
-  const grandBalance = filteredLedger.reduce((sum, entry) => sum + (entry.balance || 0), 0);
-  const totalPayments = filteredLedger.reduce((sum, entry) => sum + entry.paymentCount, 0);
-  const grandMiscellaneous = filteredLedger.reduce((sum, entry) => {
-    if (!entry.tuitionAssigned) return sum;
-    return sum + Math.max(0, entry.totalPaid - entry.tuitionAssigned);
-  }, 0);
-  const anyTuitionAssigned = filteredLedger.some((e) => !!e.tuitionAssigned);
-
   const getStatusBadge = (status: string) => {
     if (status === "confirmed") return <Badge className="bg-green-100 text-green-800 text-[10px]">Confirmed</Badge>;
     if (status === "recorded") return <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">Pending</Badge>;
@@ -317,22 +307,6 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                   </TableCell>
                 </TableRow>
               ))}
-              <TableRow className="bg-muted/80 font-bold border-t-2">
-                <TableCell />
-                <TableCell>Grand Total</TableCell>
-                <TableCell />
-                <TableCell />
-                <TableCell className="text-right text-green-700">₦{grandTotalPaid.toLocaleString()}</TableCell>
-                <TableCell className="text-right text-blue-700">
-                  {anyTuitionAssigned ? `₦${grandMiscellaneous.toLocaleString()}` : "—"}
-                </TableCell>
-                <TableCell className={`text-right ${grandBalance > 0 ? "text-red-600" : "text-green-700"}`}>
-                  {grandTotalAssigned > 0 ? `₦${grandBalance.toLocaleString()}` : "—"}
-                </TableCell>
-                <TableCell className="text-center">{totalPayments}</TableCell>
-                <TableCell />
-                <TableCell />
-              </TableRow>
             </TableBody>
           </Table>
         </div>
