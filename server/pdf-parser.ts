@@ -73,9 +73,17 @@ export function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "
     return "fidelity";
   }
   // MoniePoint: does NOT put "Moniepoint" in its account header — it appears only in
-  // narrations. Detect by their unique ISO-timestamp date format "2026-01-15T12:" which
-  // only MoniePoint statements contain.
+  // narrations. Detect by any of three signals that survive PDF text extraction
+  // even when the date column is wrapped/fragmented across lines:
+  //   1. The original single-line ISO timestamp "2026-01-15T12:" (older layout)
+  //   2. A fragmented date triple — "YYYY-" + "MM-" + "DDTHH:" on three lines
+  //      (newer Moniepoint POS layout where columns are narrower)
+  //   3. The Moniepoint POS Terminal ID prefix "2TPTNXPY" combined with the
+  //      "Settlement Credit" column header — both are Moniepoint-specific and
+  //      cannot appear together in any other bank's statement.
   if (/\d{4}-\d{2}-\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
+  if (/\d{4}-\s*\n\s*\d{2}-\s*\n\s*\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
+  if (rawText.includes("2TPTNXPY") && /settlement\s+credit/i.test(rawText)) return "moniepoint";
 
   // Zenith: bank name must appear in the actual account header (above
   // "TRANSACTIONS"), not in transaction narrations.
@@ -240,13 +248,47 @@ function extractDescription(line: string): string {
 }
 
 function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
-  const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+  const rawLines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // Newer Moniepoint POS PDFs render the date column narrow enough that
+  // pdf-parse splits each date across THREE lines: "YYYY-", "MM-", "DDTHH:".
+  // Stitch those triples back into the canonical "YYYY-MM-DDTHH:" form the
+  // rest of this parser already understands. Older single-line dates pass
+  // through unchanged, so both layouts work.
+  // The third fragment may also have trailing content from the next column
+  // (e.g. "27T07: OGHENERUKEVWE") — in that case we stitch only the date
+  // portion and push the remainder as its own line.
+  const lines: string[] = [];
+  for (let k = 0; k < rawLines.length; k++) {
+    const a = rawLines[k];
+    const b = rawLines[k + 1];
+    const c = rawLines[k + 2];
+    const cMatch = c ? c.match(/^(\d{2}T\d{2}:)(\s+(.*))?$/) : null;
+    if (/^\d{4}-$/.test(a) && b && /^\d{2}-$/.test(b) && cMatch) {
+      lines.push(a + b + cMatch[1]);
+      const rest = (cMatch[3] || "").trim();
+      if (rest) lines.push(rest);
+      k += 2;
+    } else {
+      lines.push(a);
+    }
+  }
+
   const transactions: ParsedTransaction[] = [];
 
   // Verified from real pdf-parse output: date IS always on its own line e.g. "2026-01-15T12:"
   const dateLineRegex = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:$/;
   // Amounts: line ends with three decimal numbers (Debit Credit Balance)
   const amountsLineRegex = /([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/;
+  // Newer Moniepoint POS layout: a single wide line that contains the whole
+  // row, with "PURCHASE COMPLETED" / "TRANSFER COMPLETED" + reversal status
+  // "N/A" + at least 6 decimal numbers in the middle. The columns after N/A
+  // are: Tx Amount, Settlement Debit, Settlement Credit, Balance Before,
+  // Balance After, Charge. We only want the Settlement Credit (3rd number).
+  const newLayoutRowRegex = /\b(PURCHASE|TRANSFER|REFUND)\s+COMPLETED\b.*?\bN\/A\b/;
+  // Pull the unique RRN / transaction-ref token so per-row fingerprints stay
+  // stable even if narration is sparse.
+  const newLayoutRefRegex = /\b(?:PUR|TRF|REF)\|[A-Za-z0-9_|]+/;
 
   // Lines to skip when accumulating narration (they are not descriptive text)
   const isSkipLine = (l: string) =>
@@ -264,9 +306,13 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
     const formattedDate = `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
     i++; // advance past date line
 
-    // Inner scan: accumulate narration and find the amounts line
+    // Inner scan: accumulate narration and find the amounts line.
+    // We support both the old layout (amounts on a trailing line) and the
+    // new layout (whole row on a single wide line with amounts in the middle).
     let narration = "";
     let amountsMatch: RegExpMatchArray | null = null;
+    let newLayoutCredit: number | null = null;
+    let newLayoutRef = "";
 
     while (i < lines.length) {
       const candidate = lines[i];
@@ -275,7 +321,23 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
       // which we already consumed as the amounts line; or the transaction has no amounts)
       if (dateLineRegex.test(candidate)) break;
 
-      // Check for amounts at end of line (compact debits also match here and get skipped)
+      // New-layout single-wide-line row: extract Settlement Credit directly.
+      if (newLayoutCredit === null && newLayoutRowRegex.test(candidate)) {
+        const naIdx = candidate.search(/\bN\/A\b/);
+        const tail = naIdx >= 0 ? candidate.slice(naIdx) : candidate;
+        const nums = tail.match(/\d{1,3}(?:,\d{3})*\.\d{2}/g) || [];
+        // Need at least: Tx Amount, Settlement Debit, Settlement Credit
+        if (nums.length >= 3) {
+          newLayoutCredit = parseFloat(nums[2].replace(/,/g, ""));
+          const refMatch = candidate.match(newLayoutRefRegex);
+          if (refMatch) newLayoutRef = refMatch[0];
+        }
+        i++;
+        continue;
+      }
+
+      // Check for amounts at end of line (old-layout path; compact debits also
+      // match here and get filtered out by the credit<=0 check below)
       const m = candidate.match(amountsLineRegex);
       if (m) {
         amountsMatch = m;
@@ -293,6 +355,15 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
       if (!narration) narration = candidate;
       else narration += " " + candidate;
       i++;
+    }
+
+    // New-layout success: we got the credit straight from the wide line.
+    if (newLayoutCredit !== null) {
+      if (newLayoutCredit <= 0) continue; // skip pure-debit rows (Settlement Credit 0)
+      const desc = (narration.trim() || newLayoutRef.replace(/\|/g, " ")).trim();
+      const fingerprint = generateFingerprint(formattedDate, newLayoutCredit, desc, newLayoutRef);
+      transactions.push({ date: formattedDate, credit: newLayoutCredit, rawDescription: desc, fingerprint });
+      continue;
     }
 
     if (!amountsMatch) continue;
