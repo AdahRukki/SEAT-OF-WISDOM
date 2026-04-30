@@ -82,8 +82,13 @@ export function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "
   //      "Settlement Credit" column header — both are Moniepoint-specific and
   //      cannot appear together in any other bank's statement.
   if (/\d{4}-\d{2}-\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
-  if (/\d{4}-\s*\n\s*\d{2}-\s*\n\s*\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
-  if (rawText.includes("2TPTNXPY") && /settlement\s+credit/i.test(rawText)) return "moniepoint";
+  // Fragmented-date pattern is broad on its own (any PDF could conceivably
+  // wrap an ISO timestamp this way), so REQUIRE it to appear ALONGSIDE a
+  // Moniepoint-only structural marker: the "2TPTNXPY" terminal-ID prefix or
+  // the "Settlement Credit" / "Settlement Debit" column header.
+  const hasFragmentedDate = /\d{4}-\s*\n\s*\d{2}-\s*\n\s*\d{2}T\d{2}:/.test(rawText);
+  const hasMoniepointMarker = rawText.includes("2TPTNXPY") || /settlement\s+(credit|debit)/i.test(rawText);
+  if (hasFragmentedDate && hasMoniepointMarker) return "moniepoint";
 
   // Zenith: bank name must appear in the actual account header (above
   // "TRANSACTIONS"), not in transaction narrations.
@@ -325,7 +330,10 @@ function parseMoniePointTransactions(rawText: string): ParsedTransaction[] {
       if (newLayoutCredit === null && newLayoutRowRegex.test(candidate)) {
         const naIdx = candidate.search(/\bN\/A\b/);
         const tail = naIdx >= 0 ? candidate.slice(naIdx) : candidate;
-        const nums = tail.match(/\d{1,3}(?:,\d{3})*\.\d{2}/g) || [];
+        // Use the same broad amount pattern other parsers use so an uncommaed
+        // large number like "32900.00" is captured as one token instead of a
+        // bare suffix being misread as the Settlement Credit.
+        const nums = tail.match(/[\d,]+\.\d{2}/g) || [];
         // Need at least: Tx Amount, Settlement Debit, Settlement Credit
         if (nums.length >= 3) {
           newLayoutCredit = parseFloat(nums[2].replace(/,/g, ""));
