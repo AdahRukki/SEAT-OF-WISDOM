@@ -260,11 +260,10 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                 <TableHead>Student Name</TableHead>
                 <TableHead>Class</TableHead>
                 <TableHead>SOWA ID</TableHead>
+                <TableHead className="text-right">Tuition Fee (₦)</TableHead>
                 <TableHead className="text-right">Total Paid (₦)</TableHead>
                 <TableHead className="text-right">Miscellaneous (₦)</TableHead>
                 <TableHead className="text-right">Balance (₦)</TableHead>
-                <TableHead className="text-center">Payments</TableHead>
-                <TableHead>Last Payment</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -277,6 +276,9 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                   </TableCell>
                   <TableCell className="text-sm">{entry.className}</TableCell>
                   <TableCell className="text-sm font-mono">{entry.studentId}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {entry.tuitionAssigned > 0 ? `₦${entry.tuitionAssigned.toLocaleString()}` : "—"}
+                  </TableCell>
                   <TableCell className={`text-right font-semibold ${entry.totalPaid > 0 ? "text-green-600" : ""}`}>
                     {entry.totalPaid > 0 ? `₦${entry.totalPaid.toLocaleString()}` : "₦0"}
                   </TableCell>
@@ -285,15 +287,14 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                       ? `₦${Math.max(0, entry.totalPaid - entry.tuitionAssigned).toLocaleString()}`
                       : "—"}
                   </TableCell>
-                  <TableCell className={`text-right font-semibold ${(entry.balance || 0) > 0 ? "text-red-500" : "text-green-600"}`}>
-                    {entry.totalAssigned > 0
-                      ? `₦${(entry.balance || 0).toLocaleString()}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="text-center">{entry.paymentCount || "0"}</TableCell>
-                  <TableCell className="text-sm">
-                    {formatLedgerDate(entry.lastPaymentDate)}
-                  </TableCell>
+                  {(() => {
+                    const tuitionBalance = Math.max(0, (entry.tuitionAssigned || 0) - (entry.totalPaid || 0));
+                    return (
+                      <TableCell className={`text-right font-semibold ${tuitionBalance > 0 ? "text-red-500" : "text-green-600"}`}>
+                        {entry.tuitionAssigned > 0 ? `₦${tuitionBalance.toLocaleString()}` : "—"}
+                      </TableCell>
+                    );
+                  })()}
                   <TableCell>
                     <Button
                       variant="ghost"
