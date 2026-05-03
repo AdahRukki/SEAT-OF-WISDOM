@@ -1226,6 +1226,19 @@ function PaymentDetailsDialog({
   >({
     queryKey: ["/api/payments/records", record?.id, "splits"],
     enabled: !!record && isSplit,
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/payments/records/${record!.id}/splits`, {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to fetch payment splits");
+      return res.json();
+    },
   });
 
   if (!record) return null;
