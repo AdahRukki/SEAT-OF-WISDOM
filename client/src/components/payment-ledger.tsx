@@ -73,6 +73,7 @@ interface PaymentRecord {
   reference: string | null;
   status: string;
   paymentDate: string | null;
+  isSplit?: boolean;
 }
 
 interface PaymentLedgerProps {
@@ -149,12 +150,12 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
   });
 
   const { data: studentRecords = [], isLoading: recordsLoading } = useQuery<PaymentRecord[]>({
-    queryKey: ["/api/payments/records", schoolId, selectedStudent?.studentDbId, selectedTerm, selectedSession],
+    queryKey: ["/api/payments/student-history", schoolId, selectedStudent?.studentDbId, selectedTerm, selectedSession],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const url = `/api/payments/records?schoolId=${schoolId}&studentId=${selectedStudent!.studentDbId}&status=confirmed` +
+      const url = `/api/payments/student-history/${selectedStudent!.studentDbId}?schoolId=${schoolId}&status=confirmed` +
         (selectedTerm ? `&term=${encodeURIComponent(selectedTerm)}` : "") +
         (selectedSession ? `&session=${encodeURIComponent(selectedSession)}` : "");
       const res = await fetch(url, { credentials: "include", headers });
@@ -402,7 +403,14 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                             {formatLedgerDate(rec.paymentDate)}
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
-                            ₦{parseFloat(rec.amount).toLocaleString()}
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span>₦{parseFloat(rec.amount).toLocaleString()}</span>
+                              {rec.isSplit && (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-normal text-blue-700 border-blue-300 bg-blue-50">
+                                  split
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm">{rec.purpose || "—"}</TableCell>
                           <TableCell className="text-sm capitalize">{rec.paymentMethod || "—"}</TableCell>

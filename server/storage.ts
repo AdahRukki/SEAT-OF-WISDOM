@@ -198,6 +198,17 @@ export interface IStorage {
   getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
   createFeePaymentWithSplits(record: Omit<InsertFeePaymentRecord, 'studentId'>, splits: Array<{ studentId: string; amount: number }>): Promise<FeePaymentRecord>;
   getSplitsForPaymentRecord(paymentRecordId: string): Promise<FeePaymentStudentSplit[]>;
+  getStudentPaymentHistory(studentId: string, schoolId: string, status?: string, term?: string, session?: string): Promise<Array<{
+    id: string;
+    paymentRecordId: string;
+    amount: string;
+    purpose: string | null;
+    paymentMethod: string | null;
+    reference: string | null;
+    status: string;
+    paymentDate: string | null;
+    isSplit: boolean;
+  }>>;
   
   getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
     studentDbId: string;
@@ -3068,6 +3079,74 @@ export class DatabaseStorage implements IStorage {
 
     console.log('[createFeePaymentWithSplits] Created payment record:', paymentRecord.id, 'with splits for', splits.length, 'students');
     return paymentRecord;
+  }
+
+  async getStudentPaymentHistory(
+    studentId: string,
+    schoolId: string,
+    status?: string,
+    term?: string,
+    session?: string,
+  ): Promise<Array<{
+    id: string;
+    paymentRecordId: string;
+    amount: string;
+    purpose: string | null;
+    paymentMethod: string | null;
+    reference: string | null;
+    status: string;
+    paymentDate: string | null;
+    isSplit: boolean;
+  }>> {
+    const result = await db.execute(sql`
+      SELECT
+        fpr.id AS "id",
+        fpr.id AS "paymentRecordId",
+        fpr.amount::text AS "amount",
+        fpr.purpose AS "purpose",
+        fpr.payment_method AS "paymentMethod",
+        fpr.reference AS "reference",
+        fpr.status AS "status",
+        fpr.payment_date AS "paymentDate",
+        false AS "isSplit"
+      FROM fee_payment_records fpr
+      WHERE fpr.student_id = ${studentId}
+        AND fpr.school_id = ${schoolId}
+        ${status ? sql`AND fpr.status = ${status}` : sql``}
+        ${term ? sql`AND fpr.term = ${term}` : sql``}
+        ${session ? sql`AND fpr.session = ${session}` : sql``}
+      UNION ALL
+      SELECT
+        fpss.id AS "id",
+        fpr2.id AS "paymentRecordId",
+        fpss.amount::text AS "amount",
+        fpr2.purpose AS "purpose",
+        fpr2.payment_method AS "paymentMethod",
+        fpr2.reference AS "reference",
+        fpr2.status AS "status",
+        fpr2.payment_date AS "paymentDate",
+        true AS "isSplit"
+      FROM fee_payment_student_splits fpss
+      JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+      WHERE fpss.student_id = ${studentId}
+        AND fpr2.school_id = ${schoolId}
+        ${status ? sql`AND fpr2.status = ${status}` : sql``}
+        ${term ? sql`AND fpr2.term = ${term}` : sql``}
+        ${session ? sql`AND fpr2.session = ${session}` : sql``}
+      ORDER BY "paymentDate" DESC NULLS LAST
+    `);
+    const rows = ((result as any).rows ?? result) as any[];
+    return rows.map((r) => ({
+      id: r.id,
+      paymentRecordId: r.paymentRecordId,
+      amount: String(r.amount),
+      purpose: r.purpose ?? null,
+      paymentMethod: r.paymentMethod ?? null,
+      reference: r.reference ?? null,
+      status: r.status,
+      paymentDate: r.paymentDate ? new Date(r.paymentDate).toISOString() : null,
+      isSplit: r.isSplit === true || r.isSplit === 't' || r.isSplit === 'true',
+    }));
   }
 
   async getSplitsForPaymentRecord(paymentRecordId: string): Promise<any[]> {

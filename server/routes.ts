@@ -3527,6 +3527,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/payments/student-history/:studentId", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const { studentId } = req.params;
+      const schoolId = (user.role === 'sub-admin' || user.role === 'bursar')
+        ? user.schoolId
+        : (req.query.schoolId as string | undefined);
+      if (!schoolId) return res.status(400).json({ error: "schoolId is required" });
+      const status = req.query.status as string | undefined;
+      const term = req.query.term as string | undefined;
+      const session = req.query.session as string | undefined;
+      const history = await storage.getStudentPaymentHistory(studentId, schoolId, status, term, session);
+      res.json(history);
+    } catch (error) {
+      console.error("[GET /api/payments/student-history] Error:", error);
+      res.status(500).json({ error: "Failed to fetch student payment history" });
+    }
+  });
+
   app.get("/api/payments/ledger", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
