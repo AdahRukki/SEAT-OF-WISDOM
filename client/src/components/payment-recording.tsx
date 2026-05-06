@@ -796,8 +796,8 @@ export function PaymentRecording({
                       <div className="border rounded-md divide-y">
                         {selectedEntries.map((entry) => {
                           const bal = tuitionBalanceMap.get(entry.student.id);
-                          const showBalance = !!bal && bal.assigned > 0;
-                          const fullyPaid = showBalance && bal.due === 0;
+                          const hasAssigned = !!bal && bal.assigned > 0;
+                          const fullyPaid = hasAssigned && bal!.due === 0;
                           return (
                           <div key={entry.student.id} className="p-3 flex items-center gap-3">
                             <div className="flex-1 min-w-0">
@@ -807,18 +807,28 @@ export function PaymentRecording({
                               <div className="text-xs text-muted-foreground">
                                 {entry.student.studentId} | {entry.student.className || "N/A"}
                               </div>
-                              {showBalance && (
+                              {hasAssigned ? (
                                 fullyPaid ? (
                                   <div className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-green-700 dark:text-green-400" data-testid={`text-tuition-balance-${entry.student.id}`}>
                                     <CheckCircle2 className="h-3 w-3" />
                                     Tuition fully paid for {currentTerm}
                                   </div>
                                 ) : (
-                                  <div className={`text-[11px] mt-0.5 ${bal.paid > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                    Tuition: ₦{bal.assigned.toLocaleString()} assigned · ₦{bal.paid.toLocaleString()} paid ·{" "}
-                                    <span className="font-medium">₦{bal.due.toLocaleString()} due</span>
+                                  <div className={`text-[11px] mt-0.5 ${bal!.paid > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                    Tuition: ₦{bal!.assigned.toLocaleString()} assigned · ₦{bal!.paid.toLocaleString()} paid ·{" "}
+                                    <span className="font-medium">₦{bal!.due.toLocaleString()} due</span>
                                   </div>
                                 )
+                              ) : bal && bal.paid > 0 ? (
+                                <div className="text-[11px] mt-0.5 text-muted-foreground" data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                  Tuition: ₦{bal.paid.toLocaleString()} paid · no tuition amount set for this class
+                                </div>
+                              ) : (
+                                <div className="text-[11px] mt-0.5 text-muted-foreground italic" data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                  {entry.student.classId
+                                    ? `No tuition configured for this class (${currentTerm} ${currentSession})`
+                                    : "Student has no class assigned — tuition cannot be tracked"}
+                                </div>
                               )}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
