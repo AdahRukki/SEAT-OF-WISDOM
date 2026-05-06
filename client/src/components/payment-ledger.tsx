@@ -89,6 +89,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
   const [nameSearch, setNameSearch] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
+  const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
 
   useEffect(() => {
     if (currentTerm) setSelectedTerm(currentTerm);
@@ -255,29 +256,47 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
         </div>
       ) : (
         <div className="space-y-2">
-          {ledger.length > 0 && ledger.every((e) => !e.tuitionAssigned) && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="flex-1">
-                <div className="font-medium">Tuition not configured for this term/session</div>
-                <div className="text-xs mt-0.5">
-                  No per-class tuition amounts are set for{" "}
-                  <strong>{selectedTerm || "all terms"}</strong> ·{" "}
-                  <strong>{selectedSession || "all sessions"}</strong>.
+          {(() => {
+            const bannerKey = `${selectedTerm}|${selectedSession}`;
+            const showBanner =
+              ledger.length > 0 &&
+              ledger.every((e) => !e.tuitionAssigned) &&
+              tuitionBannerDismissed !== bannerKey;
+            if (!showBanner) return null;
+            return (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex-1">
+                  <div className="font-medium">Tuition not configured for this term/session</div>
+                  <div className="text-xs mt-0.5">
+                    No per-class tuition amounts are set for{" "}
+                    <strong>{selectedTerm || "all terms"}</strong> ·{" "}
+                    <strong>{selectedSession || "all sessions"}</strong>.
+                  </div>
                 </div>
-              </div>
-              {onOpenTuitionSetup && (
+                {onOpenTuitionSetup && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-400 text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/40"
+                    onClick={onOpenTuitionSetup}
+                    data-testid="button-setup-tuition"
+                  >
+                    Set up tuition
+                  </Button>
+                )}
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="border-amber-400 text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/40"
-                  onClick={onOpenTuitionSetup}
-                  data-testid="button-setup-tuition"
+                  variant="ghost"
+                  className="h-8 px-2 text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/40"
+                  onClick={() => setTuitionBannerDismissed(bannerKey)}
+                  data-testid="button-dismiss-tuition-banner"
+                  aria-label="Dismiss"
                 >
-                  Set up tuition
+                  ✕
                 </Button>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
           <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>

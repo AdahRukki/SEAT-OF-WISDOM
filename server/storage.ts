@@ -1147,11 +1147,15 @@ export class DatabaseStorage implements IStorage {
     term?: string,
     session?: string
   ): Promise<TuitionClassAmount[]> {
+    // Delete only the rows matching this exact scope so global and
+    // term/session-scoped rows can coexist:
+    //   - global save (no term, no session) -> delete only (term IS NULL AND session IS NULL)
+    //   - scoped save (term & session present) -> delete only (term=? AND session=?)
     await db.delete(tuitionClassAmounts).where(
       and(
         eq(tuitionClassAmounts.feeTypeId, feeTypeId),
-        term ? eq(tuitionClassAmounts.term, term) : sql`true`,
-        session ? eq(tuitionClassAmounts.session, session) : sql`true`
+        term ? eq(tuitionClassAmounts.term, term) : sql`${tuitionClassAmounts.term} IS NULL`,
+        session ? eq(tuitionClassAmounts.session, session) : sql`${tuitionClassAmounts.session} IS NULL`,
       )
     );
     if (amounts.length === 0) return [];
