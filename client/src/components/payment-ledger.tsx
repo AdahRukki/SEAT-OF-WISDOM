@@ -276,13 +276,16 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
         <div className="space-y-2">
           {(() => {
             const bannerKey = `${selectedTerm}|${selectedSession}`;
-            // Fallback-aware: only show the "not configured" banner when there
-            // is no tuition fee type at all OR when neither global nor scoped
-            // tuition rows exist for this fee type.
-            const trulyMissing = !ledgerMeta.hasTuitionFeeType || (!ledgerMeta.hasGlobalTuition && !ledgerMeta.hasScopedTuition);
+            // Fallback-aware: show the "not configured" banner only when
+            // every visible student has 0 tuition AND there is no global or
+            // scoped tuition fallback that could supply a value. This still
+            // surfaces the banner if scoped rows exist but don't match any
+            // student's class.
+            const allZeroTuition = ledger.length > 0 && ledger.every((e) => !e.tuitionAssigned);
+            const noFallback = !ledgerMeta.hasTuitionFeeType || (!ledgerMeta.hasGlobalTuition && !ledgerMeta.hasScopedTuition);
             const showBanner =
-              ledger.length > 0 &&
-              trulyMissing &&
+              allZeroTuition &&
+              noFallback &&
               tuitionBannerDismissed !== bannerKey;
             if (!showBanner) return null;
             return (
