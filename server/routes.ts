@@ -3431,19 +3431,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = recordFeePaymentSchema.parse(req.body);
       console.log('[POST /api/payments/record] Validated data:', validatedData);
 
-      // Idempotency: dedupe replays of the same client submission
-      if (validatedData.clientRequestId) {
-        const existing = await storage.getFeePaymentByClientRequestId(validatedData.clientRequestId);
-        if (existing) {
-          console.log('[POST /api/payments/record] Idempotent replay returning existing:', existing.id);
-          return res.status(200).json({ ...existing, idempotent: true });
-        }
-      }
-
-      // Get student to determine school
+      // Get student to determine school (needed for both auth + idempotency)
       const student = await storage.getStudent(validatedData.studentId);
       if (!student) {
         return res.status(404).json({ error: "Student not found" });
+      }
+
+      // Idempotency: dedupe replays — but ONLY after re-asserting school
+      // ownership on the existing record so we can never leak another school's
+      // payment via a guessed/leaked clientRequestId.
+      if (validatedData.clientRequestId) {
+        const existing = await storage.getFeePaymentByClientRequestId(validatedData.clientRequestId);
+        if (existing) {
+          if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && existing.schoolId !== user.schoolId) {
+            return res.status(403).json({ error: "Not allowed" });
+          }
+          console.log('[POST /api/payments/record] Idempotent replay returning existing:', existing.id);
+          return res.status(200).json({ ...existing, idempotent: true });
+        }
       }
 
       // Get school ID from student's class
@@ -3514,17 +3519,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = recordMultiStudentPaymentSchema.parse(req.body);
       const { schoolId, entries, amount, paymentMethod, paymentDate, purpose, depositorName, reference, term, session, notes, clientRequestId } = validatedData;
 
-      // Idempotency: dedupe replays
+      if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "You can only record payments for your school's students" });
+      }
+
+      // Idempotency: dedupe replays — re-assert school ownership on the
+      // existing record before returning it.
       if (clientRequestId) {
         const existing = await storage.getFeePaymentByClientRequestId(clientRequestId);
         if (existing) {
+          if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && existing.schoolId !== user.schoolId) {
+            return res.status(403).json({ error: "Not allowed" });
+          }
           console.log('[POST /api/payments/records/multi] Idempotent replay returning existing:', existing.id);
           return res.status(200).json({ ...existing, idempotent: true });
         }
-      }
-
-      if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
-        return res.status(403).json({ error: "You can only record payments for your school's students" });
       }
 
       // Validate split amounts sum to total (within 1 penny tolerance)

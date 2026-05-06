@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
-import { generateClientRequestId, queuedApiRequest } from "@/lib/offline-queue";
+import { generateClientRequestId, queuedApiRequest, addSyncListener, getPendingCount } from "@/lib/offline-queue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -188,6 +188,21 @@ export function PaymentRecording({
       syncPendingPayments();
     }
   }, [isOnline]);
+
+  // Reconcile optimistic rows when the offline queue drains. Any payment that
+  // was queued (slow-network or fully offline) and is no longer in the queue
+  // has either succeeded server-side or been dropped — drop the optimistic row
+  // and refetch so the canonical record appears.
+  useEffect(() => {
+    const off = addSyncListener((status) => {
+      if (status.justSynced) {
+        setPendingPayments((prev) => prev.filter((p) => p.__status === 'failed'));
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+      }
+    });
+    return off;
+  }, [queryClient]);
 
   const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string }[]>({
     queryKey: ["/api/admin/academic-sessions"],
@@ -454,11 +469,13 @@ export function PaymentRecording({
       const offlinePayments = selectedEntries.map((entry) => ({
         ...dataWithPurpose,
         studentId: entry.student.id,
+        student: entry.student,
         amount: totalAmount,
         offlineId: `offline_${Date.now()}_${entry.student.id}`,
         // Stable idempotency key so replay (online or via queue) is deduped server-side
         clientRequestId: generateClientRequestId(),
         createdAt: new Date().toISOString(),
+        __status: 'pending-sync' as const,
       }));
       setPendingPayments([...pendingPayments, ...offlinePayments]);
       toast({
@@ -475,6 +492,28 @@ export function PaymentRecording({
     // offline queue eventually replays it, the server returns the original record
     // instead of inserting a duplicate.
     const submissionKey = generateClientRequestId();
+    const optimisticId = `opt_${Date.now()}`;
+
+    // Insert an optimistic row for EVERY entry immediately so the user sees
+    // their work in the table the moment they hit Submit, regardless of
+    // network condition. Status: 'saving' until server confirms.
+    const optimisticRows = selectedEntries.map((entry, i) => ({
+      ...dataWithPurpose,
+      studentId: entry.student.id,
+      student: entry.student,
+      amount: studentCount > 1 ? entry.amount : totalAmount,
+      offlineId: `${optimisticId}_${i}`,
+      clientRequestId: submissionKey,
+      createdAt: new Date().toISOString(),
+      __status: 'saving' as const,
+    }));
+    setPendingPayments(prev => [...prev, ...optimisticRows]);
+    const removeOptimistic = () =>
+      setPendingPayments(prev => prev.filter(p => !p.offlineId?.startsWith(optimisticId)));
+    const markOptimisticAs = (status: 'pending-sync' | 'failed', error?: string) =>
+      setPendingPayments(prev => prev.map(p =>
+        p.offlineId?.startsWith(optimisticId) ? { ...p, __status: status, __error: error } : p
+      ));
 
     try {
       if (studentCount > 1) {
@@ -491,11 +530,13 @@ export function PaymentRecording({
           },
         }, 'create-multi-payment');
         if (multiResult?.queued) {
+          markOptimisticAs('pending-sync');
           toast({
             title: "Saving — slow network",
             description: `Split payment will sync automatically. It will appear once confirmed by the server.`,
           });
         } else {
+          removeOptimistic();
           queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
           queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
           toast({
@@ -517,15 +558,7 @@ export function PaymentRecording({
           },
         }, 'create-payment-record');
         if (singleResult?.queued) {
-          // Show as pending so the bursar sees their work immediately
-          setPendingPayments(prev => [...prev, {
-            ...dataWithPurpose,
-            studentId: entry.student.id,
-            amount: totalAmount,
-            offlineId: `offline_${Date.now()}_${entry.student.id}`,
-            clientRequestId: submissionKey,
-            createdAt: new Date().toISOString(),
-          }]);
+          markOptimisticAs('pending-sync');
           toast({
             title: "Saving — slow network",
             description: "Payment will sync automatically. It is safe to record more.",
@@ -534,6 +567,7 @@ export function PaymentRecording({
           setIsSubmitting(false);
           return;
         }
+        removeOptimistic();
         queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
         queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
         toast({
@@ -543,14 +577,59 @@ export function PaymentRecording({
         closeAndReset();
       }
     } catch (err: any) {
+      // Keep the optimistic row visible but mark it failed so the user can
+      // retry or discard from the table — never silently lose their input.
+      markOptimisticAs('failed', err?.message || 'Failed to record payment');
       toast({
         title: "Payment Failed",
-        description: err.message || "Failed to record payment. Please try again.",
+        description: err.message || "Failed to record payment. You can retry or discard the row.",
         variant: "destructive",
       });
     }
 
     setIsSubmitting(false);
+  };
+
+  // Retry a failed optimistic payment row. Reuses its stable clientRequestId so
+  // the server safely dedupes if the original request actually succeeded.
+  const retryFailedPayment = async (offlineId: string) => {
+    const row = pendingPayments.find(p => p.offlineId === offlineId);
+    if (!row) return;
+    setPendingPayments(prev => prev.map(p => p.offlineId === offlineId ? { ...p, __status: 'saving', __error: undefined } : p));
+    try {
+      const res = await queuedApiRequest("/api/payments/record", {
+        method: "POST",
+        body: {
+          studentId: row.studentId,
+          amount: row.amount,
+          paymentMethod: row.paymentMethod,
+          paymentDate: row.paymentDate,
+          purpose: row.purpose,
+          depositorName: row.depositorName,
+          reference: row.reference,
+          term: row.term,
+          session: row.session,
+          notes: row.notes,
+          clientRequestId: row.clientRequestId,
+        },
+      }, 'create-payment-record');
+      if (res?.queued) {
+        setPendingPayments(prev => prev.map(p => p.offlineId === offlineId ? { ...p, __status: 'pending-sync' } : p));
+        toast({ title: "Queued", description: "Will sync when network recovers." });
+      } else {
+        setPendingPayments(prev => prev.filter(p => p.offlineId !== offlineId));
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+        toast({ title: res?.idempotent ? "Already Recorded" : "Payment Recorded" });
+      }
+    } catch (err: any) {
+      setPendingPayments(prev => prev.map(p => p.offlineId === offlineId ? { ...p, __status: 'failed', __error: err?.message } : p));
+      toast({ title: "Retry Failed", description: err?.message || "Try again", variant: "destructive" });
+    }
+  };
+
+  const discardFailedPayment = (offlineId: string) => {
+    setPendingPayments(prev => prev.filter(p => p.offlineId !== offlineId));
   };
 
   const closeAndReset = () => {
@@ -1173,13 +1252,69 @@ export function PaymentRecording({
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {/* Optimistic rows: every Submit click appears here immediately
+                    with a status badge, regardless of network. Saving / Pending
+                    sync / Failed states with retry+discard for failed. */}
+                {pendingPayments.map((p) => {
+                  const status = p.__status || 'pending-sync';
+                  const badge = status === 'saving'
+                    ? <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Saving…</Badge>
+                    : status === 'failed'
+                    ? <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Failed</Badge>
+                    : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300"><Clock className="h-3 w-3 mr-1" />Pending sync</Badge>;
+                  return (
+                    <TableRow key={p.offlineId} className={status === 'failed' ? 'bg-red-50/30' : 'bg-blue-50/20'} data-testid={`row-pending-payment-${p.offlineId}`}>
+                      <TableCell className="text-sm">{formatPaymentDate(p.paymentDate)}</TableCell>
+                      <TableCell>
+                        {p.student ? (
+                          <>
+                            <div className="font-medium text-sm">
+                              {p.student.user?.lastName || p.student.lastName} {p.student.user?.firstName || p.student.firstName}
+                            </div>
+                            <div className="text-xs text-muted-foreground">{p.student.studentId}</div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{p.student?.class?.name || '—'}</TableCell>
+                      <TableCell className="font-medium">₦{Number(p.amount).toLocaleString()}</TableCell>
+                      <TableCell className="text-sm">{p.purpose || '—'}</TableCell>
+                      <TableCell className="text-sm">{METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground font-mono">{p.reference || '—'}</TableCell>
+                      <TableCell className="text-sm">{p.term} / {p.session}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {badge}
+                          {status === 'failed' && p.__error && (
+                            <span className="text-[10px] text-red-600 max-w-[160px] truncate" title={p.__error}>{p.__error}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{p.depositorName || '—'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">—</TableCell>
+                      <TableCell className="text-right">
+                        {status === 'failed' ? (
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => retryFailedPayment(p.offlineId)} title="Retry" data-testid={`button-retry-${p.offlineId}`}>
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => discardFailedPayment(p.offlineId)} title="Discard" data-testid={`button-discard-${p.offlineId}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {recordsLoading ? (
                   <TableRow>
                     <TableCell colSpan={12} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
-                ) : totalRecords === 0 ? (
+                ) : totalRecords === 0 && pendingPayments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                       No payment records found

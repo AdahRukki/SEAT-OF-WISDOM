@@ -1213,6 +1213,21 @@ export default function AdminDashboard() {
 
   const [offlineStudents, setOfflineStudents] = useState<OfflineStudent[]>(() => getOfflineStudents());
 
+  // Ephemeral in-memory rows for in-flight student submissions so the user
+  // sees a "Saving…" row immediately and a "Failed" row with retry/discard
+  // when the server rejects. These never touch localStorage — they exist only
+  // for the current session. The offlineStudents list above handles the
+  // queued ("Pending Sync") state across reloads.
+  const [extraPendingStudents, setExtraPendingStudents] = useState<Array<{
+    offlineId: string;
+    firstName: string;
+    lastName: string;
+    classId: string;
+    __status: 'saving' | 'failed';
+    __error?: string;
+    __body?: any;
+  }>>([]);
+
   const createStudentMutation = useMutation({
     mutationFn: async (studentData: any) => {
       const bodyData = {
@@ -1222,13 +1237,25 @@ export default function AdminDashboard() {
         // Idempotency key — server dedupes if offline-queue replays this request
         clientRequestId: studentData.clientRequestId || generateClientRequestId(),
       };
+      // Optimistic "Saving…" row so the user can SEE their submission instantly
+      const tempId = `SAVING-${Date.now()}`;
+      setExtraPendingStudents(prev => [...prev, {
+        offlineId: tempId,
+        firstName: bodyData.firstName,
+        lastName: bodyData.lastName,
+        classId: bodyData.classId,
+        __status: 'saving',
+        __body: bodyData,
+      }]);
       const result = await queuedApiRequest('/api/admin/students', {
         method: 'POST',
         body: bodyData
       }, 'create-student');
-      return { ...result, _bodyData: bodyData };
+      return { ...result, _bodyData: bodyData, _tempId: tempId };
     },
     onSuccess: (response) => {
+      // Remove the "Saving…" row regardless of outcome path
+      setExtraPendingStudents(prev => prev.filter(s => s.offlineId !== response._tempId));
       if (response?.queued) {
         saveOfflineStudent(response._bodyData, response.offlineId);
         setOfflineStudents(getOfflineStudents());
@@ -1243,8 +1270,10 @@ export default function AdminDashboard() {
         return;
       }
       toast({
-        title: "Success",
-        description: "Student created successfully with auto-generated SOWA ID",
+        title: response?.idempotent ? "Already Created" : "Success",
+        description: response?.idempotent
+          ? "This student was already saved earlier (duplicate prevented)."
+          : "Student created successfully with auto-generated SOWA ID",
       });
       setIsStudentDialogOpen(false);
       setCurrentStep(1); // Reset to step 1 for next student creation
@@ -1263,14 +1292,32 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'] });
     },
-    onError: (error) => {
+    onError: (error: any, variables: any) => {
+      // Convert all in-flight "Saving…" rows for this submission into a
+      // "Failed" row with the original body so the user can retry or discard.
+      setExtraPendingStudents(prev => prev.map(s =>
+        s.__status === 'saving' && s.firstName === variables?.firstName && s.lastName === variables?.lastName
+          ? { ...s, __status: 'failed', __error: error?.message || 'Failed to create student' }
+          : s
+      ));
       toast({
         title: "Error",
-        description: error.message || "Failed to create student",
+        description: error.message || "Failed to create student. You can retry or discard the row.",
         variant: "destructive",
       });
     },
   });
+
+  // Retry / discard a failed in-memory student row.
+  const retryFailedStudent = (offlineId: string) => {
+    const row = extraPendingStudents.find(s => s.offlineId === offlineId);
+    if (!row?.__body) return;
+    setExtraPendingStudents(prev => prev.filter(s => s.offlineId !== offlineId));
+    createStudentMutation.mutate(row.__body);
+  };
+  const discardFailedStudent = (offlineId: string) => {
+    setExtraPendingStudents(prev => prev.filter(s => s.offlineId !== offlineId));
+  };
 
   // Batch student upload mutation
   const batchUploadMutation = useMutation({
@@ -4160,7 +4207,7 @@ export default function AdminDashboard() {
                     {offlineStudents
                       .filter(s => s.classId === selectedClassForStudents)
                       .map((student) => (
-                        <div key={student.offlineId} className="flex items-center justify-between px-3 py-2 gap-2 bg-amber-50 dark:bg-amber-900/20 border-l-2 border-l-amber-400">
+                        <div key={student.offlineId} className="flex items-center justify-between px-3 py-2 gap-2 bg-amber-50 dark:bg-amber-900/20 border-l-2 border-l-amber-400" data-testid={`row-pending-student-${student.offlineId}`}>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -4172,7 +4219,35 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       ))}
-                    {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
+                    {extraPendingStudents
+                      .filter(s => s.classId === selectedClassForStudents)
+                      .map((student) => {
+                        const isFailed = student.__status === 'failed';
+                        return (
+                          <div key={student.offlineId} className={`flex items-center justify-between px-3 py-2 gap-2 border-l-2 ${isFailed ? 'bg-red-50 dark:bg-red-900/20 border-l-red-400' : 'bg-blue-50 dark:bg-blue-900/20 border-l-blue-400'}`} data-testid={`row-${student.__status}-student-${student.offlineId}`}>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                  {student.firstName} {student.lastName}
+                                </p>
+                                {isFailed ? (
+                                  <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Failed</span>
+                                ) : (
+                                  <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Saving…</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 truncate" title={student.__error}>{isFailed ? (student.__error || 'Submission failed') : '—'}</p>
+                            </div>
+                            {isFailed && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button size="sm" variant="ghost" onClick={() => retryFailedStudent(student.offlineId)} data-testid={`button-retry-student-${student.offlineId}`}>Retry</Button>
+                                <Button size="sm" variant="ghost" className="text-red-600" onClick={() => discardFailedStudent(student.offlineId)} data-testid={`button-discard-student-${student.offlineId}`}>Discard</Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && extraPendingStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
                       <div className="text-center py-8">
                         <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No students in this class</h3>
