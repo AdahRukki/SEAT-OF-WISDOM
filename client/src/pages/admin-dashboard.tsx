@@ -986,6 +986,31 @@ export default function AdminDashboard() {
         setOfflineStudents(getOfflineStudents());
         queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       }
+      // Surface dropped (retry-budget-exhausted) student replays as Failed
+      // rows with Retry/Discard so nothing silently stays in Pending Sync.
+      const droppedStudentOps = (status.droppedOps ?? []).filter(o => o.type === 'create-student');
+      if (droppedStudentOps.length > 0) {
+        setExtraPendingStudents(prev => {
+          const additions = droppedStudentOps.map(o => {
+            const body: any = o.body ?? {};
+            return {
+              offlineId: `FAILED-${o.queueOperationId || o.clientRequestId || Date.now()}`,
+              firstName: body.firstName || '',
+              lastName: body.lastName || '',
+              classId: body.classId || '',
+              __status: 'failed' as const,
+              __error: 'Sync failed after multiple retries',
+              __body: body,
+            };
+          });
+          return [...prev, ...additions];
+        });
+        toast({
+          title: 'Student sync failed',
+          description: `${droppedStudentOps.length} student record(s) could not sync. Use Retry or Discard.`,
+          variant: 'destructive',
+        });
+      }
     });
 
     // Prefetch status listeners

@@ -30,6 +30,8 @@ export interface OpResult {
   clientRequestId?: string;
   type: string;
   url: string;
+  queueOperationId?: string;
+  body?: unknown;
 }
 
 export interface SyncStatus {
@@ -56,8 +58,14 @@ function extractClientRequestId(body: unknown): string | undefined {
   return undefined;
 }
 
-function opToResult(op: QueuedOperation): OpResult {
-  return { clientRequestId: extractClientRequestId(op.body), type: op.type, url: op.url };
+function opToResult(op: QueuedOperation, includeBody = false): OpResult {
+  return {
+    clientRequestId: extractClientRequestId(op.body),
+    type: op.type,
+    url: op.url,
+    queueOperationId: op.id,
+    ...(includeBody ? { body: op.body } : {}),
+  };
 }
 
 type SyncListener = (status: SyncStatus) => void;
@@ -206,7 +214,14 @@ export async function processOfflineQueue(opts: { force?: boolean } = {}): Promi
         retryingOps.push(opToResult(op));
       } else {
         droppedCount += 1;
-        droppedOps.push(opToResult(op));
+        // Include the original body so the UI can transition the row to a
+        // Failed state with a working Retry that re-uses the same payload
+        // (and clientRequestId, so the server still dedupes).
+        droppedOps.push(opToResult(op, true));
+        if (op.type === 'create-student') {
+          removeOfflineStudentByQueueId(op.id);
+          studentsChanged = true;
+        }
       }
     } else {
       // Network failure: keep the item in the queue without consuming its
