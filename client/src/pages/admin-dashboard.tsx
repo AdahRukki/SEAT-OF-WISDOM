@@ -1272,11 +1272,21 @@ export default function AdminDashboard() {
         __status: 'saving',
         __body: bodyData,
       }]);
-      const result = await queuedApiRequest('/api/admin/students', {
-        method: 'POST',
-        body: bodyData
-      }, 'create-student');
-      return { ...result, _bodyData: bodyData, _tempId: tempId };
+      try {
+        const result = await queuedApiRequest('/api/admin/students', {
+          method: 'POST',
+          body: bodyData
+        }, 'create-student');
+        return { ...result, _bodyData: bodyData, _tempId: tempId };
+      } catch (err: any) {
+        // Tag the error with the stable temp ID + clientRequestId so onError
+        // can correlate to the exact saving row, even when two concurrent
+        // submissions share the same first/last name.
+        err._tempId = tempId;
+        err._clientRequestId = bodyData.clientRequestId;
+        err._body = bodyData;
+        throw err;
+      }
     },
     onSuccess: (response) => {
       // Remove the "Saving…" row regardless of outcome path
@@ -1317,12 +1327,13 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'students'] });
     },
-    onError: (error: any, variables: any) => {
-      // Convert all in-flight "Saving…" rows for this submission into a
-      // "Failed" row with the original body so the user can retry or discard.
+    onError: (error: any) => {
+      // Correlate by the stable _tempId attached in mutationFn so concurrent
+      // same-name submissions can never mark the wrong row as failed.
+      const tempId = error?._tempId;
       setExtraPendingStudents(prev => prev.map(s =>
-        s.__status === 'saving' && s.firstName === variables?.firstName && s.lastName === variables?.lastName
-          ? { ...s, __status: 'failed', __error: error?.message || 'Failed to create student' }
+        s.offlineId === tempId
+          ? { ...s, __status: 'failed', __error: error?.message || 'Failed to create student', __body: error?._body || s.__body }
           : s
       ));
       toast({
