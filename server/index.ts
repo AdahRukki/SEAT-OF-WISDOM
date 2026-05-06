@@ -11,6 +11,12 @@ async function runMigrations() {
       ALTER TABLE schools ADD COLUMN IF NOT EXISTS current_session VARCHAR(20);
       ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS purpose VARCHAR(100);
       ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS depositor_name VARCHAR(150);
+      ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS client_request_id TEXT;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS client_request_id TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_fee_payment_records_client_request_id
+        ON fee_payment_records (client_request_id) WHERE client_request_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_students_client_request_id
+        ON students (client_request_id) WHERE client_request_id IS NOT NULL;
       ALTER TABLE fee_types ADD COLUMN IF NOT EXISTS is_tuition BOOLEAN DEFAULT FALSE;
       ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS bank_format VARCHAR(20);
       CREATE TABLE IF NOT EXISTS tuition_class_amounts (

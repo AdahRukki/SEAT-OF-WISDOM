@@ -132,6 +132,7 @@ export const students = pgTable("students", {
   parentWhatsapp: varchar("parent_whatsapp", { length: 20 }).notNull(), // WhatsApp number for parents (required)
   address: text("address"),
   status: varchar("status", { length: 20 }).default("active"), // active, graduated
+  clientRequestId: text("client_request_id"), // Idempotency key from client; partial unique index where not null
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -409,6 +410,7 @@ export const feePaymentRecords = pgTable("fee_payment_records", {
   reversedBy: uuid("reversed_by").references(() => users.id),
   reversedAt: timestamp("reversed_at"),
   reversalReason: text("reversal_reason"),
+  clientRequestId: text("client_request_id"), // Idempotency key from client; partial unique index where not null
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1072,6 +1074,7 @@ export const recordFeePaymentSchema = z.object({
   term: z.string().optional(),
   session: z.string().optional(),
   notes: z.string().optional(),
+  clientRequestId: z.string().min(1).max(80).optional(),
 });
 
 // Payment Allocation schemas
@@ -1167,6 +1170,7 @@ export const recordMultiStudentPaymentSchema = z.object({
     studentId: z.string().min(1, "Student is required"),
     amount: z.coerce.number().positive("Amount must be positive"),
   })).min(2, "Multi-student payment requires at least 2 students"),
+  clientRequestId: z.string().min(1).max(80).optional(),
 });
 
 export type RecordMultiStudentPayment = z.infer<typeof recordMultiStudentPaymentSchema>;

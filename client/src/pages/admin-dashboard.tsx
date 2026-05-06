@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest } from "@/lib/queryClient";
-import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue, saveOfflineStudent, getOfflineStudents } from "@/lib/offline-queue";
+import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue, saveOfflineStudent, getOfflineStudents, generateClientRequestId } from "@/lib/offline-queue";
 import type { OfflineStudent } from "@/lib/offline-queue";
 import { onPrefetchStart, onPrefetchDone, isPrefetchRunning } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
@@ -1218,7 +1218,9 @@ export default function AdminDashboard() {
       const bodyData = {
         ...studentData,
         parentWhatsapp: studentData.parentWhatsApp,
-        schoolId: selectedSchoolId || user?.schoolId
+        schoolId: selectedSchoolId || user?.schoolId,
+        // Idempotency key — server dedupes if offline-queue replays this request
+        clientRequestId: studentData.clientRequestId || generateClientRequestId(),
       };
       const result = await queuedApiRequest('/api/admin/students', {
         method: 'POST',

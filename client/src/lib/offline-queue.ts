@@ -75,6 +75,18 @@ function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// UUIDv4-style idempotency key sent to the server with every mutating
+// student/payment request. Server uses this to dedupe replays caused by
+// slow-network timeouts that triggered the offline queue.
+export function generateClientRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
+    return (crypto as any).randomUUID();
+  }
+  // Fallback: RFC4122 v4 layout, sufficient for idempotency
+  const rand = () => Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+  return `${rand()}-${rand().slice(0, 4)}-4${rand().slice(0, 3)}-a${rand().slice(0, 3)}-${rand()}${rand().slice(0, 4)}`;
+}
+
 export function getPendingCount(): number {
   return getQueue().length;
 }
@@ -219,9 +231,11 @@ export async function queuedApiRequest(
     throw new Error('Offline: no cached data available');
   }
 
-  // navigator.onLine can lie (e.g. WiFi with no internet) — add a hard 8-second timeout
+  // navigator.onLine can lie (e.g. WiFi with no internet) — add a hard 30-second timeout.
+  // Server-side idempotency keys (clientRequestId) prevent duplicates if the request
+  // actually completed during the wait, since the queued replay is deduped.
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
     const res = await fetch(url, {

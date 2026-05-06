@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
+import { generateClientRequestId, queuedApiRequest } from "@/lib/offline-queue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -323,7 +324,7 @@ export function PaymentRecording({
   });
 
   const recordPaymentMutation = useMutation({
-    mutationFn: async (data: RecordPaymentForm) => {
+    mutationFn: async (data: RecordPaymentForm & { clientRequestId?: string }) => {
       const res = await apiRequest("/api/payments/record", { method: "POST", body: data });
       return res;
     },
@@ -335,6 +336,7 @@ export function PaymentRecording({
 
     for (const payment of toSync) {
       try {
+        // payment object already carries its clientRequestId — server dedupes replays
         await apiRequest("/api/payments/record", { method: "POST", body: payment });
       } catch {
         failed.push(payment);
@@ -454,6 +456,8 @@ export function PaymentRecording({
         studentId: entry.student.id,
         amount: totalAmount,
         offlineId: `offline_${Date.now()}_${entry.student.id}`,
+        // Stable idempotency key so replay (online or via queue) is deduped server-side
+        clientRequestId: generateClientRequestId(),
         createdAt: new Date().toISOString(),
       }));
       setPendingPayments([...pendingPayments, ...offlinePayments]);
@@ -467,33 +471,69 @@ export function PaymentRecording({
 
     setIsSubmitting(true);
 
+    // One stable idempotency key per submission. If the request hangs and the
+    // offline queue eventually replays it, the server returns the original record
+    // instead of inserting a duplicate.
+    const submissionKey = generateClientRequestId();
+
     try {
       if (studentCount > 1) {
-        // Multi-student: send a single request with splits
-        await apiRequest("/api/payments/records/multi", {
+        // Multi-student: send a single request with splits via the queued helper so
+        // a 30s timeout falls back to the offline queue (still deduped via key).
+        const multiResult = await queuedApiRequest("/api/payments/records/multi", {
           method: "POST",
           body: {
             ...dataWithPurpose,
             schoolId: schoolId,
             amount: totalAmount,
             entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
+            clientRequestId: submissionKey,
           },
-        });
-        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
-        toast({
-          title: "Payment Recorded",
-          description: `Split payment of ₦${totalAmount.toLocaleString()} recorded for ${studentCount} students.`,
-        });
+        }, 'create-multi-payment');
+        if (multiResult?.queued) {
+          toast({
+            title: "Saving — slow network",
+            description: `Split payment will sync automatically. It will appear once confirmed by the server.`,
+          });
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+          toast({
+            title: multiResult?.idempotent ? "Already Recorded" : "Payment Recorded",
+            description: `Split payment of ₦${totalAmount.toLocaleString()} recorded for ${studentCount} students.`,
+          });
+        }
         closeAndReset();
       } else {
-        // Single student
+        // Single student — use queued helper for slow-network resilience
         const entry = selectedEntries[0];
-        await recordPaymentMutation.mutateAsync({
-          ...dataWithPurpose,
-          studentId: entry.student.id,
-          amount: totalAmount,
-        });
+        const singleResult = await queuedApiRequest("/api/payments/record", {
+          method: "POST",
+          body: {
+            ...dataWithPurpose,
+            studentId: entry.student.id,
+            amount: totalAmount,
+            clientRequestId: submissionKey,
+          },
+        }, 'create-payment-record');
+        if (singleResult?.queued) {
+          // Show as pending so the bursar sees their work immediately
+          setPendingPayments(prev => [...prev, {
+            ...dataWithPurpose,
+            studentId: entry.student.id,
+            amount: totalAmount,
+            offlineId: `offline_${Date.now()}_${entry.student.id}`,
+            clientRequestId: submissionKey,
+            createdAt: new Date().toISOString(),
+          }]);
+          toast({
+            title: "Saving — slow network",
+            description: "Payment will sync automatically. It is safe to record more.",
+          });
+          closeAndReset();
+          setIsSubmitting(false);
+          return;
+        }
         queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
         queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
         toast({

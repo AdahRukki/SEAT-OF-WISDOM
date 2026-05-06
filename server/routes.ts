@@ -1059,8 +1059,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         profileImage,
         parentWhatsApp,
         address,
-        schoolId: requestSchoolId
+        schoolId: requestSchoolId,
+        clientRequestId,
       } = req.body;
+
+      // Idempotency: if a student already exists for this clientRequestId, return it
+      // instead of inserting a duplicate. Protects against offline-queue replays of a
+      // request that actually succeeded server-side but timed out client-side.
+      if (clientRequestId && typeof clientRequestId === 'string') {
+        const existing = await storage.getStudentByClientRequestId(clientRequestId);
+        if (existing) {
+          const existingUser = await storage.getUserById(existing.userId);
+          return res.json({
+            message: "Student already created (idempotent replay)",
+            user: existingUser,
+            student: existing,
+            studentId: existing.studentId,
+            idempotent: true,
+          });
+        }
+      }
       
       // Required fields validation (email is now optional)
       if (!firstName || !lastName || !password || !classId || !parentWhatsApp) {
@@ -1118,10 +1136,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         profileImage: profileImage || null,
         gender: gender || null,
         parentWhatsapp: parentWhatsApp,
-        address: address || ''
+        address: address || '',
+        clientRequestId: clientRequestId || null,
       });
-      
-      const student = await storage.createStudent(studentData);
+
+      let student;
+      try {
+        student = await storage.createStudent(studentData);
+      } catch (err: any) {
+        // Always clean up the just-created orphan user — there is no scenario where
+        // we want a user row without a matching student row from this endpoint.
+        // This covers (a) parallel replay racing on the unique index and (b) any
+        // other student-insert failure mid-request.
+        try { await storage.deleteUser(newUser.id); } catch { /* noop */ }
+
+        // If the failure was the idempotency unique-index race, the parallel request
+        // already created the canonical student — return it as the idempotent result.
+        const isUniqueViolation = err?.code === '23505' || /uniq_students_client_request_id/i.test(err?.message || '');
+        if (clientRequestId && isUniqueViolation) {
+          const existing = await storage.getStudentByClientRequestId(clientRequestId);
+          if (existing) {
+            const existingUser = await storage.getUserById(existing.userId);
+            return res.json({
+              message: "Student already created (idempotent replay)",
+              user: existingUser,
+              student: existing,
+              studentId: existing.studentId,
+              idempotent: true,
+            });
+          }
+        }
+        throw err;
+      }
       
       // Update email if it was a placeholder
       if (!email) {
@@ -3384,7 +3430,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = recordFeePaymentSchema.parse(req.body);
       console.log('[POST /api/payments/record] Validated data:', validatedData);
-      
+
+      // Idempotency: dedupe replays of the same client submission
+      if (validatedData.clientRequestId) {
+        const existing = await storage.getFeePaymentByClientRequestId(validatedData.clientRequestId);
+        if (existing) {
+          console.log('[POST /api/payments/record] Idempotent replay returning existing:', existing.id);
+          return res.status(200).json({ ...existing, idempotent: true });
+        }
+      }
+
       // Get student to determine school
       const student = await storage.getStudent(validatedData.studentId);
       if (!student) {
@@ -3401,21 +3456,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create the payment record
-      const paymentRecord = await storage.recordFeePayment({
-        studentId: validatedData.studentId,
-        schoolId: schoolId || undefined,
-        amount: validatedData.amount.toString(),
-        paymentMethod: validatedData.paymentMethod,
-        paymentDate: new Date(validatedData.paymentDate),
-        purpose: validatedData.purpose,
-        depositorName: validatedData.depositorName,
-        reference: validatedData.reference,
-        term: validatedData.term,
-        session: validatedData.session,
-        notes: validatedData.notes,
-        recordedBy: user.id,
-        status: 'recorded',
-      });
+      let paymentRecord;
+      try {
+        paymentRecord = await storage.recordFeePayment({
+          studentId: validatedData.studentId,
+          schoolId: schoolId || undefined,
+          amount: validatedData.amount.toString(),
+          paymentMethod: validatedData.paymentMethod,
+          paymentDate: new Date(validatedData.paymentDate),
+          purpose: validatedData.purpose,
+          depositorName: validatedData.depositorName,
+          reference: validatedData.reference,
+          term: validatedData.term,
+          session: validatedData.session,
+          notes: validatedData.notes,
+          recordedBy: user.id,
+          status: 'recorded',
+          clientRequestId: validatedData.clientRequestId,
+        });
+      } catch (err: any) {
+        const isUniqueViolation = err?.code === '23505' || /uniq_fee_payment_records_client_request_id/i.test(err?.message || '');
+        if (validatedData.clientRequestId && isUniqueViolation) {
+          const existing = await storage.getFeePaymentByClientRequestId(validatedData.clientRequestId);
+          if (existing) {
+            return res.status(200).json({ ...existing, idempotent: true });
+          }
+        }
+        throw err;
+      }
 
       // Create audit log entry
       await storage.createPaymentAuditLog({
@@ -3444,7 +3512,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log('[POST /api/payments/records/multi] User:', user.id, 'Role:', user.role);
       const validatedData = recordMultiStudentPaymentSchema.parse(req.body);
-      const { schoolId, entries, amount, paymentMethod, paymentDate, purpose, depositorName, reference, term, session, notes } = validatedData;
+      const { schoolId, entries, amount, paymentMethod, paymentDate, purpose, depositorName, reference, term, session, notes, clientRequestId } = validatedData;
+
+      // Idempotency: dedupe replays
+      if (clientRequestId) {
+        const existing = await storage.getFeePaymentByClientRequestId(clientRequestId);
+        if (existing) {
+          console.log('[POST /api/payments/records/multi] Idempotent replay returning existing:', existing.id);
+          return res.status(200).json({ ...existing, idempotent: true });
+        }
+      }
 
       if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
         return res.status(403).json({ error: "You can only record payments for your school's students" });
@@ -3468,22 +3545,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const paymentRecord = await storage.createFeePaymentWithSplits(
-        {
-          schoolId,
-          amount: amount.toString(),
-          paymentMethod,
-          paymentDate: new Date(paymentDate),
-          purpose: purpose || undefined,
-          depositorName,
-          reference,
-          term,
-          session,
-          notes,
-          recordedBy: user.id,
-        },
-        entries.map(e => ({ studentId: e.studentId, amount: e.amount }))
-      );
+      let paymentRecord;
+      try {
+        paymentRecord = await storage.createFeePaymentWithSplits(
+          {
+            schoolId,
+            amount: amount.toString(),
+            paymentMethod,
+            paymentDate: new Date(paymentDate),
+            purpose: purpose || undefined,
+            depositorName,
+            reference,
+            term,
+            session,
+            notes,
+            recordedBy: user.id,
+            clientRequestId: clientRequestId || undefined,
+          },
+          entries.map(e => ({ studentId: e.studentId, amount: e.amount }))
+        );
+      } catch (err: any) {
+        const isUniqueViolation = err?.code === '23505' || /uniq_fee_payment_records_client_request_id/i.test(err?.message || '');
+        if (clientRequestId && isUniqueViolation) {
+          const existing = await storage.getFeePaymentByClientRequestId(clientRequestId);
+          if (existing) {
+            return res.status(200).json({ ...existing, idempotent: true });
+          }
+        }
+        throw err;
+      }
 
       await storage.createPaymentAuditLog({
         action: 'record_payment',

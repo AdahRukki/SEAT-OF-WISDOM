@@ -333,6 +333,8 @@ export interface IStorage {
 
   // Fee Payment Records (Payment Tracking & Reconciliation)
   recordFeePayment(data: InsertFeePaymentRecord): Promise<FeePaymentRecord>;
+  getFeePaymentByClientRequestId(clientRequestId: string): Promise<FeePaymentRecord | undefined>;
+  getStudentByClientRequestId(clientRequestId: string): Promise<Student | undefined>;
   getFeePaymentRecords(filters: { schoolId?: string; studentId?: string; status?: string; startDate?: Date; endDate?: Date; term?: string; session?: string }): Promise<FeePaymentRecordWithDetails[]>;
   getFeePaymentRecordById(id: string): Promise<FeePaymentRecordWithDetails | undefined>;
   confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord>;
@@ -3164,6 +3166,24 @@ export class DatabaseStorage implements IStorage {
       .from(publishedScores)
       .where(eq(publishedScores.classId, classId))
       .orderBy(desc(publishedScores.publishedAt));
+  }
+
+  async getFeePaymentByClientRequestId(clientRequestId: string): Promise<FeePaymentRecord | undefined> {
+    const [record] = await db
+      .select()
+      .from(feePaymentRecords)
+      .where(eq(feePaymentRecords.clientRequestId, clientRequestId))
+      .limit(1);
+    return record || undefined;
+  }
+
+  async getStudentByClientRequestId(clientRequestId: string): Promise<Student | undefined> {
+    const [student] = await db
+      .select()
+      .from(students)
+      .where(eq(students.clientRequestId, clientRequestId))
+      .limit(1);
+    return student || undefined;
   }
 
   // Fee Payment Records (Payment Tracking & Reconciliation)
