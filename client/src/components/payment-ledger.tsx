@@ -80,9 +80,10 @@ interface PaymentLedgerProps {
   schoolId?: string;
   currentTerm?: string;
   currentSession?: string;
+  onOpenTuitionSetup?: () => void;
 }
 
-export function PaymentLedger({ schoolId, currentTerm, currentSession }: PaymentLedgerProps) {
+export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTuitionSetup }: PaymentLedgerProps) {
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
@@ -253,7 +254,31 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
           <p className="text-sm">{ledger.length === 0 ? "No students found for the selected filters." : "No students match your search."}</p>
         </div>
       ) : (
-        <div className="rounded-md border overflow-x-auto">
+        <div className="space-y-2">
+          {ledger.length > 0 && ledger.every((e) => !e.tuitionAssigned) && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex-1">
+                <div className="font-medium">Tuition not configured for this term/session</div>
+                <div className="text-xs mt-0.5">
+                  No per-class tuition amounts are set for{" "}
+                  <strong>{selectedTerm || "all terms"}</strong> ·{" "}
+                  <strong>{selectedSession || "all sessions"}</strong>.
+                </div>
+              </div>
+              {onOpenTuitionSetup && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-400 text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/40"
+                  onClick={onOpenTuitionSetup}
+                  data-testid="button-setup-tuition"
+                >
+                  Set up tuition
+                </Button>
+              )}
+            </div>
+          )}
+          <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -284,7 +309,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
                     {entry.totalPaid > 0 ? `₦${entry.totalPaid.toLocaleString()}` : "₦0"}
                   </TableCell>
                   <TableCell className="text-right font-semibold text-blue-600">
-                    {entry.tuitionAssigned
+                    {entry.tuitionAssigned > 0 || entry.totalPaid > 0
                       ? `₦${Math.max(0, entry.totalPaid - entry.tuitionAssigned).toLocaleString()}`
                       : "—"}
                   </TableCell>
@@ -311,6 +336,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession }: Payment
               ))}
             </TableBody>
           </Table>
+          </div>
         </div>
       )}
 

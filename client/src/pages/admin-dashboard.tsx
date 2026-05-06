@@ -585,6 +585,11 @@ export default function AdminDashboard() {
   const [isTuitionMode, setIsTuitionMode] = useState(false);
   const [tuitionClassAmountsMap, setTuitionClassAmountsMap] = useState<Record<string, string>>({});
   const [editTuitionClassAmountsMap, setEditTuitionClassAmountsMap] = useState<Record<string, string>>({});
+  // Scope (term/session) for tuition setup. Empty string = "All" (global, NULL in DB).
+  const [tuitionScopeTerm, setTuitionScopeTerm] = useState<string>("");
+  const [tuitionScopeSession, setTuitionScopeSession] = useState<string>("");
+  const [editTuitionScopeTerm, setEditTuitionScopeTerm] = useState<string>("");
+  const [editTuitionScopeSession, setEditTuitionScopeSession] = useState<string>("");
   const [assignFeeClassIds, setAssignFeeClassIds] = useState<string[]>([]);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
@@ -672,6 +677,44 @@ export default function AdminDashboard() {
     }
   }, [academicInfo]);
 
+  // When the tuition edit dialog's scope changes, refetch amounts for that
+  // scope and prefill the editor (falling back to globals if the scope is empty).
+  useEffect(() => {
+    if (!isEditFeeTypeDialogOpen || !editingFeeType?.isTuition) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const params = new URLSearchParams();
+        if (editTuitionScopeTerm) params.set('term', editTuitionScopeTerm);
+        if (editTuitionScopeSession) params.set('session', editTuitionScopeSession);
+        // Always fetch all rows for this fee type and partition locally so
+        // we can correctly distinguish global rows from scoped ones.
+        const allRes = await fetch(`/api/admin/tuition-amounts/${editingFeeType.id}`, { credentials: 'include', headers });
+        const allRows: any[] = allRes.ok ? await allRes.json() : [];
+        const globals = allRows.filter((r: any) => r.term === null && r.session === null);
+        const bothPicked = !!(editTuitionScopeTerm && editTuitionScopeSession);
+        let rows: any[];
+        if (!bothPicked) {
+          // "All terms / All sessions" view → show only true global rows.
+          rows = globals;
+        } else {
+          const scoped = allRows.filter((r: any) => r.term === editTuitionScopeTerm && r.session === editTuitionScopeSession);
+          // Prefill from globals when no scoped rows exist yet.
+          rows = scoped.length > 0 ? scoped : globals;
+        }
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        rows.forEach((ta: any) => { map[ta.classId] = ta.amount; });
+        setEditTuitionClassAmountsMap(map);
+      } catch {
+        // ignore — leave existing map untouched
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isEditFeeTypeDialogOpen, editingFeeType?.id, editingFeeType?.isTuition, editTuitionScopeTerm, editTuitionScopeSession]);
 
   // Scores management states
   const [scoresClassId, setScoresClassId] = useState("");
@@ -2055,6 +2098,8 @@ export default function AdminDashboard() {
           isTuition: isTuitionMode,
           schoolId: selectedSchoolId || user?.schoolId,
           classAmounts,
+          ...(isTuitionMode && tuitionScopeTerm ? { term: tuitionScopeTerm } : {}),
+          ...(isTuitionMode && tuitionScopeSession ? { session: tuitionScopeSession } : {}),
         }
       });
       if (!isTuitionMode && feeTypeAssignClassIds.length > 0 && result?.id) {
@@ -4507,10 +4552,16 @@ export default function AdminDashboard() {
                           setEditFeeTypeAmount(feeType.amount);
                           setEditFeeTypeCategory(feeType.category);
                           setEditFeeTypeDescription(feeType.description || "");
-                          if (feeType.isTuition && tuitionAmounts) {
-                            const map: Record<string, string> = {};
-                            tuitionAmounts.forEach((ta: any) => { map[ta.classId] = ta.amount; });
-                            setEditTuitionClassAmountsMap(map);
+                          if (feeType.isTuition) {
+                            // Default scope to school's current term/session, fall back to global.
+                            setEditTuitionScopeTerm(academicInfo?.currentTerm || "");
+                            setEditTuitionScopeSession(academicInfo?.currentSession || "");
+                            // Pre-populate map with global amounts (refetch effect will refine for scope).
+                            if (tuitionAmounts) {
+                              const map: Record<string, string> = {};
+                              tuitionAmounts.forEach((ta: any) => { map[ta.classId] = ta.amount; });
+                              setEditTuitionClassAmountsMap(map);
+                            }
                           }
                           setIsEditFeeTypeDialogOpen(true);
                         }}
@@ -4580,6 +4631,22 @@ export default function AdminDashboard() {
                     schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
                     currentTerm={selectedFinanceTerm}
                     currentSession={selectedFinanceSession}
+                    onOpenTuitionSetup={() => {
+                      const tuitionFt = (feeTypes as FeeType[]).find((ft) => ft.isTuition);
+                      if (tuitionFt) {
+                        setEditingFeeType(tuitionFt);
+                        setEditFeeTypeName(tuitionFt.name);
+                        setEditFeeTypeAmount(tuitionFt.amount);
+                        setEditFeeTypeCategory(tuitionFt.category);
+                        setEditFeeTypeDescription(tuitionFt.description || "");
+                        setEditTuitionScopeTerm(selectedFinanceTerm || academicInfo?.currentTerm || "");
+                        setEditTuitionScopeSession(selectedFinanceSession || academicInfo?.currentSession || "");
+                        setIsEditFeeTypeDialogOpen(true);
+                      } else {
+                        setIsTuitionMode(true);
+                        setIsFeeTypeDialogOpen(true);
+                      }
+                    }}
                   />
                   {user?.role === 'admin' && (
                     <div id="broadsheet-print-area">
@@ -6553,7 +6620,19 @@ export default function AdminDashboard() {
         </Dialog>
 
         {/* Fee Type Creation Dialog */}
-        <Dialog open={isFeeTypeDialogOpen} onOpenChange={(open) => { setIsFeeTypeDialogOpen(open); if (!open) { setIsTuitionMode(false); setTuitionClassAmountsMap({}); setFeeTypeAssignClassIds([]); } }}>
+        <Dialog open={isFeeTypeDialogOpen} onOpenChange={(open) => {
+          setIsFeeTypeDialogOpen(open);
+          if (open) {
+            setTuitionScopeTerm(academicInfo?.currentTerm || "");
+            setTuitionScopeSession(academicInfo?.currentSession || "");
+          } else {
+            setIsTuitionMode(false);
+            setTuitionClassAmountsMap({});
+            setFeeTypeAssignClassIds([]);
+            setTuitionScopeTerm("");
+            setTuitionScopeSession("");
+          }
+        }}>
           <DialogContent className="max-w-md dialog-content-scrollable form-container">
             <DialogHeader>
               <DialogTitle>Create New Fee Type</DialogTitle>
@@ -6655,6 +6734,38 @@ export default function AdminDashboard() {
                     </FormItem>
                   )}
                 />
+
+                {isTuitionMode && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Term</label>
+                      <Select value={tuitionScopeTerm || "__all__"} onValueChange={(v) => setTuitionScopeTerm(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All terms (global)</SelectItem>
+                          <SelectItem value="First Term">First Term</SelectItem>
+                          <SelectItem value="Second Term">Second Term</SelectItem>
+                          <SelectItem value="Third Term">Third Term</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Session</label>
+                      <Select value={tuitionScopeSession || "__all__"} onValueChange={(v) => setTuitionScopeSession(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All sessions (global)</SelectItem>
+                          {(academicSessions || []).map((s: any) => (
+                            <SelectItem key={s.id} value={s.sessionYear}>{s.sessionYear}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground col-span-2">
+                      Leave both as "All" to set global amounts that apply to every term/session. Pick a specific term and session to override globals only for that scope.
+                    </p>
+                  </div>
+                )}
 
                 {isTuitionMode ? (
                   <div className="space-y-2">
@@ -6932,27 +7043,61 @@ export default function AdminDashboard() {
                 />
               </div>
               {editingFeeType?.isTuition && (
-                <div className="space-y-2">
-                  <Label>Amount per Class</Label>
-                  <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y">
-                    {sortClassesByOrder(classes).map((cls) => (
-                      <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
-                        <span className="text-sm flex-1 min-w-0 truncate">{cls.name}</span>
-                        <div className="relative w-32 shrink-0">
-                          <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
-                          <Input
-                            type="number"
-                            placeholder="0"
-                            className="pl-6 h-8 text-sm"
-                            value={editTuitionClassAmountsMap[cls.id] || ""}
-                            onChange={(e) => setEditTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }))}
-                            min={0}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Term</Label>
+                      <Select value={editTuitionScopeTerm || "__all__"} onValueChange={(v) => setEditTuitionScopeTerm(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All terms (global)</SelectItem>
+                          <SelectItem value="First Term">First Term</SelectItem>
+                          <SelectItem value="Second Term">Second Term</SelectItem>
+                          <SelectItem value="Third Term">Third Term</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Session</Label>
+                      <Select value={editTuitionScopeSession || "__all__"} onValueChange={(v) => setEditTuitionScopeSession(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All sessions (global)</SelectItem>
+                          {(academicSessions || []).map((s: any) => (
+                            <SelectItem key={s.id} value={s.sessionYear}>{s.sessionYear}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground col-span-2">
+                      Editing amounts for{" "}
+                      <strong>{editTuitionScopeTerm || "all terms"}</strong> ·{" "}
+                      <strong>{editTuitionScopeSession || "all sessions"}</strong>.
+                      Empty fields fall back to the global amount.
+                    </p>
                   </div>
-                </div>
+                  <div className="space-y-2">
+                    <Label>Amount per Class</Label>
+                    <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y">
+                      {sortClassesByOrder(classes).map((cls) => (
+                        <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
+                          <span className="text-sm flex-1 min-w-0 truncate">{cls.name}</span>
+                          <div className="relative w-32 shrink-0">
+                            <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              className="pl-6 h-8 text-sm"
+                              value={editTuitionClassAmountsMap[cls.id] || ""}
+                              onChange={(e) => setEditTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }))}
+                              min={0}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
               <div className="flex justify-end space-x-2 pt-4">
                 <Button
@@ -6981,10 +7126,15 @@ export default function AdminDashboard() {
                         .map(([classId, amount]) => ({ classId, amount }));
                       await apiRequest(`/api/admin/tuition-amounts/${editingFeeType.id}`, {
                         method: 'PUT',
-                        body: { amounts: classAmounts },
+                        body: {
+                          amounts: classAmounts,
+                          ...(editTuitionScopeTerm ? { term: editTuitionScopeTerm } : {}),
+                          ...(editTuitionScopeSession ? { session: editTuitionScopeSession } : {}),
+                        },
                       });
                       queryClient.invalidateQueries({ queryKey: ['/api/admin/tuition-amounts', editingFeeType.id] });
                       queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
                     }
                   }}
                   disabled={updateFeeTypeMutation.isPending || !editFeeTypeName.trim() || (!editingFeeType?.isTuition && !editFeeTypeAmount.trim())}

@@ -1514,10 +1514,24 @@ export class DatabaseStorage implements IStorage {
     `);
     const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
 
-    let tuitionMap = new Map<string, number>();
+    const tuitionMap = new Map<string, number>();
     if (tuitionFee) {
-      const tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
-      tuitionMap = new Map(tuitionAmts.map(ta => [ta.classId, Number(ta.amount)]));
+      // Resolve per-class tuition: term/session-specific rows override
+      // global (NULL term/session) rows. This avoids "—" in the ledger when
+      // tuition was set up without a scope but the caller passes term/session.
+      const allRows = await this.getTuitionClassAmounts(tuitionFee.id);
+      for (const ta of allRows) {
+        if (ta.term === null && ta.session === null) {
+          tuitionMap.set(ta.classId, Number(ta.amount));
+        }
+      }
+      if (term && session) {
+        for (const ta of allRows) {
+          if (ta.term === term && ta.session === session) {
+            tuitionMap.set(ta.classId, Number(ta.amount));
+          }
+        }
+      }
     }
 
     return (rows.rows || rows).map((r: any) => {
@@ -1605,10 +1619,24 @@ export class DatabaseStorage implements IStorage {
     `);
     const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
 
-    let tuitionMap = new Map<string, number>();
+    const tuitionMap = new Map<string, number>();
     if (tuitionFee) {
-      const tuitionAmts = await this.getTuitionClassAmounts(tuitionFee.id, term, session);
-      tuitionMap = new Map(tuitionAmts.map(ta => [ta.classId, Number(ta.amount)]));
+      // Resolve per-class tuition: term/session-specific rows override
+      // global (NULL term/session) rows. This avoids "—" in the ledger when
+      // tuition was set up without a scope but the caller passes term/session.
+      const allRows = await this.getTuitionClassAmounts(tuitionFee.id);
+      for (const ta of allRows) {
+        if (ta.term === null && ta.session === null) {
+          tuitionMap.set(ta.classId, Number(ta.amount));
+        }
+      }
+      if (term && session) {
+        for (const ta of allRows) {
+          if (ta.term === term && ta.session === session) {
+            tuitionMap.set(ta.classId, Number(ta.amount));
+          }
+        }
+      }
     }
 
     const allStudents = ((studentsRows as any).rows || studentsRows) as any[];

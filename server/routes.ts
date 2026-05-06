@@ -2457,7 +2457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/fee-types', authenticate, requireAdmin, async (req, res) => {
     try {
       const user = (req as any).user;
-      const { classAmounts, ...bodyData } = req.body;
+      const { classAmounts, term: tuitionTerm, session: tuitionSession, ...bodyData } = req.body;
       const feeTypeData = insertFeeTypeSchema.parse(bodyData);
       
       if (user.role === 'sub-admin') {
@@ -2476,7 +2476,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const feeType = await storage.createFeeType(feeTypeData);
 
       if (feeTypeData.isTuition && Array.isArray(classAmounts) && classAmounts.length > 0) {
-        await storage.upsertTuitionClassAmounts(feeType.id, classAmounts);
+        // Enforce scope consistency: term and session must be supplied together.
+        // Otherwise treat as global (NULL,NULL) so the ledger can resolve them.
+        const t = typeof tuitionTerm === 'string' && tuitionTerm ? tuitionTerm : undefined;
+        const s = typeof tuitionSession === 'string' && tuitionSession ? tuitionSession : undefined;
+        const bothOrNone = t && s ? { t, s } : { t: undefined, s: undefined };
+        await storage.upsertTuitionClassAmounts(
+          feeType.id,
+          classAmounts,
+          bothOrNone.t,
+          bothOrNone.s,
+        );
       }
 
       res.json(feeType);
@@ -2572,7 +2582,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!Array.isArray(amounts)) {
         return res.status(400).json({ error: "amounts must be an array" });
       }
-      const result = await storage.upsertTuitionClassAmounts(feeTypeId, amounts, term, session);
+      // Enforce scope consistency (see POST /api/admin/fee-types).
+      const t = typeof term === 'string' && term ? term : undefined;
+      const s = typeof session === 'string' && session ? session : undefined;
+      const scopedT = t && s ? t : undefined;
+      const scopedS = t && s ? s : undefined;
+      const result = await storage.upsertTuitionClassAmounts(feeTypeId, amounts, scopedT, scopedS);
       res.json(result);
     } catch (error) {
       console.error("Upsert tuition amounts error:", error);
