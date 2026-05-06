@@ -363,7 +363,7 @@ function ClassTuitionBreakdownDialog({
   schoolName: string;
   term: string;
   session: string;
-  sortClassesByOrder: (c: any[]) => any[];
+  sortClassesByOrder: <T extends { name: string }>(c: T[]) => T[];
 }) {
   const { data: rows = [], isLoading } = useQuery<ClassTuitionRow[]>({
     queryKey: ['/api/admin/financial-summary/by-class', schoolId, term, session],
@@ -378,8 +378,8 @@ function ClassTuitionBreakdownDialog({
   });
 
   const sortedRows = sortClassesByOrder(
-    (rows as any[]).map(r => ({ ...r, name: r.className }))
-  ) as ClassTuitionRow[];
+    rows.map(r => ({ ...r, name: r.className }))
+  );
 
   const totals = sortedRows.reduce(
     (acc, r) => {
