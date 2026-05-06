@@ -1800,6 +1800,7 @@ export class DatabaseStorage implements IStorage {
     totalPending: number;
     totalOverdue: number;
     totalRevenue: number;
+    actualTuitionCollected: number;
     totalOutstanding: number;
     collectionRate: number;
     studentsOwing: number;
@@ -1833,6 +1834,8 @@ export class DatabaseStorage implements IStorage {
     let tuitionPaid = 0;
     let studentsOwing = 0;
 
+    let actualTuitionCollected = 0;
+
     if (tuitionFeeType) {
       let tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id, term, session);
       if (tuitionAmounts.length === 0 && (term || session)) {
@@ -1840,9 +1843,11 @@ export class DatabaseStorage implements IStorage {
       }
       const classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
 
+      const studentOwedMap = new Map<string, number>();
       for (const student of allActiveStudents) {
         const classAmount = student.classId ? classAmountMap.get(student.classId) : undefined;
-        if (classAmount) {
+        if (classAmount && classAmount > 0) {
+          studentOwedMap.set(student.id, classAmount);
           totalTuitionOwed += classAmount;
         }
       }
@@ -1855,24 +1860,42 @@ export class DatabaseStorage implements IStorage {
       if (term) tuitionPaymentConditions.push(eq(feePaymentRecords.term, term));
       if (session) tuitionPaymentConditions.push(eq(feePaymentRecords.session, session));
 
-      const [tuitionPaidRow] = await db
-        .select({ total: sql<string>`COALESCE(SUM(${feePaymentRecords.amount}), 0)` })
+      // Per-student paid totals (raw, before capping).
+      const paidPerStudentRows = await db
+        .select({
+          studentId: feePaymentRecords.studentId,
+          total: sql<string>`COALESCE(SUM(${feePaymentRecords.amount}), 0)`,
+        })
         .from(feePaymentRecords)
-        .where(and(...tuitionPaymentConditions));
-      tuitionPaid = Number(tuitionPaidRow?.total || 0);
+        .where(and(...tuitionPaymentConditions))
+        .groupBy(feePaymentRecords.studentId);
+      const studentPaidMap = new Map<string, number>(
+        paidPerStudentRows.map(r => [r.studentId, Number(r.total || 0)])
+      );
 
-      const paidTuitionStudentRows = await db
-        .selectDistinct({ studentId: feePaymentRecords.studentId })
-        .from(feePaymentRecords)
-        .where(and(...tuitionPaymentConditions));
-      const paidTuitionStudentIds = new Set(paidTuitionStudentRows.map(r => r.studentId));
-      studentsOwing = allActiveStudents.filter(s => !paidTuitionStudentIds.has(s.id)).length;
+      // tuitionPaid: raw sum of all confirmed tuition payments (uncapped).
+      tuitionPaid = Array.from(studentPaidMap.values()).reduce((s, v) => s + v, 0);
+
+      // actualTuitionCollected: per-student capped at what they actually owe —
+      // overpayments do NOT inflate collection; partial payments DO count
+      // toward the rate and outstanding.
+      // studentsOwing: every active student whose owed > paid (partial payers
+      // included), only counting students who actually have a tuition assigned.
+      let owingCount = 0;
+      for (const [studentId, owed] of studentOwedMap) {
+        const paid = studentPaidMap.get(studentId) || 0;
+        actualTuitionCollected += Math.min(paid, owed);
+        if (paid < owed) owingCount += 1;
+      }
+      studentsOwing = owingCount;
     } else {
       studentsOwing = 0;
     }
 
-    const totalOutstanding = Math.max(0, totalTuitionOwed - tuitionPaid);
-    const collectionRate = totalTuitionOwed > 0 ? Math.round((tuitionPaid / totalTuitionOwed) * 100) : 0;
+    const totalOutstanding = Math.max(0, totalTuitionOwed - actualTuitionCollected);
+    const collectionRate = totalTuitionOwed > 0
+      ? Math.round((actualTuitionCollected / totalTuitionOwed) * 100)
+      : 0;
 
     // Sum POS fees absorbed for Moniepoint-matched allocations.
     // Fee per allocation = |bankTransactionAmount - allocatedAmount|.
@@ -1896,6 +1919,7 @@ export class DatabaseStorage implements IStorage {
       totalPending: 0,
       totalOverdue: 0,
       totalRevenue,
+      actualTuitionCollected,
       totalOutstanding,
       collectionRate,
       studentsOwing,

@@ -4673,6 +4673,9 @@ export default function AdminDashboard() {
                       ₦{(financialSummary?.totalRevenue ?? financialSummary?.totalPaid ?? 0).toLocaleString()}
                     </div>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedFinanceTerm} confirmed</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1" data-testid="text-actual-tuition">
+                      Actual tuition: ₦{(financialSummary?.actualTuitionCollected ?? 0).toLocaleString()}
+                    </p>
                   </CardContent>
                 </Card>
               )}
@@ -4688,7 +4691,7 @@ export default function AdminDashboard() {
                       {financialSummary?.totalFees ? `₦${(financialSummary.totalOutstanding ?? 0).toLocaleString()}` : "N/A"}
                     </div>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">
-                      {financialSummary?.totalFees ? "Assigned fees minus confirmed" : "No fees assigned"}
+                      {financialSummary?.totalFees ? "Assigned tuition minus actual collected" : "No fees assigned"}
                     </p>
                   </CardContent>
                 </Card>
@@ -4718,7 +4721,7 @@ export default function AdminDashboard() {
                   <div className="text-lg sm:text-2xl font-bold">
                     {financialSummary?.studentsOwing ?? "0"}
                   </div>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">No confirmed payments this term</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Tuition not fully paid this term</p>
                 </CardContent>
               </Card>
 
