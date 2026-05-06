@@ -338,13 +338,15 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   );
 }
 
-function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, onDelete }: {
+function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, onDelete, currentTerm, currentSession }: {
   feeType: FeeType;
   classes: any[];
   sortClassesByOrder: (c: any[]) => any[];
   onAssign: () => void;
   onEdit: (tuitionAmounts?: any[]) => void;
   onDelete: () => void;
+  currentTerm?: string;
+  currentSession?: string;
 }) {
   const { data: tuitionAmounts = [] } = useQuery<any[]>({
     queryKey: ['/api/admin/tuition-amounts', feeType.id],
@@ -360,6 +362,65 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
   });
 
   const classMap = new Map(classes.map(c => [c.id, c.name]));
+
+  // Group tuition rows by scope and dedupe per class within each scope.
+  // Group key "" = global (term IS NULL AND session IS NULL).
+  // Other keys are `${term}|${session}`.
+  const scopeGroups = (() => {
+    const map = new Map<string, { term: string | null; session: string | null; perClass: Map<string, string> }>();
+    for (const row of tuitionAmounts as any[]) {
+      const term = row.term || null;
+      const session = row.session || null;
+      const key = term && session ? `${term}|${session}` : '';
+      if (!map.has(key)) map.set(key, { term, session, perClass: new Map() });
+      // Last-write-wins per class within a scope (defensive against stray dupes).
+      map.get(key)!.perClass.set(row.classId, row.amount);
+    }
+    return map;
+  })();
+
+  // Sort: Global first, then by session/term.
+  const orderedScopeKeys = Array.from(scopeGroups.keys()).sort((a, b) => {
+    if (a === '') return -1;
+    if (b === '') return 1;
+    return a.localeCompare(b);
+  });
+
+  const currentScopeKey = currentTerm && currentSession ? `${currentTerm}|${currentSession}` : '';
+  const hasGlobal = scopeGroups.has('');
+  const hasCurrentScoped = currentScopeKey !== '' && scopeGroups.has(currentScopeKey);
+
+  // Default the visible group to the school's current scope if it exists,
+  // otherwise to Global, otherwise to the first group available.
+  const initialKey = hasCurrentScoped
+    ? currentScopeKey
+    : hasGlobal
+    ? ''
+    : orderedScopeKeys[0] ?? '';
+  const [visibleScopeKey, setVisibleScopeKey] = useState<string>(initialKey);
+
+  // Re-sync if scopes change (e.g., after a save adds a new scope).
+  useEffect(() => {
+    if (!scopeGroups.has(visibleScopeKey)) {
+      setVisibleScopeKey(initialKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedScopeKeys.join(',')]);
+
+  const scopeLabel = (key: string) => {
+    if (key === '') return 'Global (default)';
+    const g = scopeGroups.get(key)!;
+    return `${g.term} · ${g.session}`;
+  };
+
+  const visibleGroup = scopeGroups.get(visibleScopeKey);
+  const visibleEntries = visibleGroup
+    ? Array.from(visibleGroup.perClass.entries()).map(([classId, amount]) => ({
+        id: classId,
+        name: classMap.get(classId) || classId,
+        _amount: amount,
+      }))
+    : [];
 
   return (
     <div className="border rounded-lg p-3 sm:p-4">
@@ -377,18 +438,59 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
             </span>
           </div>
           {feeType.isTuition ? (
-            <div className="mt-1">
-              {tuitionAmounts.length > 0 ? (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {sortClassesByOrder(tuitionAmounts.map(ta => ({ id: ta.classId, name: classMap.get(ta.classId) || ta.classId, _amount: ta.amount }))).map((item: any) => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground truncate">{item.name}</span>
-                      <span className="font-medium text-green-600 ml-2">₦{parseFloat(item._amount).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
+            <div className="mt-2 space-y-2">
+              {orderedScopeKeys.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No per-class amounts set</p>
+              ) : (
+                <>
+                  {orderedScopeKeys.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground mr-1">Showing:</span>
+                      {orderedScopeKeys.map((k) => (
+                        <button
+                          key={k || 'global'}
+                          type="button"
+                          onClick={() => setVisibleScopeKey(k)}
+                          className={`px-2 py-0.5 rounded-full text-xs border transition ${
+                            visibleScopeKey === k
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                          }`}
+                          data-testid={`button-tuition-scope-${k || 'global'}`}
+                        >
+                          {scopeLabel(k)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {orderedScopeKeys.length === 1 && (
+                    <div className="text-xs text-muted-foreground">
+                      Scope: <span className="font-medium text-foreground">{scopeLabel(visibleScopeKey)}</span>
+                    </div>
+                  )}
+                  {visibleScopeKey !== '' && hasGlobal && (
+                    <div className="text-[11px] text-muted-foreground italic">
+                      Overrides the Global default for this term/session.
+                    </div>
+                  )}
+                  {visibleScopeKey === '' && currentScopeKey !== '' && !hasCurrentScoped && (
+                    <div className="text-[11px] text-muted-foreground italic">
+                      Used as the default for {currentTerm} · {currentSession} (no override saved).
+                    </div>
+                  )}
+                  {visibleEntries.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      {sortClassesByOrder(visibleEntries).map((item: any) => (
+                        <div key={item.id} className="flex justify-between text-sm">
+                          <span className="text-muted-foreground truncate">{item.name}</span>
+                          <span className="font-medium text-green-600 ml-2">₦{parseFloat(item._amount).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No amounts saved for this scope.</p>
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -4542,6 +4644,8 @@ export default function AdminDashboard() {
                         feeType={feeType}
                         classes={classes}
                         sortClassesByOrder={sortClassesByOrder}
+                        currentTerm={academicInfo?.currentTerm || undefined}
+                        currentSession={academicInfo?.currentSession || undefined}
                         onAssign={() => {
                           assignFeeForm.setValue('feeTypeId', feeType.id);
                           setIsAssignFeeDialogOpen(true);
@@ -7069,11 +7173,20 @@ export default function AdminDashboard() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <p className="text-[11px] text-muted-foreground col-span-2">
-                      Editing amounts for{" "}
-                      <strong>{editTuitionScopeTerm || "all terms"}</strong> ·{" "}
-                      <strong>{editTuitionScopeSession || "all sessions"}</strong>.
-                      Empty fields fall back to the global amount.
+                    <p className="text-[11px] text-muted-foreground col-span-2 leading-snug">
+                      {(!editTuitionScopeTerm || !editTuitionScopeSession) ? (
+                        <>
+                          Saving with <strong>All terms / All sessions</strong> updates the{" "}
+                          <strong>global default</strong> used whenever no term-specific amount is set.
+                        </>
+                      ) : (
+                        <>
+                          Editing amounts for <strong>{editTuitionScopeTerm}</strong> ·{" "}
+                          <strong>{editTuitionScopeSession}</strong>. Saving here overrides the global
+                          default for this term/session only. Pre-filled values inherit from the global
+                          default until you save.
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="space-y-2">

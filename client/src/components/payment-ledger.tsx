@@ -258,9 +258,14 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
         <div className="space-y-2">
           {(() => {
             const bannerKey = `${selectedTerm}|${selectedSession}`;
+            // Only nag when truly nothing is configured: every student has 0 tuition
+            // AND there are also no recorded payments anywhere (so the resolver had
+            // nothing to apply and no payments to imply tuition is being tracked).
+            const allZeroTuition = ledger.length > 0 && ledger.every((e) => !e.tuitionAssigned);
+            const anyPaymentsRecorded = ledger.some((e) => (e.totalPaid || 0) > 0 || (e.paymentCount || 0) > 0);
             const showBanner =
-              ledger.length > 0 &&
-              ledger.every((e) => !e.tuitionAssigned) &&
+              allZeroTuition &&
+              !anyPaymentsRecorded &&
               tuitionBannerDismissed !== bannerKey;
             if (!showBanner) return null;
             return (
