@@ -186,12 +186,13 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
   });
 
   const filteredLedger = nameSearch.trim()
-    ? ledger.filter(
-        (e) =>
-          `${e.lastName} ${e.firstName}`.toLowerCase().includes(nameSearch.toLowerCase()) ||
-          e.studentId.toLowerCase().includes(nameSearch.toLowerCase())
-      )
-    : ledger;
+    ? (Array.isArray(ledger) ? ledger : []).filter((e) => {
+        const q = nameSearch.toLowerCase();
+        const name = `${e?.lastName ?? ""} ${e?.firstName ?? ""}`.toLowerCase();
+        const sid = (e?.studentId ?? "").toLowerCase();
+        return name.includes(q) || sid.includes(q);
+      })
+    : (Array.isArray(ledger) ? ledger : []);
 
   const getStatusBadge = (status: string) => {
     if (status === "confirmed") return <Badge className="bg-green-100 text-green-800 text-[10px]">Confirmed</Badge>;
