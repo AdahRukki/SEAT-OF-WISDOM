@@ -489,6 +489,32 @@ export function PaymentRecording({
     // Insert an optimistic row for EVERY entry immediately so the user sees
     // their work in the table the moment they hit Submit, regardless of
     // network condition. Status: 'saving' until server confirms.
+    // Capture the EXACT request shape used for this submission so a later
+    // Retry replays the same endpoint with the same body — preserving
+    // single vs. multi semantics. All rows from one submission share the
+    // same `__submission` so a single retry re-runs the original atomic op.
+    const submission = studentCount > 1
+      ? {
+          url: '/api/payments/records/multi',
+          type: 'create-multi-payment',
+          body: {
+            ...dataWithPurpose,
+            schoolId: schoolId,
+            amount: totalAmount,
+            entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
+            clientRequestId: submissionKey,
+          },
+        }
+      : {
+          url: '/api/payments/record',
+          type: 'create-payment-record',
+          body: {
+            ...dataWithPurpose,
+            studentId: selectedEntries[0].student.id,
+            amount: totalAmount,
+            clientRequestId: submissionKey,
+          },
+        };
     const optimisticRows = selectedEntries.map((entry, i) => ({
       ...dataWithPurpose,
       studentId: entry.student.id,
@@ -498,6 +524,7 @@ export function PaymentRecording({
       clientRequestId: submissionKey,
       createdAt: new Date().toISOString(),
       __status: 'saving' as const,
+      __submission: submission,
     }));
     setPendingPayments(prev => [...prev, ...optimisticRows]);
     const removeOptimistic = () =>
@@ -582,46 +609,58 @@ export function PaymentRecording({
     setIsSubmitting(false);
   };
 
-  // Retry a failed optimistic payment row. Reuses its stable clientRequestId so
-  // the server safely dedupes if the original request actually succeeded.
+  // Retry a failed optimistic payment row. Reuses its stable clientRequestId
+  // so the server safely dedupes if the original request actually succeeded.
+  // For multi-student submissions, every sibling row shares one __submission;
+  // a retry replays the original /multi request once and updates every sibling.
   const retryFailedPayment = async (offlineId: string) => {
     const row = pendingPayments.find(p => p.offlineId === offlineId);
     if (!row) return;
-    setPendingPayments(prev => prev.map(p => p.offlineId === offlineId ? { ...p, __status: 'saving', __error: undefined } : p));
+    // Backwards-compat: rows created before __submission existed default to single endpoint
+    const submission = row.__submission ?? {
+      url: '/api/payments/record',
+      type: 'create-payment-record',
+      body: {
+        studentId: row.studentId,
+        amount: row.amount,
+        paymentMethod: row.paymentMethod,
+        paymentDate: row.paymentDate,
+        purpose: row.purpose,
+        depositorName: row.depositorName,
+        reference: row.reference,
+        term: row.term,
+        session: row.session,
+        notes: row.notes,
+        clientRequestId: row.clientRequestId,
+      },
+    };
+    const siblingMatch = (p: any) => p.clientRequestId && p.clientRequestId === row.clientRequestId;
+    setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: 'saving', __error: undefined } : p));
     try {
-      const res = await queuedApiRequest("/api/payments/record", {
-        method: "POST",
-        body: {
-          studentId: row.studentId,
-          amount: row.amount,
-          paymentMethod: row.paymentMethod,
-          paymentDate: row.paymentDate,
-          purpose: row.purpose,
-          depositorName: row.depositorName,
-          reference: row.reference,
-          term: row.term,
-          session: row.session,
-          notes: row.notes,
-          clientRequestId: row.clientRequestId,
-        },
-      }, 'create-payment-record');
+      const res = await queuedApiRequest(submission.url, { method: 'POST', body: submission.body }, submission.type);
       if (res?.queued) {
-        setPendingPayments(prev => prev.map(p => p.offlineId === offlineId ? { ...p, __status: 'pending-sync' } : p));
+        setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: 'pending-sync' } : p));
         toast({ title: "Queued", description: "Will sync when network recovers." });
       } else {
-        setPendingPayments(prev => prev.filter(p => p.offlineId !== offlineId));
+        setPendingPayments(prev => prev.filter(p => !siblingMatch(p)));
         queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
         queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
         toast({ title: res?.idempotent ? "Already Recorded" : "Payment Recorded" });
       }
     } catch (err: any) {
-      setPendingPayments(prev => prev.map(p => p.offlineId === offlineId ? { ...p, __status: 'failed', __error: err?.message } : p));
+      setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: 'failed', __error: err?.message } : p));
       toast({ title: "Retry Failed", description: err?.message || "Try again", variant: "destructive" });
     }
   };
 
+  // Discarding a row removes all siblings from the same submission so the
+  // user doesn't see half a multi-student split lingering after they discard.
   const discardFailedPayment = (offlineId: string) => {
-    setPendingPayments(prev => prev.filter(p => p.offlineId !== offlineId));
+    const row = pendingPayments.find(p => p.offlineId === offlineId);
+    const key = row?.clientRequestId;
+    setPendingPayments(prev => prev.filter(p =>
+      key ? p.clientRequestId !== key : p.offlineId !== offlineId,
+    ));
   };
 
   const closeAndReset = () => {
