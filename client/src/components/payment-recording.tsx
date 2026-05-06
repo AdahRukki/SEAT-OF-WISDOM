@@ -1243,15 +1243,34 @@ export function PaymentRecording({
           const slow = pendingPayments.filter(p => p.__status === 'pending-slow').length;
           const pending = pendingPayments.filter(p => p.__status === 'pending-sync').length;
           const failed = pendingPayments.filter(p => p.__status === 'failed').length;
+          // Legacy single-payment offline rows (created before queue-based replay)
+          // are identified by an offlineId starting with 'offline_'. They are not
+          // auto-replayed; expose a manual "Sync Now" button so they aren't stuck.
+          const legacyCount = pendingPayments.filter(
+            p => typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_')
+          ).length;
           const parts: string[] = [];
           if (saving) parts.push(`${saving} saving`);
           if (slow) parts.push(`${slow} saving on slow network`);
           if (pending) parts.push(`${pending} pending sync`);
           if (failed) parts.push(`${failed} failed`);
           return (
-            <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-              <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
-              {parts.length > 0 ? parts.join(' · ') : `${pendingPayments.length} payment(s) in progress`}
+            <div className="flex items-center justify-between gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+                <span>{parts.length > 0 ? parts.join(' · ') : `${pendingPayments.length} payment(s) in progress`}</span>
+              </div>
+              {legacyCount > 0 && isOnline && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => syncPendingPayments()}
+                  data-testid="button-sync-now-legacy"
+                >
+                  Sync Now ({legacyCount})
+                </Button>
+              )}
             </div>
           );
         })()}
