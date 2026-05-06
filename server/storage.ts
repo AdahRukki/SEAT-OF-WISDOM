@@ -249,6 +249,11 @@ export interface IStorage {
     }>;
     grandTotal: { totalAssigned: number; totalPaid: number; balance: number };
   }>;
+  getStudentTuitionBalances(schoolId: string, term: string, session: string): Promise<{
+    studentDbId: string;
+    tuitionAssigned: number;
+    tuitionPaid: number;
+  }[]>;
   getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
     totalFees: number;
     totalPaid: number;
@@ -1586,6 +1591,73 @@ export class DatabaseStorage implements IStorage {
         hasScopedTuition,
       },
     };
+  }
+
+  async getStudentTuitionBalances(schoolId: string, term: string, session: string): Promise<{
+    studentDbId: string;
+    tuitionAssigned: number;
+    tuitionPaid: number;
+  }[]> {
+    // Find the active tuition fee type for the school.
+    const tuitionFeeRows = await db.execute(sql`
+      SELECT ft.id, ft.name FROM fee_types ft
+      WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.is_active = true
+      LIMIT 1
+    `);
+    const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
+    if (!tuitionFee) return [];
+
+    // Build per-class assigned amount map: scoped (term+session) overrides global.
+    const allTuitionRows = await this.getTuitionClassAmounts(tuitionFee.id);
+    const perClass = new Map<string, number>();
+    for (const ta of allTuitionRows) {
+      if (ta.term === null && ta.session === null) {
+        perClass.set(ta.classId, Number(ta.amount));
+      }
+    }
+    for (const ta of allTuitionRows) {
+      if (ta.term === term && ta.session === session) {
+        perClass.set(ta.classId, Number(ta.amount));
+      }
+    }
+
+    // Per-student tuition paid (confirmed only, scoped to term+session and
+    // matched by purpose = tuition fee type name). Includes split allocations.
+    const paidRows = await db.execute(sql`
+      SELECT s.id AS "studentDbId",
+             s.class_id AS "classId",
+             (
+               COALESCE((
+                 SELECT SUM(fpr.amount) FROM fee_payment_records fpr
+                 WHERE fpr.student_id = s.id
+                   AND fpr.school_id = ${schoolId}
+                   AND fpr.status = 'confirmed'
+                   AND fpr.term = ${term}
+                   AND fpr.session = ${session}
+                   AND fpr.purpose = ${tuitionFee.name}
+               ), 0)
+               +
+               COALESCE((
+                 SELECT SUM(fpss.amount) FROM fee_payment_student_splits fpss
+                 JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+                 WHERE fpss.student_id = s.id
+                   AND fpr2.school_id = ${schoolId}
+                   AND fpr2.status = 'confirmed'
+                   AND fpr2.term = ${term}
+                   AND fpr2.session = ${session}
+                   AND fpr2.purpose = ${tuitionFee.name}
+               ), 0)
+             )::numeric AS "tuitionPaid"
+      FROM students s
+      JOIN users u ON s.user_id = u.id
+      WHERE u.is_active = true AND u.school_id = ${schoolId}
+    `);
+
+    return ((paidRows as any).rows || paidRows).map((r: any) => ({
+      studentDbId: r.studentDbId,
+      tuitionAssigned: r.classId ? (perClass.get(r.classId) || 0) : 0,
+      tuitionPaid: Number(r.tuitionPaid) || 0,
+    }));
   }
 
   async getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{

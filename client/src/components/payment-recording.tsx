@@ -61,6 +61,7 @@ import {
   ArrowDown,
   Eye,
   EyeOff,
+  CheckCircle2,
 } from "lucide-react";
 import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeePaymentStudentSplit, type FeeType } from "@shared/schema";
 
@@ -254,6 +255,38 @@ export function PaymentRecording({
     [tuitionAmounts]
   );
 
+  // Tuition balance per student for the current term/session, fetched only
+  // when the dialog is open so we don't ping the server unnecessarily.
+  const { data: tuitionBalancesData = [] } = useQuery<{
+    studentDbId: string;
+    tuitionAssigned: number;
+    tuitionPaid: number;
+  }[]>({
+    queryKey: ["/api/payments/tuition-balances", schoolId, currentTerm, currentSession],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const params = new URLSearchParams();
+      if (schoolId) params.set('schoolId', schoolId);
+      if (currentTerm) params.set('term', currentTerm);
+      if (currentSession) params.set('session', currentSession);
+      const res = await fetch(`/api/payments/tuition-balances?${params.toString()}`, { credentials: 'include', headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!schoolId && !!currentTerm && !!currentSession && isRecordDialogOpen,
+  });
+
+  const tuitionBalanceMap = useMemo(() => {
+    const m = new Map<string, { assigned: number; paid: number; due: number }>();
+    for (const r of tuitionBalancesData) {
+      const due = Math.max(0, r.tuitionAssigned - r.tuitionPaid);
+      m.set(r.studentDbId, { assigned: r.tuitionAssigned, paid: r.tuitionPaid, due });
+    }
+    return m;
+  }, [tuitionBalancesData]);
+
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
     queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, filterTerm, filterSession],
     queryFn: async () => {
@@ -324,6 +357,7 @@ export function PaymentRecording({
     }
 
     queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
   };
 
   const currentPurpose = form.watch("purpose");
@@ -446,6 +480,7 @@ export function PaymentRecording({
           },
         });
         queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
         toast({
           title: "Payment Recorded",
           description: `Split payment of ₦${totalAmount.toLocaleString()} recorded for ${studentCount} students.`,
@@ -460,6 +495,7 @@ export function PaymentRecording({
           amount: totalAmount,
         });
         queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
         toast({
           title: "Payment Recorded",
           description: `Payment of ₦${totalAmount.toLocaleString()} recorded successfully.`,
@@ -758,7 +794,11 @@ export function PaymentRecording({
                         )}
                       </div>
                       <div className="border rounded-md divide-y">
-                        {selectedEntries.map((entry) => (
+                        {selectedEntries.map((entry) => {
+                          const bal = tuitionBalanceMap.get(entry.student.id);
+                          const showBalance = !!bal && bal.assigned > 0;
+                          const fullyPaid = showBalance && bal.due === 0;
+                          return (
                           <div key={entry.student.id} className="p-3 flex items-center gap-3">
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-sm truncate">
@@ -767,6 +807,19 @@ export function PaymentRecording({
                               <div className="text-xs text-muted-foreground">
                                 {entry.student.studentId} | {entry.student.className || "N/A"}
                               </div>
+                              {showBalance && (
+                                fullyPaid ? (
+                                  <div className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-green-700 dark:text-green-400" data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Tuition fully paid for {currentTerm}
+                                  </div>
+                                ) : (
+                                  <div className={`text-[11px] mt-0.5 ${bal.paid > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                    Tuition: ₦{bal.assigned.toLocaleString()} assigned · ₦{bal.paid.toLocaleString()} paid ·{" "}
+                                    <span className="font-medium">₦{bal.due.toLocaleString()} due</span>
+                                  </div>
+                                )
+                              )}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                               {/* Fix #2a: single student shows read-only amount from totalAmount */}
@@ -798,7 +851,8 @@ export function PaymentRecording({
                               </Button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       {/* Fix #2b: hide allocation strip for single student */}
                       {totalAmount > 0 && studentCount > 1 && (

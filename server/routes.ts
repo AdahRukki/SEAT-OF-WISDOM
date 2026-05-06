@@ -3561,6 +3561,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/payments/tuition-balances", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = (user.role === 'sub-admin' || user.role === 'bursar') ? user.schoolId : req.query.schoolId as string;
+      if (!schoolId) return res.status(400).json({ error: "schoolId is required" });
+      const term = req.query.term as string | undefined;
+      const session = req.query.session as string | undefined;
+      if (!term || !session) return res.status(400).json({ error: "term and session are required" });
+      const balances = await storage.getStudentTuitionBalances(schoolId, term, session);
+      res.json(balances);
+    } catch (error) {
+      console.error("Get tuition balances error:", error);
+      res.status(500).json({ error: "Failed to fetch tuition balances" });
+    }
+  });
+
   app.get("/api/payments/ledger", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
