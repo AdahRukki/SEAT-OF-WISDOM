@@ -356,31 +356,34 @@ export function PaymentRecording({
   const syncPendingPayments = async () => {
     const toSync = pendingPayments.filter(p => typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_'));
     const keep = pendingPayments.filter(p => !(typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_')));
-    const failed: any[] = [];
+    const failedAttempts: any[] = [];
 
     for (const payment of toSync) {
       try {
         // payment object already carries its clientRequestId — server dedupes replays
         await apiRequest("/api/payments/record", { method: "POST", body: payment });
       } catch {
-        failed.push(payment);
+        failedAttempts.push(payment);
       }
     }
 
-    // Re-merge non-syncable optimistic rows so they remain visible
-    failed.push(...keep);
+    // Counts must reflect ONLY rows we actually attempted to sync — not the
+    // unrelated optimistic rows we had to retain for visibility.
+    const syncedCount = toSync.length - failedAttempts.length;
+    const failedCount = failedAttempts.length;
 
-    setPendingPayments(failed);
+    // Persist: keep failed-this-pass items + any rows we never tried.
+    setPendingPayments([...failedAttempts, ...keep]);
 
-    if (failed.length === 0) {
+    if (failedCount === 0) {
       toast({
         title: "Sync Complete",
-        description: `Successfully synced ${toSync.length} pending payment(s).`,
+        description: `Successfully synced ${syncedCount} pending payment(s).`,
       });
     } else {
       toast({
         title: "Partial Sync",
-        description: `${toSync.length - failed.length} synced, ${failed.length} failed.`,
+        description: `${syncedCount} synced, ${failedCount} failed.`,
         variant: "destructive",
       });
     }
@@ -1234,12 +1237,21 @@ export function PaymentRecording({
           </div>
         </div>
 
-        {pendingPayments.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
-            {pendingPayments.length} offline payment(s) syncing when connected…
-          </div>
-        )}
+        {pendingPayments.length > 0 && (() => {
+          const saving = pendingPayments.filter(p => p.__status === 'saving').length;
+          const pending = pendingPayments.filter(p => p.__status === 'pending-sync').length;
+          const failed = pendingPayments.filter(p => p.__status === 'failed').length;
+          const parts: string[] = [];
+          if (saving) parts.push(`${saving} saving`);
+          if (pending) parts.push(`${pending} pending sync`);
+          if (failed) parts.push(`${failed} failed`);
+          return (
+            <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+              {parts.length > 0 ? parts.join(' · ') : `${pendingPayments.length} payment(s) in progress`}
+            </div>
+          );
+        })()}
 
         <Card>
           <CardContent className="p-0">
