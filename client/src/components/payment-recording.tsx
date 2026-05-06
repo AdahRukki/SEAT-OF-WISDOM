@@ -63,6 +63,7 @@ import {
   Eye,
   EyeOff,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeePaymentStudentSplit, type FeeType } from "@shared/schema";
 
@@ -189,16 +190,21 @@ export function PaymentRecording({
     }
   }, [isOnline]);
 
-  // Reconcile optimistic rows when the offline queue drains. Any payment that
-  // was queued (slow-network or fully offline) and is no longer in the queue
-  // has either succeeded server-side or been dropped — drop the optimistic row
-  // and refetch so the canonical record appears.
+  // Reconcile optimistic rows when the offline queue drains. Only clear
+  // 'pending-sync' rows when the queue is fully empty AND at least one item
+  // succeeded — keep 'saving' / 'failed' rows visible always, and keep
+  // pending-sync rows visible while items are still queued or network-failed
+  // so nothing is silently lost.
   useEffect(() => {
     const off = addSyncListener((status) => {
       if (status.justSynced) {
-        setPendingPayments((prev) => prev.filter((p) => p.__status === 'failed'));
         queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
         queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+        const queueEmpty = (status.pendingCount ?? getPendingCount()) === 0;
+        const anySucceeded = (status.succeededCount ?? 0) > 0;
+        if (queueEmpty && anySucceeded) {
+          setPendingPayments((prev) => prev.filter((p) => p.__status !== 'pending-sync'));
+        }
       }
     });
     return off;
@@ -455,36 +461,9 @@ export function PaymentRecording({
     const resolvedPurpose = commonData.purpose === "Other" ? customPurpose.trim() : commonData.purpose;
     const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
 
-    if (!isOnline) {
-      if (studentCount > 1) {
-        // Multi-student payments must be online — they require a single atomic DB record
-        toast({
-          title: "Connection Required",
-          description: "Split payments for multiple students require an internet connection. Please reconnect and try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-      // Single-student offline flow
-      const offlinePayments = selectedEntries.map((entry) => ({
-        ...dataWithPurpose,
-        studentId: entry.student.id,
-        student: entry.student,
-        amount: totalAmount,
-        offlineId: `offline_${Date.now()}_${entry.student.id}`,
-        // Stable idempotency key so replay (online or via queue) is deduped server-side
-        clientRequestId: generateClientRequestId(),
-        createdAt: new Date().toISOString(),
-        __status: 'pending-sync' as const,
-      }));
-      setPendingPayments([...pendingPayments, ...offlinePayments]);
-      toast({
-        title: "Payment Saved Offline",
-        description: "Payment will be synced when you're back online.",
-      });
-      closeAndReset();
-      return;
-    }
+    // No hard offline block: every submission flows through the queued helper
+    // below so it appears optimistically and syncs when online — single-student
+    // and multi-student alike. Server idempotency keeps replays safe.
 
     setIsSubmitting(true);
 

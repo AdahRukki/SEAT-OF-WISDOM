@@ -1066,9 +1066,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Idempotency: if a student already exists for this clientRequestId, return it
       // instead of inserting a duplicate. Protects against offline-queue replays of a
       // request that actually succeeded server-side but timed out client-side.
+      // Authorization: re-assert school ownership on the existing record so a
+      // leaked/guessed clientRequestId can never expose another school's student.
       if (clientRequestId && typeof clientRequestId === 'string') {
         const existing = await storage.getStudentByClientRequestId(clientRequestId);
         if (existing) {
+          const callerSchoolId = (req as any).user?.schoolId;
+          const callerRole = (req as any).user?.role;
+          const existingClass = await storage.getClassById(existing.classId);
+          if ((callerRole === 'sub-admin' || callerRole === 'bursar') && callerSchoolId && existingClass?.schoolId !== callerSchoolId) {
+            return res.status(403).json({ error: "Not allowed" });
+          }
           const existingUser = await storage.getUserById(existing.userId);
           return res.json({
             message: "Student already created (idempotent replay)",
@@ -1156,6 +1164,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (clientRequestId && isUniqueViolation) {
           const existing = await storage.getStudentByClientRequestId(clientRequestId);
           if (existing) {
+            const callerSchoolId = (req as any).user?.schoolId;
+            const callerRole = (req as any).user?.role;
+            const existingClass = await storage.getClassById(existing.classId);
+            if ((callerRole === 'sub-admin' || callerRole === 'bursar') && callerSchoolId && existingClass?.schoolId !== callerSchoolId) {
+              return res.status(403).json({ error: "Not allowed" });
+            }
             const existingUser = await storage.getUserById(existing.userId);
             return res.json({
               message: "Student already created (idempotent replay)",
