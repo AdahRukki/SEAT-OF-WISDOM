@@ -3498,6 +3498,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (validatedData.clientRequestId && isUniqueViolation) {
           const existing = await storage.getFeePaymentByClientRequestId(validatedData.clientRequestId);
           if (existing) {
+            // Mirror pre-check authz: never leak another school's payment
+            // through a TOCTOU race on the unique-violation recovery path.
+            if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && existing.schoolId !== user.schoolId) {
+              return res.status(403).json({ error: "Not allowed" });
+            }
             return res.status(200).json({ ...existing, idempotent: true });
           }
         }
@@ -3592,6 +3597,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (clientRequestId && isUniqueViolation) {
           const existing = await storage.getFeePaymentByClientRequestId(clientRequestId);
           if (existing) {
+            // Mirror pre-check authz on race recovery path.
+            if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && existing.schoolId !== user.schoolId) {
+              return res.status(403).json({ error: "Not allowed" });
+            }
             return res.status(200).json({ ...existing, idempotent: true });
           }
         }
