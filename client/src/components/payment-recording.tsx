@@ -169,9 +169,11 @@ export function PaymentRecording({
     if (saved) {
       const loaded = JSON.parse(saved);
       setPendingPayments(loaded);
-      if (navigator.onLine && loaded.length > 0) {
-        syncPendingPayments();
-      }
+      // NOTE: we no longer auto-replay pendingPayments via the legacy
+      // syncPendingPayments() helper because optimistic rows for multi-student
+      // submissions also live in this list and must NOT be re-posted as
+      // single-payment rows. The offline queue handles the actual replay of
+      // original requests with their correct endpoint/body.
     }
 
     return () => {
@@ -184,11 +186,9 @@ export function PaymentRecording({
     localStorage.setItem("pendingPayments", JSON.stringify(pendingPayments));
   }, [pendingPayments]);
 
-  useEffect(() => {
-    if (isOnline && pendingPayments.length > 0) {
-      syncPendingPayments();
-    }
-  }, [isOnline]);
+  // (Intentionally no auto-syncPendingPayments on isOnline — the offline
+  // queue is the single source of truth for replay; this list is purely
+  // optimistic UI state.)
 
   // Reconcile optimistic rows when the offline queue drains. Only clear
   // 'pending-sync' rows when the queue is fully empty AND at least one item
@@ -351,8 +351,14 @@ export function PaymentRecording({
     },
   });
 
+  // Legacy helper kept for the manual "Sync Now" button. Replays ONLY rows
+  // that originated as single-student offline submissions (offlineId prefix
+  // 'offline_'); optimistic rows for multi-student requests are skipped here
+  // because the offline queue replays the original /multi request with its
+  // own clientRequestId.
   const syncPendingPayments = async () => {
-    const toSync = [...pendingPayments];
+    const toSync = pendingPayments.filter(p => typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_'));
+    const keep = pendingPayments.filter(p => !(typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_')));
     const failed: any[] = [];
 
     for (const payment of toSync) {
@@ -363,6 +369,9 @@ export function PaymentRecording({
         failed.push(payment);
       }
     }
+
+    // Re-merge non-syncable optimistic rows so they remain visible
+    failed.push(...keep);
 
     setPendingPayments(failed);
 
