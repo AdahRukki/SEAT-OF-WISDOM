@@ -190,22 +190,26 @@ export function PaymentRecording({
   // queue is the single source of truth for replay; this list is purely
   // optimistic UI state.)
 
-  // Reconcile optimistic rows when the offline queue drains. Only clear
-  // 'pending-sync' rows when the queue is fully empty AND at least one item
-  // succeeded — keep 'saving' / 'failed' rows visible always, and keep
-  // pending-sync rows visible while items are still queued or network-failed
-  // so nothing is silently lost.
+  // Per-operation reconciliation: when the queue drains, only mutate the
+  // optimistic rows whose clientRequestId matches a confirmed outcome.
+  //  - succeededOps  -> remove the row (canonical record arrives via refetch)
+  //  - droppedOps    -> mark the row 'failed' so Retry/Discard becomes available
+  //  - retryingOps   -> leave as 'pending-sync' so it stays visible
+  // Rows with no matching outcome stay as-is so nothing is silently lost.
   useEffect(() => {
     const off = addSyncListener((status) => {
-      if (status.justSynced) {
-        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
-        const queueEmpty = (status.pendingCount ?? getPendingCount()) === 0;
-        const anySucceeded = (status.succeededCount ?? 0) > 0;
-        if (queueEmpty && anySucceeded) {
-          setPendingPayments((prev) => prev.filter((p) => p.__status !== 'pending-sync'));
-        }
-      }
+      if (!status.justSynced) return;
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+      const succeededIds = new Set((status.succeededOps ?? []).map(o => o.clientRequestId).filter(Boolean) as string[]);
+      const droppedIds = new Set((status.droppedOps ?? []).map(o => o.clientRequestId).filter(Boolean) as string[]);
+      if (succeededIds.size === 0 && droppedIds.size === 0) return;
+      setPendingPayments((prev) => prev
+        .filter(p => !(p.clientRequestId && succeededIds.has(p.clientRequestId)))
+        .map(p => (p.clientRequestId && droppedIds.has(p.clientRequestId))
+          ? { ...p, __status: 'failed' as const }
+          : p),
+      );
     });
     return off;
   }, [queryClient]);

@@ -26,6 +26,12 @@ export interface OfflineStudent {
   queueOperationId: string;
 }
 
+export interface OpResult {
+  clientRequestId?: string;
+  type: string;
+  url: string;
+}
+
 export interface SyncStatus {
   syncing: boolean;
   pendingCount: number;
@@ -36,6 +42,22 @@ export interface SyncStatus {
   droppedCount?: number;
   stillPendingFailures?: number;
   networkFailures?: number;
+  // Per-operation outcomes so UIs can correlate optimistic rows by clientRequestId
+  succeededOps?: OpResult[];
+  droppedOps?: OpResult[];   // permanently failed (retry budget exhausted)
+  retryingOps?: OpResult[];  // server-failure but will retry
+}
+
+function extractClientRequestId(body: unknown): string | undefined {
+  if (body && typeof body === 'object' && 'clientRequestId' in (body as any)) {
+    const v = (body as any).clientRequestId;
+    return typeof v === 'string' ? v : undefined;
+  }
+  return undefined;
+}
+
+function opToResult(op: QueuedOperation): OpResult {
+  return { clientRequestId: extractClientRequestId(op.body), type: op.type, url: op.url };
 }
 
 type SyncListener = (status: SyncStatus) => void;
@@ -164,10 +186,14 @@ export async function processOfflineQueue(opts: { force?: boolean } = {}): Promi
   let droppedCount = 0;
   let stillPendingFailures = 0;
   let networkFailures = 0;
+  const succeededOps: OpResult[] = [];
+  const droppedOps: OpResult[] = [];
+  const retryingOps: OpResult[] = [];
   for (const op of queue) {
     const result = await replayOperation(op, token);
     if (result === 'success') {
       succeededCount += 1;
+      succeededOps.push(opToResult(op));
       if (op.type === 'create-student') {
         removeOfflineStudentByQueueId(op.id);
         studentsChanged = true;
@@ -177,8 +203,10 @@ export async function processOfflineQueue(opts: { force?: boolean } = {}): Promi
       if (op.retryCount < 5) {
         remaining.push(op);
         stillPendingFailures += 1;
+        retryingOps.push(opToResult(op));
       } else {
         droppedCount += 1;
+        droppedOps.push(opToResult(op));
       }
     } else {
       // Network failure: keep the item in the queue without consuming its
@@ -201,6 +229,9 @@ export async function processOfflineQueue(opts: { force?: boolean } = {}): Promi
     droppedCount,
     stillPendingFailures,
     networkFailures,
+    succeededOps,
+    droppedOps,
+    retryingOps,
   });
 
   setTimeout(() => {
