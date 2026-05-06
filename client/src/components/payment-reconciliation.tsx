@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,8 @@ import {
   Calendar,
   Trash2,
   Search,
+  Clock,
+  WifiOff,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails } from "@shared/schema";
 
@@ -148,6 +151,36 @@ interface PaymentReconciliationProps {
 export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
+  const [uploadElapsedMs, setUploadElapsedMs] = useState(0);
+  // Sticks around after a failed upload while the browser is offline so the
+  // admin can clearly see "you're offline, reconnect and retry" instead of a
+  // generic toast that disappears.
+  const [uploadOfflineFailure, setUploadOfflineFailure] = useState(false);
+  const { isOnline } = useNetworkStatus();
+
+  // Tick a timer while an upload is in flight so we can flip the in-progress
+  // badge from a normal "Uploading…" state to a distinct "slow network" state
+  // after a few seconds — matching the slow-network badge on the payments page.
+  useEffect(() => {
+    if (!isUploading || uploadStartedAt === null) {
+      setUploadElapsedMs(0);
+      return;
+    }
+    const tick = () => setUploadElapsedMs(Date.now() - uploadStartedAt);
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isUploading, uploadStartedAt]);
+
+  // Auto-clear the offline-failure banner once connectivity returns so the
+  // admin can retry without dismissing anything manually.
+  useEffect(() => {
+    if (isOnline && uploadOfflineFailure) setUploadOfflineFailure(false);
+  }, [isOnline, uploadOfflineFailure]);
+
+  const uploadIsSlow = isUploading && isOnline && uploadElapsedMs >= 5000;
+  const uploadIsOffline = (isUploading && !isOnline) || uploadOfflineFailure;
   const [selectedPayment, setSelectedPayment] = useState<FeePaymentRecordWithDetails | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<BankTransaction | null>(null);
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
@@ -282,6 +315,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       return res;
     },
     onSuccess: (data) => {
+      setUploadOfflineFailure(false);
       toast({
         title: "Statement Uploaded",
         description: `Processed ${data.newTransactions} new transactions. ${data.duplicatesSkipped} duplicates skipped.`,
@@ -292,6 +326,19 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
     },
     onError: (error: Error) => {
+      // If the failure was simply because the device is offline, surface the
+      // offline badge instead of a destructive toast that vanishes — the user
+      // needs a sticky cue that the request didn't go through and they should
+      // retry once reconnected. (File uploads can't be replayed by the offline
+      // queue today, so we explicitly do *not* claim a sync will happen.)
+      if (!navigator.onLine) {
+        setUploadOfflineFailure(true);
+        toast({
+          title: "Upload paused — you're offline",
+          description: "Reconnect and click Upload & Process again to retry.",
+        });
+        return;
+      }
       toast({
         title: "Upload Failed",
         description: error.message || "Failed to upload bank statement",
@@ -437,9 +484,14 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
   const handleUpload = () => {
     if (!selectedFile) return;
+    setUploadOfflineFailure(false);
     setIsUploading(true);
+    setUploadStartedAt(Date.now());
     uploadMutation.mutate(selectedFile, {
-      onSettled: () => setIsUploading(false),
+      onSettled: () => {
+        setIsUploading(false);
+        setUploadStartedAt(null);
+      },
     });
   };
 
@@ -766,6 +818,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       onClick={handleUpload}
                       disabled={isUploading}
                       className="mt-4"
+                      data-testid="button-upload-statement"
                     >
                       {isUploading ? (
                         <>
@@ -779,6 +832,40 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                         </>
                       )}
                     </Button>
+                    {(isUploading || uploadOfflineFailure) && (
+                      <div className="mt-3 flex justify-center" data-testid="badge-upload-status">
+                        {uploadIsOffline ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-50 text-amber-700 border-amber-300 gap-1"
+                            title="You're offline. Bank statement uploads can't be queued for replay — reconnect and click Upload & Process to retry."
+                            data-testid="badge-upload-offline"
+                          >
+                            <WifiOff className="h-3 w-3" />
+                            Offline — reconnect to upload
+                          </Badge>
+                        ) : uploadIsSlow ? (
+                          <Badge
+                            variant="outline"
+                            className="bg-indigo-50 text-indigo-700 border-indigo-300 gap-1"
+                            title="Request is in flight on a slow network. Please keep this page open."
+                            data-testid="badge-upload-slow"
+                          >
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Saving — slow network
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-50 text-blue-700 border-blue-300 gap-1"
+                            data-testid="badge-upload-saving"
+                          >
+                            <Clock className="h-3 w-3" />
+                            Uploading…
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
