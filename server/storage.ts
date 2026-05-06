@@ -211,18 +211,26 @@ export interface IStorage {
   }>>;
   
   getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
-    studentDbId: string;
-    studentId: string;
-    firstName: string;
-    lastName: string;
-    className: string;
-    classId: string;
-    totalPaid: number;
-    totalAssigned: number;
-    balance: number;
-    paymentCount: number;
-    lastPaymentDate: string | null;
-  }[]>;
+    entries: {
+      studentDbId: string;
+      studentId: string;
+      firstName: string;
+      lastName: string;
+      className: string;
+      classId: string;
+      totalPaid: number;
+      totalAssigned: number;
+      tuitionAssigned: number;
+      balance: number;
+      paymentCount: number;
+      lastPaymentDate: string | null;
+    }[];
+    meta: {
+      hasTuitionFeeType: boolean;
+      hasGlobalTuition: boolean;
+      hasScopedTuition: boolean;
+    };
+  }>;
   getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{
     classes: Array<{
       classId: string;
