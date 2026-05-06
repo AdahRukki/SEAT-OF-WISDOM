@@ -260,11 +260,20 @@ export interface IStorage {
     totalPending: number;
     totalOverdue: number;
     totalRevenue: number;
+    actualTuitionCollected: number;
     totalOutstanding: number;
     collectionRate: number;
     studentsOwing: number;
     totalPosFees: number;
   }>;
+  getTuitionCollectionByClass(schoolId: string, term?: string, session?: string): Promise<Array<{
+    classId: string;
+    className: string;
+    activeStudentCount: number;
+    expectedTuition: number;
+    tuitionCollected: number;
+    collectionRate: number | null;
+  }>>;
 
   // Settings operations
   getSetting(key: string): Promise<Setting | undefined>;
@@ -1925,6 +1934,102 @@ export class DatabaseStorage implements IStorage {
       studentsOwing,
       totalPosFees,
     };
+  }
+
+  async getTuitionCollectionByClass(schoolId: string, term?: string, session?: string): Promise<Array<{
+    classId: string;
+    className: string;
+    activeStudentCount: number;
+    expectedTuition: number;
+    tuitionCollected: number;
+    collectionRate: number | null;
+  }>> {
+    // All classes for the school (so empty classes still appear).
+    const schoolClasses = await db
+      .select({ id: classes.id, name: classes.name })
+      .from(classes)
+      .where(eq(classes.schoolId, schoolId));
+
+    // Active students in the school, with their classId.
+    const activeStudentsRows = await db.execute(sql`
+      SELECT s.id, s.class_id AS "classId"
+      FROM students s
+      JOIN users u ON s.user_id = u.id
+      WHERE u.is_active = true
+        AND u.school_id = ${schoolId}
+    `);
+    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string }[];
+
+    // Active tuition fee type for this school.
+    const tuitionFeeConditions: any[] = [
+      eq(feeTypes.isTuition, true),
+      eq(feeTypes.isActive, true),
+      eq(feeTypes.schoolId, schoolId),
+    ];
+    const [tuitionFeeType] = await db.select().from(feeTypes).where(and(...tuitionFeeConditions)).limit(1);
+
+    // Per-class tuition amount map (fall back to global if scoped is empty).
+    let classAmountMap = new Map<string, number>();
+    if (tuitionFeeType) {
+      let tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id, term, session);
+      if (tuitionAmounts.length === 0 && (term || session)) {
+        tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
+      }
+      classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
+    }
+
+    // Per-student paid tuition for the scope.
+    const studentPaidMap = new Map<string, number>();
+    if (tuitionFeeType) {
+      const tuitionPaymentConditions: any[] = [
+        eq(feePaymentRecords.status, 'confirmed'),
+        eq(feePaymentRecords.purpose, tuitionFeeType.name),
+        eq(feePaymentRecords.schoolId, schoolId),
+      ];
+      if (term) tuitionPaymentConditions.push(eq(feePaymentRecords.term, term));
+      if (session) tuitionPaymentConditions.push(eq(feePaymentRecords.session, session));
+
+      const paidRows = await db
+        .select({
+          studentId: feePaymentRecords.studentId,
+          total: sql<string>`COALESCE(SUM(${feePaymentRecords.amount}), 0)`,
+        })
+        .from(feePaymentRecords)
+        .where(and(...tuitionPaymentConditions))
+        .groupBy(feePaymentRecords.studentId);
+      for (const r of paidRows) studentPaidMap.set(r.studentId, Number(r.total || 0));
+    }
+
+    // Aggregate per class.
+    const perClass = new Map<string, { activeStudentCount: number; expectedTuition: number; tuitionCollected: number }>();
+    for (const cls of schoolClasses) {
+      perClass.set(cls.id, { activeStudentCount: 0, expectedTuition: 0, tuitionCollected: 0 });
+    }
+    for (const student of allActiveStudents) {
+      if (!student.classId) continue;
+      const bucket = perClass.get(student.classId);
+      if (!bucket) continue;
+      bucket.activeStudentCount += 1;
+      const owed = classAmountMap.get(student.classId) || 0;
+      const paid = studentPaidMap.get(student.id) || 0;
+      bucket.expectedTuition += owed;
+      bucket.tuitionCollected += Math.min(paid, owed);
+    }
+
+    return schoolClasses.map(cls => {
+      const b = perClass.get(cls.id)!;
+      const rate = b.expectedTuition > 0
+        ? Math.round((b.tuitionCollected / b.expectedTuition) * 100)
+        : null;
+      return {
+        classId: cls.id,
+        className: cls.name,
+        activeStudentCount: b.activeStudentCount,
+        expectedTuition: b.expectedTuition,
+        tuitionCollected: b.tuitionCollected,
+        collectionRate: rate,
+      };
+    });
   }
 
   // Settings operations

@@ -125,7 +125,8 @@ import {
   Printer,
   Search,
   CloudOff,
-  Inbox
+  Inbox,
+  BarChart3
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { InquiriesManagement } from "@/components/inquiries-management";
@@ -335,6 +336,122 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
         </Table>
       </div>
     </div>
+  );
+}
+
+type ClassTuitionRow = {
+  classId: string;
+  className: string;
+  activeStudentCount: number;
+  expectedTuition: number;
+  tuitionCollected: number;
+  collectionRate: number | null;
+};
+
+function ClassTuitionBreakdownDialog({
+  open,
+  onOpenChange,
+  schoolId,
+  schoolName,
+  term,
+  session,
+  sortClassesByOrder,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  schoolId: string;
+  schoolName: string;
+  term: string;
+  session: string;
+  sortClassesByOrder: (c: any[]) => any[];
+}) {
+  const { data: rows = [], isLoading } = useQuery<ClassTuitionRow[]>({
+    queryKey: ['/api/admin/financial-summary/by-class', schoolId, term, session],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (schoolId) params.set('schoolId', schoolId);
+      if (term) params.set('term', term);
+      if (session) params.set('session', session);
+      return apiRequest(`/api/admin/financial-summary/by-class?${params.toString()}`);
+    },
+    enabled: open && !!schoolId,
+  });
+
+  const sortedRows = sortClassesByOrder(
+    (rows as any[]).map(r => ({ ...r, name: r.className }))
+  ) as ClassTuitionRow[];
+
+  const totals = sortedRows.reduce(
+    (acc, r) => {
+      acc.activeStudentCount += r.activeStudentCount;
+      acc.expectedTuition += r.expectedTuition;
+      acc.tuitionCollected += r.tuitionCollected;
+      return acc;
+    },
+    { activeStudentCount: 0, expectedTuition: 0, tuitionCollected: 0 }
+  );
+  const totalRate = totals.expectedTuition > 0
+    ? Math.round((totals.tuitionCollected / totals.expectedTuition) * 100)
+    : null;
+
+  const fmt = (n: number) => `₦${n.toLocaleString()}`;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Tuition Collection by Class
+          </DialogTitle>
+          <DialogDescription>
+            {[schoolName, term, session].filter(Boolean).join(' · ')}
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : sortedRows.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            No classes found for this school.
+          </div>
+        ) : (
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Class</TableHead>
+                  <TableHead className="text-right">Active Students</TableHead>
+                  <TableHead className="text-right">Expected Tuition</TableHead>
+                  <TableHead className="text-right">Tuition Collected</TableHead>
+                  <TableHead className="text-right">Collection %</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedRows.map(r => (
+                  <TableRow key={r.classId} data-testid={`row-class-tuition-${r.classId}`}>
+                    <TableCell className="font-medium">{r.className}</TableCell>
+                    <TableCell className="text-right">{r.activeStudentCount}</TableCell>
+                    <TableCell className="text-right">{fmt(r.expectedTuition)}</TableCell>
+                    <TableCell className="text-right">{fmt(r.tuitionCollected)}</TableCell>
+                    <TableCell className="text-right">
+                      {r.collectionRate === null ? '—' : `${r.collectionRate}%`}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-bold bg-muted/40" data-testid="row-class-tuition-total">
+                  <TableCell>Total</TableCell>
+                  <TableCell className="text-right">{totals.activeStudentCount}</TableCell>
+                  <TableCell className="text-right">{fmt(totals.expectedTuition)}</TableCell>
+                  <TableCell className="text-right">{fmt(totals.tuitionCollected)}</TableCell>
+                  <TableCell className="text-right">
+                    {totalRate === null ? '—' : `${totalRate}%`}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -706,6 +823,7 @@ export default function AdminDashboard() {
   const [editTuitionScopeTerm, setEditTuitionScopeTerm] = useState<string>("");
   const [editTuitionScopeSession, setEditTuitionScopeSession] = useState<string>("");
   const [assignFeeClassIds, setAssignFeeClassIds] = useState<string[]>([]);
+  const [isClassTuitionDialogOpen, setIsClassTuitionDialogOpen] = useState(false);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
   const [showFinanceDetails, setShowFinanceDetails] = useState(true);
@@ -4742,6 +4860,29 @@ export default function AdminDashboard() {
                 </Card>
               )}
             </div>
+
+            {user?.role === 'admin' && (
+              <div className="mb-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsClassTuitionDialogOpen(true)}
+                  data-testid="button-class-tuition-breakdown"
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  View class tuition breakdown
+                </Button>
+                <ClassTuitionBreakdownDialog
+                  open={isClassTuitionDialogOpen}
+                  onOpenChange={setIsClassTuitionDialogOpen}
+                  schoolId={selectedSchoolId}
+                  schoolName={schools.find((s) => s.id === selectedSchoolId)?.name || ''}
+                  term={selectedFinanceTerm}
+                  session={selectedFinanceSession}
+                  sortClassesByOrder={sortClassesByOrder}
+                />
+              </div>
+            )}
 
             {/* Fee Types Management - Admin Only */}
             {user?.role === 'admin' && (<Card>

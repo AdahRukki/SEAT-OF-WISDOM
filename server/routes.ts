@@ -2902,6 +2902,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Per-class tuition collection breakdown
+  app.get('/api/admin/financial-summary/by-class', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
+      const term = req.query.term as string | undefined;
+      const session = req.query.session as string | undefined;
+      if (!schoolId) {
+        return res.status(400).json({ error: 'schoolId is required' });
+      }
+      const rows = await storage.getTuitionCollectionByClass(schoolId, term, session);
+      res.json(rows);
+    } catch (error) {
+      console.error("Get tuition collection by class error:", error);
+      res.status(500).json({ error: "Failed to fetch tuition collection by class" });
+    }
+  });
+
   // Attendance tracking routes
   app.get("/api/admin/attendance/class/:classId", authenticate, async (req: Request, res: Response) => {
     const { classId } = req.params;
