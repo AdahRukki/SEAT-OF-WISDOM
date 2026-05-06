@@ -390,22 +390,29 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
   const hasGlobal = scopeGroups.has('');
   const hasCurrentScoped = currentScopeKey !== '' && scopeGroups.has(currentScopeKey);
 
-  // Default the visible group to the school's current scope if it exists,
-  // otherwise to Global, otherwise to the first group available.
-  const initialKey = hasCurrentScoped
+  // Preferred default recomputed every render so it tracks data + props.
+  // Order: current scope (if it has rows) → Global → first scope available.
+  const preferredKey = hasCurrentScoped
     ? currentScopeKey
     : hasGlobal
     ? ''
     : orderedScopeKeys[0] ?? '';
-  const [visibleScopeKey, setVisibleScopeKey] = useState<string>(initialKey);
 
-  // Re-sync if scopes change (e.g., after a save adds a new scope).
+  // User explicit override (null = follow preferredKey).
+  const [userPickedScopeKey, setUserPickedScopeKey] = useState<string | null>(null);
+
+  // If the user's picked key vanishes (e.g. scope was deleted), drop the override.
   useEffect(() => {
-    if (!scopeGroups.has(visibleScopeKey)) {
-      setVisibleScopeKey(initialKey);
+    if (userPickedScopeKey !== null && !scopeGroups.has(userPickedScopeKey)) {
+      setUserPickedScopeKey(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderedScopeKeys.join(',')]);
+
+  const visibleScopeKey =
+    userPickedScopeKey !== null && scopeGroups.has(userPickedScopeKey)
+      ? userPickedScopeKey
+      : preferredKey;
 
   const scopeLabel = (key: string) => {
     if (key === '') return 'Global (default)';
@@ -450,7 +457,7 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
                         <button
                           key={k || 'global'}
                           type="button"
-                          onClick={() => setVisibleScopeKey(k)}
+                          onClick={() => setUserPickedScopeKey(k)}
                           className={`px-2 py-0.5 rounded-full text-xs border transition ${
                             visibleScopeKey === k
                               ? 'bg-blue-600 text-white border-blue-600'
@@ -687,6 +694,12 @@ export default function AdminDashboard() {
   const [isTuitionMode, setIsTuitionMode] = useState(false);
   const [tuitionClassAmountsMap, setTuitionClassAmountsMap] = useState<Record<string, string>>({});
   const [editTuitionClassAmountsMap, setEditTuitionClassAmountsMap] = useState<Record<string, string>>({});
+  // True when the scoped view is showing values inherited from globals
+  // because no scoped rows exist yet (per-row "Inherited from global" hint).
+  const [editScopeIsInherited, setEditScopeIsInherited] = useState<boolean>(false);
+  // Class IDs whose value was prefilled from the global default in the
+  // current scoped view (used for per-row inheritance hint until the user edits).
+  const [editInheritedClassIds, setEditInheritedClassIds] = useState<Set<string>>(new Set());
   // Scope (term/session) for tuition setup. Empty string = "All" (global, NULL in DB).
   const [tuitionScopeTerm, setTuitionScopeTerm] = useState<string>("");
   const [tuitionScopeSession, setTuitionScopeSession] = useState<string>("");
@@ -799,18 +812,22 @@ export default function AdminDashboard() {
         const globals = allRows.filter((r: any) => r.term === null && r.session === null);
         const bothPicked = !!(editTuitionScopeTerm && editTuitionScopeSession);
         let rows: any[];
+        let inherited = false;
         if (!bothPicked) {
           // "All terms / All sessions" view → show only true global rows.
           rows = globals;
         } else {
           const scoped = allRows.filter((r: any) => r.term === editTuitionScopeTerm && r.session === editTuitionScopeSession);
           // Prefill from globals when no scoped rows exist yet.
+          inherited = scoped.length === 0 && globals.length > 0;
           rows = scoped.length > 0 ? scoped : globals;
         }
         if (cancelled) return;
         const map: Record<string, string> = {};
         rows.forEach((ta: any) => { map[ta.classId] = ta.amount; });
         setEditTuitionClassAmountsMap(map);
+        setEditScopeIsInherited(inherited);
+        setEditInheritedClassIds(inherited ? new Set(Object.keys(map)) : new Set());
       } catch {
         // ignore — leave existing map untouched
       }
@@ -7191,23 +7208,48 @@ export default function AdminDashboard() {
                   </div>
                   <div className="space-y-2">
                     <Label>Amount per Class</Label>
+                    {editScopeIsInherited && (
+                      <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                        Pre-filled with the <strong>global default</strong> amounts. Edit any
+                        value and save to create a term/session-specific override.
+                      </p>
+                    )}
                     <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y">
-                      {sortClassesByOrder(classes).map((cls) => (
-                        <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
-                          <span className="text-sm flex-1 min-w-0 truncate">{cls.name}</span>
-                          <div className="relative w-32 shrink-0">
-                            <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
-                            <Input
-                              type="number"
-                              placeholder="0"
-                              className="pl-6 h-8 text-sm"
-                              value={editTuitionClassAmountsMap[cls.id] || ""}
-                              onChange={(e) => setEditTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }))}
-                              min={0}
-                            />
+                      {sortClassesByOrder(classes).map((cls) => {
+                        const isInheritedRow = editScopeIsInherited && editInheritedClassIds.has(cls.id);
+                        return (
+                          <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm truncate">{cls.name}</div>
+                              {isInheritedRow && (
+                                <div className="text-[10px] text-muted-foreground italic">
+                                  Inherited from global
+                                </div>
+                              )}
+                            </div>
+                            <div className="relative w-32 shrink-0">
+                              <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                className={`pl-6 h-8 text-sm ${isInheritedRow ? 'border-dashed text-muted-foreground' : ''}`}
+                                value={editTuitionClassAmountsMap[cls.id] || ""}
+                                onChange={(e) => {
+                                  setEditTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }));
+                                  if (editInheritedClassIds.has(cls.id)) {
+                                    setEditInheritedClassIds(prev => {
+                                      const next = new Set(prev);
+                                      next.delete(cls.id);
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                min={0}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </>

@@ -1406,19 +1406,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
-    studentDbId: string;
-    studentId: string;
-    firstName: string;
-    lastName: string;
-    className: string;
-    classId: string;
-    totalPaid: number;
-    totalAssigned: number;
-    tuitionAssigned: number;
-    balance: number;
-    paymentCount: number;
-    lastPaymentDate: string | null;
-  }[]> {
+    entries: {
+      studentDbId: string;
+      studentId: string;
+      firstName: string;
+      lastName: string;
+      className: string;
+      classId: string;
+      totalPaid: number;
+      totalAssigned: number;
+      tuitionAssigned: number;
+      balance: number;
+      paymentCount: number;
+      lastPaymentDate: string | null;
+    }[];
+    meta: {
+      hasTuitionFeeType: boolean;
+      hasGlobalTuition: boolean;
+      hasScopedTuition: boolean;
+    };
+  }> {
     const paymentConditions = [
       sql`fpr.school_id = ${schoolId}`,
       sql`fpr.status = 'confirmed'`,
@@ -1519,6 +1526,8 @@ export class DatabaseStorage implements IStorage {
     const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
 
     const tuitionMap = new Map<string, number>();
+    let hasGlobalTuition = false;
+    let hasScopedTuition = false;
     if (tuitionFee) {
       // Resolve per-class tuition: term/session-specific rows override
       // global (NULL term/session) rows. This avoids "—" in the ledger when
@@ -1526,19 +1535,21 @@ export class DatabaseStorage implements IStorage {
       const allRows = await this.getTuitionClassAmounts(tuitionFee.id);
       for (const ta of allRows) {
         if (ta.term === null && ta.session === null) {
+          hasGlobalTuition = true;
           tuitionMap.set(ta.classId, Number(ta.amount));
         }
       }
       if (term && session) {
         for (const ta of allRows) {
           if (ta.term === term && ta.session === session) {
+            hasScopedTuition = true;
             tuitionMap.set(ta.classId, Number(ta.amount));
           }
         }
       }
     }
 
-    return (rows.rows || rows).map((r: any) => {
+    const entries = (rows.rows || rows).map((r: any) => {
       const totalPaid = Number(r.totalPaid) || 0;
       const sfAssigned = Number(r.sfAssigned) || 0;
       const tuitionAssigned = tuitionMap.get(r.classId) || 0;
@@ -1558,6 +1569,15 @@ export class DatabaseStorage implements IStorage {
         lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
       };
     });
+
+    return {
+      entries,
+      meta: {
+        hasTuitionFeeType: !!tuitionFee,
+        hasGlobalTuition,
+        hasScopedTuition,
+      },
+    };
   }
 
   async getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{

@@ -76,6 +76,17 @@ interface PaymentRecord {
   isSplit?: boolean;
 }
 
+interface LedgerMeta {
+  hasTuitionFeeType: boolean;
+  hasGlobalTuition: boolean;
+  hasScopedTuition: boolean;
+}
+
+interface LedgerResponse {
+  entries: LedgerEntry[];
+  meta: LedgerMeta;
+}
+
 interface PaymentLedgerProps {
   schoolId?: string;
   currentTerm?: string;
@@ -138,7 +149,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
   if (selectedTerm) params.set("term", selectedTerm);
   if (selectedSession) params.set("session", selectedSession);
 
-  const { data: ledger = [], isLoading } = useQuery<LedgerEntry[]>({
+  const { data: ledgerResponse, isLoading } = useQuery<LedgerResponse>({
     queryKey: ["/api/payments/ledger", schoolId, selectedClassId, selectedTerm, selectedSession],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
@@ -146,10 +157,17 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(`/api/payments/ledger?${params.toString()}`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch ledger");
-      return res.json();
+      const json = await res.json();
+      // Tolerate older array-shaped responses just in case.
+      if (Array.isArray(json)) {
+        return { entries: json, meta: { hasTuitionFeeType: false, hasGlobalTuition: false, hasScopedTuition: false } };
+      }
+      return json;
     },
     enabled: !!schoolId,
   });
+  const ledger: LedgerEntry[] = ledgerResponse?.entries ?? [];
+  const ledgerMeta: LedgerMeta = ledgerResponse?.meta ?? { hasTuitionFeeType: false, hasGlobalTuition: false, hasScopedTuition: false };
 
   const { data: studentRecords = [], isLoading: recordsLoading } = useQuery<PaymentRecord[]>({
     queryKey: ["/api/payments/student-history", schoolId, selectedStudent?.studentDbId, selectedTerm, selectedSession],
@@ -258,14 +276,13 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
         <div className="space-y-2">
           {(() => {
             const bannerKey = `${selectedTerm}|${selectedSession}`;
-            // Only nag when truly nothing is configured: every student has 0 tuition
-            // AND there are also no recorded payments anywhere (so the resolver had
-            // nothing to apply and no payments to imply tuition is being tracked).
-            const allZeroTuition = ledger.length > 0 && ledger.every((e) => !e.tuitionAssigned);
-            const anyPaymentsRecorded = ledger.some((e) => (e.totalPaid || 0) > 0 || (e.paymentCount || 0) > 0);
+            // Fallback-aware: only show the "not configured" banner when there
+            // is no tuition fee type at all OR when neither global nor scoped
+            // tuition rows exist for this fee type.
+            const trulyMissing = !ledgerMeta.hasTuitionFeeType || (!ledgerMeta.hasGlobalTuition && !ledgerMeta.hasScopedTuition);
             const showBanner =
-              allZeroTuition &&
-              !anyPaymentsRecorded &&
+              ledger.length > 0 &&
+              trulyMissing &&
               tuitionBannerDismissed !== bannerKey;
             if (!showBanner) return null;
             return (
@@ -302,6 +319,13 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
               </div>
             );
           })()}
+          {ledgerMeta.hasTuitionFeeType && ledgerMeta.hasGlobalTuition && !ledgerMeta.hasScopedTuition && selectedTerm && selectedSession && (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="text-tuition-using-global">
+              Using <strong>global tuition defaults</strong> for{" "}
+              <strong>{selectedTerm}</strong> · <strong>{selectedSession}</strong>{" "}
+              (no term-specific override saved).
+            </div>
+          )}
           <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
