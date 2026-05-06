@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
-import { generateClientRequestId, queuedApiRequest, addSyncListener, getPendingCount } from "@/lib/offline-queue";
+import { generateClientRequestId, queuedApiRequest, addSyncListener } from "@/lib/offline-queue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -345,13 +345,6 @@ export function PaymentRecording({
       term: currentTerm || "",
       session: currentSession || "",
       notes: "",
-    },
-  });
-
-  const recordPaymentMutation = useMutation({
-    mutationFn: async (data: RecordPaymentForm & { clientRequestId?: string }) => {
-      const res = await apiRequest("/api/payments/record", { method: "POST", body: data });
-      return res;
     },
   });
 
