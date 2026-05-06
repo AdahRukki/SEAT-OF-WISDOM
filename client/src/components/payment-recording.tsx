@@ -525,7 +525,7 @@ export function PaymentRecording({
     setPendingPayments(prev => [...prev, ...optimisticRows]);
     const removeOptimistic = () =>
       setPendingPayments(prev => prev.filter(p => !p.offlineId?.startsWith(optimisticId)));
-    const markOptimisticAs = (status: 'pending-sync' | 'failed', error?: string) =>
+    const markOptimisticAs = (status: 'pending-sync' | 'pending-slow' | 'failed', error?: string) =>
       setPendingPayments(prev => prev.map(p =>
         p.offlineId?.startsWith(optimisticId) ? { ...p, __status: status, __error: error } : p
       ));
@@ -545,9 +545,9 @@ export function PaymentRecording({
           },
         }, 'create-multi-payment');
         if (multiResult?.queued) {
-          markOptimisticAs('pending-sync');
+          markOptimisticAs(multiResult.offline ? 'pending-sync' : 'pending-slow');
           toast({
-            title: "Saving — slow network",
+            title: multiResult.offline ? "Saved offline" : "Saving — slow network",
             description: `Split payment will sync automatically. It will appear once confirmed by the server.`,
           });
         } else {
@@ -573,9 +573,9 @@ export function PaymentRecording({
           },
         }, 'create-payment-record');
         if (singleResult?.queued) {
-          markOptimisticAs('pending-sync');
+          markOptimisticAs(singleResult.offline ? 'pending-sync' : 'pending-slow');
           toast({
-            title: "Saving — slow network",
+            title: singleResult.offline ? "Saved offline" : "Saving — slow network",
             description: "Payment will sync automatically. It is safe to record more.",
           });
           closeAndReset();
@@ -635,7 +635,8 @@ export function PaymentRecording({
     try {
       const res = await queuedApiRequest(submission.url, { method: 'POST', body: submission.body }, submission.type);
       if (res?.queued) {
-        setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: 'pending-sync' } : p));
+        const nextStatus = res.offline ? 'pending-sync' : 'pending-slow';
+        setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: nextStatus } : p));
         toast({ title: "Queued", description: "Will sync when network recovers." });
       } else {
         setPendingPayments(prev => prev.filter(p => !siblingMatch(p)));
@@ -1239,10 +1240,12 @@ export function PaymentRecording({
 
         {pendingPayments.length > 0 && (() => {
           const saving = pendingPayments.filter(p => p.__status === 'saving').length;
+          const slow = pendingPayments.filter(p => p.__status === 'pending-slow').length;
           const pending = pendingPayments.filter(p => p.__status === 'pending-sync').length;
           const failed = pendingPayments.filter(p => p.__status === 'failed').length;
           const parts: string[] = [];
           if (saving) parts.push(`${saving} saving`);
+          if (slow) parts.push(`${slow} saving on slow network`);
           if (pending) parts.push(`${pending} pending sync`);
           if (failed) parts.push(`${failed} failed`);
           return (
@@ -1297,6 +1300,8 @@ export function PaymentRecording({
                     ? <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Saving…</Badge>
                     : status === 'failed'
                     ? <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Failed</Badge>
+                    : status === 'pending-slow'
+                    ? <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-300" title="Request is in flight on a slow network and will be retried automatically."><Loader2 className="h-3 w-3 mr-1 animate-spin" />Saving — slow network</Badge>
                     : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300"><Clock className="h-3 w-3 mr-1" />Pending sync</Badge>;
                   return (
                     <TableRow key={p.offlineId} className={status === 'failed' ? 'bg-red-50/30' : 'bg-blue-50/20'} data-testid={`row-pending-payment-${p.offlineId}`}>

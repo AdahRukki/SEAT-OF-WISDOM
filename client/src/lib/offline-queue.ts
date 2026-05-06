@@ -272,7 +272,7 @@ export async function queuedApiRequest(
   if (!navigator.onLine) {
     if (method !== 'GET') {
       const op = enqueue(url, method, options?.body, operationType);
-      return { queued: true, offlineId: op.id, message: 'Saved offline. Will sync when connected.' };
+      return { queued: true, offline: true, offlineId: op.id, message: 'Saved offline. Will sync when connected.' };
     }
     throw new Error('Offline: no cached data available');
   }
@@ -309,7 +309,7 @@ export async function queuedApiRequest(
     const isNetworkError = err?.name === 'AbortError' || err?.name === 'TypeError';
     if (isNetworkError && method !== 'GET') {
       const op = enqueue(url, method, options?.body, operationType);
-      return { queued: true, offlineId: op.id, message: 'Saved offline. Will sync when connected.' };
+      return { queued: true, offline: false, offlineId: op.id, message: 'Saved offline. Will sync when connected.' };
     }
 
     throw err;
