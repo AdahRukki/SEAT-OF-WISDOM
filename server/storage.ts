@@ -1680,13 +1680,16 @@ export class DatabaseStorage implements IStorage {
     schoolId?: string,
     term?: string,
     session?: string,
+    purpose?: string,
   ): Promise<Map<string, number>> {
     const schoolFpr = schoolId ? sql`AND fpr.school_id = ${schoolId}` : sql``;
     const termFpr = term ? sql`AND fpr.term = ${term}` : sql``;
     const sessFpr = session ? sql`AND fpr.session = ${session}` : sql``;
+    const purposeFpr = purpose ? sql`AND fpr.purpose = ${purpose}` : sql``;
     const schoolFpr2 = schoolId ? sql`AND fpr2.school_id = ${schoolId}` : sql``;
     const termFpr2 = term ? sql`AND fpr2.term = ${term}` : sql``;
     const sessFpr2 = session ? sql`AND fpr2.session = ${session}` : sql``;
+    const purposeFpr2 = purpose ? sql`AND fpr2.purpose = ${purpose}` : sql``;
 
     const rows = await db.execute(sql`
       SELECT student_id AS "studentId",
@@ -1696,13 +1699,13 @@ export class DatabaseStorage implements IStorage {
         FROM fee_payment_records fpr
         WHERE fpr.status = 'confirmed'
           AND fpr.student_id IS NOT NULL
-          ${schoolFpr} ${termFpr} ${sessFpr}
+          ${schoolFpr} ${termFpr} ${sessFpr} ${purposeFpr}
         UNION ALL
         SELECT fpss.student_id, fpss.amount
         FROM fee_payment_student_splits fpss
         JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
         WHERE fpr2.status = 'confirmed'
-          ${schoolFpr2} ${termFpr2} ${sessFpr2}
+          ${schoolFpr2} ${termFpr2} ${sessFpr2} ${purposeFpr2}
       ) combined
       GROUP BY student_id
     `);
@@ -1890,12 +1893,14 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      // Per-student paid totals (raw, before capping). Sourced from the same
-      // UNION that the Payment Broadsheet uses so all Finance metrics
-      // reconcile (see getConfirmedPaymentTotalsByStudent). This intentionally
-      // does NOT filter by purpose — every confirmed payment in scope counts
-      // toward the student's tuition obligation, exactly like the broadsheet.
-      const studentPaidMap = await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session);
+      // Per-student paid TUITION totals. Same UNION as the Payment Broadsheet
+      // (records + multi-student splits) but filtered to the tuition fee
+      // purpose. Tuition payments can never exceed what's owed (any excess on
+      // the tuition column is recorded as miscellaneous instead), so this
+      // gives the exact tuition collected without double-counting other fees.
+      const studentPaidMap = await this.getConfirmedPaymentTotalsByStudent(
+        schoolId, term, session, tuitionFeeType.name,
+      );
 
       // tuitionPaid: raw sum of all confirmed tuition payments (uncapped).
       tuitionPaid = Array.from(studentPaidMap.values()).reduce((s, v) => s + v, 0);
@@ -1993,11 +1998,15 @@ export class DatabaseStorage implements IStorage {
       classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
     }
 
-    // Per-student paid totals (raw, before capping). Sourced from the same
-    // UNION the Payment Broadsheet uses so this popup reconciles with the
-    // broadsheet and with the "Actual tuition" sub-line on Total Revenue.
+    // Per-student paid TUITION totals. Same UNION the Payment Broadsheet uses
+    // (records + splits) but scoped to the tuition fee purpose so the popup
+    // shows real tuition collected per class — excess on tuition is impossible
+    // (it's auto-routed to miscellaneous), so no cap is needed beyond the
+    // safety min(paid, owed) below.
     const studentPaidMap = tuitionFeeType
-      ? await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session)
+      ? await this.getConfirmedPaymentTotalsByStudent(
+          schoolId, term, session, tuitionFeeType.name,
+        )
       : new Map<string, number>();
 
     // Aggregate per class.
