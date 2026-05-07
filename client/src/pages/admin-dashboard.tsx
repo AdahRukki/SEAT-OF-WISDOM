@@ -1300,6 +1300,32 @@ export default function AdminDashboard() {
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
 
+  const { data: financeLedgerResp } = useQuery<{ entries: Array<{ tuitionAssigned: number; totalPaid: number }> }>({
+    queryKey: ['/api/payments/ledger', selectedSchoolId, 'all', selectedFinanceTerm, selectedFinanceSession],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (user?.role === 'admin' && selectedSchoolId) params.set('schoolId', selectedSchoolId);
+      if (selectedFinanceTerm) params.set('term', selectedFinanceTerm);
+      if (selectedFinanceSession) params.set('session', selectedFinanceSession);
+      return apiRequest(`/api/payments/ledger?${params.toString()}`);
+    },
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+  });
+
+  const ledgerCollectionRate: number | null = (() => {
+    const entries = financeLedgerResp?.entries ?? [];
+    if (entries.length === 0) return null;
+    let expected = 0;
+    let collected = 0;
+    for (const e of entries) {
+      const tuition = e.tuitionAssigned || 0;
+      const paid = e.totalPaid || 0;
+      expected += tuition;
+      collected += Math.min(paid, tuition);
+    }
+    return expected > 0 ? Math.round((collected / expected) * 100) : null;
+  })();
+
 
   // Mutations
   const createClassMutation = useMutation({
@@ -4849,11 +4875,11 @@ export default function AdminDashboard() {
                   <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
-                  <div className="text-lg sm:text-2xl font-bold">
-                    {financialSummary?.totalFees ? `${financialSummary.collectionRate}%` : "—"}
+                  <div className="text-lg sm:text-2xl font-bold" data-testid="text-collection-rate">
+                    {ledgerCollectionRate === null ? "—" : `${ledgerCollectionRate}%`}
                   </div>
                   <p className="text-[10px] sm:text-xs text-muted-foreground">
-                    {financialSummary?.totalFees ? "Of assigned fees collected" : "No fees assigned"}
+                    {ledgerCollectionRate === null ? "No tuition assigned" : "Of assigned tuition collected"}
                   </p>
                 </CardContent>
               </Card>
