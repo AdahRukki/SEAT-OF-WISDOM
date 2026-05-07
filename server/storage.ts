@@ -1671,6 +1671,48 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  // Per-student confirmed-payment totals using the same UNION the Payment
+  // Broadsheet relies on (records + multi-student splits). No purpose filter —
+  // every confirmed payment in scope counts toward the student. Used by
+  // getPaymentBroadsheet, getFinancialSummary, and getTuitionCollectionByClass
+  // so all three views reconcile.
+  private async getConfirmedPaymentTotalsByStudent(
+    schoolId?: string,
+    term?: string,
+    session?: string,
+  ): Promise<Map<string, number>> {
+    const schoolFpr = schoolId ? sql`AND fpr.school_id = ${schoolId}` : sql``;
+    const termFpr = term ? sql`AND fpr.term = ${term}` : sql``;
+    const sessFpr = session ? sql`AND fpr.session = ${session}` : sql``;
+    const schoolFpr2 = schoolId ? sql`AND fpr2.school_id = ${schoolId}` : sql``;
+    const termFpr2 = term ? sql`AND fpr2.term = ${term}` : sql``;
+    const sessFpr2 = session ? sql`AND fpr2.session = ${session}` : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT student_id AS "studentId",
+             COALESCE(SUM(amount), 0)::numeric AS "totalPaid"
+      FROM (
+        SELECT fpr.student_id, fpr.amount
+        FROM fee_payment_records fpr
+        WHERE fpr.status = 'confirmed'
+          AND fpr.student_id IS NOT NULL
+          ${schoolFpr} ${termFpr} ${sessFpr}
+        UNION ALL
+        SELECT fpss.student_id, fpss.amount
+        FROM fee_payment_student_splits fpss
+        JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+        WHERE fpr2.status = 'confirmed'
+          ${schoolFpr2} ${termFpr2} ${sessFpr2}
+      ) combined
+      GROUP BY student_id
+    `);
+    const out = new Map<string, number>();
+    for (const r of (((rows as any).rows ?? rows) as any[])) {
+      out.set(r.studentId, Number(r.totalPaid || 0));
+    }
+    return out;
+  }
+
   async getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{
     classes: Array<{
       classId: string;
@@ -1709,23 +1751,10 @@ export class DatabaseStorage implements IStorage {
       GROUP BY sf.student_id
     `);
 
-    const paymentsRows = await db.execute(sql`
-      SELECT student_id AS "studentId", COALESCE(SUM(amount), 0)::numeric AS "totalPaid"
-      FROM (
-        SELECT fpr.student_id, fpr.amount
-        FROM fee_payment_records fpr
-        WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'
-          AND fpr.term = ${term} AND fpr.session = ${session}
-          AND fpr.student_id IS NOT NULL
-        UNION ALL
-        SELECT fpss.student_id, fpss.amount
-        FROM fee_payment_student_splits fpss
-        JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-        WHERE fpr2.school_id = ${schoolId} AND fpr2.status = 'confirmed'
-          AND fpr2.term = ${term} AND fpr2.session = ${session}
-      ) combined
-      GROUP BY student_id
-    `);
+    // Per-student paid totals — same UNION used everywhere tuition collection
+    // is computed (see getConfirmedPaymentTotalsByStudent).
+    const paymentsMapShared = await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session);
+    const paymentsRows = { rows: Array.from(paymentsMapShared, ([studentId, totalPaid]) => ({ studentId, totalPaid })) };
 
     const tuitionFeeRows = await db.execute(sql`
       SELECT ft.id, ft.name FROM fee_types ft
@@ -1861,26 +1890,12 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      const tuitionPaymentConditions: any[] = [
-        eq(feePaymentRecords.status, 'confirmed'),
-        eq(feePaymentRecords.purpose, tuitionFeeType.name),
-      ];
-      if (schoolId) tuitionPaymentConditions.push(eq(feePaymentRecords.schoolId, schoolId));
-      if (term) tuitionPaymentConditions.push(eq(feePaymentRecords.term, term));
-      if (session) tuitionPaymentConditions.push(eq(feePaymentRecords.session, session));
-
-      // Per-student paid totals (raw, before capping).
-      const paidPerStudentRows = await db
-        .select({
-          studentId: feePaymentRecords.studentId,
-          total: sql<string>`COALESCE(SUM(${feePaymentRecords.amount}), 0)`,
-        })
-        .from(feePaymentRecords)
-        .where(and(...tuitionPaymentConditions))
-        .groupBy(feePaymentRecords.studentId);
-      const studentPaidMap = new Map<string, number>(
-        paidPerStudentRows.map(r => [r.studentId, Number(r.total || 0)])
-      );
+      // Per-student paid totals (raw, before capping). Sourced from the same
+      // UNION that the Payment Broadsheet uses so all Finance metrics
+      // reconcile (see getConfirmedPaymentTotalsByStudent). This intentionally
+      // does NOT filter by purpose — every confirmed payment in scope counts
+      // toward the student's tuition obligation, exactly like the broadsheet.
+      const studentPaidMap = await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session);
 
       // tuitionPaid: raw sum of all confirmed tuition payments (uncapped).
       tuitionPaid = Array.from(studentPaidMap.values()).reduce((s, v) => s + v, 0);
@@ -1978,27 +1993,12 @@ export class DatabaseStorage implements IStorage {
       classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
     }
 
-    // Per-student paid tuition for the scope.
-    const studentPaidMap = new Map<string, number>();
-    if (tuitionFeeType) {
-      const tuitionPaymentConditions: any[] = [
-        eq(feePaymentRecords.status, 'confirmed'),
-        eq(feePaymentRecords.purpose, tuitionFeeType.name),
-        eq(feePaymentRecords.schoolId, schoolId),
-      ];
-      if (term) tuitionPaymentConditions.push(eq(feePaymentRecords.term, term));
-      if (session) tuitionPaymentConditions.push(eq(feePaymentRecords.session, session));
-
-      const paidRows = await db
-        .select({
-          studentId: feePaymentRecords.studentId,
-          total: sql<string>`COALESCE(SUM(${feePaymentRecords.amount}), 0)`,
-        })
-        .from(feePaymentRecords)
-        .where(and(...tuitionPaymentConditions))
-        .groupBy(feePaymentRecords.studentId);
-      for (const r of paidRows) studentPaidMap.set(r.studentId, Number(r.total || 0));
-    }
+    // Per-student paid totals (raw, before capping). Sourced from the same
+    // UNION the Payment Broadsheet uses so this popup reconciles with the
+    // broadsheet and with the "Actual tuition" sub-line on Total Revenue.
+    const studentPaidMap = tuitionFeeType
+      ? await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session)
+      : new Map<string, number>();
 
     // Aggregate per class.
     const perClass = new Map<string, { activeStudentCount: number; expectedTuition: number; tuitionCollected: number }>();
