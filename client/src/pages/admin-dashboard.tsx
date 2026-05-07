@@ -365,17 +365,45 @@ function ClassTuitionBreakdownDialog({
   session: string;
   sortClassesByOrder: <T extends { name: string }>(c: T[]) => T[];
 }) {
-  const { data: rows = [], isLoading } = useQuery<ClassTuitionRow[]>({
-    queryKey: ['/api/admin/financial-summary/by-class', schoolId, term, session],
+  const { data: ledgerResp, isLoading } = useQuery<{ entries: Array<{ classId: string; className: string; tuitionAssigned: number; totalPaid: number }> }>({
+    queryKey: ['/api/payments/ledger', schoolId, 'all', term, session],
     queryFn: () => {
       const params = new URLSearchParams();
       if (schoolId) params.set('schoolId', schoolId);
       if (term) params.set('term', term);
       if (session) params.set('session', session);
-      return apiRequest(`/api/admin/financial-summary/by-class?${params.toString()}`);
+      return apiRequest(`/api/payments/ledger?${params.toString()}`);
     },
     enabled: open && !!schoolId,
   });
+
+  const rows: ClassTuitionRow[] = (() => {
+    const entries = ledgerResp?.entries ?? [];
+    const byClass = new Map<string, ClassTuitionRow>();
+    for (const e of entries) {
+      const tuition = e.tuitionAssigned || 0;
+      const paid = e.totalPaid || 0;
+      const tuitionPaid = Math.min(paid, tuition);
+      const cur = byClass.get(e.classId) ?? {
+        classId: e.classId,
+        className: e.className,
+        activeStudentCount: 0,
+        expectedTuition: 0,
+        tuitionCollected: 0,
+        collectionRate: null as number | null,
+      };
+      cur.activeStudentCount += 1;
+      cur.expectedTuition += tuition;
+      cur.tuitionCollected += tuitionPaid;
+      byClass.set(e.classId, cur);
+    }
+    return Array.from(byClass.values()).map(r => ({
+      ...r,
+      collectionRate: r.expectedTuition > 0
+        ? Math.round((r.tuitionCollected / r.expectedTuition) * 100)
+        : null,
+    }));
+  })();
 
   const sortedRows = sortClassesByOrder(
     rows.map(r => ({ ...r, name: r.className }))
