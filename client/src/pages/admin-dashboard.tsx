@@ -5009,6 +5009,7 @@ export default function AdminDashboard() {
                     schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
                     currentTerm={selectedFinanceTerm}
                     currentSession={selectedFinanceSession}
+                    userRole={user?.role}
                     onOpenTuitionSetup={() => {
                       const tuitionFt = (feeTypes as FeeType[]).find((ft) => ft.isTuition);
                       if (tuitionFt) {
@@ -5026,24 +5027,6 @@ export default function AdminDashboard() {
                       }
                     }}
                   />
-                  {user?.role === 'admin' && (
-                    <div id="broadsheet-print-area">
-                      <CardHeader className="px-0 pt-0 pb-4 flex flex-row items-center justify-between">
-                        <div>
-                          <CardTitle>Payment Broadsheet</CardTitle>
-                          <CardDescription>
-                            Per-class student fee summary for the selected term and session
-                          </CardDescription>
-                        </div>
-                      </CardHeader>
-                      <BroadsheetTable
-                        schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
-                        term={selectedFinanceTerm}
-                        session={selectedFinanceSession}
-                        schoolName={schools.find(s => s.id === (user?.role === 'admin' ? selectedSchoolId : user?.schoolId))?.name || ''}
-                      />
-                    </div>
-                  )}
                 </CardContent>
               )}
             </Card>

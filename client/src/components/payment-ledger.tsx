@@ -91,10 +91,11 @@ interface PaymentLedgerProps {
   schoolId?: string;
   currentTerm?: string;
   currentSession?: string;
+  userRole?: string;
   onOpenTuitionSetup?: () => void;
 }
 
-export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTuitionSetup }: PaymentLedgerProps) {
+export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole, onOpenTuitionSetup }: PaymentLedgerProps) {
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
@@ -386,6 +387,38 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, onOpenTui
                   </TableCell>
                 </TableRow>
               ))}
+              {userRole === 'admin' && filteredLedger.length > 0 && (() => {
+                const totals = filteredLedger.reduce(
+                  (acc, e) => {
+                    const tuition = e.tuitionAssigned || 0;
+                    const paid = e.totalPaid || 0;
+                    acc.tuition += tuition;
+                    acc.paid += paid;
+                    acc.misc += Math.max(0, paid - tuition);
+                    acc.balance += Math.max(0, tuition - paid);
+                    return acc;
+                  },
+                  { tuition: 0, paid: 0, misc: 0, balance: 0 }
+                );
+                return (
+                  <TableRow
+                    className="bg-muted/80 font-bold border-t-2"
+                    data-testid="row-ledger-grand-total"
+                  >
+                    <TableCell></TableCell>
+                    <TableCell>Grand Total</TableCell>
+                    <TableCell></TableCell>
+                    <TableCell></TableCell>
+                    <TableCell className="text-right">₦{totals.tuition.toLocaleString()}</TableCell>
+                    <TableCell className="text-right text-green-600">₦{totals.paid.toLocaleString()}</TableCell>
+                    <TableCell className="text-right text-blue-600">₦{totals.misc.toLocaleString()}</TableCell>
+                    <TableCell className={`text-right ${totals.balance > 0 ? "text-red-500" : "text-green-600"}`}>
+                      ₦{totals.balance.toLocaleString()}
+                    </TableCell>
+                    <TableCell></TableCell>
+                  </TableRow>
+                );
+              })()}
             </TableBody>
           </Table>
           </div>
