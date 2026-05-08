@@ -1005,7 +1005,27 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       : reconcileStatus === "reversed" ? "Reversed Payments"
                       : "All Payments"}
                   </h5>
-                  <Badge variant="secondary">{filteredPayments.length}</Badge>
+                  <Badge variant="secondary" data-testid="badge-payments-count">
+                    {(() => {
+                      const q = paymentSearch.trim().toLowerCase();
+                      if (!q) return filteredPayments.length;
+                      return filteredPayments.filter((p) => {
+                        if (
+                          p.student?.user?.firstName?.toLowerCase().includes(q) ||
+                          p.student?.user?.lastName?.toLowerCase().includes(q) ||
+                          p.student?.studentId?.toLowerCase().includes(q)
+                        ) return true;
+                        for (const sp of p.splits ?? []) {
+                          if (
+                            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
+                            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
+                            sp.student?.studentId?.toLowerCase().includes(q)
+                          ) return true;
+                        }
+                        return false;
+                      }).length;
+                    })()}
+                  </Badge>
                   <div className="relative ml-auto w-full sm:w-[220px]">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
