@@ -67,28 +67,34 @@ export function detectBankFormat(rawText: string): "fidelity" | "moniepoint" | "
   const header = rawText.substring(0, headerEnd).toLowerCase();
   const lower  = rawText.toLowerCase(); // full text for structural/format checks only
 
+  // ---------------------------------------------------------------------------
+  // MoniePoint MUST be checked before Fidelity. Moniepoint POS statements
+  // routinely contain narrations like "PURCHASE FOR ... Fidelity Bank ..." in
+  // the very first transactions, which would otherwise trip the Fidelity
+  // brand-name fallback below and misclassify the file. Moniepoint signals are
+  // strong enough on their own to be checked first:
+  //   1. The single-line ISO timestamp "2026-01-15T12:" (older layout)
+  //   2. A fragmented date triple — "YYYY-" + "MM-" + "DDTHH:" on three lines
+  //      (newer Moniepoint POS layout where the date column wraps)
+  //   3. Any Moniepoint POS Terminal ID prefix matching `2TPT` + 4 alnum chars
+  //      (e.g. 2TPTNXPY, 2TPT5IEK, 2TPT6AS9). Terminal IDs are issued per-POS,
+  //      so the suffix varies by merchant — we must not hard-code one.
+  //   4. The "Settlement Credit" / "Settlement Debit" column header.
+  // ---------------------------------------------------------------------------
+  if (/\d{4}-\d{2}-\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
+  if (/2TPT[A-Z0-9]{4}/.test(rawText)) return "moniepoint";
+  if (/settlement\s+(credit|debit)/i.test(rawText)) return "moniepoint";
+  // Fragmented-date pattern is broad on its own (any PDF could conceivably
+  // wrap an ISO timestamp this way), so REQUIRE it to appear ALONGSIDE one of
+  // the Moniepoint-only structural markers above.
+  const hasFragmentedDate = /\d{4}-\s*\n\s*\d{2}-\s*\n\s*\d{2}T\d{2}:/.test(rawText);
+  if (hasFragmentedDate && /2TPT[A-Z0-9]{4}/.test(rawText)) return "moniepoint";
+
   // Fidelity: unique brand in header, OR structural "Pay In / Pay Out" column headers
   if (header.includes("fidelitybank") || header.includes("fidelity bank") ||
       (lower.includes("pay in") && lower.includes("pay out") && lower.includes("balance"))) {
     return "fidelity";
   }
-  // MoniePoint: does NOT put "Moniepoint" in its account header — it appears only in
-  // narrations. Detect by any of three signals that survive PDF text extraction
-  // even when the date column is wrapped/fragmented across lines:
-  //   1. The original single-line ISO timestamp "2026-01-15T12:" (older layout)
-  //   2. A fragmented date triple — "YYYY-" + "MM-" + "DDTHH:" on three lines
-  //      (newer Moniepoint POS layout where columns are narrower)
-  //   3. The Moniepoint POS Terminal ID prefix "2TPTNXPY" combined with the
-  //      "Settlement Credit" column header — both are Moniepoint-specific and
-  //      cannot appear together in any other bank's statement.
-  if (/\d{4}-\d{2}-\d{2}T\d{2}:/.test(rawText)) return "moniepoint";
-  // Fragmented-date pattern is broad on its own (any PDF could conceivably
-  // wrap an ISO timestamp this way), so REQUIRE it to appear ALONGSIDE a
-  // Moniepoint-only structural marker: the "2TPTNXPY" terminal-ID prefix or
-  // the "Settlement Credit" / "Settlement Debit" column header.
-  const hasFragmentedDate = /\d{4}-\s*\n\s*\d{2}-\s*\n\s*\d{2}T\d{2}:/.test(rawText);
-  const hasMoniepointMarker = rawText.includes("2TPTNXPY") || /settlement\s+(credit|debit)/i.test(rawText);
-  if (hasFragmentedDate && hasMoniepointMarker) return "moniepoint";
 
   // Zenith: bank name must appear in the actual account header (above
   // "TRANSACTIONS"), not in transaction narrations.

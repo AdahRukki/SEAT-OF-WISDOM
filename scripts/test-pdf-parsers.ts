@@ -91,6 +91,27 @@ const FIXTURES: Fixture[] = [
     sum: 4153243.09,
     note: "Access-style export — later month, fewer transactions.",
   },
+  {
+    file: "account-statement_(18)_1778226807476.pdf",
+    bank: "moniepoint",
+    count: 25,
+    sum: 1441050,
+    note: "Moniepoint POS (terminal 2TPT5IEK) — narrations contain 'Fidelity Bank' early; must NOT misclassify as Fidelity (task #124).",
+  },
+  {
+    file: "account-statement_(20)_1778226818357.pdf",
+    bank: "moniepoint",
+    count: 22,
+    sum: 1211750,
+    note: "Moniepoint POS (terminal 2TPT6AS9) — different terminal-ID prefix variant (task #124).",
+  },
+  {
+    file: "account-statement_(21)_1778226788181.pdf",
+    bank: "moniepoint",
+    count: 21,
+    sum: 1445540,
+    note: "Moniepoint POS (terminal 2TPTNXPY) — original-style terminal prefix; multiple Fidelity-Bank narrations (task #124).",
+  },
 ];
 
 const FIXTURE_DIR = "attached_assets";
