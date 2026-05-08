@@ -3767,6 +3767,14 @@ export class DatabaseStorage implements IStorage {
       const bankTransactionIds = allocs.map(a => a.bankTransactionId);
 
       if (bankTransactionIds.length > 0) {
+        // Serialize against concurrent confirm/allocate on the same bank tx
+        // by taking a row-level lock before we read-then-write its status.
+        await tx
+          .select({ id: bankTransactions.id })
+          .from(bankTransactions)
+          .where(inArray(bankTransactions.id, bankTransactionIds))
+          .for('update');
+
         await tx
           .delete(paymentAllocations)
           .where(eq(paymentAllocations.paymentRecordId, paymentId));
@@ -3820,6 +3828,14 @@ export class DatabaseStorage implements IStorage {
       const bankTransactionIds = allocs.map(a => a.bankTransactionId);
 
       if (bankTransactionIds.length > 0) {
+        // Serialize against concurrent confirm/allocate on the same bank tx
+        // by taking a row-level lock before we read-then-write its status.
+        await tx
+          .select({ id: bankTransactions.id })
+          .from(bankTransactions)
+          .where(inArray(bankTransactions.id, bankTransactionIds))
+          .for('update');
+
         await tx
           .delete(paymentAllocations)
           .where(eq(paymentAllocations.paymentRecordId, paymentId));

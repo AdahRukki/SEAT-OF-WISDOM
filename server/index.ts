@@ -53,6 +53,27 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    // Self-heal Task #123: any bank_transactions row whose status is not
+    // 'unmatched' but has zero linked payment_allocations is an orphan from
+    // legacy data (pre Task #94/#95) or external SQL writes. Reset it so the
+    // bank credit can be re-allocated.
+    const healed = await pool.query(`
+      UPDATE bank_transactions bt
+         SET status = 'unmatched',
+             match_confidence = 0,
+             updated_at = NOW()
+       WHERE bt.status <> 'unmatched'
+         AND NOT EXISTS (
+           SELECT 1 FROM payment_allocations pa
+            WHERE pa.bank_transaction_id = bt.id
+         )
+      RETURNING bt.id;
+    `);
+    if (healed.rowCount && healed.rowCount > 0) {
+      log(`Self-healed ${healed.rowCount} orphan bank transaction(s) back to unmatched`);
+    }
+
     log("Database migrations applied successfully");
   } catch (err) {
     console.error("Migration error:", err);
