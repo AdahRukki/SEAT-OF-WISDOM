@@ -631,19 +631,58 @@ function parseAccessTransactions(rawText: string): ParsedTransaction[] {
   return transactions;
 }
 
+/**
+ * Universal safety pass: when a parser emits multiple rows that share the
+ * exact same (date, amount, normalized description) — e.g. the same payer
+ * sent the same amount three times in one day — they would otherwise
+ * collide on the DB's unique fingerprint constraint and be silently
+ * dropped on insert. Append a stable per-occurrence index to the dedupe
+ * key so each repeat keeps its own fingerprint. The order is preserved
+ * across re-uploads of the same statement, so re-uploads still match
+ * existing rows and don't produce ghost duplicates.
+ *
+ * Skipped for any row whose parser already disambiguated (i.e. its
+ * fingerprint differs from the legacy `(date, amount, desc)` formula),
+ * so Zenith's balance-based disambiguator is left alone.
+ */
+function disambiguateRepeatedTransactions(
+  transactions: ParsedTransaction[],
+): ParsedTransaction[] {
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < transactions.length; i++) {
+    const t = transactions[i];
+    const legacyFp = generateFingerprint(t.date, t.credit, t.rawDescription);
+    if (t.fingerprint !== legacyFp) continue;
+    const key = `${t.date}|${t.credit.toFixed(2)}|${normalizeForFingerprint(t.rawDescription)}`;
+    const arr = groups.get(key);
+    if (arr) arr.push(i); else groups.set(key, [i]);
+  }
+  for (const indices of groups.values()) {
+    if (indices.length < 2) continue;
+    indices.forEach((idx, occ) => {
+      const t = transactions[idx];
+      transactions[idx] = {
+        ...t,
+        fingerprint: generateFingerprint(t.date, t.credit, t.rawDescription, `occ${occ + 1}`),
+      };
+    });
+  }
+  return transactions;
+}
+
 export function parseTransactions(rawText: string): ParsedTransaction[] {
   const format = detectBankFormat(rawText);
   if (format === "fidelity") {
-    return parseFidelityTransactions(rawText);
+    return disambiguateRepeatedTransactions(parseFidelityTransactions(rawText));
   }
   if (format === "moniepoint") {
-    return parseMoniePointTransactions(rawText);
+    return disambiguateRepeatedTransactions(parseMoniePointTransactions(rawText));
   }
   if (format === "zenith") {
-    return parseZenithTransactions(rawText);
+    return disambiguateRepeatedTransactions(parseZenithTransactions(rawText));
   }
   if (format === "access") {
-    return parseAccessTransactions(rawText);
+    return disambiguateRepeatedTransactions(parseAccessTransactions(rawText));
   }
 
   const columnOrder = detectColumnOrder(rawText);
@@ -682,7 +721,7 @@ export function parseTransactions(rawText: string): ParsedTransaction[] {
     });
   }
 
-  return transactions;
+  return disambiguateRepeatedTransactions(transactions);
 }
 
 export function generateExcelBuffer(transactions: ParsedTransaction[]): Buffer {
