@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
-import { generateClientRequestId, queuedApiRequest, addSyncListener } from "@/lib/offline-queue";
+import { generateClientRequestId, queuedApiRequest, addSyncListener, getQueuedClientRequestIds, processOfflineQueue } from "@/lib/offline-queue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -158,6 +158,12 @@ export function PaymentRecording({
     if (currentSession) setFilterSession(currentSession);
   }, [currentSession]);
 
+  // Snapshot of pendingPayments restored from localStorage on mount. The
+  // reconcile effect only inspects rows that were already persisted at load
+  // time so a brand-new in-flight submission is never misclassified as an
+  // orphan from a prior session.
+  const hydratedPendingRef = useRef<any[] | null>(null);
+
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -165,15 +171,18 @@ export function PaymentRecording({
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
+    // NOTE: we no longer auto-replay pendingPayments via the legacy
+    // syncPendingPayments() helper because optimistic rows for multi-student
+    // submissions also live in this list and must NOT be re-posted as
+    // single-payment rows. The offline queue handles the actual replay of
+    // original requests with their correct endpoint/body.
     const saved = localStorage.getItem("pendingPayments");
     if (saved) {
       const loaded = JSON.parse(saved);
+      hydratedPendingRef.current = loaded;
       setPendingPayments(loaded);
-      // NOTE: we no longer auto-replay pendingPayments via the legacy
-      // syncPendingPayments() helper because optimistic rows for multi-student
-      // submissions also live in this list and must NOT be re-posted as
-      // single-payment rows. The offline queue handles the actual replay of
-      // original requests with their correct endpoint/body.
+    } else {
+      hydratedPendingRef.current = [];
     }
 
     return () => {
@@ -213,6 +222,91 @@ export function PaymentRecording({
     });
     return off;
   }, [queryClient]);
+
+  // Single-shot reconciliation on mount.
+  //
+  // Bug being fixed: an optimistic row is added to `pendingPayments` with
+  // status 'saving' BEFORE queuedApiRequest's 30s in-flight fetch completes.
+  // If the user reloads / closes / navigates away during those 30s, the row
+  // is persisted to localStorage as 'saving' but no offline-queue entry was
+  // ever enqueued (enqueue only happens AFTER the timeout aborts). Result:
+  // the row is stuck on "Saving" forever with nothing to drive it.
+  //
+  // Reconcile: for any persisted row in a transient state ('saving',
+  // 'pending-sync', 'pending-slow') whose clientRequestId is NOT in the
+  // current offline queue, replay the original __submission once via
+  // queuedApiRequest. The server's clientRequestId unique index dedupes
+  // safely if the original actually completed; otherwise the request is
+  // (re)created or (re)queued. If even this attempt errors out, the row
+  // is demoted to 'failed' so the existing Retry/Discard UI takes over.
+  const didReconcileRef = useRef(false);
+  useEffect(() => {
+    if (didReconcileRef.current) return;
+    // Wait until the localStorage hydration effect has run so we always
+    // reconcile against rows that came from a previous session, never
+    // against a brand-new optimistic row from a still-in-flight submission.
+    const hydrated = hydratedPendingRef.current;
+    if (hydrated === null) return;
+    didReconcileRef.current = true;
+    if (hydrated.length === 0) return;
+
+    const transient = new Set(['saving', 'pending-sync', 'pending-slow']);
+    const queuedIds = getQueuedClientRequestIds();
+
+    // Group orphaned rows by clientRequestId so we replay each submission once
+    // (multi-student rows share one clientRequestId / one __submission).
+    const orphansByKey = new Map<string, any>();
+    for (const row of hydrated) {
+      const key = row.clientRequestId;
+      if (!key) continue;
+      if (!transient.has(row.__status)) continue;
+      if (queuedIds.has(key)) continue;
+      if (!row.__submission) continue;
+      if (!orphansByKey.has(key)) orphansByKey.set(key, row);
+    }
+
+    if (orphansByKey.size === 0) {
+      // Nothing orphaned, but still kick the queue once in case any
+      // in-flight syncs were missed while the page was hidden.
+      processOfflineQueue().catch(() => {});
+      return;
+    }
+
+    (async () => {
+      for (const [key, row] of Array.from(orphansByKey.entries())) {
+        const matchSibling = (p: any) => p.clientRequestId === key;
+        // Visually distinguish reconciled rows so the user knows we're acting.
+        setPendingPayments(prev => prev.map(p =>
+          matchSibling(p) ? { ...p, __status: 'saving', __error: undefined } : p,
+        ));
+        try {
+          const res = await queuedApiRequest(
+            row.__submission.url,
+            { method: 'POST', body: row.__submission.body },
+            row.__submission.type,
+          );
+          if (res?.queued) {
+            const nextStatus = res.offline ? 'pending-sync' : 'pending-slow';
+            setPendingPayments(prev => prev.map(p =>
+              matchSibling(p) ? { ...p, __status: nextStatus } : p,
+            ));
+          } else {
+            // Server accepted (new or idempotent replay) — drop optimistic rows
+            // and refetch canonical records.
+            setPendingPayments(prev => prev.filter(p => !matchSibling(p)));
+            queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+          }
+        } catch (err: any) {
+          setPendingPayments(prev => prev.map(p =>
+            matchSibling(p)
+              ? { ...p, __status: 'failed', __error: err?.message || 'Sync interrupted — click Retry' }
+              : p,
+          ));
+        }
+      }
+    })();
+  }, [pendingPayments, queryClient]);
 
   const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string }[]>({
     queryKey: ["/api/admin/academic-sessions"],

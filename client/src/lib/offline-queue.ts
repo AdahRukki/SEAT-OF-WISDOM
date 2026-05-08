@@ -121,6 +121,18 @@ export function getPendingCount(): number {
   return getQueue().length;
 }
 
+// Set of clientRequestIds currently sitting in the offline queue. Used by the
+// payment UI to detect optimistic rows whose submission was interrupted before
+// the queue entry was even created (e.g. user reloaded mid 30s timeout).
+export function getQueuedClientRequestIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const op of getQueue()) {
+    const id = extractClientRequestId(op.body);
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
 export function enqueueOperation(url: string, method: string, body: unknown, type = 'generic'): QueuedOperation {
   return enqueue(url, method, body, type);
 }
