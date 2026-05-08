@@ -63,7 +63,7 @@ async function runMigrations() {
          SET status = 'unmatched',
              match_confidence = 0,
              updated_at = NOW()
-       WHERE bt.status <> 'unmatched'
+       WHERE bt.status IN ('confirmed','matched','suggested','partially_reconciled')
          AND NOT EXISTS (
            SELECT 1 FROM payment_allocations pa
             WHERE pa.bank_transaction_id = bt.id
