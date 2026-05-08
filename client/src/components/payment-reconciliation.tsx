@@ -138,6 +138,13 @@ interface BankTransactionAllocation {
       };
     } | null;
   };
+  // Per-student split rows for multi-student payment records (paymentRecord.student is null).
+  splitStudents?: Array<{
+    studentDbId: string;
+    studentId: string;
+    amount: string;
+    user: { firstName: string; lastName: string };
+  }>;
 }
 
 interface BankTransactionWithAllocations extends BankTransaction {
@@ -191,6 +198,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [transactionToMatch, setTransactionToMatch] = useState<BankTransaction | null>(null);
   const [selectedMatchPaymentId, setSelectedMatchPaymentId] = useState<string | null>(null);
   const [txSearch, setTxSearch] = useState("");
+  const [paymentSearch, setPaymentSearch] = useState("");
   const [unmatchedSearch, setUnmatchedSearch] = useState("");
   const [matchSearch, setMatchSearch] = useState("");
   const [isBulkMatchDialogOpen, setIsBulkMatchDialogOpen] = useState(false);
@@ -998,7 +1006,17 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       : "All Payments"}
                   </h5>
                   <Badge variant="secondary">{filteredPayments.length}</Badge>
-                  <div className="ml-auto flex gap-1 flex-wrap">
+                  <div className="relative ml-auto w-full sm:w-[220px]">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search student name or ID..."
+                      value={paymentSearch}
+                      onChange={(e) => setPaymentSearch(e.target.value)}
+                      className="pl-8 h-8 text-sm"
+                      data-testid="input-payment-search"
+                    />
+                  </div>
+                  <div className="flex gap-1 flex-wrap">
                     {(["recorded", "confirmed", "reversed", "all"] as const).map((s) => {
                       const labels: Record<typeof s, string> = {
                         recorded: "Pending",
@@ -1022,24 +1040,49 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   </div>
                 </div>
                 
-                {filteredPayments.length === 0 ? (
-                  <Card>
-                    <CardContent className="text-center py-6 text-muted-foreground">
-                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                      <p className="text-sm">
-                        {reconcileStatus === "recorded"
-                          ? "No pending payments"
-                          : reconcileStatus === "confirmed"
-                            ? "No confirmed payments"
-                            : reconcileStatus === "reversed"
-                              ? "No reversed payments"
-                              : "No payments"}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ) : (
+                {(() => {
+                  const q = paymentSearch.trim().toLowerCase();
+                  const visiblePayments = q
+                    ? filteredPayments.filter((p) => {
+                        if (
+                          p.student?.user?.firstName?.toLowerCase().includes(q) ||
+                          p.student?.user?.lastName?.toLowerCase().includes(q) ||
+                          p.student?.studentId?.toLowerCase().includes(q)
+                        ) return true;
+                        // Multi-student split records carry per-child rows in `splits`.
+                        for (const sp of p.splits ?? []) {
+                          if (
+                            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
+                            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
+                            sp.student?.studentId?.toLowerCase().includes(q)
+                          ) return true;
+                        }
+                        return false;
+                      })
+                    : filteredPayments;
+                  if (visiblePayments.length === 0) {
+                    return (
+                      <Card>
+                        <CardContent className="text-center py-6 text-muted-foreground">
+                          <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                          <p className="text-sm">
+                            {q
+                              ? "No payments match your search"
+                              : reconcileStatus === "recorded"
+                                ? "No pending payments"
+                                : reconcileStatus === "confirmed"
+                                  ? "No confirmed payments"
+                                  : reconcileStatus === "reversed"
+                                    ? "No reversed payments"
+                                    : "No payments"}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+                  return (
                   <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                    {filteredPayments.map((payment) => {
+                    {visiblePayments.map((payment) => {
                       const suggestion = paymentSuggestions.get(payment.id) || { transaction: null, confidence: 0, reasons: [] };
                       const matchingTxs = paymentMatchableMap.get(payment.id) || [];
                       
@@ -1233,7 +1276,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       );
                     })}
                   </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Right Column: Bank Transactions */}
@@ -1259,7 +1303,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search narration, reference or amount..."
+                    placeholder="Search narration, reference, amount or student name/ID..."
                     value={txSearch}
                     onChange={(e) => setTxSearch(e.target.value)}
                     className="pl-8 h-8 text-sm"
@@ -1275,11 +1319,31 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   const filteredTx = txSearch.trim()
                     ? displayedTransactions.filter((t) => {
                         const q = txSearch.toLowerCase();
-                        return (
+                        if (
                           t.rawDescription?.toLowerCase().includes(q) ||
                           t.reference?.toLowerCase().includes(q) ||
                           t.amount?.toString().includes(q)
-                        );
+                        ) return true;
+                        // Match against any linked allocation's student name/ID,
+                        // including every child student in a multi-student split.
+                        for (const a of t.allocations ?? []) {
+                          const stu = a.paymentRecord?.student;
+                          if (stu) {
+                            if (
+                              stu.user?.firstName?.toLowerCase().includes(q) ||
+                              stu.user?.lastName?.toLowerCase().includes(q) ||
+                              stu.studentId?.toLowerCase().includes(q)
+                            ) return true;
+                          }
+                          for (const sp of a.splitStudents ?? []) {
+                            if (
+                              sp.user?.firstName?.toLowerCase().includes(q) ||
+                              sp.user?.lastName?.toLowerCase().includes(q) ||
+                              sp.studentId?.toLowerCase().includes(q)
+                            ) return true;
+                          }
+                        }
+                        return false;
                       })
                     : displayedTransactions;
                   const emptyCopy = (() => {
@@ -1371,21 +1435,47 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 </div>
                                 {allocations.map((alloc) => {
                                   const stu = alloc.paymentRecord?.student;
-                                  const name = stu?.user
-                                    ? `${stu.user.lastName} ${stu.user.firstName}`.trim()
-                                    : "Multi-student / Unassigned";
+                                  const splitStudents = alloc.splitStudents ?? [];
+                                  const isSplit = !stu && splitStudents.length > 0;
                                   return (
                                     <div key={alloc.id} className="text-xs bg-white/80 p-2 rounded border">
                                       <div className="flex items-center justify-between gap-2 flex-wrap">
                                         <div className="flex-1 min-w-0">
-                                          <span className="font-medium">{name}</span>
-                                          {stu?.studentId && (
-                                            <span className="text-muted-foreground ml-1">({stu.studentId})</span>
+                                          {isSplit ? (
+                                            <>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-300">
+                                                  Split · {splitStudents.length} students
+                                                </Badge>
+                                                <span className="text-muted-foreground">
+                                                  • ₦{parseFloat(alloc.allocatedAmount).toLocaleString()}
+                                                  {alloc.paymentRecord?.paymentDate && ` • ${formatRecoDate(alloc.paymentRecord.paymentDate)}`}
+                                                </span>
+                                              </div>
+                                              <ul className="mt-1 space-y-0.5">
+                                                {splitStudents.map((sp) => (
+                                                  <li key={sp.studentDbId} className="text-[11px] flex items-center gap-1">
+                                                    <span className="font-medium">{sp.user.lastName} {sp.user.firstName}</span>
+                                                    <span className="text-muted-foreground">({sp.studentId})</span>
+                                                    <span className="text-muted-foreground">• ₦{parseFloat(sp.amount).toLocaleString()}</span>
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span className="font-medium">
+                                                {stu?.user ? `${stu.user.lastName} ${stu.user.firstName}`.trim() : "Unassigned"}
+                                              </span>
+                                              {stu?.studentId && (
+                                                <span className="text-muted-foreground ml-1">({stu.studentId})</span>
+                                              )}
+                                              <span className="text-muted-foreground ml-1">
+                                                • ₦{parseFloat(alloc.allocatedAmount).toLocaleString()}
+                                                {alloc.paymentRecord?.paymentDate && ` • ${formatRecoDate(alloc.paymentRecord.paymentDate)}`}
+                                              </span>
+                                            </>
                                           )}
-                                          <span className="text-muted-foreground ml-1">
-                                            • ₦{parseFloat(alloc.allocatedAmount).toLocaleString()}
-                                            {alloc.paymentRecord?.paymentDate && ` • ${formatRecoDate(alloc.paymentRecord.paymentDate)}`}
-                                          </span>
                                         </div>
                                         {alloc.paymentRecord?.status && (
                                           <Badge variant="outline" className="text-[10px] capitalize">

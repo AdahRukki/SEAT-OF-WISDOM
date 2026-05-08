@@ -819,11 +819,20 @@ export function PaymentRecording({
   const nameFilteredRecords = nameSearch.trim()
     ? sortedRecords.filter((r) => {
         const q = nameSearch.toLowerCase();
-        return (
+        if (
           r.student?.user?.lastName?.toLowerCase().includes(q) ||
           r.student?.user?.firstName?.toLowerCase().includes(q) ||
           r.student?.studentId?.toLowerCase().includes(q)
-        );
+        ) return true;
+        // Multi-student records: match against any child split's student.
+        for (const sp of r.splits ?? []) {
+          if (
+            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
+            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
+            sp.student?.studentId?.toLowerCase().includes(q)
+          ) return true;
+        }
+        return false;
       })
     : sortedRecords;
 

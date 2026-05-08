@@ -1185,7 +1185,13 @@ export type FeePaymentRecordWithDetails = FeePaymentRecord & {
   confirmedByUser?: User;
   reversedByUser?: User;
   allocations?: PaymentAllocation[];
-  splits?: FeePaymentStudentSplit[];
+  splits?: (FeePaymentStudentSplit & {
+    student?: {
+      id: string;
+      studentId: string;
+      user?: { firstName: string; lastName: string };
+    };
+  })[];
   splitCount?: number;
   posFee?: number;
   matchedTransaction?: {
@@ -1228,6 +1234,16 @@ export type BankTransactionAllocationSummary = PaymentAllocation & {
       };
     } | null;
   };
+  // For multi-student split payments (paymentRecord.student is null), the
+  // per-child split rows so the UI can render real names instead of a
+  // "Multi-student / Unassigned" placeholder, and so client-side search can
+  // match against any of the involved students.
+  splitStudents?: Array<{
+    studentDbId: string;
+    studentId: string;
+    amount: string;
+    user: { firstName: string; lastName: string };
+  }>;
 };
 
 export type BankTransactionWithAllocationSummaries = BankTransaction & {

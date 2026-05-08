@@ -3601,21 +3601,53 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    // Enrich multi-student records with splitCount
+    // Enrich multi-student records with splitCount AND the per-student split
+    // rows (with student name + studentId) so the records list can:
+    //   - render real names instead of just "Split: N students"
+    //   - let the client-side name/ID search filter find a multi-student
+    //     record whenever any of its child students matches.
     const multiIds = result.filter(r => !r.student).map(r => r.id);
     if (multiIds.length > 0) {
-      const splitCountRows = await db
+      const splitRows = await db
         .select({
-          id: feePaymentStudentSplits.paymentRecordId,
-          cnt: sql<number>`COUNT(*)::int`,
+          id: feePaymentStudentSplits.id,
+          paymentRecordId: feePaymentStudentSplits.paymentRecordId,
+          studentId: feePaymentStudentSplits.studentId,
+          amount: feePaymentStudentSplits.amount,
+          createdAt: feePaymentStudentSplits.createdAt,
+          studentDbId: students.id,
+          studentDisplayId: students.studentId,
+          firstName: users.firstName,
+          lastName: users.lastName,
         })
         .from(feePaymentStudentSplits)
-        .where(inArray(feePaymentStudentSplits.paymentRecordId, multiIds))
-        .groupBy(feePaymentStudentSplits.paymentRecordId);
-      const splitCountMap = new Map(splitCountRows.map(r => [r.id, Number(r.cnt)]));
+        .leftJoin(students, eq(feePaymentStudentSplits.studentId, students.id))
+        .leftJoin(users, eq(students.userId, users.id))
+        .where(inArray(feePaymentStudentSplits.paymentRecordId, multiIds));
+      const splitsByPayment = new Map<string, NonNullable<FeePaymentRecordWithDetails['splits']>>();
+      for (const r of splitRows) {
+        const list = splitsByPayment.get(r.paymentRecordId) ?? [];
+        list.push({
+          id: r.id,
+          paymentRecordId: r.paymentRecordId,
+          studentId: r.studentId,
+          amount: r.amount,
+          createdAt: r.createdAt,
+          student: r.studentDbId && r.studentDisplayId
+            ? {
+                id: r.studentDbId,
+                studentId: r.studentDisplayId,
+                user: { firstName: r.firstName ?? '', lastName: r.lastName ?? '' },
+              }
+            : undefined,
+        });
+        splitsByPayment.set(r.paymentRecordId, list);
+      }
       result.forEach(r => {
         if (!r.student) {
-          r.splitCount = splitCountMap.get(r.id) ?? 0;
+          const list = splitsByPayment.get(r.id) ?? [];
+          r.splits = list;
+          r.splitCount = list.length;
         }
       });
     }
@@ -4099,6 +4131,29 @@ export class DatabaseStorage implements IStorage {
   async getBankTransactionsWithAllocations(filters: { schoolId?: string; status?: string }): Promise<BankTransactionWithAllocationSummaries[]> {
     console.log('[getBankTransactionsWithAllocations] Fetching with filters:', filters);
 
+    // Self-heal at view-time: any bank transaction whose status implies it is
+    // linked to a payment but actually has zero allocations gets demoted back
+    // to 'unmatched' before we read. Mirrors the startup migration so the
+    // Confirmed/Matched tabs never display orphaned rows even if an allocation
+    // disappeared mid-session. Predicate stays narrow on purpose.
+    try {
+      const healSchoolFilter = filters.schoolId ? sql`AND bt.school_id = ${filters.schoolId}` : sql``;
+      await db.execute(sql`
+        UPDATE bank_transactions bt
+           SET status = 'unmatched',
+               match_confidence = 0,
+               updated_at = NOW()
+         WHERE bt.status IN ('confirmed','matched','suggested','partially_reconciled')
+           ${healSchoolFilter}
+           AND NOT EXISTS (
+             SELECT 1 FROM payment_allocations pa
+              WHERE pa.bank_transaction_id = bt.id
+           )
+      `);
+    } catch (err) {
+      console.warn('[getBankTransactionsWithAllocations] Self-heal failed (non-fatal):', err);
+    }
+
     const conditions = [];
     if (filters.schoolId) {
       conditions.push(eq(bankTransactions.schoolId, filters.schoolId));
@@ -4197,8 +4252,57 @@ export class DatabaseStorage implements IStorage {
       allocMap.set(r.bankTransactionId, list);
     }
 
+    // For multi-student split allocations (paymentRecord.student is null),
+    // pull every child split with its student name + studentId so the UI
+    // can render real names instead of "Multi-student / Unassigned".
+    const multiPaymentIds = Array.from(
+      new Set(
+        Array.from(allocMap.values())
+          .flat()
+          .filter(a => a.paymentRecord.student === null)
+          .map(a => a.paymentRecord.id),
+      ),
+    );
+    const splitsByPaymentId = new Map<string, BankTransactionAllocationSummary['splitStudents']>();
+    if (multiPaymentIds.length > 0) {
+      const splitRows = await db
+        .select({
+          paymentRecordId: feePaymentStudentSplits.paymentRecordId,
+          amount: feePaymentStudentSplits.amount,
+          studentDbId: students.id,
+          studentDisplayId: students.studentId,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(feePaymentStudentSplits)
+        .leftJoin(students, eq(feePaymentStudentSplits.studentId, students.id))
+        .leftJoin(users, eq(students.userId, users.id))
+        .where(inArray(feePaymentStudentSplits.paymentRecordId, multiPaymentIds));
+      for (const r of splitRows) {
+        if (!r.studentDbId || !r.studentDisplayId) continue;
+        const list = splitsByPaymentId.get(r.paymentRecordId) ?? [];
+        list.push({
+          studentDbId: r.studentDbId,
+          studentId: r.studentDisplayId,
+          amount: r.amount,
+          user: {
+            firstName: r.firstName ?? '',
+            lastName: r.lastName ?? '',
+          },
+        });
+        splitsByPaymentId.set(r.paymentRecordId, list);
+      }
+    }
+
     transactions.forEach(t => {
-      t.allocations = allocMap.get(t.id) ?? [];
+      const list = allocMap.get(t.id) ?? [];
+      for (const a of list) {
+        if (a.paymentRecord.student === null) {
+          const splits = splitsByPaymentId.get(a.paymentRecord.id);
+          if (splits && splits.length > 0) a.splitStudents = splits;
+        }
+      }
+      t.allocations = list;
     });
 
     console.log('[getBankTransactionsWithAllocations] Found', transactions.length, 'transactions');
