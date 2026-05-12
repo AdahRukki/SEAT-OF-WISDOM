@@ -3885,6 +3885,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Insert transactions with duplicate detection
       let newCount = 0;
       let duplicateCount = 0;
+      const insertedTxIds: string[] = [];
 
       for (const tx of transactions) {
         try {
@@ -3892,7 +3893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const dateParts = tx.date.split('/');
           const transactionDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
 
-          await storage.createBankTransaction({
+          const created = await storage.createBankTransaction({
             statementId: statement.id,
             schoolId: schoolId || undefined,
             transactionDate,
@@ -3904,6 +3905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: "unmatched",
             classification: tx.rawDescription.length < 20 ? "code_only" : "named",
           });
+          insertedTxIds.push(created.id);
           newCount++;
         } catch (insertError: any) {
           // Duplicate fingerprint - skip
@@ -3924,6 +3926,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         duplicateCount
       );
 
+      // Task #128: flag similar (not exact-fingerprint) duplicates among the
+      // freshly inserted rows. Same school, same calendar day, same amount,
+      // same normalized depositor as an EARLIER existing transaction.
+      let possibleDuplicateCount = 0;
+      try {
+        possibleDuplicateCount = await storage.flagBankTransactionDuplicates(insertedTxIds);
+      } catch (flagErr) {
+        console.warn('[Upload] flagBankTransactionDuplicates failed (non-fatal):', flagErr);
+      }
+
       // Create audit log
       await storage.createPaymentAuditLog({
         action: 'upload_statement',
@@ -3937,10 +3949,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalTransactions: transactions.length,
           newTransactions: newCount,
           duplicatesSkipped: duplicateCount,
+          possibleDuplicatesFlagged: possibleDuplicateCount,
         },
       });
 
-      console.log('[Upload] Complete - Total:', transactions.length, 'New:', newCount, 'Duplicates:', duplicateCount);
+      console.log('[Upload] Complete - Total:', transactions.length, 'New:', newCount, 'Duplicates:', duplicateCount, 'PossibleDuplicates:', possibleDuplicateCount);
 
       res.json({
         success: true,
@@ -3950,6 +3963,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalTransactions: transactions.length,
           newTransactions: newCount,
           duplicatesSkipped: duplicateCount,
+          possibleDuplicatesFlagged: possibleDuplicateCount,
         }
       });
     } catch (error: any) {
@@ -4055,6 +4069,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const paymentBefore = await storage.getFeePaymentRecordById(paymentId);
       if (!paymentBefore) {
         return res.status(404).json({ error: "Payment record not found" });
+      }
+
+      // Task #128: block confirmation while a possible-duplicate flag is
+      // outstanding. Admin must explicitly clear the flag (or reverse the
+      // payment as a duplicate) before confirming. The flag does NOT block
+      // record/allocate, only confirm — and only if not explicitly overridden.
+      if (paymentBefore.possibleDuplicate && req.body?.overrideDuplicate !== true) {
+        return res.status(409).json({
+          error: "This payment is flagged as a possible duplicate. Clear the flag or reverse it as a duplicate before confirming.",
+          code: "POSSIBLE_DUPLICATE",
+          duplicateOfPaymentId: paymentBefore.duplicateOfPaymentId,
+        });
       }
 
       // Confirm the payment (atomically updates payment status, allocation, and bank tx status)
@@ -4164,6 +4190,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[POST /api/admin/payments/:id/reverse] Error:", error);
       res.status(500).json({ error: error.message || "Failed to reverse payment" });
+    }
+  });
+
+  // Task #128: admin actions for "Possible duplicate" flags.
+  // Three intents, all admin-only, all leave a distinct audit-log action so
+  // intent is preserved even though the DB column update is identical:
+  //   1. clear_duplicate_flag           — "this is NOT a duplicate"
+  //   2. mark_transaction_ignored_duplicate — "yes, it's a duplicate, dismiss"
+  //   3. reverse_as_duplicate            — same as reverse with explicit reason
+  app.post("/api/admin/payments/:id/clear-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const paymentId = req.params.id;
+      const before = await storage.getFeePaymentRecordById(paymentId);
+      if (!before) return res.status(404).json({ error: "Payment record not found" });
+      const updated = await storage.clearPaymentDuplicateFlag(paymentId);
+      await storage.createPaymentAuditLog({
+        action: 'clear_duplicate_flag',
+        entityType: 'payment_record',
+        entityId: paymentId,
+        userId: user.id,
+        schoolId: before.schoolId || undefined,
+        previousData: { possibleDuplicate: before.possibleDuplicate, duplicateOfPaymentId: before.duplicateOfPaymentId },
+        newData: { possibleDuplicate: false, duplicateOfPaymentId: null },
+      });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("[POST /api/admin/payments/:id/clear-duplicate] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to clear duplicate flag" });
+    }
+  });
+
+  app.post("/api/admin/payments/:id/reverse-as-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const paymentId = req.params.id;
+      const reason = (req.body?.reason && typeof req.body.reason === 'string' && req.body.reason.trim().length > 0)
+        ? req.body.reason.trim()
+        : 'Reversed as duplicate';
+      const before = await storage.getFeePaymentRecordById(paymentId);
+      if (!before) return res.status(404).json({ error: "Payment record not found" });
+      const { payment, bankTransactionIds } = await storage.reverseFeePayment(paymentId, user.id, reason);
+      await storage.createPaymentAuditLog({
+        action: 'reverse_as_duplicate',
+        entityType: 'payment_record',
+        entityId: paymentId,
+        userId: user.id,
+        schoolId: payment.schoolId || undefined,
+        previousData: {
+          status: before.status,
+          bankTransactionIds,
+          possibleDuplicate: before.possibleDuplicate,
+          duplicateOfPaymentId: before.duplicateOfPaymentId,
+        },
+        newData: {
+          status: 'reversed',
+          reversedBy: user.id,
+          reversedAt: new Date().toISOString(),
+          reversalReason: reason,
+          releasedBankTransactionIds: bankTransactionIds,
+        },
+      });
+      res.json(payment);
+    } catch (error: any) {
+      console.error("[POST /api/admin/payments/:id/reverse-as-duplicate] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to reverse payment as duplicate" });
+    }
+  });
+
+  app.post("/api/admin/bank-transactions/:id/clear-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const txId = req.params.id;
+      const beforeRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, txId)).limit(1);
+      const before = beforeRows[0];
+      if (!before) return res.status(404).json({ error: "Bank transaction not found" });
+      const updated = await storage.clearTransactionDuplicateFlag(txId);
+      await storage.createPaymentAuditLog({
+        action: 'clear_duplicate_flag',
+        entityType: 'bank_transaction',
+        entityId: txId,
+        userId: user.id,
+        schoolId: before.schoolId || undefined,
+        previousData: { possibleDuplicate: before.possibleDuplicate, duplicateOfTransactionId: before.duplicateOfTransactionId },
+        newData: { possibleDuplicate: false, duplicateOfTransactionId: null },
+      });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("[POST /api/admin/bank-transactions/:id/clear-duplicate] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to clear duplicate flag" });
+    }
+  });
+
+  app.post("/api/admin/bank-transactions/:id/ignore-as-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const txId = req.params.id;
+      const beforeRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, txId)).limit(1);
+      const before = beforeRows[0];
+      if (!before) return res.status(404).json({ error: "Bank transaction not found" });
+      // Same DB write as "clear" — distinguished only by audit-log action.
+      // The transaction stays in the books (in case admin changes their mind)
+      // but is dismissed from the duplicate-review surface.
+      const updated = await storage.clearTransactionDuplicateFlag(txId);
+      await storage.createPaymentAuditLog({
+        action: 'mark_transaction_ignored_duplicate',
+        entityType: 'bank_transaction',
+        entityId: txId,
+        userId: user.id,
+        schoolId: before.schoolId || undefined,
+        previousData: { possibleDuplicate: before.possibleDuplicate, duplicateOfTransactionId: before.duplicateOfTransactionId },
+        newData: { possibleDuplicate: false, duplicateOfTransactionId: null, intent: 'ignored_as_duplicate' },
+      });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("[POST /api/admin/bank-transactions/:id/ignore-as-duplicate] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to ignore transaction as duplicate" });
     }
   });
 

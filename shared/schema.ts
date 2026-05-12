@@ -385,6 +385,15 @@ export const bankTransactions = pgTable("bank_transactions", {
   status: varchar("status", { length: 30 }).notNull().default("unmatched"), // unmatched, suggested, confirmed, partially_reconciled
   classification: varchar("classification", { length: 30 }).default("unknown"), // named, code_only, unknown
   matchConfidence: integer("match_confidence").default(0), // 0-100
+  // Task #128: similar-but-not-identical duplicate flagging.
+  // possibleDuplicate is set TRUE at insert time when a same-school, same-day,
+  // same-amount, same-normalized-depositor credit already exists. The flag
+  // PERSISTS through allocate/confirm so admins always see the warning.
+  // duplicateOfTransactionId points to the OLDER transaction it most likely
+  // duplicates (informational; not a hard FK so deleting the original never
+  // cascades and never blocks).
+  possibleDuplicate: boolean("possible_duplicate").default(false).notNull(),
+  duplicateOfTransactionId: uuid("duplicate_of_transaction_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -411,6 +420,12 @@ export const feePaymentRecords = pgTable("fee_payment_records", {
   reversedAt: timestamp("reversed_at"),
   reversalReason: text("reversal_reason"),
   clientRequestId: text("client_request_id"), // Idempotency key from client; partial unique index where not null
+  // Task #128: similar-but-not-identical duplicate flagging.
+  // Set TRUE at record-time when same student + amount + calendar day already
+  // has a non-reversed payment. Persists past confirmation. Pointer is the
+  // OLDER payment it most likely duplicates (informational, no hard FK).
+  possibleDuplicate: boolean("possible_duplicate").default(false).notNull(),
+  duplicateOfPaymentId: uuid("duplicate_of_payment_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

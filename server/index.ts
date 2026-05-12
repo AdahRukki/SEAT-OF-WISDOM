@@ -19,6 +19,15 @@ async function runMigrations() {
         ON students (client_request_id) WHERE client_request_id IS NOT NULL;
       ALTER TABLE fee_types ADD COLUMN IF NOT EXISTS is_tuition BOOLEAN DEFAULT FALSE;
       ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS bank_format VARCHAR(20);
+      -- Task #128: similar-but-not-identical duplicate flagging.
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS possible_duplicate BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS duplicate_of_transaction_id UUID;
+      ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS possible_duplicate BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS duplicate_of_payment_id UUID;
+      CREATE INDEX IF NOT EXISTS idx_bank_transactions_possible_duplicate
+        ON bank_transactions (school_id) WHERE possible_duplicate = TRUE;
+      CREATE INDEX IF NOT EXISTS idx_fee_payment_records_possible_duplicate
+        ON fee_payment_records (school_id) WHERE possible_duplicate = TRUE;
       CREATE TABLE IF NOT EXISTS tuition_class_amounts (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         fee_type_id UUID NOT NULL REFERENCES fee_types(id) ON DELETE CASCADE,

@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { generateClientRequestId, queuedApiRequest, addSyncListener, getQueuedClientRequestIds, processOfflineQueue } from "@/lib/offline-queue";
@@ -843,6 +844,32 @@ export function PaymentRecording({
   const showingFrom = totalRecords === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const showingTo = Math.min(safePage * PAGE_SIZE, totalRecords);
 
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  // Task #128: clear/reverse-as-duplicate mutations.
+  const clearPaymentDuplicateMutation = useMutation({
+    mutationFn: async (paymentId: string) =>
+      apiRequest(`/api/admin/payments/${paymentId}/clear-duplicate`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Duplicate flag cleared" });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+    },
+    onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+  const reverseAsDuplicateMutation = useMutation({
+    mutationFn: async (paymentId: string) =>
+      apiRequest(`/api/admin/payments/${paymentId}/reverse-as-duplicate`, {
+        method: "POST",
+        body: { reason: "Reversed as duplicate" },
+      }),
+    onSuccess: () => {
+      toast({ title: "Payment reversed as duplicate" });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+    },
+    onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "recorded":
@@ -1538,7 +1565,51 @@ export function PaymentRecording({
                       <TableCell className="text-sm">
                         {record.term} / {record.session}
                       </TableCell>
-                      <TableCell>{getStatusBadge(record.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {getStatusBadge(record.status)}
+                          {record.possibleDuplicate && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
+                              title="Same student, same day, same amount as another non-reversed payment. Confirmation is blocked until resolved."
+                              data-testid={`badge-record-possible-duplicate-${record.id}`}
+                            >
+                              ⚠ Possible duplicate
+                            </Badge>
+                          )}
+                          {record.possibleDuplicate && isAdmin && record.status !== 'reversed' && (
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-[10px] h-6 px-2"
+                                title="Not a duplicate — clear flag"
+                                disabled={clearPaymentDuplicateMutation.isPending}
+                                onClick={() => clearPaymentDuplicateMutation.mutate(record.id)}
+                                data-testid={`button-record-clear-duplicate-${record.id}`}
+                              >
+                                Clear
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-[10px] h-6 px-2 text-red-700 border-red-300"
+                                title="Reverse as duplicate"
+                                disabled={reverseAsDuplicateMutation.isPending}
+                                onClick={() => {
+                                  if (window.confirm("Reverse this payment as a duplicate?")) {
+                                    reverseAsDuplicateMutation.mutate(record.id);
+                                  }
+                                }}
+                                data-testid={`button-record-reverse-duplicate-${record.id}`}
+                              >
+                                Reverse
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
                       {/* UX #5: depositor moved from Student cell to own column */}
                       <TableCell className="text-sm text-muted-foreground">
                         {record.depositorName || <span>—</span>}

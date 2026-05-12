@@ -342,6 +342,10 @@ export interface IStorage {
 
   // Fee Payment Records (Payment Tracking & Reconciliation)
   recordFeePayment(data: InsertFeePaymentRecord): Promise<FeePaymentRecord>;
+  // Task #128: similar-but-not-identical duplicate flagging admin actions
+  clearPaymentDuplicateFlag(id: string): Promise<FeePaymentRecord>;
+  clearTransactionDuplicateFlag(id: string): Promise<BankTransaction>;
+  flagBankTransactionDuplicates(transactionIds: string[]): Promise<number>;
   getFeePaymentByClientRequestId(clientRequestId: string): Promise<FeePaymentRecord | undefined>;
   getStudentByClientRequestId(clientRequestId: string): Promise<Student | undefined>;
   getFeePaymentRecords(filters: { schoolId?: string; studentId?: string; status?: string; startDate?: Date; endDate?: Date; term?: string; session?: string }): Promise<FeePaymentRecordWithDetails[]>;
@@ -3334,9 +3338,109 @@ export class DatabaseStorage implements IStorage {
         status: 'recorded',
       })
       .returning();
-    
+
+    // Task #128: same student + amount + calendar day, NOT reversed.
+    // Comparison pool intentionally includes confirmed payments so the flag
+    // surfaces real duplicates that another bursar already confirmed.
+    if (record.studentId) {
+      const earlier = await db
+        .select({ id: feePaymentRecords.id })
+        .from(feePaymentRecords)
+        .where(and(
+          eq(feePaymentRecords.studentId, record.studentId),
+          sql`${feePaymentRecords.amount}::numeric = ${record.amount}::numeric`,
+          sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${record.paymentDate})`,
+          ne(feePaymentRecords.status, 'reversed'),
+          ne(feePaymentRecords.id, record.id),
+        ))
+        .orderBy(asc(feePaymentRecords.createdAt))
+        .limit(1);
+      if (earlier.length > 0) {
+        const [updated] = await db
+          .update(feePaymentRecords)
+          .set({ possibleDuplicate: true, duplicateOfPaymentId: earlier[0].id })
+          .where(eq(feePaymentRecords.id, record.id))
+          .returning();
+        console.log('[recordFeePayment] Flagged as possible duplicate of', earlier[0].id);
+        return updated;
+      }
+    }
+
     console.log('[recordFeePayment] Created payment record:', record.id);
     return record;
+  }
+
+  async clearPaymentDuplicateFlag(id: string): Promise<FeePaymentRecord> {
+    const [updated] = await db
+      .update(feePaymentRecords)
+      .set({ possibleDuplicate: false, duplicateOfPaymentId: null })
+      .where(eq(feePaymentRecords.id, id))
+      .returning();
+    if (!updated) throw new Error('Payment record not found');
+    return updated;
+  }
+
+  async clearTransactionDuplicateFlag(id: string): Promise<BankTransaction> {
+    const [updated] = await db
+      .update(bankTransactions)
+      .set({ possibleDuplicate: false, duplicateOfTransactionId: null })
+      .where(eq(bankTransactions.id, id))
+      .returning();
+    if (!updated) throw new Error('Bank transaction not found');
+    return updated;
+  }
+
+  // Task #128: scan a freshly-uploaded batch of bank transactions and flag any
+  // that share school + calendar day + amount + normalized depositor with an
+  // EARLIER same-school transaction. Returns count flagged. Comparison pool
+  // includes ALL prior transactions (matched/unmatched/confirmed).
+  async flagBankTransactionDuplicates(transactionIds: string[]): Promise<number> {
+    if (transactionIds.length === 0) return 0;
+    const { extractDepositor } = await import('./pdf-parser');
+    const newRows = await db
+      .select()
+      .from(bankTransactions)
+      .where(inArray(bankTransactions.id, transactionIds));
+
+    // Process in deterministic chronological order so peers inserted in the
+    // same batch resolve duplicate-of pointers to the strictly earlier row.
+    const orderedRows = [...newRows].sort((a, b) => {
+      const at = (a.createdAt ?? new Date(0)).getTime();
+      const bt = (b.createdAt ?? new Date(0)).getTime();
+      if (at !== bt) return at - bt;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+
+    let flagged = 0;
+    for (const row of orderedRows) {
+      if (!row.schoolId) continue;
+      const depKey = extractDepositor(row.rawDescription);
+      if (!depKey) continue;
+      // Strictly-earlier predicate: createdAt < row.createdAt, or equal
+      // createdAt with lexicographically smaller id (stable tiebreaker).
+      const rowCreatedAt = row.createdAt ?? new Date(0);
+      const candidates = await db
+        .select()
+        .from(bankTransactions)
+        .where(and(
+          eq(bankTransactions.schoolId, row.schoolId),
+          ne(bankTransactions.id, row.id),
+          sql`${bankTransactions.amount}::numeric = ${row.amount}::numeric`,
+          sql`DATE(${bankTransactions.transactionDate}) = DATE(${row.transactionDate})`,
+          sql`(${bankTransactions.createdAt} < ${rowCreatedAt} OR (${bankTransactions.createdAt} = ${rowCreatedAt} AND ${bankTransactions.id} < ${row.id}))`,
+        ))
+        .orderBy(asc(bankTransactions.createdAt), asc(bankTransactions.id));
+
+      const match = candidates.find((c) => extractDepositor(c.rawDescription) === depKey);
+      if (match) {
+        await db
+          .update(bankTransactions)
+          .set({ possibleDuplicate: true, duplicateOfTransactionId: match.id })
+          .where(eq(bankTransactions.id, row.id));
+        flagged++;
+      }
+    }
+    return flagged;
   }
 
   async createFeePaymentWithSplits(
@@ -3387,6 +3491,7 @@ export class DatabaseStorage implements IStorage {
     status: string;
     paymentDate: string | null;
     isSplit: boolean;
+    possibleDuplicate?: boolean;
   }>> {
     const result = await db.execute(sql`
       SELECT
@@ -3398,6 +3503,7 @@ export class DatabaseStorage implements IStorage {
         fpr.reference AS "reference",
         fpr.status AS "status",
         fpr.payment_date AS "paymentDate",
+        fpr.possible_duplicate AS "possibleDuplicate",
         false AS "isSplit"
       FROM fee_payment_records fpr
       WHERE fpr.student_id = ${studentId}
@@ -3415,6 +3521,7 @@ export class DatabaseStorage implements IStorage {
         fpr2.reference AS "reference",
         fpr2.status AS "status",
         fpr2.payment_date AS "paymentDate",
+        fpr2.possible_duplicate AS "possibleDuplicate",
         true AS "isSplit"
       FROM fee_payment_student_splits fpss
       JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
@@ -3436,6 +3543,7 @@ export class DatabaseStorage implements IStorage {
       status: r.status,
       paymentDate: r.paymentDate ? new Date(r.paymentDate).toISOString() : null,
       isSplit: r.isSplit === true || r.isSplit === 't' || r.isSplit === 'true',
+      possibleDuplicate: r.possibleDuplicate === true || r.possibleDuplicate === 't' || r.possibleDuplicate === 'true',
     }));
   }
 

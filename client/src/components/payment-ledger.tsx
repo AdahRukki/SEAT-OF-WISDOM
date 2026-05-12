@@ -74,6 +74,7 @@ interface PaymentRecord {
   status: string;
   paymentDate: string | null;
   isSplit?: boolean;
+  possibleDuplicate?: boolean;
 }
 
 interface LedgerMeta {
@@ -531,7 +532,21 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
                           <TableCell className="text-sm">{rec.purpose || "—"}</TableCell>
                           <TableCell className="text-sm capitalize">{rec.paymentMethod || "—"}</TableCell>
                           <TableCell className="text-sm font-mono">{rec.reference || "—"}</TableCell>
-                          <TableCell>{getStatusBadge(rec.status)}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {getStatusBadge(rec.status)}
+                              {rec.possibleDuplicate && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
+                                  title="Same student, same day, same amount as another non-reversed payment."
+                                  data-testid={`badge-ledger-possible-duplicate-${rec.id}`}
+                                >
+                                  ⚠ Possible duplicate
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

@@ -118,6 +118,9 @@ interface BankTransaction {
   status: string;
   matchConfidence: number | null;
   bankFormat?: string | null;
+  // Task #128: similar-but-not-identical duplicate flag (set at upload time)
+  possibleDuplicate?: boolean;
+  duplicateOfTransactionId?: string | null;
 }
 
 interface BankTransactionAllocation {
@@ -440,6 +443,47 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         variant: "destructive",
       });
     },
+  });
+
+  // Task #128: clear/ignore/reverse-as-duplicate mutations (admin-only).
+  const clearTxDuplicateMutation = useMutation({
+    mutationFn: async (txId: string) => apiRequest(`/api/admin/bank-transactions/${txId}/clear-duplicate`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Duplicate flag cleared", description: "Transaction marked as not a duplicate." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
+    },
+    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
+  });
+  const ignoreTxDuplicateMutation = useMutation({
+    mutationFn: async (txId: string) => apiRequest(`/api/admin/bank-transactions/${txId}/ignore-as-duplicate`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Transaction dismissed", description: "Marked as duplicate and dismissed from the review list." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
+    },
+    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
+  });
+  const clearPaymentDuplicateMutation = useMutation({
+    mutationFn: async (paymentId: string) => apiRequest(`/api/admin/payments/${paymentId}/clear-duplicate`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Duplicate flag cleared", description: "Payment marked as not a duplicate." });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
+    },
+    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
+  });
+  const reverseAsDuplicateMutation = useMutation({
+    mutationFn: async (paymentId: string) => apiRequest(`/api/admin/payments/${paymentId}/reverse-as-duplicate`, { method: "POST", body: { reason: "Reversed as duplicate" } }),
+    onSuccess: () => {
+      toast({ title: "Payment reversed as duplicate" });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
+    },
+    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
   });
 
   const reverseMutation = useMutation({
@@ -1125,6 +1169,16 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     {payment.student?.user?.lastName || 'Unknown'} {payment.student?.user?.firstName || ''}
                                   </span>
                                   <Badge variant="outline" className="text-xs">{payment.student?.studentId || 'N/A'}</Badge>
+                                  {payment.possibleDuplicate && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
+                                      title="Same student, same day, same amount as another non-reversed payment. Confirmation is blocked until resolved."
+                                      data-testid={`badge-payment-possible-duplicate-${payment.id}`}
+                                    >
+                                      ⚠ Possible duplicate
+                                    </Badge>
+                                  )}
                                 </div>
                                 <div className="text-xl font-bold text-green-600">
                                   ₦{parseFloat(payment.amount).toLocaleString()}
@@ -1151,6 +1205,36 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <Link className="h-3 w-3 mr-1" />
                                     Match
                                   </Button>
+                                )}
+                                {payment.possibleDuplicate && isAdmin && payment.status !== 'reversed' && (
+                                  <div className="flex gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[10px] h-6 px-2"
+                                      title="Not a duplicate — clear flag"
+                                      disabled={clearPaymentDuplicateMutation.isPending}
+                                      onClick={() => clearPaymentDuplicateMutation.mutate(payment.id)}
+                                      data-testid={`button-clear-payment-duplicate-${payment.id}`}
+                                    >
+                                      Clear
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[10px] h-6 px-2 text-red-700 border-red-300"
+                                      title="Reverse this payment as a duplicate"
+                                      disabled={reverseAsDuplicateMutation.isPending}
+                                      onClick={() => {
+                                        if (window.confirm("Reverse this payment as a duplicate?")) {
+                                          reverseAsDuplicateMutation.mutate(payment.id);
+                                        }
+                                      }}
+                                      data-testid={`button-reverse-payment-duplicate-${payment.id}`}
+                                    >
+                                      Reverse as duplicate
+                                    </Button>
+                                  </div>
                                 )}
                                 {payment.status === "confirmed" && (
                                   <>
@@ -1419,6 +1503,16 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   <Badge variant="outline" className={`text-[10px] ${statusBadge.cls}`}>
                                     {statusBadge.label}
                                   </Badge>
+                                  {tx.possibleDuplicate && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
+                                      title="Same school, same day, same amount, same depositor as an earlier transaction. Review before confirming."
+                                      data-testid={`badge-tx-possible-duplicate-${tx.id}`}
+                                    >
+                                      ⚠ Possible duplicate
+                                    </Badge>
+                                  )}
                                 </div>
                                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                                   <Calendar className="h-3 w-3" />
@@ -1434,7 +1528,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 )}
                               </div>
                               {isUnmatched && (
-                                <div>
+                                <div className="flex flex-col gap-1 items-end">
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -1444,6 +1538,32 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <Link className="h-3 w-3 mr-1" />
                                     Match
                                   </Button>
+                                  {tx.possibleDuplicate && isAdmin && (
+                                    <div className="flex gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-[10px] h-6 px-2"
+                                        title="Not a duplicate — clear flag"
+                                        disabled={clearTxDuplicateMutation.isPending}
+                                        onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
+                                        data-testid={`button-clear-tx-duplicate-${tx.id}`}
+                                      >
+                                        Clear
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-[10px] h-6 px-2 text-amber-800 border-amber-400"
+                                        title="Confirm this IS a duplicate and dismiss it from the review list"
+                                        disabled={ignoreTxDuplicateMutation.isPending}
+                                        onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
+                                        data-testid={`button-ignore-tx-duplicate-${tx.id}`}
+                                      >
+                                        Ignore
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1633,19 +1753,59 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                         </TableCell>
                         <TableCell>{tx.reference || "-"}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
-                            Unmatched
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                              Unmatched
+                            </Badge>
+                            {tx.possibleDuplicate && (
+                              <Badge
+                                variant="outline"
+                                className="bg-amber-50 text-amber-800 border-amber-400 text-[10px]"
+                                title="Same school, same day, same amount, same depositor as an earlier transaction."
+                                data-testid={`badge-tx-possible-duplicate-row-${tx.id}`}
+                              >
+                                ⚠ Possible duplicate
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenMatchTxDialog(tx)}
-                          >
-                            <Link className="h-3 w-3 mr-1" />
-                            Match
-                          </Button>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenMatchTxDialog(tx)}
+                            >
+                              <Link className="h-3 w-3 mr-1" />
+                              Match
+                            </Button>
+                            {tx.possibleDuplicate && isAdmin && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-[10px] h-7 px-2"
+                                  disabled={clearTxDuplicateMutation.isPending}
+                                  onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
+                                  title="Not a duplicate — clear flag"
+                                  data-testid={`button-clear-tx-duplicate-row-${tx.id}`}
+                                >
+                                  Clear
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-[10px] h-7 px-2 text-amber-800 border-amber-400"
+                                  disabled={ignoreTxDuplicateMutation.isPending}
+                                  onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
+                                  title="Confirm this IS a duplicate and dismiss it"
+                                  data-testid={`button-ignore-tx-duplicate-row-${tx.id}`}
+                                >
+                                  Ignore
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

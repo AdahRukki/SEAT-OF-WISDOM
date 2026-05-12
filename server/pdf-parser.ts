@@ -25,6 +25,25 @@ export function normalizeForFingerprint(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+// Task #128: extract a normalized "depositor key" from a bank narration so
+// two transactions from the same depositor can be compared even when surrounding
+// noise (transfer codes, channel prefixes, trailing reference numbers) differs.
+// Strategy: uppercase, drop common Nigerian-bank channel/route prefixes, drop
+// trailing alphanumeric reference tokens, collapse whitespace.
+export function extractDepositor(narration: string | null | undefined): string {
+  if (!narration) return "";
+  let s = narration.toUpperCase();
+  // Drop common channel/route tokens (TRF FROM, NIP, MOB, WEB, USSD, POS, ATM)
+  s = s.replace(/\b(NIP|MOB|MOBILE|WEB|USSD|POS|ATM|TRF|TRANSFER|FROM|TO|VIA|REF|FT|INT|INTERBANK|RTGS)[\s:\/-]+/g, " ");
+  s = s.replace(/[^A-Z0-9 ]+/g, " ");
+  // Drop standalone alphanumeric reference-looking tokens (8+ chars w/ digits)
+  s = s
+    .split(/\s+/)
+    .filter((tok) => !(tok.length >= 8 && /\d/.test(tok)))
+    .join(" ");
+  return s.replace(/\s+/g, " ").trim();
+}
+
 export function generateFingerprint(date: string, amount: number, description: string, dedupeKey?: string): string {
   const normalizedDesc = normalizeForFingerprint(description);
   const suffix = dedupeKey ? `|${dedupeKey}` : "";
