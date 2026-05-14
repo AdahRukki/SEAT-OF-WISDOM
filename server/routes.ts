@@ -4205,6 +4205,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const paymentId = req.params.id;
       const before = await storage.getFeePaymentRecordById(paymentId);
       if (!before) return res.status(404).json({ error: "Payment record not found" });
+      // Task #128 phase 2: remember this "Not a duplicate" decision so a
+      // future re-scan / re-flag does not re-raise the same pair.
+      if (before.duplicateOfPaymentId) {
+        await storage.recordClearedDuplicatePair('payment', paymentId, before.duplicateOfPaymentId, user.id);
+      }
       const updated = await storage.clearPaymentDuplicateFlag(paymentId);
       await storage.createPaymentAuditLog({
         action: 'clear_duplicate_flag',
@@ -4266,6 +4271,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const beforeRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, txId)).limit(1);
       const before = beforeRows[0];
       if (!before) return res.status(404).json({ error: "Bank transaction not found" });
+      // Task #128 phase 2: remember "Not a duplicate" decision.
+      if (before.duplicateOfTransactionId) {
+        await storage.recordClearedDuplicatePair('transaction', txId, before.duplicateOfTransactionId, user.id);
+      }
       const updated = await storage.clearTransactionDuplicateFlag(txId);
       await storage.createPaymentAuditLog({
         action: 'clear_duplicate_flag',
@@ -4280,6 +4289,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("[POST /api/admin/bank-transactions/:id/clear-duplicate] Error:", error);
       res.status(500).json({ error: error.message || "Failed to clear duplicate flag" });
+    }
+  });
+
+  // Task #128 phase 2: duplicate review side-panel data. Returns the flagged
+  // entry plus its counterpart (the older record it most likely duplicates).
+  // Both shaped with enough detail for the side-by-side panel without the
+  // client juggling two separate fetches.
+  // Read-only: any authenticated bursar/sub-admin/admin can fetch a pair
+  // for the side-by-side review panel. Sub-admin / bursar are restricted to
+  // their own school; main admin can see all schools.
+  app.get("/api/admin/duplicates/:kind/:id", authenticate, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      if (!user || (user.role !== 'admin' && user.role !== 'sub_admin' && user.role !== 'bursar')) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const kind = req.params.kind;
+      const id = req.params.id;
+      if (kind !== 'transaction' && kind !== 'payment') {
+        return res.status(400).json({ error: "kind must be 'transaction' or 'payment'" });
+      }
+
+      const enforceSchool = user.role !== 'admin';
+      const userSchoolId: string | null = user.schoolId ?? null;
+
+      if (kind === 'payment') {
+        const primary = await storage.getFeePaymentRecordById(id);
+        if (!primary) return res.status(404).json({ error: "Payment record not found" });
+        if (enforceSchool && primary.schoolId !== userSchoolId) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+        let counterpart = null;
+        if (primary.duplicateOfPaymentId) {
+          const cp = await storage.getFeePaymentRecordById(primary.duplicateOfPaymentId);
+          // Hide cross-school counterpart from non-admins (shouldn't normally happen).
+          if (cp && (!enforceSchool || cp.schoolId === userSchoolId)) counterpart = cp;
+        }
+        return res.json({ kind, primary, counterpart });
+      }
+
+      // kind === 'transaction'
+      const txRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, id)).limit(1);
+      const primary = txRows[0];
+      if (!primary) return res.status(404).json({ error: "Bank transaction not found" });
+      if (enforceSchool && primary.schoolId !== userSchoolId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      let counterpart: any = null;
+      if (primary.duplicateOfTransactionId) {
+        const cpRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, primary.duplicateOfTransactionId)).limit(1);
+        const cp = cpRows[0] ?? null;
+        if (cp && (!enforceSchool || cp.schoolId === userSchoolId)) counterpart = cp;
+      }
+      return res.json({ kind, primary, counterpart });
+    } catch (error: any) {
+      console.error("[GET /api/admin/duplicates/:kind/:id] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch duplicate pair" });
+    }
+  });
+
+  // Task #128 phase 2: re-scan an old statement for similar duplicates.
+  // Admin-only. Respects cleared-pair memory. Never overwrites an existing
+  // duplicateOfTransactionId. Writes per-flag + summary audit logs.
+  app.post("/api/admin/bank-statements/:id/rescan-duplicates", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const user = (req as any).user;
+      const statementId = req.params.id;
+      const stmtRows = await db.select().from(bankStatements).where(eq(bankStatements.id, statementId)).limit(1);
+      const stmt = stmtRows[0];
+      if (!stmt) return res.status(404).json({ error: "Bank statement not found" });
+
+      const result = await storage.rescanStatementForDuplicates(statementId);
+
+      for (const txId of result.flaggedTransactionIds) {
+        const txRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, txId)).limit(1);
+        const tx = txRows[0];
+        if (!tx) continue;
+        await storage.createPaymentAuditLog({
+          action: 'rescan_flag_transaction',
+          entityType: 'bank_transaction',
+          entityId: txId,
+          userId: user.id,
+          schoolId: tx.schoolId || undefined,
+          previousData: { possibleDuplicate: false, duplicateOfTransactionId: null },
+          newData: { possibleDuplicate: true, duplicateOfTransactionId: tx.duplicateOfTransactionId },
+        });
+      }
+
+      await storage.createPaymentAuditLog({
+        action: 'rescan_statement_duplicates',
+        entityType: 'bank_statement',
+        entityId: statementId,
+        userId: user.id,
+        schoolId: stmt.schoolId || undefined,
+        previousData: null,
+        newData: {
+          statementId,
+          scanned: result.scanned,
+          newlyFlagged: result.newlyFlagged,
+          unchanged: result.unchanged,
+        },
+      });
+
+      res.json({
+        scanned: result.scanned,
+        newlyFlagged: result.newlyFlagged,
+        unchanged: result.unchanged,
+      });
+    } catch (error: any) {
+      console.error("[POST /api/admin/bank-statements/:id/rescan-duplicates] Error:", error);
+      res.status(500).json({ error: error.message || "Failed to re-scan statement for duplicates" });
     }
   });
 

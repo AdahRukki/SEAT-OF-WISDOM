@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Eye, Search, Loader2, Printer, FileSpreadsheet, Columns3 } from "lucide-react";
+import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
@@ -157,6 +158,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
   const [nameSearch, setNameSearch] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
+  const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
   const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
   const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns(userId));
 
@@ -811,14 +813,26 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                             <div className="flex flex-col gap-1">
                               {getStatusBadge(rec.status)}
                               {rec.possibleDuplicate && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
-                                  title="Same student, same day, same amount as another non-reversed payment."
-                                  data-testid={`badge-ledger-possible-duplicate-${rec.id}`}
-                                >
-                                  ⚠ Possible duplicate
-                                </Badge>
+                                <>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
+                                    title="Same student, same day, same amount as another non-reversed payment."
+                                    data-testid={`badge-ledger-possible-duplicate-${rec.id}`}
+                                  >
+                                    ⚠ Possible duplicate
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-[10px] h-6 px-2 mt-1 self-start"
+                                    title="Compare both entries side-by-side"
+                                    onClick={() => setReviewPair({ kind: 'payment', id: rec.paymentRecordId ?? rec.id })}
+                                    data-testid={`button-ledger-review-duplicate-${rec.id}`}
+                                  >
+                                    Review
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </TableCell>
@@ -832,6 +846,12 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
           )}
         </DialogContent>
       </Dialog>
+      <DuplicateReviewSheet
+        kind={reviewPair?.kind ?? 'payment'}
+        id={reviewPair?.id ?? null}
+        open={!!reviewPair}
+        onOpenChange={(o) => { if (!o) setReviewPair(null); }}
+      />
     </div>
   );
 }

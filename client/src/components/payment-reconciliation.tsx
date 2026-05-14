@@ -58,6 +58,8 @@ import {
   WifiOff,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails } from "@shared/schema";
+import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // "12 Jan 2025" — timezone-safe for YYYY-MM-DD strings and Date objects.
 function formatRecoDate(value: string | Date | null | undefined): string {
@@ -102,6 +104,8 @@ interface BankStatement {
   totalTransactions: number | null;
   newTransactions: number | null;
   duplicatesSkipped: number | null;
+  // Task #128 phase 2: server returns this aggregate for the chip.
+  possibleDuplicatesCount?: number | null;
   dateRangeStart: Date | null;
   dateRangeEnd: Date | null;
   createdAt: Date | null;
@@ -206,6 +210,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [matchSearch, setMatchSearch] = useState("");
   const [isBulkMatchDialogOpen, setIsBulkMatchDialogOpen] = useState(false);
   const [bulkMatchProgress, setBulkMatchProgress] = useState<{ current: number; total: number } | null>(null);
+  // Task #128 phase 2: side-by-side review panel
+  const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
+  // Task #128 phase 2: hide flagged candidates from Match Recorded Payment dialog by default
+  const [showFlaggedCandidates, setShowFlaggedCandidates] = useState(false);
+  // Task #128 phase 2: per-statement re-scan
+  const [rescanStatementId, setRescanStatementId] = useState<string | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -327,9 +337,17 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     },
     onSuccess: (data) => {
       setUploadOfflineFailure(false);
+      // Server returns counts under `summary` (with legacy top-level fallback for older responses).
+      const summary = data.summary ?? data;
+      const newTransactions = summary.newTransactions ?? 0;
+      const duplicatesSkipped = summary.duplicatesSkipped ?? 0;
+      const possibleDuplicatesFlagged = summary.possibleDuplicatesFlagged ?? 0;
+      const dupSuffix = possibleDuplicatesFlagged > 0
+        ? ` ${possibleDuplicatesFlagged} flagged as possible duplicates — review in Reconcile.`
+        : "";
       toast({
         title: "Statement Uploaded",
-        description: `Processed ${data.newTransactions} new transactions. ${data.duplicatesSkipped} duplicates skipped.`,
+        description: `Processed ${newTransactions} new transactions. ${duplicatesSkipped} duplicates skipped.${dupSuffix}`,
       });
       setSelectedFile(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
@@ -355,6 +373,31 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         description: error.message || "Failed to upload bank statement",
         variant: "destructive",
       });
+    },
+  });
+
+  // Task #128 phase 2: re-scan an existing statement for similar duplicates.
+  const rescanStatementMutation = useMutation({
+    mutationFn: async (statementId: string) => {
+      return apiRequest(`/api/admin/bank-statements/${statementId}/rescan-duplicates`, {
+        method: "POST",
+        body: {},
+      });
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Re-scan complete",
+        description: `Scanned ${data.scanned}. Newly flagged: ${data.newlyFlagged}. Unchanged: ${data.unchanged}.`,
+      });
+      setRescanStatementId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Re-scan failed", description: error.message, variant: "destructive" });
+      setRescanStatementId(null);
     },
   });
 
@@ -796,8 +839,24 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     return pendingPayments.filter((p) => {
       const pAmount = parseFloat(p.amount);
       if (isNaN(pAmount) || Math.abs(pAmount - txAmount) >= tolerance) return false;
-      return calendarDayDiff(p.paymentDate, transactionToMatch.transactionDate) <= 1;
+      if (calendarDayDiff(p.paymentDate, transactionToMatch.transactionDate) > 1) return false;
+      // Task #128 phase 2: hide flagged candidates by default.
+      if (!showFlaggedCandidates && p.possibleDuplicate) return false;
+      return true;
     });
+  }, [transactionToMatch, pendingPayments, showFlaggedCandidates]);
+
+  const flaggedMatchTxCandidatesCount = useMemo(() => {
+    if (!transactionToMatch) return 0;
+    const txAmount = parseFloat(transactionToMatch.amount);
+    if (isNaN(txAmount)) return 0;
+    const tolerance = transactionToMatch.bankFormat === 'moniepoint' ? 100.01 : 0.01;
+    return pendingPayments.filter((p) => {
+      const pAmount = parseFloat(p.amount);
+      if (isNaN(pAmount) || Math.abs(pAmount - txAmount) >= tolerance) return false;
+      if (calendarDayDiff(p.paymentDate, transactionToMatch.transactionDate) > 1) return false;
+      return p.possibleDuplicate === true;
+    }).length;
   }, [transactionToMatch, pendingPayments]);
 
   const handleConfirmMatchTx = () => {
@@ -960,6 +1019,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       <TableHead>Date Range</TableHead>
                       <TableHead>New</TableHead>
                       <TableHead>Duplicates</TableHead>
+                      <TableHead>Possible Dupes</TableHead>
                       <TableHead>Uploaded</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
@@ -985,18 +1045,47 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             {statement.duplicatesSkipped || 0}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          {(statement.possibleDuplicatesCount || 0) > 0 ? (
+                            <Badge
+                              variant="outline"
+                              className="bg-amber-50 text-amber-800 border-amber-400"
+                              data-testid={`badge-statement-possible-dupes-${statement.id}`}
+                            >
+                              ⚠ {statement.possibleDuplicatesCount}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">
                           {formatRecoDate(statement.createdAt)}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => setDeleteStatementId(statement.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            {isAdmin && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-[11px]"
+                                title="Re-scan this statement for similar duplicates (respects cleared decisions)"
+                                disabled={rescanStatementMutation.isPending}
+                                onClick={() => setRescanStatementId(statement.id)}
+                                data-testid={`button-rescan-${statement.id}`}
+                              >
+                                <Search className="h-3 w-3 mr-1" />
+                                Re-scan
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => setDeleteStatementId(statement.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1206,34 +1295,48 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     Match
                                   </Button>
                                 )}
-                                {payment.possibleDuplicate && isAdmin && payment.status !== 'reversed' && (
+                                {payment.possibleDuplicate && payment.status !== 'reversed' && (
                                   <div className="flex gap-1">
                                     <Button
                                       size="sm"
                                       variant="outline"
                                       className="text-[10px] h-6 px-2"
-                                      title="Not a duplicate — clear flag"
-                                      disabled={clearPaymentDuplicateMutation.isPending}
-                                      onClick={() => clearPaymentDuplicateMutation.mutate(payment.id)}
-                                      data-testid={`button-clear-payment-duplicate-${payment.id}`}
+                                      title="Compare both entries side-by-side"
+                                      onClick={() => setReviewPair({ kind: 'payment', id: payment.id })}
+                                      data-testid={`button-review-payment-duplicate-${payment.id}`}
                                     >
-                                      Clear
+                                      Review
                                     </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-[10px] h-6 px-2 text-red-700 border-red-300"
-                                      title="Reverse this payment as a duplicate"
-                                      disabled={reverseAsDuplicateMutation.isPending}
-                                      onClick={() => {
-                                        if (window.confirm("Reverse this payment as a duplicate?")) {
-                                          reverseAsDuplicateMutation.mutate(payment.id);
-                                        }
-                                      }}
-                                      data-testid={`button-reverse-payment-duplicate-${payment.id}`}
-                                    >
-                                      Reverse as duplicate
-                                    </Button>
+                                    {isAdmin && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-[10px] h-6 px-2"
+                                          title="Not a duplicate — clear flag"
+                                          disabled={clearPaymentDuplicateMutation.isPending}
+                                          onClick={() => clearPaymentDuplicateMutation.mutate(payment.id)}
+                                          data-testid={`button-clear-payment-duplicate-${payment.id}`}
+                                        >
+                                          Clear
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-[10px] h-6 px-2 text-red-700 border-red-300"
+                                          title="Reverse this payment as a duplicate"
+                                          disabled={reverseAsDuplicateMutation.isPending}
+                                          onClick={() => {
+                                            if (window.confirm("Reverse this payment as a duplicate?")) {
+                                              reverseAsDuplicateMutation.mutate(payment.id);
+                                            }
+                                          }}
+                                          data-testid={`button-reverse-payment-duplicate-${payment.id}`}
+                                        >
+                                          Reverse as duplicate
+                                        </Button>
+                                      </>
+                                    )}
                                   </div>
                                 )}
                                 {payment.status === "confirmed" && (
@@ -1538,30 +1641,44 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <Link className="h-3 w-3 mr-1" />
                                     Match
                                   </Button>
-                                  {tx.possibleDuplicate && isAdmin && (
-                                    <div className="flex gap-1">
+                                  {tx.possibleDuplicate && (
+                                    <div className="flex gap-1 flex-wrap">
                                       <Button
                                         size="sm"
                                         variant="outline"
                                         className="text-[10px] h-6 px-2"
-                                        title="Not a duplicate — clear flag"
-                                        disabled={clearTxDuplicateMutation.isPending}
-                                        onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
-                                        data-testid={`button-clear-tx-duplicate-${tx.id}`}
+                                        title="Compare both entries side-by-side"
+                                        onClick={() => setReviewPair({ kind: 'transaction', id: tx.id })}
+                                        data-testid={`button-review-tx-duplicate-${tx.id}`}
                                       >
-                                        Clear
+                                        Review
                                       </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-[10px] h-6 px-2 text-amber-800 border-amber-400"
-                                        title="Confirm this IS a duplicate and dismiss it from the review list"
-                                        disabled={ignoreTxDuplicateMutation.isPending}
-                                        onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
-                                        data-testid={`button-ignore-tx-duplicate-${tx.id}`}
-                                      >
-                                        Ignore
-                                      </Button>
+                                      {isAdmin && (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="text-[10px] h-6 px-2"
+                                            title="Not a duplicate — clear flag"
+                                            disabled={clearTxDuplicateMutation.isPending}
+                                            onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
+                                            data-testid={`button-clear-tx-duplicate-${tx.id}`}
+                                          >
+                                            Clear
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="text-[10px] h-6 px-2 text-amber-800 border-amber-400"
+                                            title="Confirm this IS a duplicate and dismiss it from the review list"
+                                            disabled={ignoreTxDuplicateMutation.isPending}
+                                            onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
+                                            data-testid={`button-ignore-tx-duplicate-${tx.id}`}
+                                          >
+                                            Ignore
+                                          </Button>
+                                        </>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -1779,30 +1896,44 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                               <Link className="h-3 w-3 mr-1" />
                               Match
                             </Button>
-                            {tx.possibleDuplicate && isAdmin && (
+                            {tx.possibleDuplicate && (
                               <>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   className="text-[10px] h-7 px-2"
-                                  disabled={clearTxDuplicateMutation.isPending}
-                                  onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
-                                  title="Not a duplicate — clear flag"
-                                  data-testid={`button-clear-tx-duplicate-row-${tx.id}`}
+                                  onClick={() => setReviewPair({ kind: 'transaction', id: tx.id })}
+                                  title="Compare both entries side-by-side"
+                                  data-testid={`button-review-tx-duplicate-row-${tx.id}`}
                                 >
-                                  Clear
+                                  Review
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-[10px] h-7 px-2 text-amber-800 border-amber-400"
-                                  disabled={ignoreTxDuplicateMutation.isPending}
-                                  onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
-                                  title="Confirm this IS a duplicate and dismiss it"
-                                  data-testid={`button-ignore-tx-duplicate-row-${tx.id}`}
-                                >
-                                  Ignore
-                                </Button>
+                                {isAdmin && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[10px] h-7 px-2"
+                                      disabled={clearTxDuplicateMutation.isPending}
+                                      onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
+                                      title="Not a duplicate — clear flag"
+                                      data-testid={`button-clear-tx-duplicate-row-${tx.id}`}
+                                    >
+                                      Clear
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[10px] h-7 px-2 text-amber-800 border-amber-400"
+                                      disabled={ignoreTxDuplicateMutation.isPending}
+                                      onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
+                                      title="Confirm this IS a duplicate and dismiss it"
+                                      data-testid={`button-ignore-tx-duplicate-row-${tx.id}`}
+                                    >
+                                      Ignore
+                                    </Button>
+                                  </>
+                                )}
                               </>
                             )}
                           </div>
@@ -2057,6 +2188,22 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   <Badge variant="secondary">{matchTxCandidates.length}</Badge>
                 </div>
 
+                {flaggedMatchTxCandidatesCount > 0 && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                    <Checkbox
+                      checked={showFlaggedCandidates}
+                      onCheckedChange={(v) => setShowFlaggedCandidates(v === true)}
+                      data-testid="checkbox-show-flagged-candidates"
+                    />
+                    <span>
+                      Show possible duplicates
+                      <Badge variant="outline" className="ml-2 text-[10px] bg-amber-50 text-amber-800 border-amber-400">
+                        {flaggedMatchTxCandidatesCount} hidden
+                      </Badge>
+                    </span>
+                  </label>
+                )}
+
                 {matchTxCandidates.length === 0 ? (
                   <div className="text-center py-8 text-sm text-muted-foreground border rounded-lg">
                     <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-orange-500" />
@@ -2106,6 +2253,13 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                               {p.reference && (
                                 <div className="text-xs text-muted-foreground mt-1">
                                   Ref: {p.reference}
+                                </div>
+                              )}
+                              {p.possibleDuplicate && (
+                                <div className="mt-1">
+                                  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-800 border-amber-400">
+                                    ⚠ Possible duplicate
+                                  </Badge>
                                 </div>
                               )}
                             </div>
@@ -2277,6 +2431,44 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Task #128 phase 2: re-scan confirmation */}
+      <Dialog open={!!rescanStatementId} onOpenChange={(open) => { if (!open && !rescanStatementMutation.isPending) setRescanStatementId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Re-scan statement for similar duplicates</DialogTitle>
+            <DialogDescription>
+              We'll compare every credit transaction in this statement against earlier transactions
+              from the same school (same calendar day, same amount). Already-cleared pairs are skipped.
+              Existing flags will not be overwritten.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRescanStatementId(null)} disabled={rescanStatementMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => rescanStatementId && rescanStatementMutation.mutate(rescanStatementId)}
+              disabled={rescanStatementMutation.isPending}
+              data-testid="button-confirm-rescan"
+            >
+              {rescanStatementMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Scanning…</>
+              ) : (
+                <><Search className="h-4 w-4 mr-2" />Run re-scan</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task #128 phase 2: side-by-side duplicate review panel */}
+      <DuplicateReviewSheet
+        kind={reviewPair?.kind ?? 'transaction'}
+        id={reviewPair?.id ?? null}
+        open={!!reviewPair}
+        onOpenChange={(o) => { if (!o) setReviewPair(null); }}
+      />
     </div>
   );
 }

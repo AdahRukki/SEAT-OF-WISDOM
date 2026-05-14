@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { generateClientRequestId, queuedApiRequest, addSyncListener, getQueuedClientRequestIds, processOfflineQueue } from "@/lib/offline-queue";
+import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -128,6 +129,7 @@ export function PaymentRecording({
   userRole,
 }: PaymentRecordingProps) {
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
+  const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
   const [isBodyVisible, setIsBodyVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
@@ -1578,34 +1580,48 @@ export function PaymentRecording({
                               ⚠ Possible duplicate
                             </Badge>
                           )}
-                          {record.possibleDuplicate && isAdmin && record.status !== 'reversed' && (
-                            <div className="flex gap-1">
+                          {record.possibleDuplicate && record.status !== 'reversed' && (
+                            <div className="flex gap-1 flex-wrap">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 className="text-[10px] h-6 px-2"
-                                title="Not a duplicate — clear flag"
-                                disabled={clearPaymentDuplicateMutation.isPending}
-                                onClick={() => clearPaymentDuplicateMutation.mutate(record.id)}
-                                data-testid={`button-record-clear-duplicate-${record.id}`}
+                                title="Compare both entries side-by-side"
+                                onClick={() => setReviewPair({ kind: 'payment', id: record.id })}
+                                data-testid={`button-record-review-duplicate-${record.id}`}
                               >
-                                Clear
+                                Review
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-[10px] h-6 px-2 text-red-700 border-red-300"
-                                title="Reverse as duplicate"
-                                disabled={reverseAsDuplicateMutation.isPending}
-                                onClick={() => {
-                                  if (window.confirm("Reverse this payment as a duplicate?")) {
-                                    reverseAsDuplicateMutation.mutate(record.id);
-                                  }
-                                }}
-                                data-testid={`button-record-reverse-duplicate-${record.id}`}
-                              >
-                                Reverse
-                              </Button>
+                              {isAdmin && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-[10px] h-6 px-2"
+                                    title="Not a duplicate — clear flag"
+                                    disabled={clearPaymentDuplicateMutation.isPending}
+                                    onClick={() => clearPaymentDuplicateMutation.mutate(record.id)}
+                                    data-testid={`button-record-clear-duplicate-${record.id}`}
+                                  >
+                                    Clear
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-[10px] h-6 px-2 text-red-700 border-red-300"
+                                    title="Reverse as duplicate"
+                                    disabled={reverseAsDuplicateMutation.isPending}
+                                    onClick={() => {
+                                      if (window.confirm("Reverse this payment as a duplicate?")) {
+                                        reverseAsDuplicateMutation.mutate(record.id);
+                                      }
+                                    }}
+                                    data-testid={`button-record-reverse-duplicate-${record.id}`}
+                                  >
+                                    Reverse
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1678,6 +1694,12 @@ export function PaymentRecording({
       <PaymentDetailsDialog
         record={viewingRecord}
         onClose={() => setViewingRecord(null)}
+      />
+      <DuplicateReviewSheet
+        kind={reviewPair?.kind ?? 'payment'}
+        id={reviewPair?.id ?? null}
+        open={!!reviewPair}
+        onOpenChange={(o) => { if (!o) setReviewPair(null); }}
       />
     </div>
   );

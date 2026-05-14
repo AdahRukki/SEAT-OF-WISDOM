@@ -28,6 +28,7 @@ import {
   paymentAllocations,
   bankStatements,
   bankTransactions,
+  clearedDuplicatePairs,
   type School,
   type User,
   type Student,
@@ -198,6 +199,10 @@ export interface IStorage {
   getPaymentById(id: string): Promise<PaymentWithDetails | undefined>;
   createFeePaymentWithSplits(record: Omit<InsertFeePaymentRecord, 'studentId'>, splits: Array<{ studentId: string; amount: number }>): Promise<FeePaymentRecord>;
   getSplitsForPaymentRecord(paymentRecordId: string): Promise<FeePaymentStudentSplit[]>;
+  // Task #128 phase 2
+  rescanStatementForDuplicates(statementId: string): Promise<{ scanned: number; newlyFlagged: number; unchanged: number; flaggedTransactionIds: string[] }>;
+  recordClearedDuplicatePair(kind: 'transaction' | 'payment', idA: string, idB: string, userId: string | null): Promise<void>;
+  isClearedDuplicatePair(kind: 'transaction' | 'payment', idA: string, idB: string): Promise<boolean>;
   getStudentPaymentHistory(studentId: string, schoolId: string, status?: string, term?: string, session?: string): Promise<Array<{
     id: string;
     paymentRecordId: string;
@@ -3474,8 +3479,183 @@ export class DatabaseStorage implements IStorage {
       return created;
     });
 
+    // Task #128: per-split duplicate detection. For each student in the
+    // split, check whether an EARLIER non-reversed payment exists for the
+    // same student + same per-split amount + same calendar day. The lookup
+    // pool covers both single-student payment rows AND any row whose splits
+    // include that student at that amount.
+    let oldestMatchPaymentId: string | null = null;
+    let oldestMatchCreatedAt: Date | null = null;
+    const paymentDateSql = paymentRecord.paymentDate;
+    for (const split of splits) {
+      // Single-student earlier payments: same student + same amount + same day
+      const singleMatches = await db
+        .select({ id: feePaymentRecords.id, createdAt: feePaymentRecords.createdAt })
+        .from(feePaymentRecords)
+        .where(and(
+          eq(feePaymentRecords.studentId, split.studentId),
+          sql`${feePaymentRecords.amount}::numeric = ${split.amount}`,
+          sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${paymentDateSql})`,
+          ne(feePaymentRecords.status, 'reversed'),
+          ne(feePaymentRecords.id, paymentRecord.id),
+        ))
+        .orderBy(asc(feePaymentRecords.createdAt))
+        .limit(1);
+
+      // Split-component earlier payments: another payment whose split row
+      // matches this student + this per-split amount, on the same day.
+      const splitMatches = await db
+        .select({ id: feePaymentRecords.id, createdAt: feePaymentRecords.createdAt })
+        .from(feePaymentStudentSplits)
+        .innerJoin(
+          feePaymentRecords,
+          eq(feePaymentStudentSplits.paymentRecordId, feePaymentRecords.id)
+        )
+        .where(and(
+          eq(feePaymentStudentSplits.studentId, split.studentId),
+          sql`${feePaymentStudentSplits.amount}::numeric = ${split.amount}`,
+          sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${paymentDateSql})`,
+          ne(feePaymentRecords.status, 'reversed'),
+          ne(feePaymentRecords.id, paymentRecord.id),
+        ))
+        .orderBy(asc(feePaymentRecords.createdAt))
+        .limit(1);
+
+      const candidates = [...singleMatches, ...splitMatches];
+      for (const c of candidates) {
+        const ct = c.createdAt ?? new Date(0);
+        if (oldestMatchCreatedAt === null || ct.getTime() < oldestMatchCreatedAt.getTime()) {
+          oldestMatchCreatedAt = ct;
+          oldestMatchPaymentId = c.id;
+        }
+      }
+    }
+
+    if (oldestMatchPaymentId) {
+      const [updated] = await db
+        .update(feePaymentRecords)
+        .set({ possibleDuplicate: true, duplicateOfPaymentId: oldestMatchPaymentId })
+        .where(eq(feePaymentRecords.id, paymentRecord.id))
+        .returning();
+      console.log('[createFeePaymentWithSplits] Flagged split payment', paymentRecord.id, 'as possible duplicate of', oldestMatchPaymentId);
+      return updated;
+    }
+
     console.log('[createFeePaymentWithSplits] Created payment record:', paymentRecord.id, 'with splits for', splits.length, 'students');
     return paymentRecord;
+  }
+
+  // Task #128 phase 2: cleared-pair memory. Stores pairs canonical-sorted so
+  // re-scans skip them regardless of which side was inspected first.
+  async recordClearedDuplicatePair(
+    kind: 'transaction' | 'payment',
+    idA: string,
+    idB: string,
+    userId: string | null,
+  ): Promise<void> {
+    if (!idA || !idB || idA === idB) return;
+    const [a, b] = idA < idB ? [idA, idB] : [idB, idA];
+    try {
+      await db.insert(clearedDuplicatePairs).values({
+        kind,
+        entityAId: a,
+        entityBId: b,
+        clearedBy: userId,
+      });
+    } catch (e: any) {
+      // Unique-index violation just means we already remembered this pair.
+      if (!String(e?.message || '').includes('uniq_cleared_duplicate_pairs')) {
+        console.warn('[recordClearedDuplicatePair] insert failed:', e?.message);
+      }
+    }
+  }
+
+  async isClearedDuplicatePair(
+    kind: 'transaction' | 'payment',
+    idA: string,
+    idB: string,
+  ): Promise<boolean> {
+    if (!idA || !idB || idA === idB) return false;
+    const [a, b] = idA < idB ? [idA, idB] : [idB, idA];
+    const rows = await db
+      .select({ id: clearedDuplicatePairs.id })
+      .from(clearedDuplicatePairs)
+      .where(and(
+        eq(clearedDuplicatePairs.kind, kind),
+        eq(clearedDuplicatePairs.entityAId, a),
+        eq(clearedDuplicatePairs.entityBId, b),
+      ))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  // Task #128 phase 2: re-scan an existing statement for similar duplicates.
+  // - Compares each transaction in the statement against the entire school's
+  //   transaction history (same school, same calendar day, same amount, same
+  //   normalized depositor).
+  // - Skips pairs already in `cleared_duplicate_pairs`.
+  // - Never overwrites an existing duplicateOfTransactionId — only newly
+  //   detected matches are flagged.
+  async rescanStatementForDuplicates(statementId: string): Promise<{
+    scanned: number;
+    newlyFlagged: number;
+    unchanged: number;
+    flaggedTransactionIds: string[];
+  }> {
+    const { extractDepositor } = await import('./pdf-parser');
+    const stmtRows = await db
+      .select()
+      .from(bankTransactions)
+      .where(eq(bankTransactions.statementId, statementId))
+      .orderBy(asc(bankTransactions.createdAt), asc(bankTransactions.id));
+
+    const flaggedIds: string[] = [];
+    let unchanged = 0;
+    for (const row of stmtRows) {
+      if (row.possibleDuplicate) { unchanged++; continue; }
+      if (!row.schoolId) { unchanged++; continue; }
+      const depKey = extractDepositor(row.rawDescription);
+      if (!depKey) { unchanged++; continue; }
+      // Strictly-earlier predicate so a newer row never gets pointed at a
+      // newer row (avoids "A is duplicate of B" while "B is duplicate of A"):
+      // require candidate.createdAt < row.createdAt, or equal createdAt with
+      // smaller id as a tiebreaker. Also filter out the row itself.
+      const candidates = await db
+        .select()
+        .from(bankTransactions)
+        .where(and(
+          eq(bankTransactions.schoolId, row.schoolId),
+          ne(bankTransactions.id, row.id),
+          sql`${bankTransactions.amount}::numeric = ${row.amount}::numeric`,
+          sql`DATE(${bankTransactions.transactionDate}) = DATE(${row.transactionDate})`,
+          sql`(${bankTransactions.createdAt} < ${row.createdAt} OR (${bankTransactions.createdAt} = ${row.createdAt} AND ${bankTransactions.id} < ${row.id}))`,
+        ))
+        .orderBy(asc(bankTransactions.createdAt), asc(bankTransactions.id));
+
+      let chosen: typeof candidates[number] | null = null;
+      for (const c of candidates) {
+        if (extractDepositor(c.rawDescription) !== depKey) continue;
+        if (await this.isClearedDuplicatePair('transaction', row.id, c.id)) continue;
+        chosen = c;
+        break;
+      }
+      if (chosen) {
+        await db
+          .update(bankTransactions)
+          .set({ possibleDuplicate: true, duplicateOfTransactionId: chosen.id })
+          .where(eq(bankTransactions.id, row.id));
+        flaggedIds.push(row.id);
+      } else {
+        unchanged++;
+      }
+    }
+
+    return {
+      scanned: stmtRows.length,
+      newlyFlagged: flaggedIds.length,
+      unchanged,
+      flaggedTransactionIds: flaggedIds,
+    };
   }
 
   async getStudentPaymentHistory(
@@ -4137,15 +4317,33 @@ export class DatabaseStorage implements IStorage {
     console.log('[getBankStatements] Fetching statements for school:', schoolId || 'all');
     
     const whereClause = schoolId ? eq(bankStatements.schoolId, schoolId) : undefined;
-    
+
+    // Task #128 phase 2: also return per-statement count of currently-flagged
+    // possible-duplicate transactions so the Upload History UI can show a chip.
     const statements = await db
-      .select()
+      .select({
+        id: bankStatements.id,
+        schoolId: bankStatements.schoolId,
+        fileName: bankStatements.fileName,
+        fileType: bankStatements.fileType,
+        fileSize: bankStatements.fileSize,
+        bankFormat: bankStatements.bankFormat,
+        totalTransactions: bankStatements.totalTransactions,
+        newTransactions: bankStatements.newTransactions,
+        duplicatesSkipped: bankStatements.duplicatesSkipped,
+        dateRangeStart: bankStatements.dateRangeStart,
+        dateRangeEnd: bankStatements.dateRangeEnd,
+        uploadedBy: bankStatements.uploadedBy,
+        processedAt: bankStatements.processedAt,
+        createdAt: bankStatements.createdAt,
+        possibleDuplicatesCount: sql<number>`COALESCE((SELECT COUNT(*)::int FROM ${bankTransactions} bt WHERE bt.statement_id = ${bankStatements.id} AND bt.possible_duplicate = TRUE), 0)`,
+      })
       .from(bankStatements)
       .where(whereClause)
       .orderBy(desc(bankStatements.createdAt));
 
     console.log('[getBankStatements] Found', statements.length, 'statements');
-    return statements;
+    return statements as unknown as BankStatement[];
   }
 
   async updateBankStatementCounts(id: string, totalTransactions: number, newTransactions: number, duplicatesSkipped: number): Promise<BankStatement> {

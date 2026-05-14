@@ -461,6 +461,19 @@ export const paymentPatternHistory = pgTable("payment_pattern_history", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Task #128: remembers admin "Not a duplicate" decisions so a later re-scan
+// of an old statement does not re-flag a pair the admin already cleared.
+// `entityAId` and `entityBId` are stored canonical (a < b lexicographically)
+// to make the unique index symmetric.
+export const clearedDuplicatePairs = pgTable("cleared_duplicate_pairs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  kind: varchar("kind", { length: 20 }).notNull(), // 'transaction' | 'payment'
+  entityAId: uuid("entity_a_id").notNull(),
+  entityBId: uuid("entity_b_id").notNull(),
+  clearedBy: uuid("cleared_by").references(() => users.id),
+  clearedAt: timestamp("cleared_at").defaultNow(),
+});
+
 // Audit Logs table (tracks all payment-related actions)
 export const paymentAuditLogs = pgTable("payment_audit_logs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1168,6 +1181,9 @@ export type ReversePayment = z.infer<typeof reversePaymentSchema>;
 
 // Fee Payment Student Split types
 export type FeePaymentStudentSplit = typeof feePaymentStudentSplits.$inferSelect;
+
+// Cleared Duplicate Pair types (Task #128)
+export type ClearedDuplicatePair = typeof clearedDuplicatePairs.$inferSelect;
 
 // Schema for recording a multi-student payment (single record with per-student splits)
 export const recordMultiStudentPaymentSchema = z.object({

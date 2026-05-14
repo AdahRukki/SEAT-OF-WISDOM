@@ -28,6 +28,18 @@ async function runMigrations() {
         ON bank_transactions (school_id) WHERE possible_duplicate = TRUE;
       CREATE INDEX IF NOT EXISTS idx_fee_payment_records_possible_duplicate
         ON fee_payment_records (school_id) WHERE possible_duplicate = TRUE;
+      -- Task #128 phase 2: remember admin "Not a duplicate" decisions so a
+      -- later statement re-scan respects them.
+      CREATE TABLE IF NOT EXISTS cleared_duplicate_pairs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        kind VARCHAR(20) NOT NULL,
+        entity_a_id UUID NOT NULL,
+        entity_b_id UUID NOT NULL,
+        cleared_by UUID REFERENCES users(id),
+        cleared_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uniq_cleared_duplicate_pairs
+        ON cleared_duplicate_pairs (kind, entity_a_id, entity_b_id);
       CREATE TABLE IF NOT EXISTS tuition_class_amounts (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         fee_type_id UUID NOT NULL REFERENCES fee_types(id) ON DELETE CASCADE,
