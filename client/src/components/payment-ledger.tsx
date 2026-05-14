@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Table,
@@ -29,11 +29,13 @@ import { Users, Eye, Search, Loader2, Printer, FileSpreadsheet, Columns3 } from 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
+import { useAuth } from "@/hooks/use-auth";
 
 const COLUMN_DEFS = [
   { key: "name", label: "Student Name", required: true },
   { key: "studentId", label: "SOWA ID" },
   { key: "className", label: "Class" },
+  { key: "parentWhatsapp", label: "Parent WhatsApp" },
   { key: "tuition", label: "Tuition Fee (₦)" },
   { key: "paid", label: "Total Paid (₦)" },
   { key: "misc", label: "Miscellaneous (₦)" },
@@ -43,11 +45,17 @@ const COLUMN_DEFS = [
 ] as const;
 type ColKey = typeof COLUMN_DEFS[number]["key"];
 const ALL_COL_KEYS: ColKey[] = COLUMN_DEFS.map((c) => c.key);
-const COLUMNS_STORAGE_KEY = "sowa_finance_visible_columns";
+const COLUMNS_STORAGE_KEY_PREFIX = "sowa_finance_visible_columns";
+// Sensitive columns are OFF by default for confidentiality on first use.
+const DEFAULT_OFF: Set<ColKey> = new Set<ColKey>(["parentWhatsapp"]);
 
-function loadVisibleColumns(): Set<ColKey> {
+function storageKeyFor(userId?: string | null): string {
+  return `${COLUMNS_STORAGE_KEY_PREFIX}:${userId || "anon"}`;
+}
+
+function loadVisibleColumns(userId?: string | null): Set<ColKey> {
   try {
-    const raw = localStorage.getItem(COLUMNS_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKeyFor(userId));
     if (raw) {
       const arr = JSON.parse(raw) as string[];
       const valid = arr.filter((k): k is ColKey => (ALL_COL_KEYS as string[]).includes(k));
@@ -56,7 +64,7 @@ function loadVisibleColumns(): Set<ColKey> {
       return set;
     }
   } catch {}
-  return new Set<ColKey>(ALL_COL_KEYS);
+  return new Set<ColKey>(ALL_COL_KEYS.filter((k) => !DEFAULT_OFF.has(k)));
 }
 
 function getEntryStatus(e: { tuitionAssigned: number; totalPaid: number }): string {
@@ -95,6 +103,7 @@ interface LedgerEntry {
   lastName: string;
   className: string;
   classId: string;
+  parentWhatsapp: string | null;
   totalPaid: number;
   totalAssigned: number;
   tuitionAssigned: number;
@@ -141,19 +150,26 @@ interface PaymentLedgerProps {
 }
 
 export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSession, userRole, onOpenTuitionSetup }: PaymentLedgerProps) {
+  const { user } = useAuth();
+  const userId = user?.id;
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
   const [nameSearch, setNameSearch] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
   const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
-  const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns());
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns(userId));
+
+  // Re-hydrate per-user preferences when the signed-in user changes.
+  useEffect(() => {
+    setVisibleColumns(loadVisibleColumns(userId));
+  }, [userId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(Array.from(visibleColumns)));
+      localStorage.setItem(storageKeyFor(userId), JSON.stringify(Array.from(visibleColumns)));
     } catch {}
-  }, [visibleColumns]);
+  }, [visibleColumns, userId]);
 
   const toggleColumn = (key: ColKey) => {
     if (key === "name") return;
@@ -282,6 +298,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("name")) row["Student Name"] = `${e.lastName ?? ""} ${e.firstName ?? ""}`.trim();
       if (isCol("className")) row["Class"] = e.className || "";
       if (isCol("studentId")) row["SOWA ID"] = e.studentId || "";
+      if (isCol("parentWhatsapp")) row["Parent WhatsApp"] = e.parentWhatsapp || "";
       if (isCol("tuition")) row["Tuition Fee (NGN)"] = tuition;
       if (isCol("paid")) row["Total Paid (NGN)"] = paid;
       if (isCol("misc")) row["Miscellaneous (NGN)"] = misc;
@@ -522,6 +539,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 {isCol("name") && <TableHead>Student Name</TableHead>}
                 {isCol("className") && <TableHead>Class</TableHead>}
                 {isCol("studentId") && <TableHead>SOWA ID</TableHead>}
+                {isCol("parentWhatsapp") && <TableHead>Parent WhatsApp</TableHead>}
                 {isCol("tuition") && <TableHead className="text-right">Tuition Fee (₦)</TableHead>}
                 {isCol("paid") && <TableHead className="text-right">Total Paid (₦)</TableHead>}
                 {isCol("misc") && <TableHead className="text-right">Miscellaneous (₦)</TableHead>}
@@ -537,8 +555,21 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 const paid = entry.totalPaid || 0;
                 const misc = Math.max(0, paid - tuition);
                 const balance = Math.max(0, tuition - paid);
+                const prevClass = idx > 0 ? filteredLedger[idx - 1].className : null;
+                // When printing "All Classes", insert a class section header
+                // before the first row of each class. Hidden on screen.
+                const showClassHeader =
+                  selectedClassId === "all" && entry.className && entry.className !== prevClass;
                 return (
-                <TableRow key={entry.studentDbId} className={paid === 0 ? "text-muted-foreground" : ""}>
+                <Fragment key={entry.studentDbId}>
+                {showClassHeader && (
+                  <TableRow className="hidden print:table-row" data-print-class-header>
+                    <TableCell colSpan={20} className="font-bold bg-gray-200 text-black uppercase tracking-wide text-xs">
+                      Class: {entry.className}
+                    </TableCell>
+                  </TableRow>
+                )}
+                <TableRow className={paid === 0 ? "text-muted-foreground" : ""}>
                   <TableCell className="text-center text-xs">{idx + 1}</TableCell>
                   {isCol("name") && (
                     <TableCell className="font-medium">
@@ -547,6 +578,9 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   )}
                   {isCol("className") && <TableCell className="text-sm">{entry.className}</TableCell>}
                   {isCol("studentId") && <TableCell className="text-sm font-mono">{entry.studentId}</TableCell>}
+                  {isCol("parentWhatsapp") && (
+                    <TableCell className="text-sm font-mono">{entry.parentWhatsapp || "—"}</TableCell>
+                  )}
                   {isCol("tuition") && (
                     <TableCell className="text-right font-semibold">
                       {tuition > 0 ? `₦${tuition.toLocaleString()}` : "—"}
@@ -585,6 +619,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                     </Button>
                   </TableCell>
                 </TableRow>
+                </Fragment>
                 );
               })}
               {userRole === 'admin' && filteredLedger.length > 0 && (() => {
@@ -610,6 +645,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                     {isCol("name") && <TableCell>Grand Total</TableCell>}
                     {isCol("className") && <TableCell></TableCell>}
                     {isCol("studentId") && <TableCell></TableCell>}
+                    {isCol("parentWhatsapp") && <TableCell></TableCell>}
                     {isCol("tuition") && (
                       <TableCell className="text-right" data-testid="cell-grand-total-tuition">
                         <span className="text-green-700">₦{totals.tuitionPaid.toLocaleString()}</span>

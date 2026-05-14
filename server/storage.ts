@@ -218,6 +218,7 @@ export interface IStorage {
       lastName: string;
       className: string;
       classId: string;
+      parentWhatsapp: string | null;
       totalPaid: number;
       totalAssigned: number;
       tuitionAssigned: number;
@@ -1478,6 +1479,7 @@ export class DatabaseStorage implements IStorage {
         u.last_name AS "lastName",
         c.name AS "className",
         s.class_id AS "classId",
+        s.parent_whatsapp AS "parentWhatsapp",
         (
           COALESCE((
             SELECT SUM(fpr.amount) FROM fee_payment_records fpr
@@ -1542,7 +1544,7 @@ export class DatabaseStorage implements IStorage {
       JOIN users u ON s.user_id = u.id
       LEFT JOIN classes c ON s.class_id = c.id
       WHERE ${studentWhereClause}
-      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id
+      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id, s.parent_whatsapp
       ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
     `);
 
@@ -1589,6 +1591,7 @@ export class DatabaseStorage implements IStorage {
         lastName: r.lastName,
         className: r.className || '',
         classId: r.classId,
+        parentWhatsapp: r.parentWhatsapp ?? null,
         totalPaid,
         totalAssigned,
         tuitionAssigned,
