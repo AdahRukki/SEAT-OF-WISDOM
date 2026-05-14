@@ -210,6 +210,15 @@
   .broadsheet-print-content * {
     visibility: visible !important;
   }
+
+  /* Finance details only prints when finance print mode is active
+     (set on <body> by the Finance Print button). This prevents
+     Finance Details from contaminating report-card / broadsheet prints
+     triggered elsewhere on the same page. */
+  body.printing-finance .finance-print-content,
+  body.printing-finance .finance-print-content * {
+    visibility: visible !important;
+  }
   
   /* Position the report card to fill the page */
   .report-card {
@@ -254,6 +263,40 @@
     border: 1px solid #ccc !important;
     padding: 3px 6px !important;
     color: black !important;
+  }
+
+  .finance-print-content {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 12px !important;
+    color: black !important;
+    background: white !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .finance-print-content table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .finance-print-content th,
+  .finance-print-content td {
+    border: 1px solid #999 !important;
+    padding: 4px 6px !important;
+    color: black !important;
+    background: white !important;
+  }
+
+  .finance-print-content th {
+    background: #f1f1f1 !important;
+    font-weight: 700 !important;
   }
 
   .no-print {

@@ -5041,26 +5041,17 @@ export default function AdminDashboard() {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowFinanceDetails((v) => !v)}
+                    className="print:hidden"
                   >
                     {showFinanceDetails ? "Hide" : "Show"} Details
                   </Button>
-                  {showFinanceDetails && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.print()}
-                      className="print:hidden"
-                    >
-                      <Printer className="h-4 w-4 mr-1" />
-                      Print
-                    </Button>
-                  )}
                 </div>
               </CardHeader>
               {showFinanceDetails && (
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 finance-print-content">
                   <PaymentLedger
                     schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
+                    schoolName={getSchoolName(user?.role === 'admin' ? selectedSchoolId : (user?.schoolId || ''))}
                     currentTerm={selectedFinanceTerm}
                     currentSession={selectedFinanceSession}
                     userRole={user?.role}

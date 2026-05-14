@@ -25,7 +25,50 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Eye, Search, Loader2 } from "lucide-react";
+import { Users, Eye, Search, Loader2, Printer, FileSpreadsheet, Columns3 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import * as XLSX from "xlsx";
+
+const COLUMN_DEFS = [
+  { key: "name", label: "Student Name", required: true },
+  { key: "studentId", label: "SOWA ID" },
+  { key: "className", label: "Class" },
+  { key: "tuition", label: "Tuition Fee (₦)" },
+  { key: "paid", label: "Total Paid (₦)" },
+  { key: "misc", label: "Miscellaneous (₦)" },
+  { key: "balance", label: "Balance (₦)" },
+  { key: "status", label: "Status" },
+  { key: "lastPayment", label: "Last Payment" },
+] as const;
+type ColKey = typeof COLUMN_DEFS[number]["key"];
+const ALL_COL_KEYS: ColKey[] = COLUMN_DEFS.map((c) => c.key);
+const COLUMNS_STORAGE_KEY = "sowa_finance_visible_columns";
+
+function loadVisibleColumns(): Set<ColKey> {
+  try {
+    const raw = localStorage.getItem(COLUMNS_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as string[];
+      const valid = arr.filter((k): k is ColKey => (ALL_COL_KEYS as string[]).includes(k));
+      const set = new Set<ColKey>(valid);
+      set.add("name");
+      return set;
+    }
+  } catch {}
+  return new Set<ColKey>(ALL_COL_KEYS);
+}
+
+function getEntryStatus(e: { tuitionAssigned: number; totalPaid: number }): string {
+  if (!e.tuitionAssigned) return "—";
+  if (e.totalPaid >= e.tuitionAssigned) return "Paid";
+  if (e.totalPaid > 0) return "Partial";
+  return "Owing";
+}
+
+function sanitizeFilenamePart(s: string): string {
+  return (s || "").trim().replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "all";
+}
 
 function formatLedgerDate(value: string | Date | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -90,19 +133,39 @@ interface LedgerResponse {
 
 interface PaymentLedgerProps {
   schoolId?: string;
+  schoolName?: string;
   currentTerm?: string;
   currentSession?: string;
   userRole?: string;
   onOpenTuitionSetup?: () => void;
 }
 
-export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole, onOpenTuitionSetup }: PaymentLedgerProps) {
+export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSession, userRole, onOpenTuitionSetup }: PaymentLedgerProps) {
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
   const [nameSearch, setNameSearch] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
   const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(Array.from(visibleColumns)));
+    } catch {}
+  }, [visibleColumns]);
+
+  const toggleColumn = (key: ColKey) => {
+    if (key === "name") return;
+    setVisibleColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      next.add("name");
+      return next;
+    });
+  };
+  const isCol = (k: ColKey) => visibleColumns.has(k);
 
   useEffect(() => {
     if (currentTerm) setSelectedTerm(currentTerm);
@@ -196,6 +259,56 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
       })
     : (Array.isArray(ledger) ? ledger : []);
 
+  const handlePrint = () => {
+    document.body.classList.add("printing-finance");
+    const cleanup = () => {
+      document.body.classList.remove("printing-finance");
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+    // Safety net for browsers that don't fire afterprint reliably.
+    setTimeout(cleanup, 5000);
+  };
+
+  const buildExportRows = () => {
+    return filteredLedger.map((e, idx) => {
+      const tuition = e.tuitionAssigned || 0;
+      const paid = e.totalPaid || 0;
+      const misc = Math.max(0, paid - tuition);
+      const balance = Math.max(0, tuition - paid);
+      // Order matches the on-screen table for predictability.
+      const row: Record<string, string | number> = { "#": idx + 1 };
+      if (isCol("name")) row["Student Name"] = `${e.lastName ?? ""} ${e.firstName ?? ""}`.trim();
+      if (isCol("className")) row["Class"] = e.className || "";
+      if (isCol("studentId")) row["SOWA ID"] = e.studentId || "";
+      if (isCol("tuition")) row["Tuition Fee (NGN)"] = tuition;
+      if (isCol("paid")) row["Total Paid (NGN)"] = paid;
+      if (isCol("misc")) row["Miscellaneous (NGN)"] = misc;
+      if (isCol("balance")) row["Balance (NGN)"] = balance;
+      if (isCol("status")) row["Status"] = getEntryStatus(e);
+      if (isCol("lastPayment")) row["Last Payment"] = formatLedgerDate(e.lastPaymentDate);
+      return row;
+    });
+  };
+
+  const handleExportExcel = () => {
+    const rows = buildExportRows();
+    if (rows.length === 0) return;
+    const className = selectedClassId === "all"
+      ? "all-classes"
+      : (schoolClasses.find((c) => c.id === selectedClassId)?.name || "class");
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Finance");
+    const fname = `finance-${sanitizeFilenamePart(schoolName || "school")}-${sanitizeFilenamePart(className)}-${sanitizeFilenamePart(selectedTerm || "all-terms")}-${sanitizeFilenamePart(selectedSession || "all-sessions")}.xlsx`;
+    XLSX.writeFile(wb, fname);
+  };
+
+  const printClassName = selectedClassId === "all"
+    ? "All Classes"
+    : (schoolClasses.find((c) => c.id === selectedClassId)?.name || "—");
+
   const getStatusBadge = (status: string) => {
     if (status === "confirmed") return <Badge className="bg-green-100 text-green-800 text-[10px]">Confirmed</Badge>;
     if (status === "recorded") return <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">Pending</Badge>;
@@ -205,7 +318,76 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+      {/* Print-only header */}
+      <div className="hidden print:block mb-3">
+        <div className="text-center">
+          <div className="text-lg font-bold uppercase tracking-wide">{schoolName || "Seat of Wisdom Academy"}</div>
+          <div className="text-sm font-semibold mt-0.5">Finance Summary</div>
+          <div className="text-xs mt-1">
+            Class: <strong>{printClassName}</strong>
+            {" · "}Term: <strong>{selectedTerm || "All"}</strong>
+            {" · "}Session: <strong>{selectedSession || "All"}</strong>
+          </div>
+          <div className="text-[10px] mt-0.5">
+            Printed: {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          </div>
+        </div>
+      </div>
+
+      {/* Action bar (screen only) */}
+      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" data-testid="button-finance-columns">
+              <Columns3 className="h-4 w-4 mr-1" />
+              Columns
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-3" align="end">
+            <div className="text-xs font-medium text-muted-foreground mb-2">Show columns</div>
+            <div className="space-y-2">
+              {COLUMN_DEFS.map((c) => {
+                const required = "required" in c && c.required === true;
+                return (
+                  <label key={c.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={visibleColumns.has(c.key)}
+                      disabled={required}
+                      onCheckedChange={() => toggleColumn(c.key)}
+                      data-testid={`checkbox-col-${c.key}`}
+                    />
+                    <span className={required ? "text-muted-foreground" : ""}>
+                      {c.label}{required && " (always)"}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportExcel}
+          disabled={filteredLedger.length === 0}
+          data-testid="button-finance-export-excel"
+        >
+          <FileSpreadsheet className="h-4 w-4 mr-1" />
+          Excel
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handlePrint}
+          disabled={filteredLedger.length === 0}
+          data-testid="button-finance-print"
+        >
+          <Printer className="h-4 w-4 mr-1" />
+          Print
+        </Button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end print:hidden">
         <div className="space-y-1 w-full sm:w-auto">
           <label className="text-xs text-muted-foreground font-medium">Term</label>
           <Select value={selectedTerm} onValueChange={setSelectedTerm}>
@@ -292,7 +474,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
               tuitionBannerDismissed !== bannerKey;
             if (!showBanner) return null;
             return (
-              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-900 dark:text-amber-100 flex flex-col sm:flex-row sm:items-center gap-2 print:hidden">
                 <div className="flex-1">
                   <div className="font-medium">Tuition not configured for this term/session</div>
                   <div className="text-xs mt-0.5">
@@ -326,7 +508,7 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
             );
           })()}
           {ledgerMeta.hasTuitionFeeType && ledgerMeta.hasGlobalTuition && !ledgerMeta.hasScopedTuition && selectedTerm && selectedSession && (
-            <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground" data-testid="text-tuition-using-global">
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground print:hidden" data-testid="text-tuition-using-global">
               Using <strong>global tuition defaults</strong> for{" "}
               <strong>{selectedTerm}</strong> · <strong>{selectedSession}</strong>{" "}
               (no term-specific override saved).
@@ -337,45 +519,61 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead className="w-[50px] text-center">#</TableHead>
-                <TableHead>Student Name</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead>SOWA ID</TableHead>
-                <TableHead className="text-right">Tuition Fee (₦)</TableHead>
-                <TableHead className="text-right">Total Paid (₦)</TableHead>
-                <TableHead className="text-right">Miscellaneous (₦)</TableHead>
-                <TableHead className="text-right">Balance (₦)</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                {isCol("name") && <TableHead>Student Name</TableHead>}
+                {isCol("className") && <TableHead>Class</TableHead>}
+                {isCol("studentId") && <TableHead>SOWA ID</TableHead>}
+                {isCol("tuition") && <TableHead className="text-right">Tuition Fee (₦)</TableHead>}
+                {isCol("paid") && <TableHead className="text-right">Total Paid (₦)</TableHead>}
+                {isCol("misc") && <TableHead className="text-right">Miscellaneous (₦)</TableHead>}
+                {isCol("balance") && <TableHead className="text-right">Balance (₦)</TableHead>}
+                {isCol("status") && <TableHead>Status</TableHead>}
+                {isCol("lastPayment") && <TableHead>Last Payment</TableHead>}
+                <TableHead className="w-[50px] print:hidden"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLedger.map((entry, idx) => (
-                <TableRow key={entry.studentDbId} className={entry.totalPaid === 0 ? "text-muted-foreground" : ""}>
+              {filteredLedger.map((entry, idx) => {
+                const tuition = entry.tuitionAssigned || 0;
+                const paid = entry.totalPaid || 0;
+                const misc = Math.max(0, paid - tuition);
+                const balance = Math.max(0, tuition - paid);
+                return (
+                <TableRow key={entry.studentDbId} className={paid === 0 ? "text-muted-foreground" : ""}>
                   <TableCell className="text-center text-xs">{idx + 1}</TableCell>
-                  <TableCell className="font-medium">
-                    {entry.lastName} {entry.firstName}
-                  </TableCell>
-                  <TableCell className="text-sm">{entry.className}</TableCell>
-                  <TableCell className="text-sm font-mono">{entry.studentId}</TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {entry.tuitionAssigned > 0 ? `₦${entry.tuitionAssigned.toLocaleString()}` : "—"}
-                  </TableCell>
-                  <TableCell className={`text-right font-semibold ${entry.totalPaid > 0 ? "text-green-600" : ""}`}>
-                    {entry.totalPaid > 0 ? `₦${entry.totalPaid.toLocaleString()}` : "₦0"}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold text-blue-600">
-                    {entry.tuitionAssigned > 0 || entry.totalPaid > 0
-                      ? `₦${Math.max(0, entry.totalPaid - entry.tuitionAssigned).toLocaleString()}`
-                      : "—"}
-                  </TableCell>
-                  {(() => {
-                    const tuitionBalance = Math.max(0, (entry.tuitionAssigned || 0) - (entry.totalPaid || 0));
-                    return (
-                      <TableCell className={`text-right font-semibold ${tuitionBalance > 0 ? "text-red-500" : "text-green-600"}`}>
-                        {entry.tuitionAssigned > 0 ? `₦${tuitionBalance.toLocaleString()}` : "—"}
-                      </TableCell>
-                    );
-                  })()}
-                  <TableCell>
+                  {isCol("name") && (
+                    <TableCell className="font-medium">
+                      {entry.lastName} {entry.firstName}
+                    </TableCell>
+                  )}
+                  {isCol("className") && <TableCell className="text-sm">{entry.className}</TableCell>}
+                  {isCol("studentId") && <TableCell className="text-sm font-mono">{entry.studentId}</TableCell>}
+                  {isCol("tuition") && (
+                    <TableCell className="text-right font-semibold">
+                      {tuition > 0 ? `₦${tuition.toLocaleString()}` : "—"}
+                    </TableCell>
+                  )}
+                  {isCol("paid") && (
+                    <TableCell className={`text-right font-semibold ${paid > 0 ? "text-green-600" : ""}`}>
+                      {paid > 0 ? `₦${paid.toLocaleString()}` : "₦0"}
+                    </TableCell>
+                  )}
+                  {isCol("misc") && (
+                    <TableCell className="text-right font-semibold text-blue-600">
+                      {tuition > 0 || paid > 0 ? `₦${misc.toLocaleString()}` : "—"}
+                    </TableCell>
+                  )}
+                  {isCol("balance") && (
+                    <TableCell className={`text-right font-semibold ${balance > 0 ? "text-red-500" : "text-green-600"}`}>
+                      {tuition > 0 ? `₦${balance.toLocaleString()}` : "—"}
+                    </TableCell>
+                  )}
+                  {isCol("status") && (
+                    <TableCell className="text-sm">{getEntryStatus(entry)}</TableCell>
+                  )}
+                  {isCol("lastPayment") && (
+                    <TableCell className="text-sm">{formatLedgerDate(entry.lastPaymentDate)}</TableCell>
+                  )}
+                  <TableCell className="print:hidden">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -387,7 +585,8 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {userRole === 'admin' && filteredLedger.length > 0 && (() => {
                 const totals = filteredLedger.reduce(
                   (acc, e) => {
@@ -408,20 +607,30 @@ export function PaymentLedger({ schoolId, currentTerm, currentSession, userRole,
                     data-testid="row-ledger-grand-total"
                   >
                     <TableCell></TableCell>
-                    <TableCell>Grand Total</TableCell>
-                    <TableCell></TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right" data-testid="cell-grand-total-tuition">
-                      <span className="text-green-700">₦{totals.tuitionPaid.toLocaleString()}</span>
-                      <span className="text-muted-foreground font-normal"> / </span>
-                      <span>₦{totals.tuition.toLocaleString()}</span>
-                    </TableCell>
-                    <TableCell className="text-right text-green-600">₦{totals.paid.toLocaleString()}</TableCell>
-                    <TableCell className="text-right text-blue-600">₦{totals.misc.toLocaleString()}</TableCell>
-                    <TableCell className={`text-right ${totals.balance > 0 ? "text-red-500" : "text-green-600"}`}>
-                      ₦{totals.balance.toLocaleString()}
-                    </TableCell>
-                    <TableCell></TableCell>
+                    {isCol("name") && <TableCell>Grand Total</TableCell>}
+                    {isCol("className") && <TableCell></TableCell>}
+                    {isCol("studentId") && <TableCell></TableCell>}
+                    {isCol("tuition") && (
+                      <TableCell className="text-right" data-testid="cell-grand-total-tuition">
+                        <span className="text-green-700">₦{totals.tuitionPaid.toLocaleString()}</span>
+                        <span className="text-muted-foreground font-normal"> / </span>
+                        <span>₦{totals.tuition.toLocaleString()}</span>
+                      </TableCell>
+                    )}
+                    {isCol("paid") && (
+                      <TableCell className="text-right text-green-600">₦{totals.paid.toLocaleString()}</TableCell>
+                    )}
+                    {isCol("misc") && (
+                      <TableCell className="text-right text-blue-600">₦{totals.misc.toLocaleString()}</TableCell>
+                    )}
+                    {isCol("balance") && (
+                      <TableCell className={`text-right ${totals.balance > 0 ? "text-red-500" : "text-green-600"}`}>
+                        ₦{totals.balance.toLocaleString()}
+                      </TableCell>
+                    )}
+                    {isCol("status") && <TableCell></TableCell>}
+                    {isCol("lastPayment") && <TableCell></TableCell>}
+                    <TableCell className="print:hidden"></TableCell>
                   </TableRow>
                 );
               })()}
