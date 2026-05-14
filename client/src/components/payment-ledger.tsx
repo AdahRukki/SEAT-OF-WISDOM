@@ -315,6 +315,36 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     const className = selectedClassId === "all"
       ? "all-classes"
       : (schoolClasses.find((c) => c.id === selectedClassId)?.name || "class");
+
+    // Append a Grand Total row mirroring the on-screen totals (admin-only).
+    if (userRole === "admin" && filteredLedger.length > 0) {
+      const totals = filteredLedger.reduce(
+        (acc, e) => {
+          const tuition = e.tuitionAssigned || 0;
+          const paid = e.totalPaid || 0;
+          acc.tuition += tuition;
+          acc.tuitionPaid += Math.min(paid, tuition);
+          acc.paid += paid;
+          acc.misc += Math.max(0, paid - tuition);
+          acc.balance += Math.max(0, tuition - paid);
+          return acc;
+        },
+        { tuition: 0, tuitionPaid: 0, paid: 0, misc: 0, balance: 0 },
+      );
+      const totalRow: Record<string, string | number> = { "#": "" };
+      if (isCol("name")) totalRow["Student Name"] = "GRAND TOTAL";
+      if (isCol("className")) totalRow["Class"] = "";
+      if (isCol("studentId")) totalRow["SOWA ID"] = "";
+      if (isCol("parentWhatsapp")) totalRow["Parent WhatsApp"] = "";
+      if (isCol("tuition")) totalRow["Tuition Fee (NGN)"] = totals.tuition;
+      if (isCol("paid")) totalRow["Total Paid (NGN)"] = totals.paid;
+      if (isCol("misc")) totalRow["Miscellaneous (NGN)"] = totals.misc;
+      if (isCol("balance")) totalRow["Balance (NGN)"] = totals.balance;
+      if (isCol("status")) totalRow["Status"] = "";
+      if (isCol("lastPayment")) totalRow["Last Payment"] = "";
+      rows.push(totalRow);
+    }
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Finance");
