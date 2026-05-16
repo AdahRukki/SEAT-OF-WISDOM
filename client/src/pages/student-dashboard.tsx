@@ -1875,9 +1875,10 @@ export default function StudentDashboard() {
                 paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0) +
                 confirmedPaymentRecords.reduce((sum, r) => sum + Number(r.amount), 0);
               const outstandingAmount = Math.max(0, totalFeesAmount - totalPaidAmount);
-              const periodLabel = selectedTerm && selectedSession
+              const hasFullPeriod = !!selectedTerm && !!selectedSession;
+              const periodLabel = hasFullPeriod
                 ? `${selectedTerm}, ${selectedSession}`
-                : selectedTerm || selectedSession || null;
+                : null;
               const noRecordsForPeriod =
                 studentFees.length === 0 &&
                 paymentHistory.length === 0 &&
@@ -1935,7 +1936,7 @@ export default function StudentDashboard() {
                       className="text-xs text-muted-foreground mb-6"
                       data-testid="text-no-fees-for-period"
                     >
-                      No fees assigned for {periodLabel ?? 'this term'} yet.
+                      No fees assigned for {hasFullPeriod ? periodLabel : 'this term'} yet.
                     </p>
                   )}
                   {!noRecordsForPeriod && <div className="mb-4" />}
