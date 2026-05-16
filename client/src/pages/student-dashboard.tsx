@@ -200,18 +200,29 @@ export default function StudentDashboard() {
     return Array.from(set);
   }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory, selectedSession]);
 
-  // Dropdown options are strictly derived from the student's real records.
-  // When the student has no records yet, the dropdowns are empty and the
-  // table's empty-state copy tells the student what to expect — we do NOT
-  // synthesize fake options that would lead to empty result pages.
+  // Dropdown options are derived from the student's real records, plus the
+  // school's current session/term as a fallback. This guarantees a brand-new
+  // student (no fees/payments yet) still sees their school's active period
+  // pre-selected instead of an empty Fees tab.
   const STANDARD_TERMS = ['First Term', 'Second Term', 'Third Term'];
-  const availableSessions = useMemo(() => recordSessions, [recordSessions]);
+  const currentSchoolSession = (academicInfo as any)?.currentSession as string | null | undefined;
+  const currentSchoolTerm = (academicInfo as any)?.currentTerm as string | null | undefined;
+  const availableSessions = useMemo(() => {
+    const set = new Set<string>(recordSessions);
+    if (currentSchoolSession) set.add(currentSchoolSession);
+    return Array.from(set).sort().reverse();
+  }, [recordSessions, currentSchoolSession]);
   const availableTerms = useMemo(() => {
     const set = new Set<string>(recordTerms);
+    // Only surface the school's current term when its session is the one
+    // currently selected — avoids cross-session leakage in the dropdown.
+    if (currentSchoolTerm && (!selectedSession || !currentSchoolSession || selectedSession === currentSchoolSession)) {
+      set.add(currentSchoolTerm);
+    }
     const inStandardOrder = STANDARD_TERMS.filter(t => set.has(t));
     const extras = Array.from(set).filter(t => !STANDARD_TERMS.includes(t));
     return [...inStandardOrder, ...extras];
-  }, [recordTerms]);
+  }, [recordTerms, currentSchoolTerm, currentSchoolSession, selectedSession]);
 
   // Filtered views used by the rest of the component.
   const studentFees = useMemo(
@@ -455,13 +466,18 @@ export default function StudentDashboard() {
       setSelectedSession(academicSession);
     } else if (recordSessions.length > 0) {
       setSelectedSession(recordSessions[0]);
+    } else if (academicSession) {
+      // No records yet — fall back to the school's current session so the
+      // Fees tab shows a meaningful header and the empty-state copy reads
+      // naturally instead of "My Fees - , ".
+      setSelectedSession(academicSession);
     }
-    // else: no records — leave empty, empty-state message handles UX
   }, [academicInfo, recordSessions, selectedSession, financeDataReady]);
 
   // Default Term: same logic — prefer school's current term if the student
   // has records under it (within the chosen session), otherwise the latest
-  // term in their records; leave empty if no records.
+  // term in their records; fall back to the school's current term if neither
+  // exists so the dropdown is never blank.
   useEffect(() => {
     if (selectedTerm) return;
     if (!financeDataReady) return;
@@ -472,8 +488,9 @@ export default function StudentDashboard() {
       const ordered = STANDARD_TERMS.filter(t => recordTerms.includes(t));
       const pick = ordered.length > 0 ? ordered[ordered.length - 1] : recordTerms[recordTerms.length - 1];
       setSelectedTerm(pick);
+    } else if (academicTerm) {
+      setSelectedTerm(academicTerm);
     }
-    // else: no records — leave empty
   }, [academicInfo, recordTerms, selectedTerm, financeDataReady]);
 
   // Password change form
@@ -1896,7 +1913,11 @@ export default function StudentDashboard() {
             {/* Current Term Fees */}
             <Card>
               <CardHeader>
-                <CardTitle>My Fees - {selectedTerm}, {selectedSession}</CardTitle>
+                <CardTitle>
+                  {selectedTerm || selectedSession
+                    ? `My Fees - ${selectedTerm || '—'}, ${selectedSession || '—'}`
+                    : 'My Fees'}
+                </CardTitle>
                 <CardDescription>
                   View your assigned fees and payment status for the selected term
                 </CardDescription>
