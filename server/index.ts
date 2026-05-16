@@ -135,6 +135,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Prevent browsers and intermediate caches from serving stale API responses.
+// Without this, browsers heuristically cache /api/* GETs (which have no
+// Cache-Control) and serve stale bodies — even back to the service worker —
+// so users see deleted records and miss new ones until they clear site data.
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 (async () => {
   await runMigrations();
   const server = await registerRoutes(app);

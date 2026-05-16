@@ -113,11 +113,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API calls: network-first, fall back to cached response
+  // API calls: network-first, fall back to cached response.
+  // We construct a fresh Request with `cache: 'no-store'` so the SW fetch
+  // bypasses the browser's HTTP cache (which can heuristically cache API
+  // responses lacking Cache-Control and serve stale bodies — those would
+  // then get re-cached here as if fresh, leaving the UI permanently stale).
   if (url.pathname.startsWith('/api/')) {
+    const networkRequest = new Request(request, { cache: 'no-store' });
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) =>
-        fetch(request)
+        fetch(networkRequest)
           .then((response) => {
             if (response && response.status === 200) {
               cache.put(request, response.clone());
