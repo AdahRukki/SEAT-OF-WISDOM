@@ -200,24 +200,18 @@ export default function StudentDashboard() {
     return Array.from(set);
   }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory, selectedSession]);
 
-  // Dropdown options: records + school's current period + a small standard
-  // fallback so the dropdowns are never empty.
+  // Dropdown options are strictly derived from the student's real records.
+  // When the student has no records yet, the dropdowns are empty and the
+  // table's empty-state copy tells the student what to expect — we do NOT
+  // synthesize fake options that would lead to empty result pages.
   const STANDARD_TERMS = ['First Term', 'Second Term', 'Third Term'];
-  const availableSessions = useMemo(() => {
-    const set = new Set<string>(recordSessions);
-    if ((academicInfo as any)?.currentSession) set.add((academicInfo as any).currentSession);
-    if (set.size === 0) ['2024/2025', '2025/2026', '2026/2027'].forEach(s => set.add(s));
-    return Array.from(set).sort().reverse();
-  }, [recordSessions, academicInfo]);
-
+  const availableSessions = useMemo(() => recordSessions, [recordSessions]);
   const availableTerms = useMemo(() => {
     const set = new Set<string>(recordTerms);
-    if ((academicInfo as any)?.currentTerm) set.add((academicInfo as any).currentTerm);
-    if (set.size === 0) STANDARD_TERMS.forEach(t => set.add(t));
     const inStandardOrder = STANDARD_TERMS.filter(t => set.has(t));
     const extras = Array.from(set).filter(t => !STANDARD_TERMS.includes(t));
     return [...inStandardOrder, ...extras];
-  }, [recordTerms, academicInfo]);
+  }, [recordTerms]);
 
   // Filtered views used by the rest of the component.
   const studentFees = useMemo(
@@ -448,46 +442,39 @@ export default function StudentDashboard() {
     }
   }, [enrolledClasses, profile?.class?.id, selectedClass]);
   
-  // Default Session: prefer school's current session, otherwise the most
-  // recent session the student has real records under, otherwise the latest
-  // synthetic fallback. We wait for finance data to resolve before falling
-  // back to synthetic options so we don't latch onto e.g. "2026/2027" before
-  // the student's real "2024/2025" records arrive.
+  // Default Session: prefer school's current session if the student actually
+  // has records under it; otherwise pick the most recent session in their
+  // records. If they have no records at all, leave the selection empty so
+  // the client-side filter is a no-op and the table shows the empty-state
+  // copy. We wait for finance data to resolve before deciding.
   useEffect(() => {
     if (selectedSession) return;
-    const academicSession = (academicInfo as any)?.currentSession;
-    if (academicSession) {
-      setSelectedSession(academicSession);
-      return;
-    }
     if (!financeDataReady) return;
-    if (recordSessions.length > 0) {
+    const academicSession = (academicInfo as any)?.currentSession;
+    if (academicSession && recordSessions.includes(academicSession)) {
+      setSelectedSession(academicSession);
+    } else if (recordSessions.length > 0) {
       setSelectedSession(recordSessions[0]);
-    } else if (availableSessions.length > 0) {
-      setSelectedSession(availableSessions[0]);
     }
-  }, [academicInfo, recordSessions, availableSessions, selectedSession, financeDataReady]);
+    // else: no records — leave empty, empty-state message handles UX
+  }, [academicInfo, recordSessions, selectedSession, financeDataReady]);
 
-  // Default Term: prefer school's current term, otherwise the latest term
-  // the student has real records under (within the chosen session), otherwise
-  // the latest synthetic fallback. Same data-ready gate as session.
+  // Default Term: same logic — prefer school's current term if the student
+  // has records under it (within the chosen session), otherwise the latest
+  // term in their records; leave empty if no records.
   useEffect(() => {
     if (selectedTerm) return;
-    const academicTerm = (academicInfo as any)?.currentTerm;
-    if (academicTerm) {
-      setSelectedTerm(academicTerm);
-      return;
-    }
     if (!financeDataReady) return;
-    if (recordTerms.length > 0) {
-      // Pick the latest term in standard order that the student has records for
+    const academicTerm = (academicInfo as any)?.currentTerm;
+    if (academicTerm && recordTerms.includes(academicTerm)) {
+      setSelectedTerm(academicTerm);
+    } else if (recordTerms.length > 0) {
       const ordered = STANDARD_TERMS.filter(t => recordTerms.includes(t));
       const pick = ordered.length > 0 ? ordered[ordered.length - 1] : recordTerms[recordTerms.length - 1];
       setSelectedTerm(pick);
-    } else if (availableTerms.length > 0) {
-      setSelectedTerm(availableTerms[availableTerms.length - 1]);
     }
-  }, [academicInfo, recordTerms, availableTerms, selectedTerm, financeDataReady]);
+    // else: no records — leave empty
+  }, [academicInfo, recordTerms, selectedTerm, financeDataReady]);
 
   // Password change form
   const passwordForm = useForm<ChangePasswordForm>({
