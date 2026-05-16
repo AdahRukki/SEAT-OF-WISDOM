@@ -1869,46 +1869,79 @@ export default function StudentDashboard() {
 
           {/* Finance Tab - keeping existing content */}
           <TabsContent value="finance" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
-                  <CreditCard className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    ₦{studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0).toLocaleString()}
-                  </div>
-                  <p className="text-xs text-muted-foreground">This term</p>
-                </CardContent>
-              </Card>
+            {(() => {
+              const totalFeesAmount = studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0);
+              const totalPaidAmount =
+                paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0) +
+                confirmedPaymentRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+              const outstandingAmount = Math.max(0, totalFeesAmount - totalPaidAmount);
+              const periodLabel = selectedTerm && selectedSession
+                ? `${selectedTerm}, ${selectedSession}`
+                : selectedTerm || selectedSession || null;
+              const noRecordsForPeriod =
+                studentFees.length === 0 &&
+                paymentHistory.length === 0 &&
+                confirmedPaymentRecords.length === 0;
+              return (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-2">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Fees</CardTitle>
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          ₦{totalFeesAmount.toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {periodLabel ? `Assigned · ${periodLabel}` : 'This term'}
+                        </p>
+                      </CardContent>
+                    </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Amount Paid</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    ₦{(paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0) + confirmedPaymentRecords.reduce((sum, r) => sum + Number(r.amount), 0)).toLocaleString()}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Total payments</p>
-                </CardContent>
-              </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Amount Paid</CardTitle>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          ₦{totalPaidAmount.toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {periodLabel ? `Payments · ${periodLabel}` : 'Total payments'}
+                        </p>
+                      </CardContent>
+                    </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    ₦{Math.max(0, studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0) - (paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0) + confirmedPaymentRecords.reduce((sum, r) => sum + Number(r.amount), 0))).toLocaleString()}
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
+                        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          ₦{outstandingAmount.toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {periodLabel ? `Balance due · ${periodLabel}` : 'Balance due'}
+                        </p>
+                      </CardContent>
+                    </Card>
                   </div>
-                  <p className="text-xs text-muted-foreground">Balance due</p>
-                </CardContent>
-              </Card>
-            </div>
+                  {noRecordsForPeriod && (
+                    <p
+                      className="text-xs text-muted-foreground mb-6"
+                      data-testid="text-no-fees-for-period"
+                    >
+                      No fees assigned for {periodLabel ?? 'this term'} yet.
+                    </p>
+                  )}
+                  {!noRecordsForPeriod && <div className="mb-4" />}
+                </>
+              );
+            })()}
 
             {/* Current Term Fees */}
             <Card>
