@@ -113,6 +113,7 @@ interface BankStatement {
 
 interface BankTransaction {
   id: string;
+  statementId?: string | null;
   transactionDate: Date;
   amount: string;
   transactionType: string;
@@ -216,6 +217,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [showFlaggedCandidates, setShowFlaggedCandidates] = useState(false);
   // Task #128 phase 2: per-statement re-scan
   const [rescanStatementId, setRescanStatementId] = useState<string | null>(null);
+  // Controlled tab state so chip click can navigate to the Transactions tab
+  const [activeTab, setActiveTab] = useState<string>("reconcile");
+  // Filter transactions tab to only those from a specific statement (set via chip click)
+  const [filterStatementId, setFilterStatementId] = useState<string | null>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -875,7 +880,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="reconcile" className="w-full">
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== "transactions") setFilterStatementId(null); }} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="upload">Upload Statements</TabsTrigger>
           <TabsTrigger value="reconcile">
@@ -1049,8 +1054,13 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           {(statement.possibleDuplicatesCount || 0) > 0 ? (
                             <Badge
                               variant="outline"
-                              className="bg-amber-50 text-amber-800 border-amber-400"
+                              className="bg-amber-50 text-amber-800 border-amber-400 cursor-pointer hover:bg-amber-100 transition-colors"
                               data-testid={`badge-statement-possible-dupes-${statement.id}`}
+                              title="Click to view flagged transactions from this statement"
+                              onClick={() => {
+                                setFilterStatementId(statement.id);
+                                setActiveTab("transactions");
+                              }}
                             >
                               ⚠ {statement.possibleDuplicatesCount}
                             </Badge>
@@ -1797,6 +1807,18 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </TabsContent>
 
         <TabsContent value="transactions" className="space-y-4 mt-4">
+          {filterStatementId && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>Showing possible duplicates from one statement only.</span>
+              <button
+                className="ml-auto text-xs underline hover:no-underline"
+                onClick={() => setFilterStatementId(null)}
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h4 className="text-lg font-medium">Unmatched Transactions</h4>
@@ -1832,6 +1854,19 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <p>All transactions have been matched</p>
               </CardContent>
             </Card>
+          ) : filterStatementId && !unmatchedTransactions.some(tx => tx.statementId === filterStatementId && tx.possibleDuplicate) ? (
+            <Card>
+              <CardContent className="text-center py-8 text-muted-foreground">
+                <CheckCircle className="h-10 w-10 mx-auto mb-4 text-green-500" />
+                <p>No unresolved duplicate flags for this statement.</p>
+                <button
+                  className="mt-2 text-xs underline hover:no-underline"
+                  onClick={() => setFilterStatementId(null)}
+                >
+                  Show all unmatched transactions
+                </button>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="p-0">
@@ -1847,17 +1882,21 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(unmatchedSearch.trim()
-                      ? unmatchedTransactions.filter(tx => {
+                    {unmatchedTransactions.filter(tx => {
+                        if (filterStatementId) {
+                          if (tx.statementId !== filterStatementId) return false;
+                          if (!tx.possibleDuplicate) return false;
+                        }
+                        if (unmatchedSearch.trim()) {
                           const q = unmatchedSearch.toLowerCase();
                           return (
                             tx.rawDescription?.toLowerCase().includes(q) ||
                             tx.reference?.toLowerCase().includes(q) ||
                             tx.amount?.toString().includes(q)
                           );
-                        })
-                      : unmatchedTransactions
-                    ).map((tx) => (
+                        }
+                        return true;
+                      }).map((tx) => (
                       <TableRow key={tx.id}>
                         <TableCell>
                           {formatRecoDate(tx.transactionDate)}

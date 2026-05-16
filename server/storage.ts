@@ -3603,10 +3603,14 @@ export class DatabaseStorage implements IStorage {
     flaggedTransactionIds: string[];
   }> {
     const { extractDepositor } = await import('./pdf-parser');
+    // Only credit transactions can be duplicate deposits; debit rows are never flagged.
     const stmtRows = await db
       .select()
       .from(bankTransactions)
-      .where(eq(bankTransactions.statementId, statementId))
+      .where(and(
+        eq(bankTransactions.statementId, statementId),
+        eq(bankTransactions.transactionType, 'credit'),
+      ))
       .orderBy(asc(bankTransactions.createdAt), asc(bankTransactions.id));
 
     const flaggedIds: string[] = [];
@@ -3625,6 +3629,7 @@ export class DatabaseStorage implements IStorage {
         .from(bankTransactions)
         .where(and(
           eq(bankTransactions.schoolId, row.schoolId),
+          eq(bankTransactions.transactionType, 'credit'),
           ne(bankTransactions.id, row.id),
           sql`${bankTransactions.amount}::numeric = ${row.amount}::numeric`,
           sql`DATE(${bankTransactions.transactionDate}) = DATE(${row.transactionDate})`,
@@ -3951,6 +3956,7 @@ export class DatabaseStorage implements IStorage {
     console.log('[getFeePaymentRecordById] Fetching record:', id);
     
     const recorderUsers = alias(users, 'recorder_users_single');
+    const confirmerUsers = alias(users, 'confirmer_users_single');
     const reverserUsers = alias(users, 'reverser_users_single');
 
     const [row] = await db
@@ -3965,6 +3971,12 @@ export class DatabaseStorage implements IStorage {
           lastName: recorderUsers.lastName,
           email: recorderUsers.email,
         },
+        confirmedByUser: {
+          id: confirmerUsers.id,
+          firstName: confirmerUsers.firstName,
+          lastName: confirmerUsers.lastName,
+          email: confirmerUsers.email,
+        },
         reversedByUser: {
           id: reverserUsers.id,
           firstName: reverserUsers.firstName,
@@ -3977,6 +3989,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(students.userId, users.id))
       .leftJoin(classes, eq(students.classId, classes.id))
       .leftJoin(recorderUsers, eq(feePaymentRecords.recordedBy, recorderUsers.id))
+      .leftJoin(confirmerUsers, eq(feePaymentRecords.confirmedBy, confirmerUsers.id))
       .leftJoin(reverserUsers, eq(feePaymentRecords.reversedBy, reverserUsers.id))
       .where(eq(feePaymentRecords.id, id));
 
@@ -3998,6 +4011,7 @@ export class DatabaseStorage implements IStorage {
         class: row.class!,
       } : null,
       recordedByUser: row.recordedByUser?.id ? (row.recordedByUser as User) : undefined,
+      confirmedByUser: row.confirmedByUser?.id ? (row.confirmedByUser as User) : undefined,
       reversedByUser: row.reversedByUser?.id ? (row.reversedByUser as User) : undefined,
       allocations,
     };

@@ -4342,7 +4342,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const cp = cpRows[0] ?? null;
         if (cp && (!enforceSchool || cp.schoolId === userSchoolId)) counterpart = cp;
       }
-      return res.json({ kind, primary, counterpart });
+
+      // Enrich both sides with allocation data so the review panel can show
+      // which payments (if any) each transaction is already linked to.
+      const enrichTxWithAllocations = async (tx: typeof primary | null) => {
+        if (!tx) return null;
+        const allocs = await db
+          .select({
+            id: paymentAllocations.id,
+            allocatedAmount: paymentAllocations.allocatedAmount,
+            paymentRecordId: paymentAllocations.paymentRecordId,
+          })
+          .from(paymentAllocations)
+          .where(eq(paymentAllocations.bankTransactionId, tx.id));
+        return { ...tx, allocations: allocs };
+      };
+
+      return res.json({
+        kind,
+        primary: await enrichTxWithAllocations(primary),
+        counterpart: await enrichTxWithAllocations(counterpart),
+      });
     } catch (error: any) {
       console.error("[GET /api/admin/duplicates/:kind/:id] Error:", error);
       res.status(500).json({ error: error.message || "Failed to fetch duplicate pair" });
@@ -4410,9 +4430,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const beforeRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, txId)).limit(1);
       const before = beforeRows[0];
       if (!before) return res.status(404).json({ error: "Bank transaction not found" });
-      // Same DB write as "clear" — distinguished only by audit-log action.
-      // The transaction stays in the books (in case admin changes their mind)
-      // but is dismissed from the duplicate-review surface.
+      // "Mark as ignored" is a soft, reversible dismissal.
+      // It intentionally does NOT write to cleared_duplicate_pairs so that
+      // a subsequent re-scan can re-evaluate the pair fresh.  This is the
+      // intended product behaviour: ignored pairs may resurface; only
+      // "Not a duplicate" (the clear-duplicate route) permanently suppresses
+      // a pair from future re-scan results by writing to cleared_duplicate_pairs.
       const updated = await storage.clearTransactionDuplicateFlag(txId);
       await storage.createPaymentAuditLog({
         action: 'mark_transaction_ignored_duplicate',

@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Loader2, Calendar } from "lucide-react";
+import { AlertTriangle, Loader2, Calendar, User, CheckCircle, XCircle, Link } from "lucide-react";
 
 interface DuplicateReviewSheetProps {
   kind: "transaction" | "payment";
@@ -26,6 +26,11 @@ function fmtMoney(amount: string | number | null | undefined): string {
   const n = typeof amount === "string" ? parseFloat(amount) : amount;
   if (isNaN(n)) return "₦0";
   return `₦${n.toLocaleString()}`;
+}
+
+function actorName(u: { firstName?: string; lastName?: string } | null | undefined): string {
+  if (!u) return "—";
+  return `${u.firstName || ""} ${u.lastName || ""}`.trim() || "—";
 }
 
 interface PairResponse {
@@ -73,7 +78,6 @@ export function DuplicateReviewSheet({ kind, id, open, onOpenChange }: Duplicate
 
   const dismissMutation = useMutation({
     mutationFn: async () => {
-      // Payments use 'reverse-as-duplicate'; bank transactions use 'ignore-as-duplicate'.
       const url = kind === "payment"
         ? `/api/admin/payments/${id}/reverse-as-duplicate`
         : `/api/admin/bank-transactions/${id}/ignore-as-duplicate`;
@@ -102,20 +106,28 @@ export function DuplicateReviewSheet({ kind, id, open, onOpenChange }: Duplicate
         </div>
       );
     }
+
     const amount = side.amount;
     const date = kind === "transaction" ? side.transactionDate : side.paymentDate;
     const description = kind === "transaction"
       ? (side.rawDescription || side.normalizedDescription || "")
       : (side.depositorName || side.notes || "");
+    const narration = kind === "transaction"
+      ? (side.normalizedDescription || null)
+      : (side.notes || null);
     const status = side.status || "—";
     const ref = side.reference || null;
     const studentName = kind === "payment" && side.student
       ? `${side.student.user?.lastName || ""} ${side.student.user?.firstName || ""}`.trim()
       : null;
     const studentId = kind === "payment" ? side.student?.studentId : null;
+
+    const allocations: Array<{ id: string; allocatedAmount: string; paymentRecordId: string }> =
+      side.allocations ?? [];
+
     return (
-      <div className={`border rounded-lg p-3 ${isPrimary ? "border-amber-400 bg-amber-50/40" : "bg-muted/20"}`}>
-        <div className="flex items-center justify-between mb-2">
+      <div className={`border rounded-lg p-3 space-y-2 ${isPrimary ? "border-amber-400 bg-amber-50/40" : "bg-muted/20"}`}>
+        <div className="flex items-center justify-between">
           <div className="text-xs font-medium text-muted-foreground">{label}</div>
           {isPrimary && (
             <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-800 border-amber-400">
@@ -123,30 +135,80 @@ export function DuplicateReviewSheet({ kind, id, open, onOpenChange }: Duplicate
             </Badge>
           )}
         </div>
+
         <div className="text-2xl font-bold text-green-700">{fmtMoney(amount)}</div>
-        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+
+        <div className="text-xs text-muted-foreground flex items-center gap-1">
           <Calendar className="h-3 w-3" />
           {formatDate(date)}
         </div>
+
         {studentName && (
-          <div className="text-sm font-medium mt-2">
+          <div className="text-sm font-medium">
             {studentName} {studentId && <Badge variant="outline" className="text-[10px] ml-1">{studentId}</Badge>}
           </div>
         )}
+
         {description && (
-          <div className="text-xs text-muted-foreground mt-2 break-words">{description}</div>
+          <div className="text-xs text-muted-foreground break-words">{description}</div>
         )}
-        {ref && <div className="text-xs text-muted-foreground mt-1">Ref: {ref}</div>}
-        <div className="mt-2">
-          <Badge variant="secondary" className="text-[10px] uppercase">{status}</Badge>
-        </div>
+        {narration && narration !== description && (
+          <div className="text-xs text-muted-foreground/70 break-words italic">{narration}</div>
+        )}
+
+        {ref && <div className="text-xs text-muted-foreground">Ref: {ref}</div>}
+
+        <Badge variant="secondary" className="text-[10px] uppercase">{status}</Badge>
+
+        {kind === "payment" && (
+          <div className="pt-1 space-y-0.5 border-t border-dashed">
+            {side.recordedByUser && (
+              <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <User className="h-3 w-3" />
+                Recorded by: <span className="font-medium text-foreground">{actorName(side.recordedByUser)}</span>
+              </div>
+            )}
+            {side.confirmedBy && (
+              <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <CheckCircle className="h-3 w-3 text-green-600" />
+                Confirmed by: <span className="font-medium text-foreground">{actorName(side.confirmedByUser)}</span>
+                {side.confirmedAt && (
+                  <span className="text-muted-foreground/60"> · {formatDate(side.confirmedAt)}</span>
+                )}
+              </div>
+            )}
+            {side.reversedBy && (
+              <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <XCircle className="h-3 w-3 text-red-600" />
+                Reversed by: <span className="font-medium text-foreground">{actorName(side.reversedByUser)}</span>
+                {side.reversedAt && (
+                  <span className="text-muted-foreground/60"> · {formatDate(side.reversedAt)}</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {allocations.length > 0 && (
+          <div className="pt-1 border-t border-dashed">
+            <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1 mb-1">
+              <Link className="h-3 w-3" />
+              {kind === "transaction" ? "Linked payment(s)" : "Allocated to transaction(s)"}: {allocations.length}
+            </div>
+            {allocations.map((a) => (
+              <div key={a.id} className="text-[11px] text-muted-foreground">
+                {fmtMoney(a.allocatedAmount)}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
