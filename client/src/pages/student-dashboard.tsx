@@ -247,6 +247,56 @@ export default function StudentDashboard() {
     [allConfirmedPaymentRecords, selectedTerm, selectedSession]
   );
 
+  // Per-receipt running balance map. For each confirmed payment record we
+  // compute the term's outstanding balance AS OF that payment by merging
+  // confirmed records and legacy payments into one date-sorted timeline and
+  // summing entries up to (and including) the receipt. Sort key matches the
+  // receipt PDF EXACTLY (ts → confirmed-before-legacy → id) so the figure
+  // shown in the table is identical to the one inside the receipt.
+  type ReceiptBalance = {
+    totalFees: number;
+    totalPaidUpTo: number;
+    balanceAfter: number;
+    fullyPaid: boolean;
+  };
+  const receiptBalanceById = useMemo(() => {
+    const map = new Map<string, ReceiptBalance>();
+    const totalFees = studentFees.reduce((s, f) => s + Number(f.amount || 0), 0);
+    type TimelineEntry = { ts: number; id: string; source: 'confirmed' | 'legacy'; amount: number };
+    const timeline: TimelineEntry[] = [
+      ...confirmedPaymentRecords.map((r: any) => ({
+        ts: new Date(r.paymentDate || r.createdAt || 0).getTime(),
+        id: String(r.id),
+        source: 'confirmed' as const,
+        amount: Number(r.amount || 0),
+      })),
+      ...paymentHistory.map((p: any) => ({
+        ts: new Date(p.paymentDate || p.createdAt || 0).getTime(),
+        id: String(p.id),
+        source: 'legacy' as const,
+        amount: Number(p.amount || 0),
+      })),
+    ].sort((a, b) => {
+      if (a.ts !== b.ts) return a.ts - b.ts;
+      if (a.source !== b.source) return a.source === 'confirmed' ? -1 : 1;
+      return a.id.localeCompare(b.id);
+    });
+    let runningPaid = 0;
+    for (const entry of timeline) {
+      runningPaid += entry.amount;
+      if (entry.source === 'confirmed') {
+        const balanceAfter = Math.max(0, totalFees - runningPaid);
+        map.set(entry.id, {
+          totalFees,
+          totalPaidUpTo: runningPaid,
+          balanceAfter,
+          fullyPaid: balanceAfter === 0 && totalFees > 0,
+        });
+      }
+    }
+    return map;
+  }, [studentFees, confirmedPaymentRecords, paymentHistory]);
+
   // Per-fee paid allocation. Legacy payments are tied directly to a studentFee
   // via studentFeeId, so they apply 1:1. Bursar-confirmed payment records
   // (fee_payment_records) don't carry a fee_id, so we allocate them: prefer a
@@ -1223,47 +1273,18 @@ export default function StudentDashboard() {
   const generateReceiptHtml = (record: any): string | null => {
     if (!profile || !record) return null;
 
-    // Compute running balance AS OF this payment by merging confirmed records
-    // and legacy payments into one date-sorted timeline, then summing only
-    // entries up to (and including) this receipt.
-    const thisDateMs = new Date(record.paymentDate || record.createdAt || 0).getTime();
-    const thisIdStr = String(record.id || '');
-
-    type TimelineEntry = { ts: number; id: string; source: 'confirmed' | 'legacy'; amount: number };
-    const timeline: TimelineEntry[] = [
-      ...confirmedPaymentRecords.map((r: any) => ({
-        ts: new Date(r.paymentDate || r.createdAt || 0).getTime(),
-        id: String(r.id),
-        source: 'confirmed' as const,
-        amount: Number(r.amount || 0),
-      })),
-      ...paymentHistory.map((p: any) => ({
-        ts: new Date(p.paymentDate || p.createdAt || 0).getTime(),
-        id: String(p.id),
-        source: 'legacy' as const,
-        amount: Number(p.amount || 0),
-      })),
-    ].sort((a, b) => {
-      if (a.ts !== b.ts) return a.ts - b.ts;
-      // Stable secondary sort: confirmed before legacy at same timestamp, then by id
-      if (a.source !== b.source) return a.source === 'confirmed' ? -1 : 1;
-      return a.id.localeCompare(b.id);
-    });
-
-    // Sum every entry whose timestamp is strictly before this receipt's
-    // timestamp, plus this receipt itself, plus any same-timestamp confirmed
-    // entries that sort before this one.
-    const termTotalPaidUpTo = timeline.reduce((sum, e) => {
-      if (e.ts < thisDateMs) return sum + e.amount;
-      if (e.ts === thisDateMs) {
-        if (e.source === 'confirmed' && e.id <= thisIdStr) return sum + e.amount;
-      }
-      return sum;
-    }, 0);
-
-    const termTotalFees = studentFees.reduce((s, f) => s + Number(f.amount || 0), 0);
-    const termBalanceUpTo = Math.max(0, termTotalFees - termTotalPaidUpTo);
-    const fullyPaid = termBalanceUpTo === 0 && termTotalFees > 0;
+    // Per-receipt running balance is precomputed in `receiptBalanceById` for
+    // both this PDF and the Payment Receipts table — they MUST match.
+    const balanceInfo = receiptBalanceById.get(String(record.id || '')) ?? {
+      totalFees: studentFees.reduce((s, f) => s + Number(f.amount || 0), 0),
+      totalPaidUpTo: Number(record.amount || 0),
+      balanceAfter: 0,
+      fullyPaid: false,
+    };
+    const termTotalFees = balanceInfo.totalFees;
+    const termTotalPaidUpTo = balanceInfo.totalPaidUpTo;
+    const termBalanceUpTo = balanceInfo.balanceAfter;
+    const fullyPaid = balanceInfo.fullyPaid;
 
     const paymentDateObj = record.paymentDate ? new Date(record.paymentDate) : new Date();
     const paymentDateStr = paymentDateObj.toLocaleDateString('en-GB', {
@@ -2073,11 +2094,14 @@ export default function StudentDashboard() {
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Purpose</th>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Method</th>
                           <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Status</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">Balance after</th>
                           <th className="px-4 py-3 text-right text-sm font-medium text-gray-900 dark:text-white">Receipt</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {confirmedPaymentRecords.map((record: any) => (
+                        {confirmedPaymentRecords.map((record: any) => {
+                          const bal = receiptBalanceById.get(String(record.id));
+                          return (
                           <tr key={record.id}>
                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-white whitespace-nowrap">
                               {record.paymentDate
@@ -2097,6 +2121,22 @@ export default function StudentDashboard() {
                               <Badge className="bg-green-100 text-green-800 border-green-200">
                                 Confirmed
                               </Badge>
+                            </td>
+                            <td
+                              className="px-4 py-3 text-sm text-right whitespace-nowrap"
+                              data-testid={`text-balance-after-${record.id}`}
+                            >
+                              {bal ? (
+                                bal.fullyPaid ? (
+                                  <Badge className="bg-green-100 text-green-800 border-green-200">FULLY PAID</Badge>
+                                ) : (
+                                  <span className="font-medium text-gray-900 dark:text-white">
+                                    ₦{bal.balanceAfter.toLocaleString()}
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm">
                               <div className="flex items-center justify-end gap-1.5">
@@ -2122,14 +2162,17 @@ export default function StudentDashboard() {
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
                   {/* Mobile card list */}
                   <div className="sm:hidden space-y-3">
-                    {confirmedPaymentRecords.map((record: any) => (
+                    {confirmedPaymentRecords.map((record: any) => {
+                      const bal = receiptBalanceById.get(String(record.id));
+                      return (
                       <div
                         key={record.id}
                         className="border rounded-lg p-3 bg-white dark:bg-gray-900"
@@ -2152,6 +2195,21 @@ export default function StudentDashboard() {
                             Confirmed
                           </Badge>
                         </div>
+                        {bal && (
+                          <div
+                            className="text-xs text-gray-600 dark:text-gray-300 mb-2"
+                            data-testid={`text-balance-after-mobile-${record.id}`}
+                          >
+                            Balance after:{" "}
+                            {bal.fullyPaid ? (
+                              <span className="font-semibold text-green-700 dark:text-green-400">FULLY PAID</span>
+                            ) : (
+                              <span className="font-semibold text-gray-900 dark:text-white">
+                                ₦{bal.balanceAfter.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {record.purpose && (
                           <div className="text-xs text-gray-600 dark:text-gray-300 mb-2 truncate">
                             {record.purpose}
@@ -2175,7 +2233,8 @@ export default function StudentDashboard() {
                           </Button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
