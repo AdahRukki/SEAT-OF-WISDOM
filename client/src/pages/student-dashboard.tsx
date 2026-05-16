@@ -205,8 +205,8 @@ export default function StudentDashboard() {
   // student (no fees/payments yet) still sees their school's active period
   // pre-selected instead of an empty Fees tab.
   const STANDARD_TERMS = ['First Term', 'Second Term', 'Third Term'];
-  const currentSchoolSession = (academicInfo as any)?.currentSession as string | null | undefined;
-  const currentSchoolTerm = (academicInfo as any)?.currentTerm as string | null | undefined;
+  const currentSchoolSession = academicInfo?.currentSession;
+  const currentSchoolTerm = academicInfo?.currentTerm;
   const availableSessions = useMemo(() => {
     const set = new Set<string>(recordSessions);
     if (currentSchoolSession) set.add(currentSchoolSession);
@@ -455,13 +455,13 @@ export default function StudentDashboard() {
   
   // Default Session: prefer school's current session if the student actually
   // has records under it; otherwise pick the most recent session in their
-  // records. If they have no records at all, leave the selection empty so
-  // the client-side filter is a no-op and the table shows the empty-state
-  // copy. We wait for finance data to resolve before deciding.
+  // records. If they have no records at all, fall back to the school's
+  // current session so the Fees tab header and dropdowns are never blank.
+  // We wait for finance data to resolve before deciding.
   useEffect(() => {
     if (selectedSession) return;
     if (!financeDataReady) return;
-    const academicSession = (academicInfo as any)?.currentSession;
+    const academicSession = academicInfo?.currentSession;
     if (academicSession && recordSessions.includes(academicSession)) {
       setSelectedSession(academicSession);
     } else if (recordSessions.length > 0) {
@@ -481,7 +481,7 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (selectedTerm) return;
     if (!financeDataReady) return;
-    const academicTerm = (academicInfo as any)?.currentTerm;
+    const academicTerm = academicInfo?.currentTerm;
     if (academicTerm && recordTerms.includes(academicTerm)) {
       setSelectedTerm(academicTerm);
     } else if (recordTerms.length > 0) {
