@@ -42,7 +42,7 @@ interface PairResponse {
 export function DuplicateReviewSheet({ kind, id, open, onOpenChange }: DuplicateReviewSheetProps) {
   const { toast } = useToast();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canActOnDuplicates = user?.role === "admin" || user?.role === "sub-admin";
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery<PairResponse>({
@@ -238,7 +238,7 @@ export function DuplicateReviewSheet({ kind, id, open, onOpenChange }: Duplicate
 
         <DialogFooter className="flex-wrap gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          {isAdmin && (
+          {canActOnDuplicates && (
             <>
               <Button
                 variant="outline"

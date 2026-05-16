@@ -4199,12 +4199,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   //   1. clear_duplicate_flag           — "this is NOT a duplicate"
   //   2. mark_transaction_ignored_duplicate — "yes, it's a duplicate, dismiss"
   //   3. reverse_as_duplicate            — same as reverse with explicit reason
-  app.post("/api/admin/payments/:id/clear-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/payments/:id/clear-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const paymentId = req.params.id;
       const before = await storage.getFeePaymentRecordById(paymentId);
       if (!before) return res.status(404).json({ error: "Payment record not found" });
+      if (user.role === 'sub-admin' && before.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot act on payments outside your school" });
+      }
       // Task #128 phase 2: remember this "Not a duplicate" decision so a
       // future re-scan / re-flag does not re-raise the same pair.
       if (before.duplicateOfPaymentId) {
@@ -4227,7 +4230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/payments/:id/reverse-as-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/payments/:id/reverse-as-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const paymentId = req.params.id;
@@ -4236,6 +4239,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : 'Reversed as duplicate';
       const before = await storage.getFeePaymentRecordById(paymentId);
       if (!before) return res.status(404).json({ error: "Payment record not found" });
+      if (user.role === 'sub-admin' && before.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot act on payments outside your school" });
+      }
       const { payment, bankTransactionIds } = await storage.reverseFeePayment(paymentId, user.id, reason);
       await storage.createPaymentAuditLog({
         action: 'reverse_as_duplicate',
@@ -4264,13 +4270,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/bank-transactions/:id/clear-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/bank-transactions/:id/clear-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const txId = req.params.id;
       const beforeRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, txId)).limit(1);
       const before = beforeRows[0];
       if (!before) return res.status(404).json({ error: "Bank transaction not found" });
+      if (user.role === 'sub-admin' && before.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot act on transactions outside your school" });
+      }
       // Task #128 phase 2: remember "Not a duplicate" decision.
       if (before.duplicateOfTransactionId) {
         await storage.recordClearedDuplicatePair('transaction', txId, before.duplicateOfTransactionId, user.id);
@@ -4302,7 +4311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/duplicates/:kind/:id", authenticate, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      if (!user || (user.role !== 'admin' && user.role !== 'sub_admin' && user.role !== 'bursar')) {
+      if (!user || (user.role !== 'admin' && user.role !== 'sub-admin' && user.role !== 'bursar')) {
         return res.status(403).json({ error: "Forbidden" });
       }
       const kind = req.params.kind;
@@ -4423,13 +4432,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/bank-transactions/:id/ignore-as-duplicate", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/bank-transactions/:id/ignore-as-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const txId = req.params.id;
       const beforeRows = await db.select().from(bankTransactions).where(eq(bankTransactions.id, txId)).limit(1);
       const before = beforeRows[0];
       if (!before) return res.status(404).json({ error: "Bank transaction not found" });
+      if (user.role === 'sub-admin' && before.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot act on transactions outside your school" });
+      }
       // "Mark as ignored" is a soft, reversible dismissal.
       // It intentionally does NOT write to cleared_duplicate_pairs so that
       // a subsequent re-scan can re-evaluate the pair fresh.  This is the

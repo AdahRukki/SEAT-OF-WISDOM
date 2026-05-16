@@ -848,6 +848,8 @@ export function PaymentRecording({
 
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  // Sub-admins (in addition to admins) may act on duplicate flags within their own school.
+  const canActOnDuplicates = user?.role === "admin" || user?.role === "sub-admin";
 
   // Task #128: clear/reverse-as-duplicate mutations.
   const clearPaymentDuplicateMutation = useMutation({
@@ -1592,7 +1594,7 @@ export function PaymentRecording({
                               >
                                 Review
                               </Button>
-                              {isAdmin && (
+                              {canActOnDuplicates && (
                                 <>
                                   <Button
                                     size="sm"

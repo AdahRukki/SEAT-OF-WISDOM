@@ -226,6 +226,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  // Sub-admins (in addition to admins) may act on duplicate flags within their own school.
+  const canActOnDuplicates = user?.role === "admin" || user?.role === "sub-admin";
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('auth_token');
@@ -1317,7 +1319,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     >
                                       Review
                                     </Button>
-                                    {isAdmin && (
+                                    {canActOnDuplicates && (
                                       <>
                                         <Button
                                           size="sm"
@@ -1663,7 +1665,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                       >
                                         Review
                                       </Button>
-                                      {isAdmin && (
+                                      {canActOnDuplicates && (
                                         <>
                                           <Button
                                             size="sm"
@@ -1947,7 +1949,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 >
                                   Review
                                 </Button>
-                                {isAdmin && (
+                                {canActOnDuplicates && (
                                   <>
                                     <Button
                                       size="sm"
