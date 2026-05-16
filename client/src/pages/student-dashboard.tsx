@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogo } from "@/hooks/use-logo";
@@ -143,57 +143,148 @@ export default function StudentDashboard() {
     enabled: !!selectedClass && !!selectedTerm && !!selectedSession && scoresPublicationStatus?.published === true
   });
 
-  // Student financial data
-  const { data: studentFees = [] } = useQuery<any[]>({ 
-    queryKey: ['/api/student/fees', selectedTerm, selectedClass, selectedSession],
+  // Student financial data — fetch ALL records (no term/session filter)
+  // so the Fees tab can show data even when school-level current term/session
+  // isn't set. Filtering by selected term/session happens client-side below.
+  const { data: allStudentFees = [] } = useQuery<any[]>({
+    queryKey: ['/api/student/fees', 'all'],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (selectedTerm) params.append('term', selectedTerm);
-      if (selectedClass) params.append('classId', selectedClass);
-      if (selectedSession) params.append('session', selectedSession);
-      
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const response = await fetch(`/api/student/fees?${params}`, {
-        headers,
-        credentials: 'include'
-      });
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const response = await fetch(`/api/student/fees`, { headers, credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch student fees');
       return response.json();
     },
-    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
+    enabled: !!profile,
   });
 
-  const { data: paymentsData } = useQuery<{ oldPayments: any[]; confirmedRecords: any[] }>({ 
-    queryKey: ['/api/student/payments', selectedTerm, selectedClass, selectedSession],
+  const { data: paymentsData } = useQuery<{ oldPayments: any[]; confirmedRecords: any[] }>({
+    queryKey: ['/api/student/payments', 'all'],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (selectedTerm) params.append('term', selectedTerm);
-      if (selectedClass) params.append('classId', selectedClass);
-      if (selectedSession) params.append('session', selectedSession);
-      
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      const response = await fetch(`/api/student/payments?${params}`, {
-        headers,
-        credentials: 'include'
-      });
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const response = await fetch(`/api/student/payments`, { headers, credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch payment history');
       return response.json();
     },
-    enabled: !!profile && !!selectedTerm && !!selectedClass && !!selectedSession
+    enabled: !!profile,
   });
 
-  const paymentHistory: any[] = paymentsData?.oldPayments ?? [];
-  const confirmedPaymentRecords: any[] = paymentsData?.confirmedRecords ?? [];
+  const allPaymentHistory: any[] = paymentsData?.oldPayments ?? [];
+  const allConfirmedPaymentRecords: any[] = paymentsData?.confirmedRecords ?? [];
+
+  // Available sessions / terms derived from the student's actual records,
+  // unioned with the school's current period and a small standard fallback so
+  // the dropdowns are never empty.
+  const STANDARD_TERMS = ['First Term', 'Second Term', 'Third Term'];
+  const availableSessions = useMemo(() => {
+    const set = new Set<string>();
+    allStudentFees.forEach((f: any) => f?.session && set.add(f.session));
+    allConfirmedPaymentRecords.forEach((r: any) => r?.session && set.add(r.session));
+    allPaymentHistory.forEach((p: any) => p?.session && set.add(p.session));
+    if ((academicInfo as any)?.currentSession) set.add((academicInfo as any).currentSession);
+    if (set.size === 0) ['2024/2025', '2025/2026', '2026/2027'].forEach(s => set.add(s));
+    return Array.from(set).sort().reverse();
+  }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory, academicInfo]);
+
+  const availableTerms = useMemo(() => {
+    const set = new Set<string>();
+    const match = (item: any) => !selectedSession || item?.session === selectedSession;
+    allStudentFees.filter(match).forEach((f: any) => f?.term && set.add(f.term));
+    allConfirmedPaymentRecords.filter(match).forEach((r: any) => r?.term && set.add(r.term));
+    allPaymentHistory.filter(match).forEach((p: any) => p?.term && set.add(p.term));
+    if ((academicInfo as any)?.currentTerm) set.add((academicInfo as any).currentTerm);
+    if (set.size === 0) STANDARD_TERMS.forEach(t => set.add(t));
+    const inStandardOrder = STANDARD_TERMS.filter(t => set.has(t));
+    const extras = Array.from(set).filter(t => !STANDARD_TERMS.includes(t));
+    return [...inStandardOrder, ...extras];
+  }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory, academicInfo, selectedSession]);
+
+  // Filtered views used by the rest of the component.
+  const studentFees = useMemo(
+    () => allStudentFees.filter((f: any) =>
+      (!selectedTerm || f.term === selectedTerm) &&
+      (!selectedSession || f.session === selectedSession)
+    ),
+    [allStudentFees, selectedTerm, selectedSession]
+  );
+  const paymentHistory = useMemo(
+    () => allPaymentHistory.filter((p: any) =>
+      (!selectedTerm || p.term === selectedTerm) &&
+      (!selectedSession || p.session === selectedSession)
+    ),
+    [allPaymentHistory, selectedTerm, selectedSession]
+  );
+  const confirmedPaymentRecords = useMemo(
+    () => allConfirmedPaymentRecords.filter((r: any) =>
+      (!selectedTerm || r.term === selectedTerm) &&
+      (!selectedSession || r.session === selectedSession)
+    ),
+    [allConfirmedPaymentRecords, selectedTerm, selectedSession]
+  );
+
+  // Per-fee paid allocation. Legacy payments are tied directly to a studentFee
+  // via studentFeeId, so they apply 1:1. Bursar-confirmed payment records
+  // (fee_payment_records) don't carry a fee_id, so we allocate them: prefer a
+  // fee whose feeType.name appears in the record's purpose; otherwise apply
+  // oldest-outstanding-first within the selected term+session.
+  const feesPaidMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const sortedFees = [...studentFees].sort((a: any, b: any) => {
+      const aT = new Date(a.createdAt || 0).getTime();
+      const bT = new Date(b.createdAt || 0).getTime();
+      if (aT !== bT) return aT - bT;
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    // Step 1: legacy payments matched by studentFeeId
+    for (const fee of sortedFees) {
+      const legacy = paymentHistory
+        .filter((p: any) => p.studentFeeId === fee.id)
+        .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+      map.set(fee.id, legacy);
+    }
+
+    // Step 2: distribute confirmed records (oldest payment first)
+    const sortedRecords = [...confirmedPaymentRecords].sort((a: any, b: any) => {
+      const aT = new Date(a.paymentDate || a.createdAt || 0).getTime();
+      const bT = new Date(b.paymentDate || b.createdAt || 0).getTime();
+      return aT - bT;
+    });
+
+    for (const record of sortedRecords) {
+      let remaining = Number(record.amount || 0);
+      const purpose = String(record.purpose || '').trim().toLowerCase();
+
+      const matchIdx = purpose
+        ? sortedFees.findIndex((fee: any) => {
+            const name = String(fee.feeType?.name || '').trim().toLowerCase();
+            if (!name) return false;
+            return purpose.includes(name) || name.includes(purpose);
+          })
+        : -1;
+
+      const order = matchIdx >= 0
+        ? [matchIdx, ...sortedFees.map((_: any, i: number) => i).filter((i: number) => i !== matchIdx)]
+        : sortedFees.map((_: any, i: number) => i);
+
+      for (const i of order) {
+        if (remaining <= 0) break;
+        const fee = sortedFees[i];
+        const owed = Number(fee.amount || 0) - (map.get(fee.id) || 0);
+        if (owed <= 0) continue;
+        const apply = Math.min(owed, remaining);
+        map.set(fee.id, (map.get(fee.id) || 0) + apply);
+        remaining -= apply;
+      }
+      // Any leftover is overpayment / unallocated and is shown in the top
+      // "Amount Paid" summary card but not against a specific row.
+    }
+
+    return map;
+  }, [studentFees, paymentHistory, confirmedPaymentRecords]);
 
   // Fetch behavioral ratings
   const { data: behavioralRating = null } = useQuery<any>({ 
@@ -340,14 +431,27 @@ export default function StudentDashboard() {
     }
   }, [enrolledClasses, profile?.class?.id, selectedClass]);
   
+  // Default Session: prefer school's current session, otherwise fall back to
+  // the most recent session the student has any record under.
   useEffect(() => {
-    if (academicInfo?.currentTerm) {
-      setSelectedTerm(academicInfo.currentTerm);
+    if (selectedSession) return;
+    if ((academicInfo as any)?.currentSession) {
+      setSelectedSession((academicInfo as any).currentSession);
+    } else if (availableSessions.length > 0) {
+      setSelectedSession(availableSessions[0]);
     }
-    if (academicInfo?.currentSession) {
-      setSelectedSession(academicInfo.currentSession);
+  }, [academicInfo, availableSessions, selectedSession]);
+
+  // Default Term: prefer school's current term, otherwise fall back to the
+  // latest term available within the chosen session.
+  useEffect(() => {
+    if (selectedTerm) return;
+    if ((academicInfo as any)?.currentTerm) {
+      setSelectedTerm((academicInfo as any).currentTerm);
+    } else if (availableTerms.length > 0) {
+      setSelectedTerm(availableTerms[availableTerms.length - 1]);
     }
-  }, [academicInfo]);
+  }, [academicInfo, availableTerms, selectedTerm]);
 
   // Password change form
   const passwordForm = useForm<ChangePasswordForm>({
@@ -1752,9 +1856,9 @@ export default function StudentDashboard() {
                         <SelectValue placeholder="Select session" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="2024/2025">2024/2025</SelectItem>
-                        <SelectItem value="2025/2026">2025/2026</SelectItem>
-                        <SelectItem value="2026/2027">2026/2027</SelectItem>
+                        {availableSessions.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Select value={selectedTerm} onValueChange={setSelectedTerm}>
@@ -1762,9 +1866,9 @@ export default function StudentDashboard() {
                         <SelectValue placeholder="Select term" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="First Term">First Term</SelectItem>
-                        <SelectItem value="Second Term">Second Term</SelectItem>
-                        <SelectItem value="Third Term">Third Term</SelectItem>
+                        {availableTerms.map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1784,14 +1888,16 @@ export default function StudentDashboard() {
                         {studentFees.length === 0 ? (
                           <tr>
                             <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
-                              No fees assigned for the selected term and session.
+                              {allStudentFees.length === 0 && allConfirmedPaymentRecords.length === 0 && allPaymentHistory.length === 0
+                                ? 'No fees on record yet. Once the school assigns tuition or records a payment, it will appear here.'
+                                : confirmedPaymentRecords.length > 0
+                                  ? 'No assigned fees for this period — your confirmed payments are listed below.'
+                                  : 'No fees assigned for the selected term and session.'}
                             </td>
                           </tr>
                         ) : (
                           studentFees.map((fee: any) => {
-                            const paidAmount = paymentHistory
-                              .filter((payment: any) => payment.studentFeeId === fee.id)
-                              .reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
+                            const paidAmount = feesPaidMap.get(fee.id) ?? 0;
                             const balance = Number(fee.amount) - paidAmount;
                             const isPaid = balance <= 0;
                             
