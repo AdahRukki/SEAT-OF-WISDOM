@@ -146,7 +146,7 @@ export default function StudentDashboard() {
   // Student financial data — fetch ALL records (no term/session filter)
   // so the Fees tab can show data even when school-level current term/session
   // isn't set. Filtering by selected term/session happens client-side below.
-  const { data: allStudentFees = [] } = useQuery<any[]>({
+  const { data: allStudentFees = [], isFetched: feesFetched } = useQuery<any[]>({
     queryKey: ['/api/student/fees', 'all'],
     queryFn: async () => {
       const token = localStorage.getItem('auth_token');
@@ -159,7 +159,7 @@ export default function StudentDashboard() {
     enabled: !!profile,
   });
 
-  const { data: paymentsData } = useQuery<{ oldPayments: any[]; confirmedRecords: any[] }>({
+  const { data: paymentsData, isFetched: paymentsFetched } = useQuery<{ oldPayments: any[]; confirmedRecords: any[] }>({
     queryKey: ['/api/student/payments', 'all'],
     queryFn: async () => {
       const token = localStorage.getItem('auth_token');
@@ -172,35 +172,52 @@ export default function StudentDashboard() {
     enabled: !!profile,
   });
 
+  // True once both finance queries have resolved at least once (or no profile yet).
+  // We gate default-period selection on this so we never latch onto the synthetic
+  // fallback session/term before the student's actual records have loaded.
+  const financeDataReady = !profile || (feesFetched && paymentsFetched);
+
   const allPaymentHistory: any[] = paymentsData?.oldPayments ?? [];
   const allConfirmedPaymentRecords: any[] = paymentsData?.confirmedRecords ?? [];
 
-  // Available sessions / terms derived from the student's actual records,
-  // unioned with the school's current period and a small standard fallback so
-  // the dropdowns are never empty.
-  const STANDARD_TERMS = ['First Term', 'Second Term', 'Third Term'];
-  const availableSessions = useMemo(() => {
+  // Sessions/terms derived ONLY from the student's actual records (no fallback).
+  // Used by the defaulting logic so we never auto-select a synthetic period
+  // when the student already has real data under a different period.
+  const recordSessions = useMemo(() => {
     const set = new Set<string>();
     allStudentFees.forEach((f: any) => f?.session && set.add(f.session));
     allConfirmedPaymentRecords.forEach((r: any) => r?.session && set.add(r.session));
     allPaymentHistory.forEach((p: any) => p?.session && set.add(p.session));
-    if ((academicInfo as any)?.currentSession) set.add((academicInfo as any).currentSession);
-    if (set.size === 0) ['2024/2025', '2025/2026', '2026/2027'].forEach(s => set.add(s));
     return Array.from(set).sort().reverse();
-  }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory, academicInfo]);
+  }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory]);
 
-  const availableTerms = useMemo(() => {
+  const recordTerms = useMemo(() => {
     const set = new Set<string>();
     const match = (item: any) => !selectedSession || item?.session === selectedSession;
     allStudentFees.filter(match).forEach((f: any) => f?.term && set.add(f.term));
     allConfirmedPaymentRecords.filter(match).forEach((r: any) => r?.term && set.add(r.term));
     allPaymentHistory.filter(match).forEach((p: any) => p?.term && set.add(p.term));
+    return Array.from(set);
+  }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory, selectedSession]);
+
+  // Dropdown options: records + school's current period + a small standard
+  // fallback so the dropdowns are never empty.
+  const STANDARD_TERMS = ['First Term', 'Second Term', 'Third Term'];
+  const availableSessions = useMemo(() => {
+    const set = new Set<string>(recordSessions);
+    if ((academicInfo as any)?.currentSession) set.add((academicInfo as any).currentSession);
+    if (set.size === 0) ['2024/2025', '2025/2026', '2026/2027'].forEach(s => set.add(s));
+    return Array.from(set).sort().reverse();
+  }, [recordSessions, academicInfo]);
+
+  const availableTerms = useMemo(() => {
+    const set = new Set<string>(recordTerms);
     if ((academicInfo as any)?.currentTerm) set.add((academicInfo as any).currentTerm);
     if (set.size === 0) STANDARD_TERMS.forEach(t => set.add(t));
     const inStandardOrder = STANDARD_TERMS.filter(t => set.has(t));
     const extras = Array.from(set).filter(t => !STANDARD_TERMS.includes(t));
     return [...inStandardOrder, ...extras];
-  }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory, academicInfo, selectedSession]);
+  }, [recordTerms, academicInfo]);
 
   // Filtered views used by the rest of the component.
   const studentFees = useMemo(
@@ -431,27 +448,46 @@ export default function StudentDashboard() {
     }
   }, [enrolledClasses, profile?.class?.id, selectedClass]);
   
-  // Default Session: prefer school's current session, otherwise fall back to
-  // the most recent session the student has any record under.
+  // Default Session: prefer school's current session, otherwise the most
+  // recent session the student has real records under, otherwise the latest
+  // synthetic fallback. We wait for finance data to resolve before falling
+  // back to synthetic options so we don't latch onto e.g. "2026/2027" before
+  // the student's real "2024/2025" records arrive.
   useEffect(() => {
     if (selectedSession) return;
-    if ((academicInfo as any)?.currentSession) {
-      setSelectedSession((academicInfo as any).currentSession);
+    const academicSession = (academicInfo as any)?.currentSession;
+    if (academicSession) {
+      setSelectedSession(academicSession);
+      return;
+    }
+    if (!financeDataReady) return;
+    if (recordSessions.length > 0) {
+      setSelectedSession(recordSessions[0]);
     } else if (availableSessions.length > 0) {
       setSelectedSession(availableSessions[0]);
     }
-  }, [academicInfo, availableSessions, selectedSession]);
+  }, [academicInfo, recordSessions, availableSessions, selectedSession, financeDataReady]);
 
-  // Default Term: prefer school's current term, otherwise fall back to the
-  // latest term available within the chosen session.
+  // Default Term: prefer school's current term, otherwise the latest term
+  // the student has real records under (within the chosen session), otherwise
+  // the latest synthetic fallback. Same data-ready gate as session.
   useEffect(() => {
     if (selectedTerm) return;
-    if ((academicInfo as any)?.currentTerm) {
-      setSelectedTerm((academicInfo as any).currentTerm);
+    const academicTerm = (academicInfo as any)?.currentTerm;
+    if (academicTerm) {
+      setSelectedTerm(academicTerm);
+      return;
+    }
+    if (!financeDataReady) return;
+    if (recordTerms.length > 0) {
+      // Pick the latest term in standard order that the student has records for
+      const ordered = STANDARD_TERMS.filter(t => recordTerms.includes(t));
+      const pick = ordered.length > 0 ? ordered[ordered.length - 1] : recordTerms[recordTerms.length - 1];
+      setSelectedTerm(pick);
     } else if (availableTerms.length > 0) {
       setSelectedTerm(availableTerms[availableTerms.length - 1]);
     }
-  }, [academicInfo, availableTerms, selectedTerm]);
+  }, [academicInfo, recordTerms, availableTerms, selectedTerm, financeDataReady]);
 
   // Password change form
   const passwordForm = useForm<ChangePasswordForm>({
@@ -1237,7 +1273,10 @@ export default function StudentDashboard() {
     const amountWords = numberToNairaWords(record.amount);
     const generatedAt = new Date().toLocaleString('en-GB');
 
-    const schoolName = school?.name || 'Seat of Wisdom Academy';
+    const ACADEMY_NAME = 'SEAT OF WISDOM ACADEMY ASABA';
+    const ACADEMY_LOCATION = 'ASABA, DELTA STATE';
+    const PRINCIPAL_LABEL = 'Principal, Seat of Wisdom Academy Asaba';
+    const branchName = school?.name || 'Seat of Wisdom Academy';
     const schoolAddress = school?.address || '';
     const schoolPhone = school?.phone || '';
     const schoolEmail = school?.email || '';
@@ -1252,48 +1291,82 @@ export default function StudentDashboard() {
 
     return `<!DOCTYPE html>
 <html><head><title>Receipt ${safe(receiptNumber)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   @page{size:A4 portrait;margin:5mm}
-  @media print{html,body{width:210mm;height:297mm;margin:0;padding:0}.receipt{box-shadow:none!important;border-radius:0!important;margin:0!important}}
-  body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f1f5f9;color:#0f172a;line-height:1.4;padding:8px}
-  .receipt{width:210mm;max-width:210mm;min-height:200mm;margin:0 auto;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.08);border-radius:8px;padding:18mm 14mm;position:relative;overflow:hidden}
+  /* Mobile-first base */
+  html,body{background:#f1f5f9}
+  body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;color:#0f172a;line-height:1.4;padding:8px}
+  .receipt{width:100%;max-width:720px;margin:0 auto;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.08);border-radius:8px;padding:14px 12px;position:relative;overflow:hidden}
   .receipt::before{content:'';position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#1e40af 0%,#3b82f6 50%,#10b981 100%)}
-  .header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:14px}
-  .logo{width:64px;height:64px;border-radius:50%;background:#fff;border:2px solid #1e40af;padding:4px;flex-shrink:0;object-fit:contain}
-  .school-info{flex:1;text-align:center}
-  .school-name{font-size:20px;font-weight:800;color:#1e3a8a;letter-spacing:.5px}
-  .school-meta{font-size:10px;color:#475569;margin-top:3px;line-height:1.5}
-  .receipt-meta{text-align:right;font-size:10px;color:#475569;min-width:140px}
-  .receipt-meta .label{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8}
-  .receipt-meta .num{font-size:11px;font-weight:700;color:#1e3a8a;font-family:monospace;margin-top:2px}
-  .title-bar{background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-  .title-bar h2{font-size:15px;letter-spacing:1px;font-weight:700}
-  .title-bar .term{font-size:11px;opacity:.95;font-weight:500}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-  .panel{border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;background:#f8fafc}
-  .panel h3{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:6px;font-weight:700}
-  .row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px dashed #e2e8f0}
+  .header{display:flex;flex-direction:column;align-items:center;gap:8px;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin-bottom:12px;text-align:center}
+  .logo{width:52px;height:52px;border-radius:50%;background:#fff;border:2px solid #1e40af;padding:3px;flex-shrink:0;object-fit:contain}
+  .school-info{flex:1;text-align:center;min-width:0}
+  .school-name{font-size:16px;font-weight:800;color:#1e3a8a;letter-spacing:.3px;line-height:1.2}
+  .school-sub{font-size:10px;font-weight:700;color:#475569;margin-top:2px;letter-spacing:.5px}
+  .school-meta{font-size:9px;color:#475569;margin-top:3px;line-height:1.4;word-break:break-word}
+  .receipt-meta{font-size:10px;color:#475569;display:flex;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:4px}
+  .receipt-meta .item{display:flex;flex-direction:column;align-items:center}
+  .receipt-meta .label{font-size:8px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8}
+  .receipt-meta .num{font-size:11px;font-weight:700;color:#1e3a8a;font-family:monospace;margin-top:1px}
+  .receipt-meta .date{font-size:11px;font-weight:600;color:#0f172a;margin-top:1px}
+  .title-bar{background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;padding:8px 12px;border-radius:6px;margin-bottom:12px;display:flex;flex-direction:column;gap:2px;align-items:center;text-align:center}
+  .title-bar h2{font-size:13px;letter-spacing:1px;font-weight:700}
+  .title-bar .term{font-size:10px;opacity:.95;font-weight:500}
+  .grid-2{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px}
+  .panel{border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px;background:#f8fafc}
+  .panel h3{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:5px;font-weight:700}
+  .row{display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:3px 0;border-bottom:1px dashed #e2e8f0}
   .row:last-child{border-bottom:none}
-  .row .k{color:#64748b;font-weight:500}
-  .row .v{color:#0f172a;font-weight:600;text-align:right;max-width:60%;word-break:break-word}
-  .amount-block{background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%);border:2px solid #16a34a;border-radius:8px;padding:14px;margin-bottom:14px;text-align:center}
-  .amount-figures{font-size:28px;font-weight:800;color:#15803d;letter-spacing:.5px}
-  .amount-words{font-size:11px;color:#166534;margin-top:4px;font-style:italic;font-weight:600}
-  .balance-summary{border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:14px}
-  .balance-summary .bs-row{display:flex;justify-content:space-between;padding:8px 12px;font-size:11px;border-bottom:1px solid #e2e8f0}
+  .row .k{color:#64748b;font-weight:500;flex-shrink:0}
+  .row .v{color:#0f172a;font-weight:600;text-align:right;word-break:break-word;min-width:0}
+  .amount-block{background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%);border:2px solid #16a34a;border-radius:8px;padding:12px;margin-bottom:12px;text-align:center}
+  .amount-figures{font-size:22px;font-weight:800;color:#15803d;letter-spacing:.3px;word-break:break-word}
+  .amount-words{font-size:10px;color:#166534;margin-top:4px;font-style:italic;font-weight:600}
+  .balance-summary{border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:12px}
+  .balance-summary .bs-row{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;font-size:11px;border-bottom:1px solid #e2e8f0}
   .balance-summary .bs-row:last-child{border-bottom:none;background:${fullyPaid ? '#dcfce7' : '#fef2f2'};font-weight:700}
   .balance-summary .bs-row .k{color:#475569;font-weight:600}
-  .balance-summary .bs-row .v{color:#0f172a;font-weight:700;font-family:monospace}
+  .balance-summary .bs-row .v{color:#0f172a;font-weight:700;font-family:monospace;text-align:right;word-break:break-word}
   .balance-summary .bs-row.outstanding .v{color:${fullyPaid ? '#15803d' : '#b91c1c'}}
-  .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:18px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:9px;color:#64748b}
-  .footer .left{flex:1;line-height:1.5}
-  .footer .sig{text-align:center;min-width:140px}
-  .footer .sig img{max-height:38px;display:block;margin:0 auto 2px}
-  .footer .sig .line{border-top:1px solid #94a3b8;padding-top:3px;font-size:9px;color:#475569}
-  .stamp{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:64px;font-weight:900;color:rgba(34,197,94,.08);letter-spacing:6px;pointer-events:none;text-transform:uppercase}
+  .footer{display:flex;flex-direction:column;gap:12px;margin-top:14px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:9px;color:#64748b;text-align:center}
+  .footer .left{line-height:1.5}
+  .footer .sig{text-align:center}
+  .footer .sig img{max-height:40px;display:block;margin:0 auto 2px}
+  .footer .sig .line{border-top:1px solid #94a3b8;padding-top:3px;font-size:9px;color:#475569;display:inline-block;min-width:180px}
+  .stamp{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%) rotate(-18deg);font-size:48px;font-weight:900;color:rgba(34,197,94,.08);letter-spacing:6px;pointer-events:none;text-transform:uppercase;white-space:nowrap}
   .badge-paid{display:inline-block;background:#16a34a;color:#fff;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.5px}
   .badge-due{display:inline-block;background:#dc2626;color:#fff;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.5px}
+  /* Tablet/desktop screen */
+  @media screen and (min-width:720px){
+    body{padding:16px}
+    .receipt{max-width:210mm;padding:18mm 14mm}
+    .header{flex-direction:row;align-items:center;gap:14px;text-align:left;padding-bottom:12px;margin-bottom:14px}
+    .logo{width:64px;height:64px;padding:4px}
+    .school-info{text-align:center}
+    .school-name{font-size:20px;letter-spacing:.5px}
+    .school-sub{font-size:11px;margin-top:3px}
+    .school-meta{font-size:10px;margin-top:3px;line-height:1.5}
+    .receipt-meta{flex-direction:column;align-items:flex-end;text-align:right;margin-top:0;min-width:150px;gap:6px}
+    .receipt-meta .item{align-items:flex-end}
+    .title-bar{flex-direction:row;justify-content:space-between;text-align:left;padding:10px 16px;margin-bottom:14px}
+    .title-bar h2{font-size:15px}
+    .title-bar .term{font-size:11px}
+    .grid-2{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+    .panel{padding:10px 12px}
+    .amount-figures{font-size:28px;letter-spacing:.5px}
+    .footer{flex-direction:row;justify-content:space-between;align-items:flex-end;text-align:left;margin-top:18px}
+    .footer .left{flex:1;text-align:left}
+    .footer .sig{min-width:160px}
+    .stamp{font-size:64px}
+  }
+  /* Print: force A4 */
+  @media print{
+    html,body{width:210mm;height:297mm;margin:0;padding:0;background:#fff}
+    body{padding:0}
+    .receipt{box-shadow:none!important;border-radius:0!important;margin:0!important;width:210mm;max-width:210mm;min-height:200mm;padding:18mm 14mm}
+  }
 </style></head>
 <body>
 <div class="receipt">
@@ -1301,16 +1374,21 @@ export default function StudentDashboard() {
   <div class="header">
     ${schoolLogo ? `<img src="${safe(schoolLogo)}" alt="logo" class="logo" crossorigin="anonymous"/>` : ''}
     <div class="school-info">
-      <div class="school-name">${safe(schoolName)}</div>
+      <div class="school-name">${ACADEMY_NAME}</div>
+      <div class="school-sub">${ACADEMY_LOCATION}</div>
       <div class="school-meta">
-        ${safe(schoolAddress)}${schoolAddress && (schoolPhone || schoolEmail) ? ' &middot; ' : ''}${safe(schoolPhone)}${schoolPhone && schoolEmail ? ' &middot; ' : ''}${safe(schoolEmail)}
+        ${[safe(schoolAddress), safe(schoolPhone), safe(schoolEmail)].filter(Boolean).join(' &middot; ')}
       </div>
     </div>
     <div class="receipt-meta">
-      <div class="label">Receipt No.</div>
-      <div class="num">${safe(receiptNumber)}</div>
-      <div class="label" style="margin-top:6px">Date</div>
-      <div style="font-weight:600;color:#0f172a">${safe(paymentDateStr)}</div>
+      <div class="item">
+        <div class="label">Receipt No.</div>
+        <div class="num">${safe(receiptNumber)}</div>
+      </div>
+      <div class="item">
+        <div class="label">Date</div>
+        <div class="date">${safe(paymentDateStr)}</div>
+      </div>
     </div>
   </div>
   <div class="title-bar">
@@ -1323,7 +1401,7 @@ export default function StudentDashboard() {
       <div class="row"><span class="k">Name</span><span class="v">${safe(studentName)}</span></div>
       <div class="row"><span class="k">Student ID</span><span class="v">${safe(profile.studentId)}</span></div>
       <div class="row"><span class="k">Class</span><span class="v">${safe(profile.class?.name || '')}</span></div>
-      <div class="row"><span class="k">Branch</span><span class="v">${safe(schoolName)}</span></div>
+      <div class="row"><span class="k">Branch</span><span class="v">${safe(branchName)}</span></div>
     </div>
     <div class="panel">
       <h3>Payment</h3>
@@ -1348,11 +1426,11 @@ export default function StudentDashboard() {
     <div class="left">
       <strong>This is a computer-generated receipt and is valid without a signature.</strong><br/>
       Generated: ${safe(generatedAt)}<br/>
-      Generated from ${safe(schoolName)} portal.
+      Generated from Seat of Wisdom Academy portal.
     </div>
     <div class="sig">
-      ${principalSignature ? `<img src="${safe(principalSignature)}" alt="signature" crossorigin="anonymous"/>` : '<div style="height:38px"></div>'}
-      <div class="line">Principal's Signature</div>
+      ${principalSignature ? `<img src="${safe(principalSignature)}" alt="signature" crossorigin="anonymous"/>` : '<div style="height:40px"></div>'}
+      <div class="line">${PRINCIPAL_LABEL}</div>
     </div>
   </div>
 </div>
