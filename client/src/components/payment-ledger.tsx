@@ -160,6 +160,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
   const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
   const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
+  const [outstandingOnly, setOutstandingOnly] = useState<boolean>(false);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns(userId));
 
   // Re-hydrate per-user preferences when the signed-in user changes.
