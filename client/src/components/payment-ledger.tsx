@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Eye, Search, Loader2, Printer, FileSpreadsheet, Columns3 } from "lucide-react";
+import { Users, Eye, Search, Loader2, Printer, FileSpreadsheet, Columns3, Wallet } from "lucide-react";
 import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -269,7 +269,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     enabled: !!selectedStudent && !!schoolId,
   });
 
-  const filteredLedger = nameSearch.trim()
+  const searchedLedger = nameSearch.trim()
     ? (Array.isArray(ledger) ? ledger : []).filter((e) => {
         const q = nameSearch.toLowerCase();
         const name = `${e?.lastName ?? ""} ${e?.firstName ?? ""}`.toLowerCase();
@@ -277,6 +277,13 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         return name.includes(q) || sid.includes(q);
       })
     : (Array.isArray(ledger) ? ledger : []);
+
+  // Outstanding-only narrows the search results to students who still owe
+  // (balance > 0). Flows through to the table, count, Excel export, Print
+  // view, and admin grand total because they all read from filteredLedger.
+  const filteredLedger = outstandingOnly
+    ? searchedLedger.filter((e) => Math.max(0, (e.tuitionAssigned || 0) - (e.totalPaid || 0)) > 0)
+    : searchedLedger;
 
   const handlePrint = () => {
     document.body.classList.add("printing-finance");
@@ -386,6 +393,17 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
 
       {/* Action bar (screen only) */}
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+        <Button
+          variant={outstandingOnly ? "default" : "outline"}
+          size="sm"
+          onClick={() => setOutstandingOnly((v) => !v)}
+          aria-pressed={outstandingOnly}
+          title="Show only students with an outstanding balance"
+          data-testid="button-finance-outstanding-only"
+        >
+          <Wallet className="h-4 w-4 mr-1" />
+          Outstanding only
+        </Button>
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" data-testid="button-finance-columns">
