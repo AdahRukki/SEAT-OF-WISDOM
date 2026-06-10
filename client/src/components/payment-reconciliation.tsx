@@ -37,6 +37,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -57,7 +64,7 @@ import {
   Clock,
   WifiOff,
 } from "lucide-react";
-import type { FeePaymentRecordWithDetails } from "@shared/schema";
+import type { FeePaymentRecordWithDetails, SchoolBankAccount } from "@shared/schema";
 import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -126,6 +133,9 @@ interface BankTransaction {
   // Task #128: similar-but-not-identical duplicate flag (set at upload time)
   possibleDuplicate?: boolean;
   duplicateOfTransactionId?: string | null;
+  // Task #149: "statement" (uploaded PDF/Excel) | "sms" (auto bank-alert SMS)
+  source?: string | null;
+  schoolId?: string | null;
 }
 
 interface BankTransactionAllocation {
@@ -568,6 +578,103 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     },
   });
 
+  // ---- Task #149: Bank Accounts (masked account -> school routing for SMS) ----
+  const isMainAdmin = user?.role === 'admin';
+
+  const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useQuery<SchoolBankAccount[]>({
+    queryKey: ["/api/admin/bank-accounts"],
+    enabled: isMainAdmin,
+  });
+
+  const { data: schoolsList = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/admin/schools"],
+    enabled: isMainAdmin,
+  });
+
+  const emptyAccountForm = { id: "", schoolId: "", bankName: "Zenith", maskedAccountNumber: "", accountLabel: "" };
+  const [accountForm, setAccountForm] = useState(emptyAccountForm);
+  const isEditingAccount = !!accountForm.id;
+
+  const resetAccountForm = () => setAccountForm(emptyAccountForm);
+
+  const schoolNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of schoolsList) m.set(s.id, s.name);
+    return m;
+  }, [schoolsList]);
+
+  const invalidateBankAccountRelated = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
+  };
+
+  const saveAccountMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        schoolId: accountForm.schoolId,
+        bankName: accountForm.bankName,
+        maskedAccountNumber: accountForm.maskedAccountNumber.trim(),
+        accountLabel: accountForm.accountLabel.trim() || undefined,
+      };
+      if (accountForm.id) {
+        return apiRequest(`/api/admin/bank-accounts/${accountForm.id}`, { method: "PUT", body: payload });
+      }
+      return apiRequest("/api/admin/bank-accounts", { method: "POST", body: payload });
+    },
+    onSuccess: (data: any) => {
+      const rerouted = data?.rerouted ?? 0;
+      toast({
+        title: isEditingAccount ? "Account Updated" : "Account Added",
+        description: rerouted > 0
+          ? `${rerouted} earlier SMS transaction(s) were routed to this school.`
+          : "Bank account mapping saved.",
+      });
+      resetAccountForm();
+      invalidateBankAccountRelated();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Save Failed", description: error.message || "Could not save bank account", variant: "destructive" });
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest(`/api/admin/bank-accounts/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      toast({ title: "Account Removed", description: "Bank account mapping deleted." });
+      invalidateBankAccountRelated();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Delete Failed", description: error.message || "Could not delete bank account", variant: "destructive" });
+    },
+  });
+
+  const toggleAccountActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiRequest(`/api/admin/bank-accounts/${id}`, { method: "PUT", body: { isActive } }),
+    onSuccess: () => invalidateBankAccountRelated(),
+    onError: (error: Error) => {
+      toast({ title: "Update Failed", description: error.message || "Could not update account", variant: "destructive" });
+    },
+  });
+
+  const rerouteMutation = useMutation({
+    mutationFn: async () => apiRequest("/api/admin/bank-accounts/reroute", { method: "POST", body: {} }),
+    onSuccess: (data: any) => {
+      const rerouted = data?.rerouted ?? 0;
+      toast({
+        title: "Re-route Complete",
+        description: rerouted > 0
+          ? `${rerouted} SMS transaction(s) routed to their school.`
+          : "No unrouted SMS transactions matched a mapped account.",
+      });
+      invalidateBankAccountRelated();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Re-route Failed", description: error.message || "Could not re-route transactions", variant: "destructive" });
+    },
+  });
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -883,7 +990,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== "transactions") setFilterStatementId(null); }} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className={`grid w-full ${isMainAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <TabsTrigger value="upload">Upload Statements</TabsTrigger>
           <TabsTrigger value="reconcile">
             Reconcile Payments
@@ -901,6 +1008,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
               </Badge>
             )}
           </TabsTrigger>
+          {isMainAdmin && (
+            <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="upload" className="space-y-4 mt-4">
@@ -1618,6 +1728,26 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   <Badge variant="outline" className={`text-[10px] ${statusBadge.cls}`}>
                                     {statusBadge.label}
                                   </Badge>
+                                  {tx.source === 'sms' && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-sky-50 text-sky-700 border-sky-300"
+                                      title="Automatically captured from a bank credit-alert SMS"
+                                      data-testid={`badge-tx-sms-${tx.id}`}
+                                    >
+                                      SMS
+                                    </Badge>
+                                  )}
+                                  {!tx.schoolId && tx.source === 'sms' && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-orange-50 text-orange-700 border-orange-300"
+                                      title="This SMS could not be routed to a school. Add its account number under Bank Accounts."
+                                      data-testid={`badge-tx-unrouted-${tx.id}`}
+                                    >
+                                      Unrouted
+                                    </Badge>
+                                  )}
                                   {tx.possibleDuplicate && (
                                     <Badge
                                       variant="outline"
@@ -1915,6 +2045,26 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
                               Unmatched
                             </Badge>
+                            {tx.source === 'sms' && (
+                              <Badge
+                                variant="outline"
+                                className="bg-sky-50 text-sky-700 border-sky-300 text-[10px]"
+                                title="Automatically captured from a bank credit-alert SMS"
+                                data-testid={`badge-tx-sms-row-${tx.id}`}
+                              >
+                                SMS
+                              </Badge>
+                            )}
+                            {!tx.schoolId && tx.source === 'sms' && (
+                              <Badge
+                                variant="outline"
+                                className="bg-orange-50 text-orange-700 border-orange-300 text-[10px]"
+                                title="This SMS could not be routed to a school. Add its account number under Bank Accounts."
+                                data-testid={`badge-tx-unrouted-row-${tx.id}`}
+                              >
+                                Unrouted
+                              </Badge>
+                            )}
                             {tx.possibleDuplicate && (
                               <Badge
                                 variant="outline"
@@ -1987,6 +2137,195 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             </Card>
           )}
         </TabsContent>
+
+        {isMainAdmin && (
+        <TabsContent value="bank-accounts" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Bank Accounts</CardTitle>
+              <CardDescription>
+                Match each bank account number to a school. When a credit-alert SMS arrives, it is
+                automatically filed under the right school. The account number shown in the SMS is
+                partly hidden (for example <span className="font-mono">238****209</span> or
+                <span className="font-mono"> **0025</span>) — type it exactly as it appears.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs">School</Label>
+                  <Select
+                    value={accountForm.schoolId}
+                    onValueChange={(v) => setAccountForm((f) => ({ ...f, schoolId: v }))}
+                  >
+                    <SelectTrigger data-testid="select-bank-account-school">
+                      <SelectValue placeholder="Select school" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {schoolsList.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Bank</Label>
+                  <Select
+                    value={accountForm.bankName}
+                    onValueChange={(v) => setAccountForm((f) => ({ ...f, bankName: v }))}
+                  >
+                    <SelectTrigger data-testid="select-bank-account-bank">
+                      <SelectValue placeholder="Select bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Zenith">Zenith</SelectItem>
+                      <SelectItem value="Access">Access</SelectItem>
+                      <SelectItem value="Fidelity">Fidelity</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Account number (as shown in SMS)</Label>
+                  <Input
+                    value={accountForm.maskedAccountNumber}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, maskedAccountNumber: e.target.value }))}
+                    placeholder="e.g. 238****209"
+                    className="font-mono"
+                    data-testid="input-bank-account-number"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Label (optional)</Label>
+                  <Input
+                    value={accountForm.accountLabel}
+                    onChange={(e) => setAccountForm((f) => ({ ...f, accountLabel: e.target.value }))}
+                    placeholder="e.g. Main"
+                    data-testid="input-bank-account-label"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => saveAccountMutation.mutate()}
+                    disabled={
+                      saveAccountMutation.isPending ||
+                      !accountForm.schoolId ||
+                      !accountForm.bankName ||
+                      accountForm.maskedAccountNumber.trim().length < 2
+                    }
+                    data-testid="button-save-bank-account"
+                  >
+                    {saveAccountMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isEditingAccount ? "Update" : "Add"}
+                  </Button>
+                  {isEditingAccount && (
+                    <Button variant="outline" onClick={resetAccountForm} data-testid="button-cancel-bank-account">
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => rerouteMutation.mutate()}
+                  disabled={rerouteMutation.isPending}
+                  data-testid="button-reroute-sms"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${rerouteMutation.isPending ? 'animate-spin' : ''}`} />
+                  Re-route unmatched SMS
+                </Button>
+              </div>
+
+              {bankAccountsLoading ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
+                </div>
+              ) : bankAccounts.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No bank accounts mapped yet. Add one above so incoming SMS can be filed automatically.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bank</TableHead>
+                      <TableHead>Account Number</TableHead>
+                      <TableHead>School</TableHead>
+                      <TableHead>Label</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bankAccounts.map((acct) => (
+                      <TableRow key={acct.id} data-testid={`row-bank-account-${acct.id}`}>
+                        <TableCell>{acct.bankName}</TableCell>
+                        <TableCell className="font-mono">{acct.maskedAccountNumber}</TableCell>
+                        <TableCell>{schoolNameById.get(acct.schoolId) || "—"}</TableCell>
+                        <TableCell>{acct.accountLabel || "—"}</TableCell>
+                        <TableCell>
+                          {acct.isActive ? (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">Active</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-gray-100 text-gray-600">Inactive</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => setAccountForm({
+                                id: acct.id,
+                                schoolId: acct.schoolId,
+                                bankName: acct.bankName,
+                                maskedAccountNumber: acct.maskedAccountNumber,
+                                accountLabel: acct.accountLabel || "",
+                              })}
+                              data-testid={`button-edit-bank-account-${acct.id}`}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => toggleAccountActiveMutation.mutate({ id: acct.id, isActive: !acct.isActive })}
+                              disabled={toggleAccountActiveMutation.isPending}
+                              data-testid={`button-toggle-bank-account-${acct.id}`}
+                            >
+                              {acct.isActive ? "Disable" : "Enable"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs text-red-600 hover:text-red-700"
+                              onClick={() => {
+                                if (confirm(`Remove the mapping for ${acct.maskedAccountNumber}?`)) {
+                                  deleteAccountMutation.mutate(acct.id);
+                                }
+                              }}
+                              disabled={deleteAccountMutation.isPending}
+                              data-testid={`button-delete-bank-account-${acct.id}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        )}
       </Tabs>
 
       <Dialog open={isConfirmDialogOpen} onOpenChange={(open) => { setIsConfirmDialogOpen(open); if (!open) setMatchSearch(""); }}>

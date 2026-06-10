@@ -28,6 +28,7 @@ import {
   paymentAllocations,
   bankStatements,
   bankTransactions,
+  schoolBankAccounts,
   clearedDuplicatePairs,
   type School,
   type User,
@@ -87,6 +88,8 @@ import {
   type BankTransactionAllocationSummary,
   type BankTransactionWithAllocationSummaries,
   type InsertBankTransaction,
+  type SchoolBankAccount,
+  type UpsertSchoolBankAccount,
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
@@ -376,6 +379,14 @@ export interface IStorage {
   getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]>;
   updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction>;
   checkTransactionFingerprint(fingerprint: string): Promise<boolean>;
+
+  // School Bank Accounts (masked account number -> school routing for SMS ingestion)
+  getSchoolBankAccounts(): Promise<SchoolBankAccount[]>;
+  getSchoolBankAccountByMasked(maskedAccountNumber: string): Promise<SchoolBankAccount | undefined>;
+  createSchoolBankAccount(data: UpsertSchoolBankAccount): Promise<SchoolBankAccount>;
+  updateSchoolBankAccount(id: string, data: Partial<UpsertSchoolBankAccount>): Promise<SchoolBankAccount>;
+  deleteSchoolBankAccount(id: string): Promise<void>;
+  rerouteUnroutedSmsTransactions(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4670,6 +4681,75 @@ export class DatabaseStorage implements IStorage {
     const exists = !!existing;
     console.log('[checkTransactionFingerprint] Fingerprint exists:', exists);
     return exists;
+  }
+
+  // ---- School Bank Accounts (masked account -> school routing for SMS) ----
+
+  async getSchoolBankAccounts(): Promise<SchoolBankAccount[]> {
+    return await db
+      .select()
+      .from(schoolBankAccounts)
+      .orderBy(asc(schoolBankAccounts.bankName), asc(schoolBankAccounts.maskedAccountNumber));
+  }
+
+  async getSchoolBankAccountByMasked(maskedAccountNumber: string): Promise<SchoolBankAccount | undefined> {
+    const [row] = await db
+      .select()
+      .from(schoolBankAccounts)
+      .where(eq(schoolBankAccounts.maskedAccountNumber, maskedAccountNumber.trim()))
+      .limit(1);
+    return row;
+  }
+
+  async createSchoolBankAccount(data: UpsertSchoolBankAccount): Promise<SchoolBankAccount> {
+    const [row] = await db
+      .insert(schoolBankAccounts)
+      .values({
+        schoolId: data.schoolId,
+        bankName: data.bankName,
+        maskedAccountNumber: data.maskedAccountNumber,
+        accountLabel: data.accountLabel,
+        isActive: data.isActive ?? true,
+      })
+      .returning();
+    return row;
+  }
+
+  async updateSchoolBankAccount(id: string, data: Partial<UpsertSchoolBankAccount>): Promise<SchoolBankAccount> {
+    const updates: Record<string, any> = {};
+    if (data.schoolId !== undefined) updates.schoolId = data.schoolId;
+    if (data.bankName !== undefined) updates.bankName = data.bankName;
+    if (data.maskedAccountNumber !== undefined) updates.maskedAccountNumber = data.maskedAccountNumber;
+    if (data.accountLabel !== undefined) updates.accountLabel = data.accountLabel;
+    if (data.isActive !== undefined) updates.isActive = data.isActive;
+
+    const [row] = await db
+      .update(schoolBankAccounts)
+      .set(updates)
+      .where(eq(schoolBankAccounts.id, id))
+      .returning();
+    if (!row) throw new Error("Bank account mapping not found");
+    return row;
+  }
+
+  async deleteSchoolBankAccount(id: string): Promise<void> {
+    await db.delete(schoolBankAccounts).where(eq(schoolBankAccounts.id, id));
+  }
+
+  // Backfill schoolId on SMS transactions that arrived before their account was
+  // mapped. Matches on the masked account stored on each SMS transaction.
+  async rerouteUnroutedSmsTransactions(): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE bank_transactions bt
+         SET school_id = sba.school_id,
+             updated_at = NOW()
+        FROM school_bank_accounts sba
+       WHERE bt.source = 'sms'
+         AND bt.school_id IS NULL
+         AND sba.is_active = TRUE
+         AND bt.sms_account = sba.masked_account_number
+    `);
+    return (result as any).rowCount ?? 0;
   }
 }
 

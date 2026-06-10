@@ -7,6 +7,7 @@ import * as XLSX from "xlsx";
 import path from "path";
 import express from "express";
 import { extractTextFromPDF, parseTransactions, parseExcelTransactions, generateFingerprint, detectBankFormat, ParsedTransaction } from "./pdf-parser";
+import { parseBankAlertSms } from "./sms-parser";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
@@ -31,6 +32,8 @@ import {
   recordFeePaymentSchema,
   recordMultiStudentPaymentSchema,
   multiStudentAllocationSchema,
+  ingestSmsSchema,
+  upsertSchoolBankAccountSchema,
   users,
   students,
   classes,
@@ -3806,6 +3809,212 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[GET /api/payments/records/:id] Error:", error);
       res.status(500).json({ error: "Failed to fetch payment record" });
+    }
+  });
+
+  // ==================== SMS BANK-ALERT INGESTION (WEBHOOK) ====================
+
+  // Public webhook that the school phone (Tasker) calls for EVERY bank SMS.
+  // Auth is a shared secret in the X-SMS-Token header (SMS_INGEST_TOKEN env var),
+  // not a user session — the phone is not logged in. Credit alerts become
+  // unmatched bank_transactions rows routed to the correct school by the masked
+  // account number. Everything else (debits, OTPs, marketing) is skipped.
+  app.post("/api/ingest/sms", async (req: Request, res: Response) => {
+    try {
+      const expectedToken = process.env.SMS_INGEST_TOKEN;
+      if (!expectedToken) {
+        console.error("[POST /api/ingest/sms] SMS_INGEST_TOKEN not configured");
+        return res.status(503).json({ error: "SMS ingestion not configured" });
+      }
+
+      const providedToken =
+        (req.headers["x-sms-token"] as string | undefined) ||
+        (req.headers["authorization"] as string | undefined)?.replace(/^Bearer\s+/i, "");
+      if (!providedToken || providedToken !== expectedToken) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Rate limit by source IP to blunt accidental floods / abuse.
+      const rlKey = `sms-ingest:${req.ip || req.socket.remoteAddress || "unknown"}`;
+      if (!checkRateLimit(rlKey, 120, 60 * 1000)) {
+        return res.status(429).json({ error: "Too many requests" });
+      }
+
+      const parsedBody = ingestSmsSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        return res.status(400).json({ error: "Invalid payload", details: parsedBody.error.errors });
+      }
+      const { sender, body, receivedAt } = parsedBody.data;
+
+      let smsReceivedAt: Date | undefined;
+      if (receivedAt !== undefined) {
+        let d: Date;
+        if (typeof receivedAt === "number") {
+          // Tasker's %TIMES is epoch SECONDS; JS Date expects milliseconds.
+          // Values below ~1e12 are seconds (any plausible date before year 33658),
+          // so scale them up; larger values are already milliseconds.
+          d = new Date(receivedAt < 1e12 ? receivedAt * 1000 : receivedAt);
+        } else {
+          // Numeric strings get the same seconds-vs-ms treatment; otherwise parse as a date string.
+          const asNum = Number(receivedAt);
+          d = !isNaN(asNum) && /^\d+$/.test(receivedAt.trim())
+            ? new Date(asNum < 1e12 ? asNum * 1000 : asNum)
+            : new Date(receivedAt);
+        }
+        if (!isNaN(d.getTime())) smsReceivedAt = d;
+      }
+
+      const result = parseBankAlertSms(body, sender);
+      if (!result.ok) {
+        // Not a credit alert (debit, OTP, marketing, unparseable). This is the
+        // common case for most SMS the phone forwards — acknowledge with 200 so
+        // Tasker does not retry, but mark it skipped.
+        console.log("[POST /api/ingest/sms] Skipped:", result.reason);
+        return res.status(200).json({ status: "skipped", reason: result.reason });
+      }
+
+      const sms = result.data;
+
+      // Duplicate check by fingerprint (same logic as the statement uploader).
+      const alreadyExists = await storage.checkTransactionFingerprint(sms.fingerprint);
+      if (alreadyExists) {
+        console.log("[POST /api/ingest/sms] Duplicate fingerprint, skipping:", sms.fingerprint.substring(0, 8));
+        return res.status(200).json({ status: "duplicate" });
+      }
+
+      // Route to a school by masked account number.
+      let schoolId: string | undefined;
+      let routed = false;
+      if (sms.maskedAccount) {
+        const account = await storage.getSchoolBankAccountByMasked(sms.maskedAccount);
+        if (account && account.isActive) {
+          schoolId = account.schoolId;
+          routed = true;
+        }
+      }
+
+      const transactionDate = new Date(sms.transactionDate.split("/").reverse().join("-"));
+
+      let created;
+      try {
+        created = await storage.createBankTransaction({
+          statementId: null,
+          schoolId: schoolId,
+          transactionDate,
+          amount: sms.amount.toString(),
+          transactionType: "credit",
+          rawDescription: sms.rawDescription,
+          normalizedDescription: sms.rawDescription.toLowerCase().trim(),
+          reference: sms.reference,
+          fingerprint: sms.fingerprint,
+          status: "unmatched",
+          classification: sms.rawDescription.length < 20 ? "code_only" : "named",
+          source: "sms",
+          smsSender: sender,
+          smsAccount: sms.maskedAccount,
+          smsReceivedAt,
+        });
+      } catch (insertError: any) {
+        // Lost a race on the fingerprint unique index — treat as duplicate.
+        if (insertError?.code === "23505" || /unique/i.test(insertError?.message || "")) {
+          return res.status(200).json({ status: "duplicate" });
+        }
+        throw insertError;
+      }
+
+      console.log(
+        `[POST /api/ingest/sms] Created ${created.id} bank=${sms.bankName} routed=${routed} school=${schoolId || "none"}`
+      );
+      return res.status(201).json({
+        status: routed ? "created" : "unrouted",
+        id: created.id,
+        bankName: sms.bankName,
+        amount: sms.amount,
+        routed,
+      });
+    } catch (error: any) {
+      console.error("[POST /api/ingest/sms] Error:", error);
+      return res.status(500).json({ error: "Failed to ingest SMS" });
+    }
+  });
+
+  // ==================== SCHOOL BANK ACCOUNTS (masked-account -> school routing) ====================
+
+  app.get("/api/admin/bank-accounts", authenticate, requireMainAdmin, async (_req: Request, res: Response) => {
+    try {
+      const accounts = await storage.getSchoolBankAccounts();
+      res.json(accounts);
+    } catch (error) {
+      console.error("[GET /api/admin/bank-accounts] Error:", error);
+      res.status(500).json({ error: "Failed to fetch bank accounts" });
+    }
+  });
+
+  app.post("/api/admin/bank-accounts", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const data = upsertSchoolBankAccountSchema.parse(req.body);
+      const existing = await storage.getSchoolBankAccountByMasked(data.maskedAccountNumber);
+      if (existing) {
+        return res.status(409).json({ error: "A mapping for this account number already exists" });
+      }
+      const account = await storage.createSchoolBankAccount(data);
+      // A newly mapped account may match SMS that arrived before it existed.
+      let rerouted = 0;
+      try {
+        rerouted = await storage.rerouteUnroutedSmsTransactions();
+      } catch (e) {
+        console.warn("[POST /api/admin/bank-accounts] reroute failed (non-fatal):", e);
+      }
+      res.status(201).json({ ...account, rerouted });
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid bank account data", details: error.errors });
+      }
+      console.error("[POST /api/admin/bank-accounts] Error:", error);
+      res.status(500).json({ error: "Failed to create bank account" });
+    }
+  });
+
+  app.put("/api/admin/bank-accounts/:id", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const data = upsertSchoolBankAccountSchema.partial().parse(req.body);
+      const account = await storage.updateSchoolBankAccount(id, data);
+      let rerouted = 0;
+      try {
+        rerouted = await storage.rerouteUnroutedSmsTransactions();
+      } catch (e) {
+        console.warn("[PUT /api/admin/bank-accounts/:id] reroute failed (non-fatal):", e);
+      }
+      res.json({ ...account, rerouted });
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: "Invalid bank account data", details: error.errors });
+      }
+      console.error("[PUT /api/admin/bank-accounts/:id] Error:", error);
+      res.status(500).json({ error: "Failed to update bank account" });
+    }
+  });
+
+  app.delete("/api/admin/bank-accounts/:id", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSchoolBankAccount(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[DELETE /api/admin/bank-accounts/:id] Error:", error);
+      res.status(500).json({ error: "Failed to delete bank account" });
+    }
+  });
+
+  // Manually re-run routing for SMS rows whose account was unmapped at arrival.
+  app.post("/api/admin/bank-accounts/reroute", authenticate, requireMainAdmin, async (_req: Request, res: Response) => {
+    try {
+      const rerouted = await storage.rerouteUnroutedSmsTransactions();
+      res.json({ rerouted });
+    } catch (error) {
+      console.error("[POST /api/admin/bank-accounts/reroute] Error:", error);
+      res.status(500).json({ error: "Failed to reroute transactions" });
     }
   });
 

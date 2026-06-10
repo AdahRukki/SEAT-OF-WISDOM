@@ -66,3 +66,8 @@ defaultBucketID = "replit-objstore-eb784079-9574-4775-acf5-39a96b8e449f"
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+SMS_INGEST_TOKEN = "5644b289984371fb9b07646dd88866e67093bf7937351bd6"

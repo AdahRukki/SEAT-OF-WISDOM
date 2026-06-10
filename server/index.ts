@@ -57,6 +57,20 @@ async function runMigrations() {
         amount DECIMAL(12,2) NOT NULL,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      -- SMS bank-alert ingestion: source tracking + masked-account -> school routing.
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'statement';
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_sender VARCHAR(100);
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_account VARCHAR(50);
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_received_at TIMESTAMP;
+      CREATE TABLE IF NOT EXISTS school_bank_accounts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+        bank_name VARCHAR(50) NOT NULL,
+        masked_account_number VARCHAR(50) NOT NULL UNIQUE,
+        account_label VARCHAR(100),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
       CREATE TABLE IF NOT EXISTS admissions_applications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         student_name VARCHAR(200) NOT NULL,
@@ -93,6 +107,27 @@ async function runMigrations() {
     `);
     if (healed.rowCount && healed.rowCount > 0) {
       log(`Self-healed ${healed.rowCount} orphan bank transaction(s) back to unmatched`);
+    }
+
+    // Seed the masked-account -> school routing map for the known accounts so
+    // SMS ingestion routes correctly out of the box. Idempotent: skips any
+    // masked number already present, and only seeds when the school is found.
+    // Admins can edit/add more in the Bank Accounts screen.
+    const seedAccounts: Array<{ masked: string; bank: string; nameLike: string; label: string }> = [
+      { masked: "238****209", bank: "Zenith", nameLike: "%ikpoto%", label: "Main" },
+      { masked: "217****822", bank: "Zenith", nameLike: "%akwuose%", label: "Main" },
+      { masked: "192****748", bank: "Access", nameLike: "%akwuofor%", label: "Main" },
+      { masked: "**0025", bank: "Fidelity", nameLike: "%bonsa%", label: "Main" },
+    ];
+    for (const acct of seedAccounts) {
+      // Values are hardcoded constants (no user input), inlined to match the
+      // single-argument pool.query() style used by the migrations above.
+      await pool.query(`
+        INSERT INTO school_bank_accounts (school_id, bank_name, masked_account_number, account_label)
+        SELECT s.id, '${acct.bank}', '${acct.masked}', '${acct.label}'
+          FROM schools s WHERE s.name ILIKE '${acct.nameLike}' LIMIT 1
+        ON CONFLICT (masked_account_number) DO NOTHING
+      `);
     }
 
     log("Database migrations applied successfully");

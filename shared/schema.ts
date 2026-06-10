@@ -394,8 +394,27 @@ export const bankTransactions = pgTable("bank_transactions", {
   // cascades and never blocks).
   possibleDuplicate: boolean("possible_duplicate").default(false).notNull(),
   duplicateOfTransactionId: uuid("duplicate_of_transaction_id"),
+  // SMS ingestion: distinguishes a row that arrived via a live bank-alert SMS
+  // (forwarded automatically from the school phone) from one parsed out of an
+  // uploaded PDF/Excel statement. "statement" (default) | "sms".
+  source: varchar("source", { length: 20 }).notNull().default("statement"),
+  smsSender: varchar("sms_sender", { length: 100 }), // SMS sender id (e.g. "Zenith")
+  smsAccount: varchar("sms_account", { length: 50 }), // Masked account from the SMS (routing key; kept for re-routing)
+  smsReceivedAt: timestamp("sms_received_at"), // When the phone received the SMS
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// School Bank Accounts table (maps a masked account number to a school so a
+// bank-alert SMS forwarded from one phone can be routed to the right school).
+export const schoolBankAccounts = pgTable("school_bank_accounts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  bankName: varchar("bank_name", { length: 50 }).notNull(), // Zenith, Access, Fidelity, etc.
+  maskedAccountNumber: varchar("masked_account_number", { length: 50 }).notNull().unique(), // e.g. 238****209, **0025
+  accountLabel: varchar("account_label", { length: 100 }), // free text, e.g. "Tuition"
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Fee Payment Records table (payments recorded by bursar/admin)
@@ -1077,6 +1096,27 @@ export const insertBankTransactionSchema = createInsertSchema(bankTransactions).
   updatedAt: true 
 });
 
+// School Bank Account schemas (masked account number -> school routing)
+export const insertSchoolBankAccountSchema = createInsertSchema(schoolBankAccounts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const upsertSchoolBankAccountSchema = z.object({
+  schoolId: z.string().min(1, "School is required"),
+  bankName: z.string().min(1, "Bank name is required").max(50),
+  maskedAccountNumber: z.string().min(2, "Masked account number is required").max(50).transform((s) => s.trim()),
+  accountLabel: z.string().max(100).optional(),
+  isActive: z.boolean().optional(),
+});
+
+// SMS ingestion webhook payload
+export const ingestSmsSchema = z.object({
+  sender: z.string().max(100).optional(),
+  body: z.string().min(1, "SMS body is required"),
+  receivedAt: z.union([z.string(), z.number()]).optional(),
+});
+
 // Fee Payment Record schemas (for bursar recording)
 export const insertFeePaymentRecordSchema = createInsertSchema(feePaymentRecords).omit({ 
   id: true, 
@@ -1156,6 +1196,12 @@ export type BankTransaction = typeof bankTransactions.$inferSelect & {
   bankFormat?: string | null;
 };
 export type InsertBankTransaction = z.infer<typeof insertBankTransactionSchema>;
+
+// School Bank Account types
+export type SchoolBankAccount = typeof schoolBankAccounts.$inferSelect;
+export type InsertSchoolBankAccount = z.infer<typeof insertSchoolBankAccountSchema>;
+export type UpsertSchoolBankAccount = z.infer<typeof upsertSchoolBankAccountSchema>;
+export type IngestSms = z.infer<typeof ingestSmsSchema>;
 
 // Fee Payment Record types
 export type FeePaymentRecord = typeof feePaymentRecords.$inferSelect;

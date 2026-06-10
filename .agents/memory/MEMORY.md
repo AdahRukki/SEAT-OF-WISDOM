@@ -1,0 +1,1 @@
+- [SMS bank-alert ingestion](sms-ingestion.md) — Tasker→webhook credit-alert ingestion; epoch-seconds gotcha, 200-on-skip contract, shared-secret public webhook, balance-keyed fingerprint dedupe, masked-account routing.
