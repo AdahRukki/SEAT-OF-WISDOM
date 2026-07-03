@@ -1,19 +1,20 @@
-import { useState, useMemo, useEffect } from "react";
-import { useNetworkStatus } from "@/hooks/use-network-status";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
+import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
+import { generateClientRequestId, queuedApiRequest, addSyncListener, getQueuedClientRequestIds, processOfflineQueue } from "@/lib/offline-queue";
+import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -21,8 +22,23 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -31,2824 +47,1829 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import {
-  Upload,
-  FileSpreadsheet,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Link,
-  Loader2,
-  RefreshCw,
-  ArrowRight,
-  RotateCcw,
-  Sparkles,
-  Calendar,
-  Trash2,
+  Plus,
   Search,
-  Clock,
+  Wifi,
   WifiOff,
+  Clock,
+  RefreshCw,
+  Loader2,
+  X,
+  Users,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  Trash2,
 } from "lucide-react";
-import type { FeePaymentRecordWithDetails, SchoolBankAccount } from "@shared/schema";
-import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
-import { Checkbox } from "@/components/ui/checkbox";
+import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeePaymentStudentSplit, type FeeType } from "@shared/schema";
 
-// "12 Jan 2025" — timezone-safe for YYYY-MM-DD strings and Date objects.
-function formatRecoDate(value: string | Date | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "N/A";
-  let d: Date;
-  if (typeof value === "string") {
-    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-    if (dateOnly) {
-      const [y, m, day] = value.split("-").map(Number);
-      d = new Date(y, m - 1, day);
-    } else {
-      d = new Date(value);
-    }
-  } else {
-    d = value;
-  }
-  if (isNaN(d.getTime())) return "N/A";
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+type RecordPaymentForm = z.infer<typeof recordFeePaymentSchema>;
+
+const commonFieldsSchema = recordFeePaymentSchema.omit({ studentId: true, amount: true });
+type CommonFields = z.infer<typeof commonFieldsSchema>;
+
+const METHOD_LABELS: Record<string, string> = {
+  transfer: "Bank Transfer",
+  pos: "POS",
+  cash: "Cash",
+};
+
+// Safe date formatter that avoids timezone off-by-one
+function formatPaymentDate(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return "—";
+  const s = typeof dateStr === "string" ? dateStr : dateStr.toISOString();
+  const parsed = new Date(s.includes("T") ? s : `${s}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  const day = parsed.getDate();
+  const month = parsed.toLocaleString("en-GB", { month: "short" });
+  const year = parsed.getFullYear();
+  return `${day} ${month} ${year}`;
 }
 
-function toLocalDate(value: string | Date): Date {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [y, m, d] = value.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }
-  return new Date(value);
-}
-
-function calendarDayDiff(a: string | Date, b: string | Date): number {
-  const da = toLocalDate(a);
-  const db = toLocalDate(b);
-  const startA = new Date(da.getFullYear(), da.getMonth(), da.getDate()).getTime();
-  const startB = new Date(db.getFullYear(), db.getMonth(), db.getDate()).getTime();
-  return Math.round(Math.abs(startA - startB) / 86400000);
-}
-
-interface BankStatement {
+interface Student {
   id: string;
-  fileName: string;
-  fileType: string;
-  totalTransactions: number | null;
-  newTransactions: number | null;
-  duplicatesSkipped: number | null;
-  // Task #128 phase 2: server returns this aggregate for the chip.
-  possibleDuplicatesCount?: number | null;
-  dateRangeStart: Date | null;
-  dateRangeEnd: Date | null;
-  createdAt: Date | null;
-}
-
-interface BankTransaction {
-  id: string;
-  statementId?: string | null;
-  transactionDate: Date;
-  amount: string;
-  transactionType: string;
-  rawDescription: string;
-  normalizedDescription: string | null;
-  reference: string | null;
-  status: string;
-  matchConfidence: number | null;
-  bankFormat?: string | null;
-  // Task #128: similar-but-not-identical duplicate flag (set at upload time)
-  possibleDuplicate?: boolean;
-  duplicateOfTransactionId?: string | null;
-  // Task #149: "statement" (uploaded PDF/Excel) | "sms" (auto bank-alert SMS)
-  source?: string | null;
-  schoolId?: string | null;
-}
-
-interface BankTransactionAllocation {
-  id: string;
-  paymentRecordId: string;
-  bankTransactionId: string;
-  allocatedAmount: string;
-  paymentRecord?: {
-    id: string;
-    amount: string;
-    paymentDate: string | Date;
-    status: string;
-    student?: {
-      studentId: string;
-      user?: {
-        firstName: string;
-        lastName: string;
-      };
-    } | null;
+  studentId: string;
+  firstName?: string;
+  lastName?: string;
+  className?: string;
+  classId?: string;
+  user?: {
+    firstName: string;
+    lastName: string;
   };
-  // Per-student split rows for multi-student payment records (paymentRecord.student is null).
-  splitStudents?: Array<{
-    studentDbId: string;
-    studentId: string;
-    amount: string;
-    user: { firstName: string; lastName: string };
-  }>;
 }
 
-interface BankTransactionWithAllocations extends BankTransaction {
-  allocations?: BankTransactionAllocation[];
+interface SchoolClass {
+  id: string;
+  name: string;
 }
 
-interface PaymentReconciliationProps {
+interface SelectedStudentEntry {
+  student: Student;
+  amount: number;
+}
+
+interface PaymentRecordingProps {
   schoolId?: string;
+  currentTerm?: string;
+  currentSession?: string;
+  userRole: "admin" | "sub-admin" | "bursar";
 }
 
-export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
-  const [uploadElapsedMs, setUploadElapsedMs] = useState(0);
-  // Sticks around after a failed upload while the browser is offline so the
-  // admin can clearly see "you're offline, reconnect and retry" instead of a
-  // generic toast that disappears.
-  const [uploadOfflineFailure, setUploadOfflineFailure] = useState(false);
-  const { isOnline } = useNetworkStatus();
-
-  // Tick a timer while an upload is in flight so we can flip the in-progress
-  // badge from a normal "Uploading…" state to a distinct "slow network" state
-  // after a few seconds — matching the slow-network badge on the payments page.
-  useEffect(() => {
-    if (!isUploading || uploadStartedAt === null) {
-      setUploadElapsedMs(0);
-      return;
-    }
-    const tick = () => setUploadElapsedMs(Date.now() - uploadStartedAt);
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [isUploading, uploadStartedAt]);
-
-  // Auto-clear the offline-failure banner once connectivity returns so the
-  // admin can retry without dismissing anything manually.
-  useEffect(() => {
-    if (isOnline && uploadOfflineFailure) setUploadOfflineFailure(false);
-  }, [isOnline, uploadOfflineFailure]);
-
-  const uploadIsSlow = isUploading && isOnline && uploadElapsedMs >= 5000;
-  const uploadIsOffline = (isUploading && !isOnline) || uploadOfflineFailure;
-  const [selectedPayment, setSelectedPayment] = useState<FeePaymentRecordWithDetails | null>(null);
-  const [selectedTransaction, setSelectedTransaction] = useState<BankTransaction | null>(null);
-  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-  const [isReverseDialogOpen, setIsReverseDialogOpen] = useState(false);
-  const [reversalReason, setReversalReason] = useState("");
-  const [deleteStatementId, setDeleteStatementId] = useState<string | null>(null);
-  const [isMatchTxDialogOpen, setIsMatchTxDialogOpen] = useState(false);
-  const [transactionToMatch, setTransactionToMatch] = useState<BankTransaction | null>(null);
-  const [selectedMatchPaymentId, setSelectedMatchPaymentId] = useState<string | null>(null);
-  const [txSearch, setTxSearch] = useState("");
-  const [paymentSearch, setPaymentSearch] = useState("");
-  const [unmatchedSearch, setUnmatchedSearch] = useState("");
-  const [matchSearch, setMatchSearch] = useState("");
-  const [isBulkMatchDialogOpen, setIsBulkMatchDialogOpen] = useState(false);
-  const [bulkMatchProgress, setBulkMatchProgress] = useState<{ current: number; total: number } | null>(null);
-  // Task #128 phase 2: side-by-side review panel
+export function PaymentRecording({
+  schoolId,
+  currentTerm,
+  currentSession,
+  userRole,
+}: PaymentRecordingProps) {
+  const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
-  // Task #128 phase 2: hide flagged candidates from Match Recorded Payment dialog by default
-  const [showFlaggedCandidates, setShowFlaggedCandidates] = useState(false);
-  // Task #128 phase 2: per-statement re-scan
-  const [rescanStatementId, setRescanStatementId] = useState<string | null>(null);
-  // Controlled tab state so chip click can navigate to the Transactions tab
-  const [activeTab, setActiveTab] = useState<string>("reconcile");
-  // Filter transactions tab to only those from a specific statement (set via chip click)
-  const [filterStatementId, setFilterStatementId] = useState<string | null>(null);
+  const [isBodyVisible, setIsBodyVisible] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
+  const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customPurpose, setCustomPurpose] = useState("");
+  const [classSortDir, setClassSortDir] = useState<"asc" | "desc" | null>(null);
+  const [classFilter, setClassFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [nameSearch, setNameSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filterTerm, setFilterTerm] = useState<string>(currentTerm || "");
+  const [filterSession, setFilterSession] = useState<string>(currentSession || "");
+  const [viewingRecord, setViewingRecord] = useState<FeePaymentRecordWithDetails | null>(null);
+  const PAGE_SIZE = 25;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (currentTerm) setFilterTerm(currentTerm);
+  }, [currentTerm]);
+
+  useEffect(() => {
+    if (currentSession) setFilterSession(currentSession);
+  }, [currentSession]);
+
+  // Snapshot of pendingPayments restored from localStorage on mount. The
+  // reconcile effect only inspects rows that were already persisted at load
+  // time so a brand-new in-flight submission is never misclassified as an
+  // orphan from a prior session.
+  const hydratedPendingRef = useRef<any[] | null>(null);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // NOTE: we no longer auto-replay pendingPayments via the legacy
+    // syncPendingPayments() helper because optimistic rows for multi-student
+    // submissions also live in this list and must NOT be re-posted as
+    // single-payment rows. The offline queue handles the actual replay of
+    // original requests with their correct endpoint/body.
+    const saved = localStorage.getItem("pendingPayments");
+    if (saved) {
+      const loaded = JSON.parse(saved);
+      hydratedPendingRef.current = loaded;
+      setPendingPayments(loaded);
+    } else {
+      hydratedPendingRef.current = [];
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("pendingPayments", JSON.stringify(pendingPayments));
+  }, [pendingPayments]);
+
+  // (Intentionally no auto-syncPendingPayments on isOnline — the offline
+  // queue is the single source of truth for replay; this list is purely
+  // optimistic UI state.)
+
+  // Per-operation reconciliation: when the queue drains, only mutate the
+  // optimistic rows whose clientRequestId matches a confirmed outcome.
+  //  - succeededOps  -> remove the row (canonical record arrives via refetch)
+  //  - droppedOps    -> mark the row 'failed' so Retry/Discard becomes available
+  //  - retryingOps   -> leave as 'pending-sync' so it stays visible
+  // Rows with no matching outcome stay as-is so nothing is silently lost.
+  useEffect(() => {
+    const off = addSyncListener((status) => {
+      if (!status.justSynced) return;
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+      const succeededIds = new Set((status.succeededOps ?? []).map(o => o.clientRequestId).filter(Boolean) as string[]);
+      const droppedIds = new Set((status.droppedOps ?? []).map(o => o.clientRequestId).filter(Boolean) as string[]);
+      if (succeededIds.size === 0 && droppedIds.size === 0) return;
+      setPendingPayments((prev) => prev
+        .filter(p => !(p.clientRequestId && succeededIds.has(p.clientRequestId)))
+        .map(p => (p.clientRequestId && droppedIds.has(p.clientRequestId))
+          ? { ...p, __status: 'failed' as const }
+          : p),
+      );
+    });
+    return off;
+  }, [queryClient]);
+
+  // Single-shot reconciliation on mount.
+  //
+  // Bug being fixed: an optimistic row is added to `pendingPayments` with
+  // status 'saving' BEFORE queuedApiRequest's 30s in-flight fetch completes.
+  // If the user reloads / closes / navigates away during those 30s, the row
+  // is persisted to localStorage as 'saving' but no offline-queue entry was
+  // ever enqueued (enqueue only happens AFTER the timeout aborts). Result:
+  // the row is stuck on "Saving" forever with nothing to drive it.
+  //
+  // Reconcile: for any persisted row in a transient state ('saving',
+  // 'pending-sync', 'pending-slow') whose clientRequestId is NOT in the
+  // current offline queue, replay the original __submission once via
+  // queuedApiRequest. The server's clientRequestId unique index dedupes
+  // safely if the original actually completed; otherwise the request is
+  // (re)created or (re)queued. If even this attempt errors out, the row
+  // is demoted to 'failed' so the existing Retry/Discard UI takes over.
+  const didReconcileRef = useRef(false);
+  useEffect(() => {
+    if (didReconcileRef.current) return;
+    // Wait until the localStorage hydration effect has run so we always
+    // reconcile against rows that came from a previous session, never
+    // against a brand-new optimistic row from a still-in-flight submission.
+    const hydrated = hydratedPendingRef.current;
+    if (hydrated === null) return;
+    didReconcileRef.current = true;
+    if (hydrated.length === 0) return;
+
+    const transient = new Set(['saving', 'pending-sync', 'pending-slow']);
+    const queuedIds = getQueuedClientRequestIds();
+
+    // Group orphaned rows by clientRequestId so we replay each submission once
+    // (multi-student rows share one clientRequestId / one __submission).
+    const orphansByKey = new Map<string, any>();
+    for (const row of hydrated) {
+      const key = row.clientRequestId;
+      if (!key) continue;
+      if (!transient.has(row.__status)) continue;
+      if (queuedIds.has(key)) continue;
+      if (!row.__submission) continue;
+      if (!orphansByKey.has(key)) orphansByKey.set(key, row);
+    }
+
+    if (orphansByKey.size === 0) {
+      // Nothing orphaned, but still kick the queue once in case any
+      // in-flight syncs were missed while the page was hidden.
+      processOfflineQueue().catch(() => {});
+      return;
+    }
+
+    (async () => {
+      for (const [key, row] of Array.from(orphansByKey.entries())) {
+        const matchSibling = (p: any) => p.clientRequestId === key;
+        // Visually distinguish reconciled rows so the user knows we're acting.
+        setPendingPayments(prev => prev.map(p =>
+          matchSibling(p) ? { ...p, __status: 'saving', __error: undefined } : p,
+        ));
+        try {
+          const res = await queuedApiRequest(
+            row.__submission.url,
+            { method: 'POST', body: row.__submission.body },
+            row.__submission.type,
+          );
+          if (res?.queued) {
+            const nextStatus = res.offline ? 'pending-sync' : 'pending-slow';
+            setPendingPayments(prev => prev.map(p =>
+              matchSibling(p) ? { ...p, __status: nextStatus } : p,
+            ));
+          } else {
+            // Server accepted (new or idempotent replay) — drop optimistic rows
+            // and refetch canonical records.
+            setPendingPayments(prev => prev.filter(p => !matchSibling(p)));
+            queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+          }
+        } catch (err: any) {
+          setPendingPayments(prev => prev.map(p =>
+            matchSibling(p)
+              ? { ...p, __status: 'failed', __error: err?.message || 'Sync interrupted — click Retry' }
+              : p,
+          ));
+        }
+      }
+    })();
+  }, [pendingPayments, queryClient]);
+
+  const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string }[]>({
+    queryKey: ["/api/admin/academic-sessions"],
+  });
+
+  const sessionOptions: string[] = academicSessions.length > 0
+    ? academicSessions.map((s) => s.sessionYear)
+    : (() => {
+        const base = currentSession
+          ? parseInt(currentSession.split("/")[0]) || new Date().getFullYear()
+          : new Date().getFullYear();
+        return [`${base - 1}/${base}`, `${base}/${base + 1}`, `${base + 1}/${base + 2}`];
+      })();
+
+  const { data: students = [], isLoading: studentsLoading } = useQuery<Student[]>({
+    queryKey: ["/api/admin/students", schoolId],
+    enabled: !!schoolId,
+  });
+
+  const { data: schoolClasses = [] } = useQuery<SchoolClass[]>({
+    queryKey: ["/api/admin/classes", schoolId],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = schoolId ? `/api/admin/classes?schoolId=${schoolId}` : `/api/admin/classes`;
+      const res = await fetch(url, { credentials: "include", headers });
+      if (!res.ok) throw new Error("Failed to fetch classes");
+      return res.json();
+    },
+    enabled: !!schoolId,
+  });
+
+  const { data: feeTypesData = [] } = useQuery<FeeType[]>({
+    queryKey: ["/api/admin/fee-types", schoolId],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = schoolId ? `/api/admin/fee-types?schoolId=${schoolId}` : `/api/admin/fee-types`;
+      const res = await fetch(url, { credentials: "include", headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!schoolId,
+  });
+
+  const tuitionFeeType = feeTypesData.find(ft => ft.isTuition);
+
+  const { data: tuitionAmounts = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/tuition-amounts", tuitionFeeType?.id],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`/api/admin/tuition-amounts/${tuitionFeeType!.id}`, { credentials: "include", headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!tuitionFeeType?.id,
+  });
+
+  // Fix #1: memoize so the Map reference is stable across renders
+  const tuitionAmountMap = useMemo(
+    () => new Map(tuitionAmounts.map((ta: any) => [ta.classId, Number(ta.amount)])),
+    [tuitionAmounts]
+  );
+
+  // Tuition balance per student for the current term/session, fetched only
+  // when the dialog is open so we don't ping the server unnecessarily.
+  const { data: tuitionBalancesData = [] } = useQuery<{
+    studentDbId: string;
+    tuitionAssigned: number;
+    tuitionPaid: number;
+  }[]>({
+    queryKey: ["/api/payments/tuition-balances", schoolId, currentTerm, currentSession],
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const params = new URLSearchParams();
+      if (schoolId) params.set('schoolId', schoolId);
+      if (currentTerm) params.set('term', currentTerm);
+      if (currentSession) params.set('session', currentSession);
+      const res = await fetch(`/api/payments/tuition-balances?${params.toString()}`, { credentials: 'include', headers });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!schoolId && !!currentTerm && !!currentSession && isRecordDialogOpen,
+  });
+
+  const tuitionBalanceMap = useMemo(() => {
+    const m = new Map<string, { assigned: number; paid: number; due: number }>();
+    for (const r of tuitionBalancesData) {
+      const due = Math.max(0, r.tuitionAssigned - r.tuitionPaid);
+      m.set(r.studentDbId, { assigned: r.tuitionAssigned, paid: r.tuitionPaid, due });
+    }
+    return m;
+  }, [tuitionBalancesData]);
+
+  const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
+    queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, filterTerm, filterSession],
+    queryFn: async () => {
+      let url = "/api/payments/records?";
+      if (schoolId) url += `schoolId=${schoolId}&`;
+      if (statusFilter && statusFilter !== "all") url += `status=${statusFilter}&`;
+      if (dateFrom) url += `startDate=${dateFrom}&`;
+      if (dateTo) url += `endDate=${dateTo}&`;
+      if (filterTerm) url += `term=${encodeURIComponent(filterTerm)}&`;
+      if (filterSession) url += `session=${encodeURIComponent(filterSession)}&`;
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(url, { credentials: "include", headers });
+      if (!res.ok) throw new Error("Failed to fetch payment records");
+      return res.json();
+    },
+  });
+
+  const form = useForm<CommonFields>({
+    resolver: zodResolver(commonFieldsSchema),
+    defaultValues: {
+      paymentMethod: "cash",
+      paymentDate: new Date().toISOString().split("T")[0],
+      purpose: "",
+      depositorName: "",
+      reference: "",
+      term: currentTerm || "",
+      session: currentSession || "",
+      notes: "",
+    },
+  });
+
+  // Legacy helper kept for the manual "Sync Now" button. Replays ONLY rows
+  // that originated as single-student offline submissions (offlineId prefix
+  // 'offline_'); optimistic rows for multi-student requests are skipped here
+  // because the offline queue replays the original /multi request with its
+  // own clientRequestId.
+  const syncPendingPayments = async () => {
+    const toSync = pendingPayments.filter(p => typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_'));
+    const keep = pendingPayments.filter(p => !(typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_')));
+    const failedAttempts: any[] = [];
+
+    for (const payment of toSync) {
+      try {
+        // payment object already carries its clientRequestId — server dedupes replays
+        await apiRequest("/api/payments/record", { method: "POST", body: payment });
+      } catch {
+        failedAttempts.push(payment);
+      }
+    }
+
+    // Counts must reflect ONLY rows we actually attempted to sync — not the
+    // unrelated optimistic rows we had to retain for visibility.
+    const syncedCount = toSync.length - failedAttempts.length;
+    const failedCount = failedAttempts.length;
+
+    // Persist: keep failed-this-pass items + any rows we never tried.
+    setPendingPayments([...failedAttempts, ...keep]);
+
+    if (failedCount === 0) {
+      toast({
+        title: "Sync Complete",
+        description: `Successfully synced ${syncedCount} pending payment(s).`,
+      });
+    } else {
+      toast({
+        title: "Partial Sync",
+        description: `${syncedCount} synced, ${failedCount} failed.`,
+        variant: "destructive",
+      });
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+  };
+
+  const currentPurpose = form.watch("purpose");
+
+  // Fix #1b: only overwrite amounts that are still 0 (preserve user-typed values)
+  useEffect(() => {
+    if (!currentPurpose || selectedEntries.length === 0) return;
+    const matchedFee = feeTypesData.find(ft => ft.name === currentPurpose);
+    if (matchedFee?.isTuition) {
+      setSelectedEntries(prev => prev.map(e => {
+        if (e.amount > 0) return e;
+        const rate = e.student.classId ? (tuitionAmountMap.get(e.student.classId) || 0) : 0;
+        return { ...e, amount: rate };
+      }));
+      const sum = selectedEntries.reduce((acc, e) => {
+        return acc + (tuitionAmountMap.get(e.student.classId || '') || 0);
+      }, 0);
+      if (sum > 0) setTotalAmount(sum);
+    }
+  }, [selectedEntries.length, currentPurpose, feeTypesData, tuitionAmountMap]);
+
+  // Allocation tally
+  const studentCount = selectedEntries.length;
+  const allocatedTotal = selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const unallocated = totalAmount - allocatedTotal;
+
+  const onSubmit = async (commonData: CommonFields) => {
+    if (selectedEntries.length === 0) {
+      toast({
+        title: "No Students Selected",
+        description: "Please add at least one student before recording a payment.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!totalAmount || totalAmount <= 0) {
+      toast({
+        title: "Missing Amount",
+        description: "Please enter a total amount greater than zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Fix #5: validate custom purpose description
+    if (commonData.purpose === "Other" && !customPurpose.trim()) {
+      toast({
+        title: "Purpose Required",
+        description: 'Please describe the payment purpose when selecting "Other".',
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Fix #2: skip per-student amount checks for single student
+    if (studentCount > 1) {
+      const hasZeroAmount = selectedEntries.some(e => !e.amount || e.amount <= 0);
+      if (hasZeroAmount) {
+        toast({
+          title: "Missing Amount",
+          description: "Please enter an amount for each student.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (allocatedTotal !== totalAmount) {
+        toast({
+          title: "Allocation Mismatch",
+          description: `Allocated amounts (₦${allocatedTotal.toLocaleString()}) do not match the total (₦${totalAmount.toLocaleString()}).`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    const resolvedPurpose = commonData.purpose === "Other" ? customPurpose.trim() : commonData.purpose;
+    const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
+
+    // No hard offline block: every submission flows through the queued helper
+    // below so it appears optimistically and syncs when online — single-student
+    // and multi-student alike. Server idempotency keeps replays safe.
+
+    setIsSubmitting(true);
+
+    // One stable idempotency key per submission. If the request hangs and the
+    // offline queue eventually replays it, the server returns the original record
+    // instead of inserting a duplicate.
+    const submissionKey = generateClientRequestId();
+    const optimisticId = `opt_${Date.now()}`;
+
+    // Insert an optimistic row for EVERY entry immediately so the user sees
+    // their work in the table the moment they hit Submit, regardless of
+    // network condition. Status: 'saving' until server confirms.
+    // Capture the EXACT request shape used for this submission so a later
+    // Retry replays the same endpoint with the same body — preserving
+    // single vs. multi semantics. All rows from one submission share the
+    // same `__submission` so a single retry re-runs the original atomic op.
+    const submission = studentCount > 1
+      ? {
+          url: '/api/payments/records/multi',
+          type: 'create-multi-payment',
+          body: {
+            ...dataWithPurpose,
+            schoolId: schoolId,
+            amount: totalAmount,
+            entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
+            clientRequestId: submissionKey,
+          },
+        }
+      : {
+          url: '/api/payments/record',
+          type: 'create-payment-record',
+          body: {
+            ...dataWithPurpose,
+            studentId: selectedEntries[0].student.id,
+            amount: totalAmount,
+            clientRequestId: submissionKey,
+          },
+        };
+    const optimisticRows = selectedEntries.map((entry, i) => ({
+      ...dataWithPurpose,
+      studentId: entry.student.id,
+      student: entry.student,
+      amount: studentCount > 1 ? entry.amount : totalAmount,
+      offlineId: `${optimisticId}_${i}`,
+      clientRequestId: submissionKey,
+      createdAt: new Date().toISOString(),
+      __status: 'saving' as const,
+      __submission: submission,
+    }));
+    setPendingPayments(prev => [...prev, ...optimisticRows]);
+    const removeOptimistic = () =>
+      setPendingPayments(prev => prev.filter(p => !p.offlineId?.startsWith(optimisticId)));
+    const markOptimisticAs = (status: 'pending-sync' | 'pending-slow' | 'failed', error?: string) =>
+      setPendingPayments(prev => prev.map(p =>
+        p.offlineId?.startsWith(optimisticId) ? { ...p, __status: status, __error: error } : p
+      ));
+
+    try {
+      if (studentCount > 1) {
+        // Multi-student: send a single request with splits via the queued helper so
+        // a 30s timeout falls back to the offline queue (still deduped via key).
+        const multiResult = await queuedApiRequest("/api/payments/records/multi", {
+          method: "POST",
+          body: {
+            ...dataWithPurpose,
+            schoolId: schoolId,
+            amount: totalAmount,
+            entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
+            clientRequestId: submissionKey,
+          },
+        }, 'create-multi-payment');
+        if (multiResult?.queued) {
+          markOptimisticAs(multiResult.offline ? 'pending-sync' : 'pending-slow');
+          toast({
+            title: multiResult.offline ? "Saved offline" : "Saving — slow network",
+            description: `Split payment will sync automatically. It will appear once confirmed by the server.`,
+          });
+        } else {
+          removeOptimistic();
+          queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+          toast({
+            title: multiResult?.idempotent ? "Already Recorded" : "Payment Recorded",
+            description: `Split payment of ₦${totalAmount.toLocaleString()} recorded for ${studentCount} students.`,
+          });
+        }
+        closeAndReset();
+      } else {
+        // Single student — use queued helper for slow-network resilience
+        const entry = selectedEntries[0];
+        const singleResult = await queuedApiRequest("/api/payments/record", {
+          method: "POST",
+          body: {
+            ...dataWithPurpose,
+            studentId: entry.student.id,
+            amount: totalAmount,
+            clientRequestId: submissionKey,
+          },
+        }, 'create-payment-record');
+        if (singleResult?.queued) {
+          markOptimisticAs(singleResult.offline ? 'pending-sync' : 'pending-slow');
+          toast({
+            title: singleResult.offline ? "Saved offline" : "Saving — slow network",
+            description: "Payment will sync automatically. It is safe to record more.",
+          });
+          closeAndReset();
+          setIsSubmitting(false);
+          return;
+        }
+        removeOptimistic();
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+        toast({
+          title: "Payment Recorded",
+          description: `Payment of ₦${totalAmount.toLocaleString()} recorded successfully.`,
+        });
+        closeAndReset();
+      }
+    } catch (err: any) {
+      // Keep the optimistic row visible but mark it failed so the user can
+      // retry or discard from the table — never silently lose their input.
+      markOptimisticAs('failed', err?.message || 'Failed to record payment');
+      toast({
+        title: "Payment Failed",
+        description: err.message || "Failed to record payment. You can retry or discard the row.",
+        variant: "destructive",
+      });
+    }
+
+    setIsSubmitting(false);
+  };
+
+  // Retry a failed optimistic payment row. Reuses its stable clientRequestId
+  // so the server safely dedupes if the original request actually succeeded.
+  // For multi-student submissions, every sibling row shares one __submission;
+  // a retry replays the original /multi request once and updates every sibling.
+  const retryFailedPayment = async (offlineId: string) => {
+    const row = pendingPayments.find(p => p.offlineId === offlineId);
+    if (!row) return;
+    // Backwards-compat: rows created before __submission existed default to single endpoint
+    const submission = row.__submission ?? {
+      url: '/api/payments/record',
+      type: 'create-payment-record',
+      body: {
+        studentId: row.studentId,
+        amount: row.amount,
+        paymentMethod: row.paymentMethod,
+        paymentDate: row.paymentDate,
+        purpose: row.purpose,
+        depositorName: row.depositorName,
+        reference: row.reference,
+        term: row.term,
+        session: row.session,
+        notes: row.notes,
+        clientRequestId: row.clientRequestId,
+      },
+    };
+    const siblingMatch = (p: any) => p.clientRequestId && p.clientRequestId === row.clientRequestId;
+    setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: 'saving', __error: undefined } : p));
+    try {
+      const res = await queuedApiRequest(submission.url, { method: 'POST', body: submission.body }, submission.type);
+      if (res?.queued) {
+        const nextStatus = res.offline ? 'pending-sync' : 'pending-slow';
+        setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: nextStatus } : p));
+        toast({ title: "Queued", description: "Will sync when network recovers." });
+      } else {
+        setPendingPayments(prev => prev.filter(p => !siblingMatch(p)));
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
+        toast({ title: res?.idempotent ? "Already Recorded" : "Payment Recorded" });
+      }
+    } catch (err: any) {
+      setPendingPayments(prev => prev.map(p => siblingMatch(p) ? { ...p, __status: 'failed', __error: err?.message } : p));
+      toast({ title: "Retry Failed", description: err?.message || "Try again", variant: "destructive" });
+    }
+  };
+
+  // Discarding a row removes all siblings from the same submission so the
+  // user doesn't see half a multi-student split lingering after they discard.
+  const discardFailedPayment = (offlineId: string) => {
+    const row = pendingPayments.find(p => p.offlineId === offlineId);
+    const key = row?.clientRequestId;
+    setPendingPayments(prev => prev.filter(p =>
+      key ? p.clientRequestId !== key : p.offlineId !== offlineId,
+    ));
+  };
+
+  const closeAndReset = () => {
+    setIsRecordDialogOpen(false);
+    setSelectedEntries([]);
+    setTotalAmount(0);
+    setSearchQuery("");
+    setClassFilter("all");
+    setCustomPurpose("");
+    form.reset({
+      paymentMethod: "cash",
+      paymentDate: new Date().toISOString().split("T")[0],
+      purpose: "",
+      depositorName: "",
+      reference: "",
+      term: currentTerm || "",
+      session: currentSession || "",
+      notes: "",
+    });
+  };
+
+  const addStudent = (student: Student) => {
+    if (selectedEntries.some((e) => e.student.id === student.id)) return;
+    setSelectedEntries([...selectedEntries, { student, amount: 0 }]);
+    setSearchQuery("");
+  };
+
+  const updateStudentAmount = (studentId: string, amount: number) => {
+    setSelectedEntries(prev =>
+      prev.map(e => e.student.id === studentId ? { ...e, amount } : e)
+    );
+  };
+
+  const removeStudent = (studentId: string) => {
+    setSelectedEntries(selectedEntries.filter((e) => e.student.id !== studentId));
+  };
+
+  const selectedIds = new Set(selectedEntries.map((e) => e.student.id));
+
+  const filteredStudents = students.filter((s) => {
+    if (!searchQuery.trim() && classFilter === "all") return false;
+    if (selectedIds.has(s.id)) return false;
+    if (classFilter !== "all" && s.classId !== classFilter) return false;
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const firstName = (s.user?.firstName || s.firstName || '').toLowerCase();
+    const lastName = (s.user?.lastName || s.lastName || '').toLowerCase();
+    const studentId = (s.studentId || '').toLowerCase();
+    return firstName.includes(query) || lastName.includes(query) || studentId.includes(query);
+  });
+
+  const toggleClassSort = () => {
+    setClassSortDir((prev) => prev === null ? "asc" : prev === "asc" ? "desc" : null);
+  };
+
+  const sortedRecords = [...paymentRecords].sort((a, b) => {
+    if (!classSortDir) return 0;
+    const nameA = (a.student?.class?.name || "").toLowerCase();
+    const nameB = (b.student?.class?.name || "").toLowerCase();
+    if (nameA < nameB) return classSortDir === "asc" ? -1 : 1;
+    if (nameA > nameB) return classSortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const nameFilteredRecords = nameSearch.trim()
+    ? sortedRecords.filter((r) => {
+        const q = nameSearch.toLowerCase();
+        if (
+          r.student?.user?.lastName?.toLowerCase().includes(q) ||
+          r.student?.user?.firstName?.toLowerCase().includes(q) ||
+          r.student?.studentId?.toLowerCase().includes(q)
+        ) return true;
+        // Multi-student records: match against any child split's student.
+        for (const sp of r.splits ?? []) {
+          if (
+            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
+            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
+            sp.student?.studentId?.toLowerCase().includes(q)
+          ) return true;
+        }
+        return false;
+      })
+    : sortedRecords;
+
+  const totalRecords = nameFilteredRecords.length;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedRecords = nameFilteredRecords.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const showingFrom = totalRecords === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const showingTo = Math.min(safePage * PAGE_SIZE, totalRecords);
+
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   // Sub-admins (in addition to admins) may act on duplicate flags within their own school.
   const canActOnDuplicates = user?.role === "admin" || user?.role === "sub-admin";
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('auth_token');
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-  };
-
-  const { data: statements = [], isLoading: statementsLoading, refetch: refetchStatements } = useQuery<BankStatement[]>({
-    queryKey: ["/api/admin/bank-statements", schoolId],
-    queryFn: async () => {
-      let url = "/api/admin/bank-statements";
-      if (schoolId) url += `?schoolId=${schoolId}`;
-      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch bank statements");
-      return res.json();
-    },
-  });
-
-  const { data: unmatchedTransactions = [], isLoading: transactionsLoading, refetch: refetchTransactions } = useQuery<BankTransaction[]>({
-    queryKey: ["/api/admin/bank-transactions/unmatched", schoolId],
-    queryFn: async () => {
-      let url = "/api/admin/bank-transactions/unmatched";
-      if (schoolId) url += `?schoolId=${schoolId}`;
-      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch transactions");
-      return res.json();
-    },
-  });
-
-  const [reconcileStatus, setReconcileStatus] = useState<"recorded" | "confirmed" | "reversed" | "all">("recorded");
-  const [bankTxStatus, setBankTxStatus] = useState<"unmatched" | "matched" | "confirmed" | "all">("unmatched");
-
-  // Display dataset for the right column. Only fires when not "unmatched", since
-  // the existing unmatchedTransactions query already covers that case.
-  const enrichedTxEnabled = bankTxStatus !== "unmatched";
-  const { data: enrichedTransactionsData = [], isLoading: enrichedTxLoadingRaw, refetch: refetchEnrichedTransactions } = useQuery<BankTransactionWithAllocations[]>({
-    queryKey: ["/api/admin/bank-transactions", schoolId, bankTxStatus],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      params.set("status", bankTxStatus);
-      if (schoolId) params.set("schoolId", schoolId);
-      const url = `/api/admin/bank-transactions?${params.toString()}`;
-      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch bank transactions");
-      return res.json();
-    },
-    enabled: enrichedTxEnabled,
-  });
-
-  const displayedTransactions: BankTransactionWithAllocations[] = enrichedTxEnabled
-    ? enrichedTransactionsData
-    : unmatchedTransactions;
-  const displayedTxLoading = enrichedTxEnabled ? enrichedTxLoadingRaw : transactionsLoading;
-
-  // Recorded-only dataset drives all matching mechanics (suggestions, bulk auto-match, match dialog).
-  const { data: recordedPayments = [], isLoading: recordedPaymentsLoading, refetch: refetchRecordedPayments } = useQuery<FeePaymentRecordWithDetails[]>({
-    queryKey: ["/api/payments/records", schoolId, "recorded"],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      params.set("status", "recorded");
-      if (schoolId) params.set("schoolId", schoolId);
-      const url = `/api/payments/records?${params.toString()}`;
-      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch pending payments");
-      return res.json();
-    },
-  });
-
-  // Display dataset for the left column, switches with the status filter pills.
-  // Skipped when the filter is "recorded" because it would duplicate the recordedPayments query above.
-  const filteredEnabled = reconcileStatus !== "recorded";
-  const { data: filteredPaymentsData = [], isLoading: filteredPaymentsLoadingRaw, refetch: refetchFilteredPayments } = useQuery<FeePaymentRecordWithDetails[]>({
-    queryKey: ["/api/payments/records", schoolId, reconcileStatus],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (reconcileStatus !== "all") params.set("status", reconcileStatus);
-      if (schoolId) params.set("schoolId", schoolId);
-      const qs = params.toString();
-      const url = `/api/payments/records${qs ? `?${qs}` : ""}`;
-      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch payments");
-      return res.json();
-    },
-    enabled: filteredEnabled,
-  });
-
-  const filteredPayments = filteredEnabled ? filteredPaymentsData : recordedPayments;
-  const filteredPaymentsLoading = filteredEnabled ? filteredPaymentsLoadingRaw : recordedPaymentsLoading;
-
-  // Backwards-compatible alias for downstream code (sidebar count, loading states, refetch buttons).
-  const pendingPayments = recordedPayments;
-  // Drive the left-column spinner from the dataset that actually feeds it so a
-  // background refetch of the recorded dataset does not blank a non-recorded view.
-  const paymentsLoading = filteredPaymentsLoading;
-  const refetchPayments = () => {
-    refetchRecordedPayments();
-    if (filteredEnabled) refetchFilteredPayments();
-  };
-
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      if (schoolId) formData.append("schoolId", schoolId);
-
-      const res = await apiRequest("/api/admin/bank-statements/upload", {
-        method: "POST",
-        body: formData,
-      });
-      return res;
-    },
-    onSuccess: (data) => {
-      setUploadOfflineFailure(false);
-      // Server returns counts under `summary` (with legacy top-level fallback for older responses).
-      const summary = data.summary ?? data;
-      const newTransactions = summary.newTransactions ?? 0;
-      const duplicatesSkipped = summary.duplicatesSkipped ?? 0;
-      const possibleDuplicatesFlagged = summary.possibleDuplicatesFlagged ?? 0;
-      const dupSuffix = possibleDuplicatesFlagged > 0
-        ? ` ${possibleDuplicatesFlagged} flagged as possible duplicates — review in Reconcile.`
-        : "";
-      toast({
-        title: "Statement Uploaded",
-        description: `Processed ${newTransactions} new transactions. ${duplicatesSkipped} duplicates skipped.${dupSuffix}`,
-      });
-      setSelectedFile(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-    },
-    onError: (error: Error) => {
-      // If the failure was simply because the device is offline, surface the
-      // offline badge instead of a destructive toast that vanishes — the user
-      // needs a sticky cue that the request didn't go through and they should
-      // retry once reconnected. (File uploads can't be replayed by the offline
-      // queue today, so we explicitly do *not* claim a sync will happen.)
-      if (!navigator.onLine) {
-        setUploadOfflineFailure(true);
-        toast({
-          title: "Upload paused — you're offline",
-          description: "Reconnect and click Upload & Process again to retry.",
-        });
-        return;
-      }
-      toast({
-        title: "Upload Failed",
-        description: error.message || "Failed to upload bank statement",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Task #128 phase 2: re-scan an existing statement for similar duplicates.
-  const rescanStatementMutation = useMutation({
-    mutationFn: async (statementId: string) => {
-      return apiRequest(`/api/admin/bank-statements/${statementId}/rescan-duplicates`, {
-        method: "POST",
-        body: {},
-      });
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Re-scan complete",
-        description: `Scanned ${data.scanned}. Newly flagged: ${data.newlyFlagged}. Unchanged: ${data.unchanged}.`,
-      });
-      setRescanStatementId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Re-scan failed", description: error.message, variant: "destructive" });
-      setRescanStatementId(null);
-    },
-  });
-
-  const deleteStatementMutation = useMutation({
-    mutationFn: async (statementId: string) => {
-      const res = await apiRequest(`/api/admin/bank-statements/${statementId}`, {
-        method: "DELETE",
-      });
-      return res;
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Statement Deleted",
-        description: `Removed statement and ${data.deletedTransactions} associated transactions.`,
-      });
-      setDeleteStatementId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Delete Failed",
-        description: error.message || "Failed to delete bank statement",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const confirmMutation = useMutation({
-    mutationFn: async ({ paymentId, bankTransactionId }: { paymentId: string; bankTransactionId: string }) => {
-      const res = await apiRequest(`/api/admin/payments/${paymentId}/confirm`, {
-        method: "POST",
-        body: { bankTransactionId },
-      });
-      return res;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Confirmed",
-        description: "The payment has been matched and confirmed.",
-      });
-      setIsConfirmDialogOpen(false);
-      setSelectedPayment(null);
-      setSelectedTransaction(null);
-      setMatchSearch("");
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Confirmation Failed",
-        description: error.message || "Failed to confirm payment",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const unconfirmMutation = useMutation({
-    mutationFn: async ({ paymentId }: { paymentId: string }) => {
-      const res = await apiRequest(`/api/admin/payments/${paymentId}/unconfirm`, {
-        method: "POST",
-      });
-      return res;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Unconfirmed",
-        description: "The payment is back in the pending list and the bank transaction is unmatched.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Unconfirm Failed",
-        description: error.message || "Failed to unconfirm payment",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Task #128: clear/ignore/reverse-as-duplicate mutations (admin-only).
-  const clearTxDuplicateMutation = useMutation({
-    mutationFn: async (txId: string) => apiRequest(`/api/admin/bank-transactions/${txId}/clear-duplicate`, { method: "POST" }),
-    onSuccess: () => {
-      toast({ title: "Duplicate flag cleared", description: "Transaction marked as not a duplicate." });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-    },
-    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
-  });
-  const ignoreTxDuplicateMutation = useMutation({
-    mutationFn: async (txId: string) => apiRequest(`/api/admin/bank-transactions/${txId}/ignore-as-duplicate`, { method: "POST" }),
-    onSuccess: () => {
-      toast({ title: "Transaction dismissed", description: "Marked as duplicate and dismissed from the review list." });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-    },
-    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
-  });
+  // Task #128: clear/reverse-as-duplicate mutations.
   const clearPaymentDuplicateMutation = useMutation({
-    mutationFn: async (paymentId: string) => apiRequest(`/api/admin/payments/${paymentId}/clear-duplicate`, { method: "POST" }),
+    mutationFn: async (paymentId: string) =>
+      apiRequest(`/api/admin/payments/${paymentId}/clear-duplicate`, { method: "POST" }),
     onSuccess: () => {
-      toast({ title: "Duplicate flag cleared", description: "Payment marked as not a duplicate." });
+      toast({ title: "Duplicate flag cleared" });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
     },
-    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
   const reverseAsDuplicateMutation = useMutation({
-    mutationFn: async (paymentId: string) => apiRequest(`/api/admin/payments/${paymentId}/reverse-as-duplicate`, { method: "POST", body: { reason: "Reversed as duplicate" } }),
+    mutationFn: async (paymentId: string) =>
+      apiRequest(`/api/admin/payments/${paymentId}/reverse-as-duplicate`, {
+        method: "POST",
+        body: { reason: "Reversed as duplicate" },
+      }),
     onSuccess: () => {
       toast({ title: "Payment reversed as duplicate" });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
-    onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
 
-  const reverseMutation = useMutation({
-    mutationFn: async ({ paymentId, reason }: { paymentId: string; reason: string }) => {
-      const res = await apiRequest(`/api/admin/payments/${paymentId}/reverse`, {
-        method: "POST",
-        body: { reason },
-      });
-      return res;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Reversed",
-        description: "The payment has been reversed successfully.",
-      });
-      setIsReverseDialogOpen(false);
-      setSelectedPayment(null);
-      setReversalReason("");
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Reversal Failed",
-        description: error.message || "Failed to reverse payment",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // ---- Task #149: Bank Accounts (masked account -> school routing for SMS) ----
-  const isMainAdmin = user?.role === 'admin';
-
-  const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useQuery<SchoolBankAccount[]>({
-    queryKey: ["/api/admin/bank-accounts"],
-    enabled: isMainAdmin,
-  });
-
-  const { data: schoolsList = [] } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ["/api/admin/schools"],
-    enabled: isMainAdmin,
-  });
-
-  const emptyAccountForm = { id: "", schoolId: "", bankName: "Zenith", maskedAccountNumber: "", accountLabel: "" };
-  const [accountForm, setAccountForm] = useState(emptyAccountForm);
-  const isEditingAccount = !!accountForm.id;
-
-  const resetAccountForm = () => setAccountForm(emptyAccountForm);
-
-  const schoolNameById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of schoolsList) m.set(s.id, s.name);
-    return m;
-  }, [schoolsList]);
-
-  const invalidateBankAccountRelated = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-accounts"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-  };
-
-  const saveAccountMutation = useMutation({
-    mutationFn: async () => {
-      const payload = {
-        schoolId: accountForm.schoolId,
-        bankName: accountForm.bankName,
-        maskedAccountNumber: accountForm.maskedAccountNumber.trim(),
-        accountLabel: accountForm.accountLabel.trim() || undefined,
-      };
-      if (accountForm.id) {
-        return apiRequest(`/api/admin/bank-accounts/${accountForm.id}`, { method: "PUT", body: payload });
-      }
-      return apiRequest("/api/admin/bank-accounts", { method: "POST", body: payload });
-    },
-    onSuccess: (data: any) => {
-      const rerouted = data?.rerouted ?? 0;
-      toast({
-        title: isEditingAccount ? "Account Updated" : "Account Added",
-        description: rerouted > 0
-          ? `${rerouted} earlier SMS transaction(s) were routed to this school.`
-          : "Bank account mapping saved.",
-      });
-      resetAccountForm();
-      invalidateBankAccountRelated();
-    },
-    onError: (error: Error) => {
-      toast({ title: "Save Failed", description: error.message || "Could not save bank account", variant: "destructive" });
-    },
-  });
-
-  const deleteAccountMutation = useMutation({
-    mutationFn: async (id: string) => apiRequest(`/api/admin/bank-accounts/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      toast({ title: "Account Removed", description: "Bank account mapping deleted." });
-      invalidateBankAccountRelated();
-    },
-    onError: (error: Error) => {
-      toast({ title: "Delete Failed", description: error.message || "Could not delete bank account", variant: "destructive" });
-    },
-  });
-
-  const toggleAccountActiveMutation = useMutation({
-    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) =>
-      apiRequest(`/api/admin/bank-accounts/${id}`, { method: "PUT", body: { isActive } }),
-    onSuccess: () => invalidateBankAccountRelated(),
-    onError: (error: Error) => {
-      toast({ title: "Update Failed", description: error.message || "Could not update account", variant: "destructive" });
-    },
-  });
-
-  const rerouteMutation = useMutation({
-    mutationFn: async () => apiRequest("/api/admin/bank-accounts/reroute", { method: "POST", body: {} }),
-    onSuccess: (data: any) => {
-      const rerouted = data?.rerouted ?? 0;
-      toast({
-        title: "Re-route Complete",
-        description: rerouted > 0
-          ? `${rerouted} SMS transaction(s) routed to their school.`
-          : "No unrouted SMS transactions matched a mapped account.",
-      });
-      invalidateBankAccountRelated();
-    },
-    onError: (error: Error) => {
-      toast({ title: "Re-route Failed", description: error.message || "Could not re-route transactions", variant: "destructive" });
-    },
-  });
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const fileName = file.name.toLowerCase();
-      if (!fileName.endsWith(".csv") && !fileName.endsWith(".xlsx") && !fileName.endsWith(".xls") && !fileName.endsWith(".pdf")) {
-        toast({
-          title: "Invalid File",
-          description: "Please select a PDF, CSV, or Excel file",
-          variant: "destructive",
-        });
-        return;
-      }
-      setSelectedFile(file);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "recorded":
+        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">Pending</Badge>;
+      case "confirmed":
+        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">Confirmed</Badge>;
+      case "reversed":
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Reversed</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
     }
-  };
-
-  const handleUpload = () => {
-    if (!selectedFile) return;
-    setUploadOfflineFailure(false);
-    setIsUploading(true);
-    setUploadStartedAt(Date.now());
-    uploadMutation.mutate(selectedFile, {
-      onSettled: () => {
-        setIsUploading(false);
-        setUploadStartedAt(null);
-      },
-    });
-  };
-
-  const handleConfirmClick = (payment: FeePaymentRecordWithDetails) => {
-    setSelectedPayment(payment);
-    setSelectedTransaction(null);
-    setMatchSearch("");
-    setIsConfirmDialogOpen(true);
-  };
-
-  const handleReverseClick = (payment: FeePaymentRecordWithDetails) => {
-    setSelectedPayment(payment);
-    setIsReverseDialogOpen(true);
-  };
-
-  const handleConfirmPayment = () => {
-    if (!selectedPayment || !selectedTransaction) return;
-    confirmMutation.mutate({
-      paymentId: selectedPayment.id,
-      bankTransactionId: selectedTransaction.id,
-    });
-  };
-
-  const handleReversePayment = () => {
-    if (!selectedPayment || !reversalReason.trim()) return;
-    reverseMutation.mutate({
-      paymentId: selectedPayment.id,
-      reason: reversalReason,
-    });
-  };
-
-  const runBulkAutoMatch = async () => {
-    const items = highConfidenceCandidates;
-    if (items.length === 0) return;
-    setBulkMatchProgress({ current: 0, total: items.length });
-    let succeeded = 0;
-    const failed: Array<{ paymentId: string; reason: string }> = [];
-    for (let i = 0; i < items.length; i++) {
-      const { payment, transaction } = items[i];
-      try {
-        await apiRequest(`/api/admin/payments/${payment.id}/confirm`, {
-          method: "POST",
-          body: { bankTransactionId: transaction.id },
-        });
-        succeeded++;
-      } catch (err: any) {
-        failed.push({ paymentId: payment.id, reason: err?.message || "Unknown error" });
-      }
-      setBulkMatchProgress({ current: i + 1, total: items.length });
-    }
-    queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
-    toast({
-      title: "Bulk Match Complete",
-      description: failed.length === 0
-        ? `Confirmed ${succeeded} payment${succeeded === 1 ? "" : "s"}.`
-        : `Confirmed ${succeeded}, failed ${failed.length}. See console for details.`,
-      variant: failed.length === 0 ? "default" : "destructive",
-    });
-    if (failed.length > 0) console.warn("Bulk auto-match failures:", failed);
-    setBulkMatchProgress(null);
-    setIsBulkMatchDialogOpen(false);
-  };
-
-  // Unified scorer used in both directions (payment->tx and tx->payment).
-  // Returns 0 score when payment and tx are more than 1 calendar day apart.
-  const scoreMatch = (
-    payment: FeePaymentRecordWithDetails,
-    tx: BankTransaction,
-  ): { score: number; reasons: string[] } => {
-    const dayDiff = calendarDayDiff(tx.transactionDate, payment.paymentDate);
-    if (dayDiff > 1) return { score: 0, reasons: [] };
-
-    const paymentAmount = parseFloat(payment.amount);
-    const txAmount = parseFloat(tx.amount);
-    if (isNaN(paymentAmount) || isNaN(txAmount)) return { score: 0, reasons: [] };
-    let score = 0;
-    const reasons: string[] = [];
-
-    // Exact amount match (30 points). Moniepoint POS deducts ₦100 per
-    // transaction, so a ₦5,000 payment lands as ₦4,900 in the bank statement.
-    // For Moniepoint transactions, treat any difference of ≤ ₦100 as exact.
-    const isMoniepoint = tx.bankFormat === 'moniepoint';
-    const amountDiff = Math.abs(txAmount - paymentAmount);
-    if (amountDiff < 0.01) {
-      score += 30;
-      reasons.push("Exact amount");
-    } else if (isMoniepoint && amountDiff <= 100.01) {
-      score += 30;
-      reasons.push("Exact amount (±₦100 POS fee)");
-    }
-
-    // Date proximity: same day (30) or ±1 day (15)
-    if (dayDiff === 0) {
-      score += 30;
-      reasons.push("Same day");
-    } else {
-      score += 15;
-      reasons.push("±1 day");
-    }
-
-    // Depositor name — tiered scoring (only highest tier fires)
-    const depositorName = (payment.depositorName || '').toLowerCase().trim();
-    if (depositorName) {
-      const txDesc = tx.rawDescription?.toLowerCase() || '';
-      const depositorWords = depositorName.split(/\s+/).filter(w => w.length > 2);
-
-      const allMatch = depositorWords.length > 0 && depositorWords.every(w => txDesc.includes(w));
-      const prefixMatch = !allMatch && depositorWords.length > 0 &&
-        depositorWords.every(w => {
-          const prefix = w.substring(0, 5);
-          return prefix.length >= 3 && txDesc.includes(prefix);
-        });
-      const longWordMatch = !allMatch && !prefixMatch &&
-        depositorWords.some(w => w.length > 5 && txDesc.includes(w));
-      const shortWordMatch = !allMatch && !prefixMatch && !longWordMatch &&
-        depositorWords.some(w => w.length >= 3 && txDesc.includes(w));
-
-      if (allMatch) {
-        score += 40;
-        reasons.push("Full depositor name match");
-      } else if (prefixMatch) {
-        score += 30;
-        reasons.push("Partial depositor name match");
-      } else if (longWordMatch) {
-        score += 20;
-        reasons.push("Depositor name word match");
-      } else if (shortWordMatch) {
-        score += 10;
-        reasons.push("Depositor name partial");
-      }
-    }
-
-    // Student name in description (20 points)
-    const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
-    if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
-      score += 20;
-      reasons.push("Name match");
-    }
-
-    // Reference match — whole-word (50) or substring (35)
-    if (payment.reference && payment.reference.length >= 5) {
-      const refLower = payment.reference.toLowerCase();
-      const descLower = tx.rawDescription?.toLowerCase() || '';
-      const escapedRef = refLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const wholeWordRegex = new RegExp(`(?<![a-z0-9])${escapedRef}(?![a-z0-9])`);
-      if (wholeWordRegex.test(descLower)) {
-        score += 50;
-        reasons.push("Reference match");
-      } else if (refLower.length >= 6 && descLower.includes(refLower)) {
-        score += 35;
-        reasons.push("Reference substring");
-      }
-    }
-
-    return { score: Math.min(score, 100), reasons };
-  };
-
-  const findMatchingTransactions = (payment: FeePaymentRecordWithDetails) => {
-    const paymentAmount = parseFloat(payment.amount);
-    return unmatchedTransactions.filter((t) => {
-      const txAmount = parseFloat(t.amount);
-      // Moniepoint POS deducts a flat ₦100 fee, so the bank credit is ₦100
-      // less than the recorded payment. Allow that gap for Moniepoint only.
-      const tolerance = t.bankFormat === 'moniepoint' ? 100.01 : 0.01;
-      if (Math.abs(txAmount - paymentAmount) >= tolerance) return false;
-      return calendarDayDiff(t.transactionDate, payment.paymentDate) <= 1;
-    });
-  };
-
-  // Memoized suggestion maps so we run the scorer once per data change,
-  // not on every keystroke in the search inputs.
-  const paymentSuggestions = useMemo(() => {
-    const map = new Map<string, { transaction: BankTransaction | null; confidence: number; reasons: string[] }>();
-    for (const p of pendingPayments) {
-      let bestMatch: BankTransaction | null = null;
-      let bestScore = 0;
-      let bestReasons: string[] = [];
-      for (const tx of unmatchedTransactions) {
-        const { score, reasons } = scoreMatch(p, tx);
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = tx;
-          bestReasons = reasons;
-        }
-      }
-      map.set(p.id, { transaction: bestMatch, confidence: bestScore, reasons: bestReasons });
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPayments, unmatchedTransactions]);
-
-  const paymentMatchableMap = useMemo(() => {
-    const map = new Map<string, BankTransaction[]>();
-    for (const p of pendingPayments) {
-      map.set(p.id, findMatchingTransactions(p));
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPayments, unmatchedTransactions]);
-
-  // Per-transaction list of payments that score >= 50 (medium+ confidence).
-  const transactionSuggestions = useMemo(() => {
-    const map = new Map<string, Array<{ payment: FeePaymentRecordWithDetails; score: number; reasons: string[] }>>();
-    for (const tx of unmatchedTransactions) {
-      const matches: Array<{ payment: FeePaymentRecordWithDetails; score: number; reasons: string[] }> = [];
-      for (const p of pendingPayments) {
-        const { score, reasons } = scoreMatch(p, tx);
-        if (score >= 50) matches.push({ payment: p, score, reasons });
-      }
-      matches.sort((a, b) => b.score - a.score);
-      map.set(tx.id, matches);
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPayments, unmatchedTransactions]);
-
-  // Bulk auto-match candidates: payments with a >= 90% suggestion.
-  const highConfidenceCandidates = useMemo(() => {
-    const candidates: Array<{ payment: FeePaymentRecordWithDetails; transaction: BankTransaction; confidence: number }> = [];
-    for (const p of pendingPayments) {
-      const s = paymentSuggestions.get(p.id);
-      if (s && s.transaction && s.confidence >= 90) {
-        candidates.push({ payment: p, transaction: s.transaction, confidence: s.confidence });
-      }
-    }
-    return candidates;
-  }, [pendingPayments, paymentSuggestions]);
-
-  const handleOpenMatchTxDialog = (tx: BankTransaction) => {
-    setTransactionToMatch(tx);
-    setSelectedMatchPaymentId(null);
-    setIsMatchTxDialogOpen(true);
-  };
-
-  // Candidate recorded payments for the open Match-Transaction dialog:
-  // unconfirmed payments with the SAME amount and date within ±1 day.
-  const matchTxCandidates = useMemo(() => {
-    if (!transactionToMatch) return [] as FeePaymentRecordWithDetails[];
-    const txAmount = parseFloat(transactionToMatch.amount);
-    if (isNaN(txAmount)) return [];
-    // Moniepoint POS deducts a flat ₦100 fee, so a ₦4,900 bank credit can
-    // legitimately match a ₦5,000 recorded payment. Allow that gap for
-    // Moniepoint only; every other bank stays strict-equal.
-    const tolerance = transactionToMatch.bankFormat === 'moniepoint' ? 100.01 : 0.01;
-    return pendingPayments.filter((p) => {
-      const pAmount = parseFloat(p.amount);
-      if (isNaN(pAmount) || Math.abs(pAmount - txAmount) >= tolerance) return false;
-      if (calendarDayDiff(p.paymentDate, transactionToMatch.transactionDate) > 1) return false;
-      // Task #128 phase 2: hide flagged candidates by default.
-      if (!showFlaggedCandidates && p.possibleDuplicate) return false;
-      return true;
-    });
-  }, [transactionToMatch, pendingPayments, showFlaggedCandidates]);
-
-  const flaggedMatchTxCandidatesCount = useMemo(() => {
-    if (!transactionToMatch) return 0;
-    const txAmount = parseFloat(transactionToMatch.amount);
-    if (isNaN(txAmount)) return 0;
-    const tolerance = transactionToMatch.bankFormat === 'moniepoint' ? 100.01 : 0.01;
-    return pendingPayments.filter((p) => {
-      const pAmount = parseFloat(p.amount);
-      if (isNaN(pAmount) || Math.abs(pAmount - txAmount) >= tolerance) return false;
-      if (calendarDayDiff(p.paymentDate, transactionToMatch.transactionDate) > 1) return false;
-      return p.possibleDuplicate === true;
-    }).length;
-  }, [transactionToMatch, pendingPayments]);
-
-  const handleConfirmMatchTx = () => {
-    if (!transactionToMatch || !selectedMatchPaymentId) return;
-    confirmMutation.mutate(
-      { paymentId: selectedMatchPaymentId, bankTransactionId: transactionToMatch.id },
-      {
-        onSuccess: () => {
-          setIsMatchTxDialogOpen(false);
-          setTransactionToMatch(null);
-          setSelectedMatchPaymentId(null);
-        },
-      },
-    );
   };
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== "transactions") setFilterStatementId(null); }} className="w-full">
-        <TabsList className={`grid w-full ${isMainAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
-          <TabsTrigger value="upload">Upload Statements</TabsTrigger>
-          <TabsTrigger value="reconcile">
-            Reconcile Payments
-            {pendingPayments.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {pendingPayments.length}
-              </Badge>
+      <div className="flex items-center justify-end">
+        <div className="flex items-center gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsBodyVisible((v) => !v)}
+            aria-label={isBodyVisible ? "Hide payment records" : "Show payment records"}
+            data-testid="button-toggle-payment-body"
+          >
+            {isBodyVisible ? (
+              <>
+                <EyeOff className="h-4 w-4 mr-2" /> Hide
+              </>
+            ) : (
+              <>
+                <Eye className="h-4 w-4 mr-2" /> Show
+              </>
             )}
-          </TabsTrigger>
-          <TabsTrigger value="transactions">
-            Unmatched
-            {unmatchedTransactions.length > 0 && (
-              <Badge variant="secondary" className="ml-2">
-                {unmatchedTransactions.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          {isMainAdmin && (
-            <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
+          </Button>
+          {pendingPayments.length > 0 && (
+            <Badge variant="outline" className="bg-orange-50 text-orange-700">
+              <Clock className="h-3 w-3 mr-1" />
+              {pendingPayments.length} pending sync
+            </Badge>
           )}
-        </TabsList>
+          <Badge variant={isOnline ? "default" : "destructive"} className="gap-1">
+            {isOnline ? (
+              <>
+                <Wifi className="h-3 w-3" /> Online
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3 w-3" /> Offline
+              </>
+            )}
+          </Badge>
+          <Dialog open={isRecordDialogOpen} onOpenChange={(open) => { if (!open) closeAndReset(); else setIsRecordDialogOpen(true); }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Record Payment
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Record Fee Payment</DialogTitle>
+                {/* UX #1: description matches actual form order */}
+                <DialogDescription>
+                  Add students, select a purpose, then confirm the amount(s).
+                </DialogDescription>
+              </DialogHeader>
 
-        <TabsContent value="upload" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Upload Bank Statement
-              </CardTitle>
-              <CardDescription>
-                Upload PDF, CSV, or Excel bank statements to import transactions for matching
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                <FileSpreadsheet className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-                <Input
-                  type="file"
-                  accept=".csv,.xlsx,.xls,.pdf"
-                  onChange={handleFileSelect}
-                  className="max-w-xs mx-auto"
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  Accepts: PDF, Excel (.xlsx, .xls), CSV
-                </p>
-                {selectedFile && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium">{selectedFile.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(selectedFile.size / 1024).toFixed(1)} KB
-                    </p>
-                    <Button
-                      onClick={handleUpload}
-                      disabled={isUploading}
-                      className="mt-4"
-                      data-testid="button-upload-statement"
-                    >
-                      {isUploading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-4 w-4 mr-2" />
-                          Upload & Process
-                        </>
-                      )}
-                    </Button>
-                    {(isUploading || uploadOfflineFailure) && (
-                      <div className="mt-3 flex justify-center" data-testid="badge-upload-status">
-                        {uploadIsOffline ? (
-                          <Badge
-                            variant="outline"
-                            className="bg-amber-50 text-amber-700 border-amber-300 gap-1"
-                            title="You're offline. Bank statement uploads can't be queued for replay — reconnect and click Upload & Process to retry."
-                            data-testid="badge-upload-offline"
-                          >
-                            <WifiOff className="h-3 w-3" />
-                            Offline — reconnect to upload
-                          </Badge>
-                        ) : uploadIsSlow ? (
-                          <Badge
-                            variant="outline"
-                            className="bg-indigo-50 text-indigo-700 border-indigo-300 gap-1"
-                            title="Request is in flight on a slow network. Please keep this page open."
-                            data-testid="badge-upload-slow"
-                          >
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Saving — slow network
-                          </Badge>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+
+                  {/* Student Search */}
+                  <div className="space-y-2">
+                    <Label>Add Students</Label>
+                    <div className="flex gap-2">
+                      {/* UX #4: clear search when switching class filter */}
+                      <Select value={classFilter} onValueChange={(v) => { setClassFilter(v); setSearchQuery(""); }}>
+                        <SelectTrigger className="w-[160px] flex-shrink-0" aria-label="Filter by class">
+                          <SelectValue placeholder="All Classes" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Classes</SelectItem>
+                          {schoolClasses.map((cls) => (
+                            <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name or ID..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9"
+                        />
+                      </div>
+                    </div>
+                    {(searchQuery.trim() || classFilter !== "all") && (
+                      <div className="max-h-[160px] overflow-y-auto border rounded-md">
+                        {studentsLoading ? (
+                          <div className="p-4 text-center text-muted-foreground">Loading students...</div>
+                        ) : filteredStudents.length === 0 ? (
+                          <div className="p-4 text-center text-muted-foreground">No students found</div>
                         ) : (
-                          <Badge
-                            variant="outline"
-                            className="bg-blue-50 text-blue-700 border-blue-300 gap-1"
-                            data-testid="badge-upload-saving"
-                          >
-                            <Clock className="h-3 w-3" />
-                            Uploading…
-                          </Badge>
+                          <>
+                            {/* UX #2: show hint when results are capped */}
+                            {filteredStudents.length > 10 && (
+                              <div className="px-3 py-1.5 text-xs text-muted-foreground border-b bg-muted/30 sticky top-0">
+                                Showing 10 of {filteredStudents.length} — type a name to narrow down
+                              </div>
+                            )}
+                            {filteredStudents.slice(0, 10).map((student) => (
+                              <div
+                                key={student.id}
+                                className="p-3 hover:bg-muted cursor-pointer border-b last:border-b-0 flex items-center justify-between"
+                                onClick={() => addStudent(student)}
+                              >
+                                <div>
+                                  <div className="font-medium text-sm">
+                                    {student.user?.lastName || student.lastName} {student.user?.firstName || student.firstName}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    ID: {student.studentId} | {student.className || "N/A"}
+                                  </div>
+                                </div>
+                                <Plus className="h-4 w-4 text-primary flex-shrink-0" />
+                              </div>
+                            ))}
+                          </>
                         )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  Expected columns: Date, Description, Amount (or Credit/Debit), Reference.
-                  Duplicate transactions are automatically detected and skipped.
-                </AlertDescription>
-              </Alert>
-            </CardContent>
-          </Card>
+                  {/* UX #1: Purpose moved above Total Amount so tuition auto-fill is immediately visible */}
+                  <FormField
+                    control={form.control}
+                    name="purpose"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Purpose</FormLabel>
+                        <Select onValueChange={(val) => {
+                          field.onChange(val);
+                          if (val !== "Other") setCustomPurpose("");
+                        }} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="What is this payment for?" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {feeTypesData.filter(ft => ft.isActive).map((ft) => (
+                              <SelectItem key={ft.id} value={ft.name}>
+                                {ft.name}{ft.isTuition ? " (Tuition)" : ""}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {field.value === "Other" && (
+                          <Input
+                            placeholder="Describe the payment purpose..."
+                            value={customPurpose}
+                            onChange={(e) => setCustomPurpose(e.target.value.slice(0, 100))}
+                            maxLength={100}
+                            className="mt-2"
+                          />
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Upload History</CardTitle>
-                <CardDescription>Previously uploaded bank statements</CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => refetchStatements()}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {statementsLoading ? (
-                <div className="text-center py-4">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                </div>
-              ) : statements.length === 0 ? (
-                <p className="text-center py-4 text-muted-foreground">
-                  No statements uploaded yet
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>File Name</TableHead>
-                      <TableHead>Date Range</TableHead>
-                      <TableHead>New</TableHead>
-                      <TableHead>Duplicates</TableHead>
-                      <TableHead>Possible Dupes</TableHead>
-                      <TableHead>Uploaded</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {statements.map((statement) => (
-                      <TableRow key={statement.id}>
-                        <TableCell className="font-medium">
-                          {statement.fileName}
-                        </TableCell>
-                        <TableCell>
-                          {statement.dateRangeStart && statement.dateRangeEnd
-                            ? `${formatRecoDate(statement.dateRangeStart)} - ${formatRecoDate(statement.dateRangeEnd)}`
-                            : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="bg-green-50 text-green-700">
-                            {statement.newTransactions || 0}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
-                            {statement.duplicatesSkipped || 0}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {(statement.possibleDuplicatesCount || 0) > 0 ? (
-                            <Badge
-                              variant="outline"
-                              className="bg-amber-50 text-amber-800 border-amber-400 cursor-pointer hover:bg-amber-100 transition-colors"
-                              data-testid={`badge-statement-possible-dupes-${statement.id}`}
-                              title="Click to view flagged transactions from this statement"
-                              onClick={() => {
-                                setFilterStatementId(statement.id);
-                                setActiveTab("transactions");
-                              }}
-                            >
-                              ⚠ {statement.possibleDuplicatesCount}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatRecoDate(statement.createdAt)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {isAdmin && (
+                  {/* Total Amount */}
+                  <div className="space-y-2">
+                    <Label>Total Amount (₦)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">₦</span>
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        className="pl-7"
+                        value={totalAmount || ""}
+                        onChange={(e) => setTotalAmount(parseFloat(e.target.value) || 0)}
+                        onFocus={(e) => e.target.select()}
+                        min={0}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Selected Students List */}
+                  {selectedEntries.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <Label>{selectedEntries.length} student{selectedEntries.length > 1 ? "s" : ""} selected</Label>
+                        {studentCount > 1 && (
+                          <span className="text-xs text-muted-foreground ml-auto">Each gets a separate payment record</span>
+                        )}
+                      </div>
+                      <div className="border rounded-md divide-y">
+                        {selectedEntries.map((entry) => {
+                          const bal = tuitionBalanceMap.get(entry.student.id);
+                          const hasAssigned = !!bal && bal.assigned > 0;
+                          const fullyPaid = hasAssigned && bal!.due === 0;
+                          return (
+                          <div key={entry.student.id} className="p-3 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm truncate">
+                                {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {entry.student.studentId} | {entry.student.className || "N/A"}
+                              </div>
+                              {hasAssigned ? (
+                                fullyPaid ? (
+                                  <div className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-green-700 dark:text-green-400" data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Tuition fully paid for {currentTerm}
+                                  </div>
+                                ) : (
+                                  <div className={`text-[11px] mt-0.5 ${bal!.paid > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                    Tuition: ₦{bal!.assigned.toLocaleString()} assigned · ₦{bal!.paid.toLocaleString()} paid ·{" "}
+                                    <span className="font-medium">₦{bal!.due.toLocaleString()} due</span>
+                                  </div>
+                                )
+                              ) : bal && bal.paid > 0 ? (
+                                <div className="text-[11px] mt-0.5 text-muted-foreground" data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                  Tuition: ₦{bal.paid.toLocaleString()} paid · no tuition amount set for this class
+                                </div>
+                              ) : (
+                                <div className="text-[11px] mt-0.5 text-muted-foreground italic" data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                  {entry.student.classId
+                                    ? `No tuition configured for this class (${currentTerm} ${currentSession})`
+                                    : "Student has no class assigned — tuition cannot be tracked"}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {/* Fix #2a: single student shows read-only amount from totalAmount */}
+                              {studentCount === 1 ? (
+                                <span className="text-sm font-medium w-28 text-right pr-2">
+                                  {totalAmount > 0 ? `₦${totalAmount.toLocaleString()}` : "—"}
+                                </span>
+                              ) : (
+                                <div className="relative w-28">
+                                  <span className="absolute left-2.5 top-2 text-sm text-muted-foreground">₦</span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    className="pl-6 h-8 text-sm"
+                                    value={entry.amount || ""}
+                                    onChange={(e) => updateStudentAmount(entry.student.id, parseFloat(e.target.value) || 0)}
+                                    onFocus={(e) => e.target.select()}
+                                  />
+                                </div>
+                              )}
                               <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 text-[11px]"
-                                title="Re-scan this statement for similar duplicates (respects cleared decisions)"
-                                disabled={rescanStatementMutation.isPending}
-                                onClick={() => setRescanStatementId(statement.id)}
-                                data-testid={`button-rescan-${statement.id}`}
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-muted-foreground hover:text-red-500"
+                                onClick={() => removeStudent(entry.student.id)}
                               >
-                                <Search className="h-3 w-3 mr-1" />
-                                Re-scan
+                                <X className="h-4 w-4" />
                               </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => setDeleteStatementId(statement.id)}
-                            >
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </div>
+                      {/* Fix #2b: hide allocation strip for single student */}
+                      {totalAmount > 0 && studentCount > 1 && (
+                        <div className={`text-xs rounded p-2 ${
+                          unallocated === 0
+                            ? "bg-green-50 text-green-700 border border-green-200"
+                            : unallocated > 0
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : "bg-red-50 text-red-700 border border-red-200"
+                        }`}>
+                          ₦{allocatedTotal.toLocaleString()} allocated of ₦{totalAmount.toLocaleString()} total
+                          {unallocated > 0 && ` — ₦${unallocated.toLocaleString()} remaining`}
+                          {unallocated < 0 && ` — ₦${Math.abs(unallocated).toLocaleString()} over total`}
+                          {unallocated === 0 && " ✓ Fully allocated"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {/* Term & Session are auto-filled from currently active academic info */}
+
+                  {/* Payment Details */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="paymentMethod"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Method</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select method" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="transfer">Bank Transfer</SelectItem>
+                              <SelectItem value="pos">POS</SelectItem>
+                              <SelectItem value="cash">Cash</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="paymentDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="depositorName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Depositor Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Name of person who made the deposit" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="reference"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reference (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Transaction reference / POS slip code" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Notes (Optional)</FormLabel>
+                        <FormControl>
+                          <Textarea placeholder="Any additional notes about this payment..." {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeAndReset}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="flex-1"
+                      disabled={isSubmitting || selectedEntries.length === 0}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Recording...
+                        </>
+                      ) : isOnline ? (
+                        selectedEntries.length > 1
+                          ? `Record ${selectedEntries.length} Payments`
+                          : "Record Payment"
+                      ) : (
+                        "Save Offline"
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {isBodyVisible && (
+      <>
+      <Separator />
+
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">Term:</Label>
+            <Select value={filterTerm || "__all__"} onValueChange={(v) => { setFilterTerm(v === "__all__" ? "" : v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Terms" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Terms</SelectItem>
+                <SelectItem value="First Term">First Term</SelectItem>
+                <SelectItem value="Second Term">Second Term</SelectItem>
+                <SelectItem value="Third Term">Third Term</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">Session:</Label>
+            <Select value={filterSession || "__all__"} onValueChange={(v) => { setFilterSession(v === "__all__" ? "" : v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="All Sessions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All Sessions</SelectItem>
+                {sessionOptions.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">Status:</Label>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="recorded">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="reversed">Reversed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">From:</Label>
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+              className="w-[150px]"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="whitespace-nowrap text-sm">To:</Label>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+              className="w-[150px]"
+            />
+          </div>
+          {(dateFrom || dateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); setCurrentPage(1); }}>
+              Clear dates
+            </Button>
+          )}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search student name or ID..."
+              value={nameSearch}
+              onChange={(e) => { setNameSearch(e.target.value); setCurrentPage(1); }}
+              className="pl-8 w-[200px]"
+            />
+          </div>
+          <div className="ml-auto">
+            <Button variant="outline" size="sm" onClick={() => refetchRecords()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        {pendingPayments.length > 0 && (() => {
+          const saving = pendingPayments.filter(p => p.__status === 'saving').length;
+          const slow = pendingPayments.filter(p => p.__status === 'pending-slow').length;
+          const pending = pendingPayments.filter(p => p.__status === 'pending-sync').length;
+          const failed = pendingPayments.filter(p => p.__status === 'failed').length;
+          // Legacy single-payment offline rows (created before queue-based replay)
+          // are identified by an offlineId starting with 'offline_'. They are not
+          // auto-replayed; expose a manual "Sync Now" button so they aren't stuck.
+          const legacyCount = pendingPayments.filter(
+            p => typeof p.offlineId === 'string' && p.offlineId.startsWith('offline_')
+          ).length;
+          const parts: string[] = [];
+          if (saving) parts.push(`${saving} saving`);
+          if (slow) parts.push(`${slow} saving on slow network`);
+          if (pending) parts.push(`${pending} pending sync`);
+          if (failed) parts.push(`${failed} failed`);
+          return (
+            <div className="flex items-center justify-between gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+                <span>{parts.length > 0 ? parts.join(' · ') : `${pendingPayments.length} payment(s) in progress`}</span>
+              </div>
+              {legacyCount > 0 && isOnline && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => syncPendingPayments()}
+                  data-testid="button-sync-now-legacy"
+                >
+                  Sync Now ({legacyCount})
+                </Button>
+              )}
+            </div>
+          );
+        })()}
+
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Student</TableHead>
+                  <TableHead>
+                    <button
+                      className="flex items-center gap-1 hover:text-foreground text-left font-medium"
+                      onClick={toggleClassSort}
+                      type="button"
+                      title={classSortDir === null ? "Sort by class A→Z" : classSortDir === "asc" ? "Sort by class Z→A" : "Clear class sort"}
+                    >
+                      Class
+                      {classSortDir === null && <ArrowUpDown className="h-3 w-3 text-muted-foreground" />}
+                      {classSortDir === "asc" && <ArrowUp className="h-3 w-3 text-primary" />}
+                      {classSortDir === "desc" && <ArrowDown className="h-3 w-3 text-primary" />}
+                    </button>
+                  </TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Purpose</TableHead>
+                  {/* Fix #3: Method column now uses proper labels */}
+                  <TableHead>Method</TableHead>
+                  {/* Fix #4: Reference column added */}
+                  <TableHead>Reference</TableHead>
+                  <TableHead>Term/Session</TableHead>
+                  <TableHead>Status</TableHead>
+                  {/* UX #5: Depositor in own column */}
+                  <TableHead>Depositor</TableHead>
+                  <TableHead>Recorded By</TableHead>
+                  <TableHead className="w-[60px] text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* Optimistic rows: every Submit click appears here immediately
+                    with a status badge, regardless of network. Saving / Pending
+                    sync / Failed states with retry+discard for failed. */}
+                {pendingPayments.map((p) => {
+                  const status = p.__status || 'pending-sync';
+                  const badge = status === 'saving'
+                    ? <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Saving…</Badge>
+                    : status === 'failed'
+                    ? <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Failed</Badge>
+                    : status === 'pending-slow'
+                    ? <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-300" title="Request is in flight on a slow network and will be retried automatically."><Loader2 className="h-3 w-3 mr-1 animate-spin" />Saving — slow network</Badge>
+                    : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300"><Clock className="h-3 w-3 mr-1" />Pending sync</Badge>;
+                  return (
+                    <TableRow key={p.offlineId} className={status === 'failed' ? 'bg-red-50/30' : 'bg-blue-50/20'} data-testid={`row-pending-payment-${p.offlineId}`}>
+                      <TableCell className="text-sm">{formatPaymentDate(p.paymentDate)}</TableCell>
+                      <TableCell>
+                        {p.student ? (
+                          <>
+                            <div className="font-medium text-sm">
+                              {p.student.user?.lastName || p.student.lastName} {p.student.user?.firstName || p.student.firstName}
+                            </div>
+                            <div className="text-xs text-muted-foreground">{p.student.studentId}</div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{p.student?.class?.name || '—'}</TableCell>
+                      <TableCell className="font-medium">₦{Number(p.amount).toLocaleString()}</TableCell>
+                      <TableCell className="text-sm">{p.purpose || '—'}</TableCell>
+                      <TableCell className="text-sm">{METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground font-mono">{p.reference || '—'}</TableCell>
+                      <TableCell className="text-sm">{p.term} / {p.session}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {badge}
+                          {status === 'failed' && p.__error && (
+                            <span className="text-[10px] text-red-600 max-w-[160px] truncate" title={p.__error}>{p.__error}</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{p.depositorName || '—'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">—</TableCell>
+                      <TableCell className="text-right">
+                        {status === 'failed' ? (
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => retryFailedPayment(p.offlineId)} title="Retry" data-testid={`button-retry-${p.offlineId}`}>
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => discardFailedPayment(p.offlineId)} title="Discard" data-testid={`button-discard-${p.offlineId}`}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="reconcile" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h4 className="text-lg font-medium">Payment Reconciliation</h4>
-              <p className="text-sm text-muted-foreground">
-                Match recorded payments with bank transactions side by side
-              </p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {highConfidenceCandidates.length > 0 && (
-                <Button
-                  size="sm"
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={() => setIsBulkMatchDialogOpen(true)}
-                  data-testid="button-bulk-automatch"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Auto-match {highConfidenceCandidates.length} High Confidence
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => { refetchPayments(); refetchTransactions(); if (enrichedTxEnabled) refetchEnrichedTransactions(); }}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh All
-              </Button>
-            </div>
-          </div>
-
-          {(paymentsLoading || transactionsLoading) ? (
-            <div className="text-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Column: Recorded Payments */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b flex-wrap">
-                  <h5 className="font-semibold text-blue-700">
-                    {reconcileStatus === "recorded" ? "Recorded Payments"
-                      : reconcileStatus === "confirmed" ? "Confirmed Payments"
-                      : reconcileStatus === "reversed" ? "Reversed Payments"
-                      : "All Payments"}
-                  </h5>
-                  <Badge variant="secondary" data-testid="badge-payments-count">
-                    {(() => {
-                      const q = paymentSearch.trim().toLowerCase();
-                      if (!q) return filteredPayments.length;
-                      return filteredPayments.filter((p) => {
-                        if (
-                          p.student?.user?.firstName?.toLowerCase().includes(q) ||
-                          p.student?.user?.lastName?.toLowerCase().includes(q) ||
-                          p.student?.studentId?.toLowerCase().includes(q)
-                        ) return true;
-                        for (const sp of p.splits ?? []) {
-                          if (
-                            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
-                            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
-                            sp.student?.studentId?.toLowerCase().includes(q)
-                          ) return true;
-                        }
-                        return false;
-                      }).length;
-                    })()}
-                  </Badge>
-                  <div className="relative ml-auto w-full sm:w-[220px]">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search student name or ID..."
-                      value={paymentSearch}
-                      onChange={(e) => setPaymentSearch(e.target.value)}
-                      className="pl-8 h-8 text-sm"
-                      data-testid="input-payment-search"
-                    />
-                  </div>
-                  <div className="flex gap-1 flex-wrap">
-                    {(["recorded", "confirmed", "reversed", "all"] as const).map((s) => {
-                      const labels: Record<typeof s, string> = {
-                        recorded: "Pending",
-                        confirmed: "Confirmed",
-                        reversed: "Reversed",
-                        all: "All",
-                      };
-                      return (
-                        <Button
-                          key={s}
-                          size="sm"
-                          variant={reconcileStatus === s ? "default" : "outline"}
-                          className="text-xs h-7"
-                          onClick={() => setReconcileStatus(s)}
-                          data-testid={`button-reconcile-status-${s}`}
-                        >
-                          {labels[s]}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-                
-                {(() => {
-                  const q = paymentSearch.trim().toLowerCase();
-                  const visiblePayments = q
-                    ? filteredPayments.filter((p) => {
-                        if (
-                          p.student?.user?.firstName?.toLowerCase().includes(q) ||
-                          p.student?.user?.lastName?.toLowerCase().includes(q) ||
-                          p.student?.studentId?.toLowerCase().includes(q)
-                        ) return true;
-                        // Multi-student split records carry per-child rows in `splits`.
-                        for (const sp of p.splits ?? []) {
-                          if (
-                            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
-                            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
-                            sp.student?.studentId?.toLowerCase().includes(q)
-                          ) return true;
-                        }
-                        return false;
-                      })
-                    : filteredPayments;
-                  if (visiblePayments.length === 0) {
-                    return (
-                      <Card>
-                        <CardContent className="text-center py-6 text-muted-foreground">
-                          <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                          <p className="text-sm">
-                            {q
-                              ? "No payments match your search"
-                              : reconcileStatus === "recorded"
-                                ? "No pending payments"
-                                : reconcileStatus === "confirmed"
-                                  ? "No confirmed payments"
-                                  : reconcileStatus === "reversed"
-                                    ? "No reversed payments"
-                                    : "No payments"}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    );
-                  }
-                  return (
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                    {visiblePayments.map((payment) => {
-                      const suggestion = paymentSuggestions.get(payment.id) || { transaction: null, confidence: 0, reasons: [] };
-                      const matchingTxs = paymentMatchableMap.get(payment.id) || [];
-                      
-                      return (
-                        <Card 
-                          key={payment.id} 
-                          className={`overflow-hidden transition-all ${
-                            suggestion.confidence >= 80 
-                              ? "border-green-300 bg-green-50/50" 
-                              : suggestion.confidence >= 50 
-                                ? "border-yellow-300 bg-yellow-50/50"
-                                : ""
-                          }`}
-                        >
-                          <CardContent className="p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1 flex-wrap mb-1">
-                                  <span className="font-medium text-sm truncate">
-                                    {payment.student?.user?.lastName || 'Unknown'} {payment.student?.user?.firstName || ''}
-                                  </span>
-                                  <Badge variant="outline" className="text-xs">{payment.student?.studentId || 'N/A'}</Badge>
-                                  {payment.possibleDuplicate && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
-                                      title="Same student, same day, same amount as another non-reversed payment. Confirmation is blocked until resolved."
-                                      data-testid={`badge-payment-possible-duplicate-${payment.id}`}
-                                    >
-                                      ⚠ Possible duplicate
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="text-xl font-bold text-green-600">
-                                  ₦{parseFloat(payment.amount).toLocaleString()}
-                                </div>
-                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatRecoDate(payment.paymentDate)}
-                                  <Badge variant="secondary" className="text-xs ml-1">{payment.paymentMethod}</Badge>
-                                </div>
-                                {payment.reference && (
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    Ref: {payment.reference}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex flex-col gap-1 items-end">
-                                {payment.status === "recorded" && (
-                                  <Button
-                                    size="sm"
-                                    className="text-xs h-7"
-                                    onClick={() => handleConfirmClick(payment)}
-                                    disabled={matchingTxs.length === 0}
-                                  >
-                                    <Link className="h-3 w-3 mr-1" />
-                                    Match
-                                  </Button>
-                                )}
-                                {payment.possibleDuplicate && payment.status !== 'reversed' && (
-                                  <div className="flex gap-1">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-[10px] h-6 px-2"
-                                      title="Compare both entries side-by-side"
-                                      onClick={() => setReviewPair({ kind: 'payment', id: payment.id })}
-                                      data-testid={`button-review-payment-duplicate-${payment.id}`}
-                                    >
-                                      Review
-                                    </Button>
-                                    {canActOnDuplicates && (
-                                      <>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="text-[10px] h-6 px-2"
-                                          title="Not a duplicate — clear flag"
-                                          disabled={clearPaymentDuplicateMutation.isPending}
-                                          onClick={() => clearPaymentDuplicateMutation.mutate(payment.id)}
-                                          data-testid={`button-clear-payment-duplicate-${payment.id}`}
-                                        >
-                                          Clear
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="text-[10px] h-6 px-2 text-red-700 border-red-300"
-                                          title="Reverse this payment as a duplicate"
-                                          disabled={reverseAsDuplicateMutation.isPending}
-                                          onClick={() => {
-                                            if (window.confirm("Reverse this payment as a duplicate?")) {
-                                              reverseAsDuplicateMutation.mutate(payment.id);
-                                            }
-                                          }}
-                                          data-testid={`button-reverse-payment-duplicate-${payment.id}`}
-                                        >
-                                          Reverse as duplicate
-                                        </Button>
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                                {payment.status === "confirmed" && (
-                                  <>
-                                    <Badge className="bg-green-600 hover:bg-green-600 text-xs">
-                                      <CheckCircle className="h-3 w-3 mr-1" />
-                                      Confirmed
-                                    </Badge>
-                                    {isAdmin && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-xs h-7"
-                                        onClick={() => {
-                                          if (window.confirm("Move this payment back to Pending and release the matched bank transaction?")) {
-                                            unconfirmMutation.mutate({ paymentId: payment.id });
-                                          }
-                                        }}
-                                        disabled={unconfirmMutation.isPending}
-                                        data-testid={`button-unconfirm-${payment.id}`}
-                                      >
-                                        <RotateCcw className="h-3 w-3 mr-1" />
-                                        Unconfirm
-                                      </Button>
-                                    )}
-                                  </>
-                                )}
-                                {payment.status === "reversed" && (
-                                  <Badge variant="destructive" className="text-xs">
-                                    <RotateCcw className="h-3 w-3 mr-1" />
-                                    Reversed
-                                  </Badge>
-                                )}
-                                {payment.status !== "reversed" && isAdmin && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-xs h-7 text-red-600 hover:text-red-700"
-                                    onClick={() => handleReverseClick(payment)}
-                                  >
-                                    <RotateCcw className="h-3 w-3 mr-1" />
-                                    Reverse
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Matched bank transaction (confirmed payments) */}
-                            {payment.status === "confirmed" && payment.matchedTransaction && (
-                              <div className="mt-2 pt-2 border-t border-dashed">
-                                <div className="flex items-center gap-1 mb-1">
-                                  <Link className="h-3 w-3 text-green-600" />
-                                  <span className="text-xs font-medium text-green-700">Matched bank transaction</span>
-                                </div>
-                                <div className="text-xs bg-green-50 p-2 rounded border border-green-200">
-                                  <div className="font-medium text-green-700">
-                                    ₦{parseFloat(payment.matchedTransaction.amount).toLocaleString()}
-                                  </div>
-                                  <div className="text-muted-foreground">
-                                    {formatRecoDate(payment.matchedTransaction.transactionDate)}
-                                    {payment.matchedTransaction.reference && ` | Ref: ${payment.matchedTransaction.reference}`}
-                                  </div>
-                                  {payment.matchedTransaction.rawDescription && (
-                                    <div className="text-muted-foreground mt-0.5 break-words">
-                                      {payment.matchedTransaction.rawDescription}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Reversal info */}
-                            {payment.status === "reversed" && (
-                              <div className="mt-2 pt-2 border-t border-dashed">
-                                <div className="flex items-center gap-1 mb-1">
-                                  <RotateCcw className="h-3 w-3 text-red-600" />
-                                  <span className="text-xs font-medium text-red-700">Reversal</span>
-                                </div>
-                                <div className="text-xs bg-red-50 p-2 rounded border border-red-200 text-red-900">
-                                  {payment.reversalReason || "No reason provided"}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Auto-suggest section */}
-                            {payment.status === "recorded" && suggestion.transaction && suggestion.confidence >= 50 && (
-                              <div className="mt-2 pt-2 border-t border-dashed">
-                                <div className="flex items-center gap-1 mb-1">
-                                  <Sparkles className={`h-3 w-3 ${suggestion.confidence >= 80 ? 'text-green-500' : 'text-yellow-500'}`} />
-                                  <span className={`text-xs font-medium ${suggestion.confidence >= 80 ? 'text-green-700' : 'text-yellow-700'}`}>
-                                    {suggestion.confidence >= 80 ? 'High Confidence Match' : 'Suggested Match'} ({suggestion.confidence}%)
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs bg-white/80 p-2 rounded border">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-green-600">
-                                      ₦{parseFloat(suggestion.transaction.amount).toLocaleString()}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                      <span>{suggestion.transaction.rawDescription}</span>
-                                      <div className="text-muted-foreground mt-0.5">
-                                        {formatRecoDate(suggestion.transaction.transactionDate)}
-                                        {suggestion.transaction.reference && ` | Ref: ${suggestion.transaction.reference}`}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  {/* Quick confirm only for high confidence matches (80%+) */}
-                                  {suggestion.confidence >= 80 && (
-                                    <Button
-                                      size="sm"
-                                      className="text-xs h-6 bg-green-600 hover:bg-green-700"
-                                      onClick={() => {
-                                        setSelectedPayment(payment);
-                                        setSelectedTransaction(suggestion.transaction);
-                                        setMatchSearch("");
-                                        setIsConfirmDialogOpen(true);
-                                      }}
-                                    >
-                                      <CheckCircle className="h-3 w-3 mr-1" />
-                                      Confirm
-                                    </Button>
-                                  )}
-                                </div>
-                                <div className="flex gap-1 mt-1 flex-wrap">
-                                  {suggestion.reasons.map((reason, i) => (
-                                    <Badge key={i} variant="outline" className="text-xs bg-white">
-                                      {reason}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            
-                            {payment.status === "recorded" && matchingTxs.length === 0 && (
-                              <div className="mt-2 pt-2 border-t">
-                                <p className="text-xs text-orange-600 flex items-center gap-1">
-                                  <AlertTriangle className="h-3 w-3" />
-                                  No matching transactions within ±1 day
-                                </p>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
                   );
-                })()}
-              </div>
-
-              {/* Right Column: Bank Transactions */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b flex-wrap">
-                  <h5 className="font-semibold text-purple-700">Bank Transactions</h5>
-                  <Badge variant="secondary">{displayedTransactions.length}</Badge>
-                  <div className="ml-auto flex flex-wrap gap-1" data-testid="bank-tx-status-filter">
-                    {(["unmatched", "matched", "confirmed", "all"] as const).map((s) => (
-                      <Button
-                        key={s}
-                        size="sm"
-                        variant={bankTxStatus === s ? "default" : "outline"}
-                        className="h-7 px-2 text-xs capitalize"
-                        onClick={() => setBankTxStatus(s)}
-                        data-testid={`bank-tx-status-${s}`}
-                      >
-                        {s}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search narration, reference, amount or student name/ID..."
-                    value={txSearch}
-                    onChange={(e) => setTxSearch(e.target.value)}
-                    className="pl-8 h-8 text-sm"
-                  />
-                </div>
-                {displayedTxLoading ? (
-                  <Card>
-                    <CardContent className="text-center py-6 text-muted-foreground">
+                })}
+                {recordsLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-                    </CardContent>
-                  </Card>
-                ) : (() => {
-                  const filteredTx = txSearch.trim()
-                    ? displayedTransactions.filter((t) => {
-                        const q = txSearch.toLowerCase();
-                        if (
-                          t.rawDescription?.toLowerCase().includes(q) ||
-                          t.reference?.toLowerCase().includes(q) ||
-                          t.amount?.toString().includes(q)
-                        ) return true;
-                        // Match against any linked allocation's student name/ID,
-                        // including every child student in a multi-student split.
-                        for (const a of t.allocations ?? []) {
-                          const stu = a.paymentRecord?.student;
-                          if (stu) {
-                            if (
-                              stu.user?.firstName?.toLowerCase().includes(q) ||
-                              stu.user?.lastName?.toLowerCase().includes(q) ||
-                              stu.studentId?.toLowerCase().includes(q)
-                            ) return true;
-                          }
-                          for (const sp of a.splitStudents ?? []) {
-                            if (
-                              sp.user?.firstName?.toLowerCase().includes(q) ||
-                              sp.user?.lastName?.toLowerCase().includes(q) ||
-                              sp.studentId?.toLowerCase().includes(q)
-                            ) return true;
-                          }
-                        }
-                        return false;
-                      })
-                    : displayedTransactions;
-                  const emptyCopy = (() => {
-                    if (displayedTransactions.length > 0) return "No transactions match your search";
-                    if (bankTxStatus === "unmatched") return "All transactions matched";
-                    if (bankTxStatus === "matched") return "No matched transactions yet";
-                    if (bankTxStatus === "confirmed") return "No confirmed transactions yet";
-                    return "No bank transactions found";
-                  })();
-                  return filteredTx.length === 0 ? (
-                  <Card>
-                    <CardContent className="text-center py-6 text-muted-foreground">
-                      <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                      <p className="text-sm">{emptyCopy}</p>
-                    </CardContent>
-                  </Card>
+                    </TableCell>
+                  </TableRow>
+                ) : totalRecords === 0 && pendingPayments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                      No payment records found
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-                    {filteredTx.map((tx) => {
-                      const isUnmatched = tx.status === "unmatched";
-                      const scoredMatches = isUnmatched ? (transactionSuggestions.get(tx.id) || []) : [];
-                      const topScore = scoredMatches[0]?.score || 0;
-                      const cardClass = isUnmatched
-                        ? topScore >= 80
-                          ? "border-green-300 bg-green-50/50"
-                          : topScore >= 50
-                            ? "border-yellow-300 bg-yellow-50/50"
-                            : ""
-                        : tx.status === "confirmed"
-                          ? "border-green-300 bg-green-50/40"
-                          : "border-blue-300 bg-blue-50/40";
-                      const statusBadge = (() => {
-                        if (tx.status === "confirmed") return { label: "Confirmed", cls: "bg-green-50 text-green-700 border-green-300" };
-                        if (tx.status === "suggested") return { label: "Matched", cls: "bg-blue-50 text-blue-700 border-blue-300" };
-                        if (tx.status === "partially_reconciled") return { label: "Partially Matched", cls: "bg-blue-50 text-blue-700 border-blue-300" };
-                        return { label: "Unmatched", cls: "bg-yellow-50 text-yellow-700 border-yellow-300" };
-                      })();
-                      const allocations = tx.allocations ?? [];
-
-                      return (
-                        <Card 
-                          key={tx.id} 
-                          className={`overflow-hidden ${cardClass}`}
-                          data-testid={`bank-tx-card-${tx.id}`}
-                        >
-                          <CardContent className="p-3">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <div className="text-xl font-bold text-green-600">
-                                    ₦{parseFloat(tx.amount).toLocaleString()}
-                                  </div>
-                                  <Badge variant="outline" className={`text-[10px] ${statusBadge.cls}`}>
-                                    {statusBadge.label}
-                                  </Badge>
-                                  {tx.source === 'sms' && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] bg-sky-50 text-sky-700 border-sky-300"
-                                      title="Automatically captured from a bank credit-alert SMS"
-                                      data-testid={`badge-tx-sms-${tx.id}`}
-                                    >
-                                      SMS
-                                    </Badge>
-                                  )}
-                                  {!tx.schoolId && tx.source === 'sms' && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] bg-orange-50 text-orange-700 border-orange-300"
-                                      title="This SMS could not be routed to a school. Add its account number under Bank Accounts."
-                                      data-testid={`badge-tx-unrouted-${tx.id}`}
-                                    >
-                                      Unrouted
-                                    </Badge>
-                                  )}
-                                  {tx.possibleDuplicate && (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
-                                      title="Same school, same day, same amount, same depositor as an earlier transaction. Review before confirming."
-                                      data-testid={`badge-tx-possible-duplicate-${tx.id}`}
-                                    >
-                                      ⚠ Possible duplicate
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatRecoDate(tx.transactionDate)}
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-1 break-words">
-                                  {tx.rawDescription}
-                                </div>
-                                {tx.reference && (
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    Ref: {tx.reference}
-                                  </div>
-                                )}
-                              </div>
-                              {isUnmatched && (
-                                <div className="flex flex-col gap-1 items-end">
+                  paginatedRecords.map((record) => (
+                    <TableRow key={record.id}>
+                      {/* Fix #6: date parsed with local-time anchor to avoid off-by-one */}
+                      <TableCell className="text-sm">
+                        {formatPaymentDate(record.paymentDate)}
+                      </TableCell>
+                      <TableCell>
+                        {record.student ? (
+                          <>
+                            <div className="font-medium text-sm">
+                              {record.student.user?.lastName} {record.student.user?.firstName}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {record.student.studentId}
+                            </div>
+                          </>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            Split: {record.splitCount ?? "N"} students
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {record.student?.class?.name || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col gap-1">
+                          <span>₦{parseFloat(record.amount).toLocaleString()}</span>
+                          {record.posFee && record.posFee > 0 && (
+                            <Badge
+                              variant="outline"
+                              className="bg-amber-50 text-amber-700 border-amber-300 text-[10px] w-fit"
+                              title={`Bank credited ₦${(parseFloat(record.amount) - record.posFee).toLocaleString()} after Moniepoint POS fee`}
+                              data-testid={`badge-pos-fee-${record.id}`}
+                            >
+                              −₦{record.posFee.toLocaleString()} POS fee
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {record.purpose || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      {/* Fix #3: use METHOD_LABELS lookup instead of CSS capitalize */}
+                      <TableCell className="text-sm">
+                        {METHOD_LABELS[record.paymentMethod] ?? record.paymentMethod}
+                      </TableCell>
+                      {/* Fix #4: reference column */}
+                      <TableCell className="text-sm text-muted-foreground font-mono">
+                        {record.reference || <span className="not-italic font-sans">—</span>}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {record.term} / {record.session}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {getStatusBadge(record.status)}
+                          {record.possibleDuplicate && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-amber-50 text-amber-800 border-amber-400"
+                              title="Same student, same day, same amount as another non-reversed payment. Confirmation is blocked until resolved."
+                              data-testid={`badge-record-possible-duplicate-${record.id}`}
+                            >
+                              ⚠ Possible duplicate
+                            </Badge>
+                          )}
+                          {record.possibleDuplicate && record.status !== 'reversed' && (
+                            <div className="flex gap-1 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-[10px] h-6 px-2"
+                                title="Compare both entries side-by-side"
+                                onClick={() => setReviewPair({ kind: 'payment', id: record.id })}
+                                data-testid={`button-record-review-duplicate-${record.id}`}
+                              >
+                                Review
+                              </Button>
+                              {canActOnDuplicates && (
+                                <>
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="text-xs h-7"
-                                    onClick={() => handleOpenMatchTxDialog(tx)}
+                                    className="text-[10px] h-6 px-2"
+                                    title="Not a duplicate — clear flag"
+                                    disabled={clearPaymentDuplicateMutation.isPending}
+                                    onClick={() => clearPaymentDuplicateMutation.mutate(record.id)}
+                                    data-testid={`button-record-clear-duplicate-${record.id}`}
                                   >
-                                    <Link className="h-3 w-3 mr-1" />
-                                    Match
+                                    Clear
                                   </Button>
-                                  {tx.possibleDuplicate && (
-                                    <div className="flex gap-1 flex-wrap">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="text-[10px] h-6 px-2"
-                                        title="Compare both entries side-by-side"
-                                        onClick={() => setReviewPair({ kind: 'transaction', id: tx.id })}
-                                        data-testid={`button-review-tx-duplicate-${tx.id}`}
-                                      >
-                                        Review
-                                      </Button>
-                                      {canActOnDuplicates && (
-                                        <>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="text-[10px] h-6 px-2"
-                                            title="Not a duplicate — clear flag"
-                                            disabled={clearTxDuplicateMutation.isPending}
-                                            onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
-                                            data-testid={`button-clear-tx-duplicate-${tx.id}`}
-                                          >
-                                            Clear
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="text-[10px] h-6 px-2 text-amber-800 border-amber-400"
-                                            title="Confirm this IS a duplicate and dismiss it from the review list"
-                                            disabled={ignoreTxDuplicateMutation.isPending}
-                                            onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
-                                            data-testid={`button-ignore-tx-duplicate-${tx.id}`}
-                                          >
-                                            Ignore
-                                          </Button>
-                                        </>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-[10px] h-6 px-2 text-red-700 border-red-300"
+                                    title="Reverse as duplicate"
+                                    disabled={reverseAsDuplicateMutation.isPending}
+                                    onClick={() => {
+                                      if (window.confirm("Reverse this payment as a duplicate?")) {
+                                        reverseAsDuplicateMutation.mutate(record.id);
+                                      }
+                                    }}
+                                    data-testid={`button-record-reverse-duplicate-${record.id}`}
+                                  >
+                                    Reverse
+                                  </Button>
+                                </>
                               )}
                             </div>
-
-                            {!isUnmatched && allocations.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-dashed space-y-1">
-                                <div className="text-[11px] font-medium text-muted-foreground">
-                                  Linked payment{allocations.length > 1 ? "s" : ""} ({allocations.length})
-                                </div>
-                                {allocations.map((alloc) => {
-                                  const stu = alloc.paymentRecord?.student;
-                                  const splitStudents = alloc.splitStudents ?? [];
-                                  const isSplit = !stu && splitStudents.length > 0;
-                                  return (
-                                    <div key={alloc.id} className="text-xs bg-white/80 p-2 rounded border">
-                                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                                        <div className="flex-1 min-w-0">
-                                          {isSplit ? (
-                                            <>
-                                              <div className="flex items-center gap-1 flex-wrap">
-                                                <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-300">
-                                                  Split · {splitStudents.length} students
-                                                </Badge>
-                                                <span className="text-muted-foreground">
-                                                  • ₦{parseFloat(alloc.allocatedAmount).toLocaleString()}
-                                                  {alloc.paymentRecord?.paymentDate && ` • ${formatRecoDate(alloc.paymentRecord.paymentDate)}`}
-                                                </span>
-                                              </div>
-                                              <ul className="mt-1 space-y-0.5">
-                                                {splitStudents.map((sp) => (
-                                                  <li key={sp.studentDbId} className="text-[11px] flex items-center gap-1">
-                                                    <span className="font-medium">{sp.user.lastName} {sp.user.firstName}</span>
-                                                    <span className="text-muted-foreground">({sp.studentId})</span>
-                                                    <span className="text-muted-foreground">• ₦{parseFloat(sp.amount).toLocaleString()}</span>
-                                                  </li>
-                                                ))}
-                                              </ul>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <span className="font-medium">
-                                                {stu?.user ? `${stu.user.lastName} ${stu.user.firstName}`.trim() : "Unassigned"}
-                                              </span>
-                                              {stu?.studentId && (
-                                                <span className="text-muted-foreground ml-1">({stu.studentId})</span>
-                                              )}
-                                              <span className="text-muted-foreground ml-1">
-                                                • ₦{parseFloat(alloc.allocatedAmount).toLocaleString()}
-                                                {alloc.paymentRecord?.paymentDate && ` • ${formatRecoDate(alloc.paymentRecord.paymentDate)}`}
-                                              </span>
-                                            </>
-                                          )}
-                                        </div>
-                                        {alloc.paymentRecord?.status && (
-                                          <Badge variant="outline" className="text-[10px] capitalize">
-                                            {alloc.paymentRecord.status}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            {isUnmatched && scoredMatches.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-dashed">
-                                <div className="flex items-center gap-1 mb-1">
-                                  <Sparkles className={`h-3 w-3 ${topScore >= 80 ? 'text-green-500' : 'text-yellow-500'}`} />
-                                  <span className={`text-xs font-medium ${topScore >= 80 ? 'text-green-700' : 'text-yellow-700'}`}>
-                                    {topScore >= 80 ? 'High Confidence Match' : 'Suggested Match'} ({topScore}%)
-                                    {scoredMatches.length > 1 && ` — ${scoredMatches.length} candidates`}
-                                  </span>
-                                </div>
-                                {scoredMatches.slice(0, 2).map(({ payment: p, score, reasons }) => (
-                                  <div key={p.id} className="text-xs bg-white/80 p-2 rounded border mb-1">
-                                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                                      <div className="flex-1 min-w-0">
-                                        <span className="font-medium">
-                                          {p.student?.user?.lastName || 'Unknown'} {p.student?.user?.firstName || ''}
-                                        </span>
-                                        <span className="text-muted-foreground ml-1">
-                                          ({p.student?.studentId || 'N/A'})
-                                        </span>
-                                        <span className="text-muted-foreground ml-1">
-                                          • ₦{parseFloat(p.amount).toLocaleString()} • {formatRecoDate(p.paymentDate)}
-                                        </span>
-                                      </div>
-                                      <Badge variant="outline" className={`text-[10px] ${score >= 80 ? 'bg-green-50 text-green-700 border-green-300' : 'bg-yellow-50 text-yellow-700 border-yellow-300'}`}>
-                                        {score}%
-                                      </Badge>
-                                    </div>
-                                    <div className="flex gap-1 mt-1 flex-wrap">
-                                      {reasons.map((reason, i) => (
-                                        <Badge key={i} variant="outline" className="text-[10px] bg-white">
-                                          {reason}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                  );
-                })()}
-              </div>
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="transactions" className="space-y-4 mt-4">
-          {filterStatementId && (
-            <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span>Showing possible duplicates from one statement only.</span>
-              <button
-                className="ml-auto text-xs underline hover:no-underline"
-                onClick={() => setFilterStatementId(null)}
-              >
-                Clear filter
-              </button>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h4 className="text-lg font-medium">Unmatched Transactions</h4>
-              <p className="text-sm text-muted-foreground">
-                Bank transactions not yet linked to any payment
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-1 min-w-0 max-w-sm">
-              <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search description, reference..."
-                  value={unmatchedSearch}
-                  onChange={(e) => setUnmatchedSearch(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-              <Button variant="outline" size="sm" onClick={() => refetchTransactions()}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
-            </div>
-          </div>
-
-          {transactionsLoading ? (
-            <div className="text-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin mx-auto" />
-            </div>
-          ) : unmatchedTransactions.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-8 text-muted-foreground">
-                <CheckCircle className="h-10 w-10 mx-auto mb-4 text-green-500" />
-                <p>All transactions have been matched</p>
-              </CardContent>
-            </Card>
-          ) : filterStatementId && !unmatchedTransactions.some(tx => tx.statementId === filterStatementId && tx.possibleDuplicate) ? (
-            <Card>
-              <CardContent className="text-center py-8 text-muted-foreground">
-                <CheckCircle className="h-10 w-10 mx-auto mb-4 text-green-500" />
-                <p>No unresolved duplicate flags for this statement.</p>
-                <button
-                  className="mt-2 text-xs underline hover:no-underline"
-                  onClick={() => setFilterStatementId(null)}
-                >
-                  Show all unmatched transactions
-                </button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
+                          )}
+                        </div>
+                      </TableCell>
+                      {/* UX #5: depositor moved from Student cell to own column */}
+                      <TableCell className="text-sm text-muted-foreground">
+                        {record.depositorName || <span>—</span>}
+                      </TableCell>
+                      {/* UX #6: fallback for missing recorded-by user */}
+                      <TableCell className="text-sm text-muted-foreground">
+                        {record.recordedByUser
+                          ? `${record.recordedByUser.firstName} ${record.recordedByUser.lastName}`.trim()
+                          : <span>—</span>
+                        }
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setViewingRecord(record)}
+                          title="View details"
+                          data-testid={`button-view-payment-${record.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {unmatchedTransactions.filter(tx => {
-                        if (filterStatementId) {
-                          if (tx.statementId !== filterStatementId) return false;
-                          if (!tx.possibleDuplicate) return false;
-                        }
-                        if (unmatchedSearch.trim()) {
-                          const q = unmatchedSearch.toLowerCase();
-                          return (
-                            tx.rawDescription?.toLowerCase().includes(q) ||
-                            tx.reference?.toLowerCase().includes(q) ||
-                            tx.amount?.toString().includes(q)
-                          );
-                        }
-                        return true;
-                      }).map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell>
-                          {formatRecoDate(tx.transactionDate)}
-                        </TableCell>
-                        <TableCell className="font-medium text-green-600">
-                          ₦{parseFloat(tx.amount).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="max-w-[300px] break-words text-sm">
-                          {tx.rawDescription}
-                        </TableCell>
-                        <TableCell>{tx.reference || "-"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
-                              Unmatched
-                            </Badge>
-                            {tx.source === 'sms' && (
-                              <Badge
-                                variant="outline"
-                                className="bg-sky-50 text-sky-700 border-sky-300 text-[10px]"
-                                title="Automatically captured from a bank credit-alert SMS"
-                                data-testid={`badge-tx-sms-row-${tx.id}`}
-                              >
-                                SMS
-                              </Badge>
-                            )}
-                            {!tx.schoolId && tx.source === 'sms' && (
-                              <Badge
-                                variant="outline"
-                                className="bg-orange-50 text-orange-700 border-orange-300 text-[10px]"
-                                title="This SMS could not be routed to a school. Add its account number under Bank Accounts."
-                                data-testid={`badge-tx-unrouted-row-${tx.id}`}
-                              >
-                                Unrouted
-                              </Badge>
-                            )}
-                            {tx.possibleDuplicate && (
-                              <Badge
-                                variant="outline"
-                                className="bg-amber-50 text-amber-800 border-amber-400 text-[10px]"
-                                title="Same school, same day, same amount, same depositor as an earlier transaction."
-                                data-testid={`badge-tx-possible-duplicate-row-${tx.id}`}
-                              >
-                                ⚠ Possible duplicate
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenMatchTxDialog(tx)}
-                            >
-                              <Link className="h-3 w-3 mr-1" />
-                              Match
-                            </Button>
-                            {tx.possibleDuplicate && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-[10px] h-7 px-2"
-                                  onClick={() => setReviewPair({ kind: 'transaction', id: tx.id })}
-                                  title="Compare both entries side-by-side"
-                                  data-testid={`button-review-tx-duplicate-row-${tx.id}`}
-                                >
-                                  Review
-                                </Button>
-                                {canActOnDuplicates && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-[10px] h-7 px-2"
-                                      disabled={clearTxDuplicateMutation.isPending}
-                                      onClick={() => clearTxDuplicateMutation.mutate(tx.id)}
-                                      title="Not a duplicate — clear flag"
-                                      data-testid={`button-clear-tx-duplicate-row-${tx.id}`}
-                                    >
-                                      Clear
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-[10px] h-7 px-2 text-amber-800 border-amber-400"
-                                      disabled={ignoreTxDuplicateMutation.isPending}
-                                      onClick={() => ignoreTxDuplicateMutation.mutate(tx.id)}
-                                      title="Confirm this IS a duplicate and dismiss it"
-                                      data-testid={`button-ignore-tx-duplicate-row-${tx.id}`}
-                                    >
-                                      Ignore
-                                    </Button>
-                                  </>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
-        {isMainAdmin && (
-        <TabsContent value="bank-accounts" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Bank Accounts</CardTitle>
-              <CardDescription>
-                Match each bank account number to a school. When a credit-alert SMS arrives, it is
-                automatically filed under the right school. The account number shown in the SMS is
-                partly hidden (for example <span className="font-mono">238****209</span> or
-                <span className="font-mono"> **0025</span>) — type it exactly as it appears.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                <div className="space-y-1">
-                  <Label className="text-xs">School</Label>
-                  <Select
-                    value={accountForm.schoolId}
-                    onValueChange={(v) => setAccountForm((f) => ({ ...f, schoolId: v }))}
-                  >
-                    <SelectTrigger data-testid="select-bank-account-school">
-                      <SelectValue placeholder="Select school" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {schoolsList.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Bank</Label>
-                  <Select
-                    value={accountForm.bankName}
-                    onValueChange={(v) => setAccountForm((f) => ({ ...f, bankName: v }))}
-                  >
-                    <SelectTrigger data-testid="select-bank-account-bank">
-                      <SelectValue placeholder="Select bank" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Zenith">Zenith</SelectItem>
-                      <SelectItem value="Access">Access</SelectItem>
-                      <SelectItem value="Fidelity">Fidelity</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Account number (as shown in SMS)</Label>
-                  <Input
-                    value={accountForm.maskedAccountNumber}
-                    onChange={(e) => setAccountForm((f) => ({ ...f, maskedAccountNumber: e.target.value }))}
-                    placeholder="e.g. 238****209"
-                    className="font-mono"
-                    data-testid="input-bank-account-number"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Label (optional)</Label>
-                  <Input
-                    value={accountForm.accountLabel}
-                    onChange={(e) => setAccountForm((f) => ({ ...f, accountLabel: e.target.value }))}
-                    placeholder="e.g. Main"
-                    data-testid="input-bank-account-label"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => saveAccountMutation.mutate()}
-                    disabled={
-                      saveAccountMutation.isPending ||
-                      !accountForm.schoolId ||
-                      !accountForm.bankName ||
-                      accountForm.maskedAccountNumber.trim().length < 2
-                    }
-                    data-testid="button-save-bank-account"
-                  >
-                    {saveAccountMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : isEditingAccount ? "Update" : "Add"}
-                  </Button>
-                  {isEditingAccount && (
-                    <Button variant="outline" onClick={resetAccountForm} data-testid="button-cancel-bank-account">
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-end">
+        {totalRecords > 0 && (
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-sm text-muted-foreground">
+              Showing {showingFrom}–{showingTo} of {totalRecords}
+            </p>
+            {totalRecords > PAGE_SIZE && (
+              <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => rerouteMutation.mutate()}
-                  disabled={rerouteMutation.isPending}
-                  data-testid="button-reroute-sms"
+                  disabled={safePage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 >
-                  <RefreshCw className={`h-4 w-4 mr-1 ${rerouteMutation.isPending ? 'animate-spin' : ''}`} />
-                  Re-route unmatched SMS
+                  Previous
                 </Button>
-              </div>
-
-              {bankAccountsLoading ? (
-                <div className="flex items-center justify-center py-8 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
-                </div>
-              ) : bankAccounts.length === 0 ? (
-                <div className="text-center py-8 text-sm text-muted-foreground">
-                  No bank accounts mapped yet. Add one above so incoming SMS can be filed automatically.
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Bank</TableHead>
-                      <TableHead>Account Number</TableHead>
-                      <TableHead>School</TableHead>
-                      <TableHead>Label</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {bankAccounts.map((acct) => (
-                      <TableRow key={acct.id} data-testid={`row-bank-account-${acct.id}`}>
-                        <TableCell>{acct.bankName}</TableCell>
-                        <TableCell className="font-mono">{acct.maskedAccountNumber}</TableCell>
-                        <TableCell>{schoolNameById.get(acct.schoolId) || "—"}</TableCell>
-                        <TableCell>{acct.accountLabel || "—"}</TableCell>
-                        <TableCell>
-                          {acct.isActive ? (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">Active</Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-gray-100 text-gray-600">Inactive</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() => setAccountForm({
-                                id: acct.id,
-                                schoolId: acct.schoolId,
-                                bankName: acct.bankName,
-                                maskedAccountNumber: acct.maskedAccountNumber,
-                                accountLabel: acct.accountLabel || "",
-                              })}
-                              data-testid={`button-edit-bank-account-${acct.id}`}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() => toggleAccountActiveMutation.mutate({ id: acct.id, isActive: !acct.isActive })}
-                              disabled={toggleAccountActiveMutation.isPending}
-                              data-testid={`button-toggle-bank-account-${acct.id}`}
-                            >
-                              {acct.isActive ? "Disable" : "Enable"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs text-red-600 hover:text-red-700"
-                              onClick={() => {
-                                if (confirm(`Remove the mapping for ${acct.maskedAccountNumber}?`)) {
-                                  deleteAccountMutation.mutate(acct.id);
-                                }
-                              }}
-                              disabled={deleteAccountMutation.isPending}
-                              data-testid={`button-delete-bank-account-${acct.id}`}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        )}
-      </Tabs>
-
-      <Dialog open={isConfirmDialogOpen} onOpenChange={(open) => { setIsConfirmDialogOpen(open); if (!open) setMatchSearch(""); }}>
-        <DialogContent
-          className="max-w-2xl"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle>Confirm Payment Match</DialogTitle>
-            <DialogDescription>
-              Select a bank transaction to match with this payment
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedPayment && (
-            <div className="space-y-4">
-              <div className="p-4 border rounded-lg bg-muted/50 space-y-1">
-                <p className="font-semibold">
-                  {selectedPayment.student?.user?.lastName} {selectedPayment.student?.user?.firstName}
-                </p>
-                <p className="text-2xl font-bold text-green-600">
-                  ₦{parseFloat(selectedPayment.amount).toLocaleString()}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedPayment.paymentMethod} | {formatRecoDate(selectedPayment.paymentDate)}
-                </p>
-                {selectedPayment.purpose && (
-                  <p className="text-sm"><span className="font-medium">Purpose:</span> {selectedPayment.purpose}</p>
-                )}
-                {selectedPayment.depositorName && (
-                  <p className="text-sm"><span className="font-medium">Depositor:</span> {selectedPayment.depositorName}</p>
-                )}
-                {selectedPayment.reference && (
-                  <p className="text-sm"><span className="font-medium">Ref:</span> {selectedPayment.reference}</p>
-                )}
-              </div>
-
-              <ArrowRight className="h-6 w-6 mx-auto text-muted-foreground" />
-
-              <div className="space-y-2">
-                <Label>Select Matching Transaction:</Label>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search description or reference..."
-                    value={matchSearch}
-                    onChange={(e) => setMatchSearch(e.target.value)}
-                    className="pl-8 h-8 text-sm"
-                    data-testid="input-match-search"
-                  />
-                </div>
-                {(() => {
-                  const baseMatches = findMatchingTransactions(selectedPayment);
-                  const q = matchSearch.trim().toLowerCase();
-                  const filtered = q
-                    ? baseMatches.filter(
-                        (tx) =>
-                          tx.rawDescription?.toLowerCase().includes(q) ||
-                          tx.reference?.toLowerCase().includes(q),
-                      )
-                    : baseMatches;
-                  if (baseMatches.length === 0) {
-                    return (
-                      <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
-                        No transactions match within ±1 day at this amount.
-                      </div>
-                    );
-                  }
-                  if (filtered.length === 0) {
-                    return (
-                      <div className="text-center py-6 text-sm text-muted-foreground border rounded-lg">
-                        No transactions match your search.
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="max-h-[200px] overflow-y-auto space-y-2">
-                      {filtered.map((tx) => (
-                        <div
-                          key={tx.id}
-                          onClick={() => setSelectedTransaction(tx)}
-                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                            selectedTransaction?.id === tx.id
-                              ? "border-primary bg-primary/5"
-                              : "hover:border-muted-foreground"
-                          }`}
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-medium">
-                              ₦{parseFloat(tx.amount).toLocaleString()}
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              {formatRecoDate(tx.transactionDate)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground break-words">
-                            {tx.rawDescription}
-                          </p>
-                          {tx.reference && (
-                            <p className="text-xs text-muted-foreground mt-1">Ref: {tx.reference}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsConfirmDialogOpen(false); setMatchSearch(""); }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmPayment}
-              disabled={!selectedTransaction || confirmMutation.isPending}
-            >
-              {confirmMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Confirming...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Confirm Match
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isReverseDialogOpen} onOpenChange={setIsReverseDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reverse Payment</DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. The payment will be marked as reversed.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedPayment && (
-            <div className="space-y-4">
-              <div className="p-4 border rounded-lg bg-red-50">
-                <p className="font-medium mb-1">
-                  {selectedPayment.student?.user?.lastName} {selectedPayment.student?.user?.firstName}
-                </p>
-                <p className="text-xl font-bold">
-                  ₦{parseFloat(selectedPayment.amount).toLocaleString()}
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="reversal-reason">Reason for Reversal</Label>
-                <Textarea
-                  id="reversal-reason"
-                  value={reversalReason}
-                  onChange={(e) => setReversalReason(e.target.value)}
-                  placeholder="Explain why this payment is being reversed..."
-                  className="mt-2"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsReverseDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReversePayment}
-              disabled={!reversalReason.trim() || reverseMutation.isPending}
-            >
-              {reverseMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Reversing...
-                </>
-              ) : (
-                <>
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Reverse Payment
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isMatchTxDialogOpen}
-        onOpenChange={(open) => {
-          setIsMatchTxDialogOpen(open);
-          if (!open) {
-            setTransactionToMatch(null);
-            setSelectedMatchPaymentId(null);
-          }
-        }}
-      >
-        <DialogContent
-          className="max-w-2xl max-h-[90vh] overflow-y-auto"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle>Match Recorded Payment</DialogTitle>
-            <DialogDescription>
-              Pick the recorded payment that this bank transaction settles. Only payments with the same amount within ±1 day are shown.
-            </DialogDescription>
-          </DialogHeader>
-
-          {transactionToMatch && (
-            <div className="space-y-4">
-              <div className="p-4 border rounded-lg bg-muted/50">
-                <div className="flex justify-between items-start gap-3">
-                  <div>
-                    <p className="text-2xl font-bold text-green-600">
-                      ₦{parseFloat(transactionToMatch.amount).toLocaleString()}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatRecoDate(transactionToMatch.transactionDate)}
-                    </p>
-                  </div>
-                  {transactionToMatch.reference && (
-                    <Badge variant="outline" className="text-xs">
-                      Ref: {transactionToMatch.reference}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground mt-2 break-words">
-                  {transactionToMatch.rawDescription}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Candidate Payments</Label>
-                  <Badge variant="secondary">{matchTxCandidates.length}</Badge>
-                </div>
-
-                {flaggedMatchTxCandidatesCount > 0 && (
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                    <Checkbox
-                      checked={showFlaggedCandidates}
-                      onCheckedChange={(v) => setShowFlaggedCandidates(v === true)}
-                      data-testid="checkbox-show-flagged-candidates"
-                    />
-                    <span>
-                      Show possible duplicates
-                      <Badge variant="outline" className="ml-2 text-[10px] bg-amber-50 text-amber-800 border-amber-400">
-                        {flaggedMatchTxCandidatesCount} hidden
-                      </Badge>
-                    </span>
-                  </label>
-                )}
-
-                {matchTxCandidates.length === 0 ? (
-                  <div className="text-center py-8 text-sm text-muted-foreground border rounded-lg">
-                    <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-orange-500" />
-                    <p>No matching recorded payments within ±1 day at this amount.</p>
-                    <p className="text-xs mt-1">Record the payment first or check a wider date window.</p>
-                  </div>
-                ) : (
-                  <div className="max-h-[320px] overflow-y-auto space-y-2 border rounded-lg p-2">
-                    {matchTxCandidates.map((p) => {
-                      const isSelected = selectedMatchPaymentId === p.id;
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => setSelectedMatchPaymentId(p.id)}
-                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                            isSelected
-                              ? "border-primary bg-primary/5"
-                              : "hover:border-muted-foreground"
-                          }`}
-                          data-testid={`match-candidate-${p.id}`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1 flex-wrap">
-                                <span className="font-medium text-sm">
-                                  {p.student?.user?.lastName || "Unknown"} {p.student?.user?.firstName || ""}
-                                </span>
-                                <Badge variant="outline" className="text-xs">
-                                  {p.student?.studentId || "N/A"}
-                                </Badge>
-                              </div>
-                              <div className="text-lg font-bold text-green-600">
-                                ₦{parseFloat(p.amount).toLocaleString()}
-                              </div>
-                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1 flex-wrap">
-                                <Calendar className="h-3 w-3" />
-                                {formatRecoDate(p.paymentDate)}
-                                <Badge variant="secondary" className="text-xs ml-1">
-                                  {p.paymentMethod}
-                                </Badge>
-                              </div>
-                              {p.depositorName && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  Depositor: {p.depositorName}
-                                </div>
-                              )}
-                              {p.reference && (
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  Ref: {p.reference}
-                                </div>
-                              )}
-                              {p.possibleDuplicate && (
-                                <div className="mt-1">
-                                  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-800 border-amber-400">
-                                    ⚠ Possible duplicate
-                                  </Badge>
-                                </div>
-                              )}
-                            </div>
-                            <div
-                              className={`h-4 w-4 rounded-full border-2 mt-1 flex-shrink-0 ${
-                                isSelected ? "border-primary bg-primary" : "border-muted-foreground/40"
-                              }`}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsMatchTxDialogOpen(false);
-                setTransactionToMatch(null);
-                setSelectedMatchPaymentId(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmMatchTx}
-              disabled={!selectedMatchPaymentId || confirmMutation.isPending}
-              data-testid="button-confirm-match-tx"
-            >
-              {confirmMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Confirming...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Confirm Match
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isBulkMatchDialogOpen}
-        onOpenChange={(open) => { if (!bulkMatchProgress) setIsBulkMatchDialogOpen(open); }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Auto-match High Confidence Payments</DialogTitle>
-            <DialogDescription>
-              These payments have a confidence score of 90% or higher. Each will be confirmed individually with a full audit log entry. This cannot be undone in bulk.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 border rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground">Payments</p>
-                <p className="text-2xl font-bold">{highConfidenceCandidates.length}</p>
-              </div>
-              <div className="p-3 border rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold text-green-600">
-                  ₦{highConfidenceCandidates.reduce((s, c) => s + parseFloat(c.payment.amount), 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
-            <div className="max-h-[200px] overflow-y-auto border rounded-lg divide-y">
-              {highConfidenceCandidates.map((c) => (
-                <div key={c.payment.id} className="p-2 text-xs flex items-center justify-between gap-2">
-                  <div className="flex-1 min-w-0 truncate">
-                    <span className="font-medium">
-                      {c.payment.student?.user?.lastName} {c.payment.student?.user?.firstName}
-                    </span>
-                    <span className="text-muted-foreground ml-1">
-                      ({c.payment.student?.studentId})
-                    </span>
-                  </div>
-                  <span className="font-mono text-green-600">
-                    ₦{parseFloat(c.payment.amount).toLocaleString()}
-                  </span>
-                  <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-300">
-                    {c.confidence}%
-                  </Badge>
-                </div>
-              ))}
-            </div>
-            {bulkMatchProgress && (
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Confirming…</span>
-                  <span>{bulkMatchProgress.current} / {bulkMatchProgress.total}</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-green-600 h-2 transition-all"
-                    style={{ width: `${(bulkMatchProgress.current / bulkMatchProgress.total) * 100}%` }}
-                  />
-                </div>
+                <span className="text-sm text-muted-foreground">
+                  Page {safePage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                </Button>
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsBulkMatchDialogOpen(false)}
-              disabled={!!bulkMatchProgress}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={runBulkAutoMatch}
-              disabled={!!bulkMatchProgress || highConfidenceCandidates.length === 0}
-              className="bg-green-600 hover:bg-green-700"
-              data-testid="button-confirm-bulk-automatch"
-            >
-              {bulkMatchProgress ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Confirming…
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Confirm All
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        )}
+      </div>
+      </>
+      )}
 
-      <Dialog open={!!deleteStatementId} onOpenChange={(open) => { if (!open) setDeleteStatementId(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Bank Statement</DialogTitle>
-            <DialogDescription>
-              This will permanently remove this statement and all its associated transactions. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteStatementId(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deleteStatementId && deleteStatementMutation.mutate(deleteStatementId)}
-              disabled={deleteStatementMutation.isPending}
-            >
-              {deleteStatementMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Statement
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Task #128 phase 2: re-scan confirmation */}
-      <Dialog open={!!rescanStatementId} onOpenChange={(open) => { if (!open && !rescanStatementMutation.isPending) setRescanStatementId(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Re-scan statement for similar duplicates</DialogTitle>
-            <DialogDescription>
-              We'll compare every credit transaction in this statement against earlier transactions
-              from the same school (same calendar day, same amount). Already-cleared pairs are skipped.
-              Existing flags will not be overwritten.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRescanStatementId(null)} disabled={rescanStatementMutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => rescanStatementId && rescanStatementMutation.mutate(rescanStatementId)}
-              disabled={rescanStatementMutation.isPending}
-              data-testid="button-confirm-rescan"
-            >
-              {rescanStatementMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Scanning…</>
-              ) : (
-                <><Search className="h-4 w-4 mr-2" />Run re-scan</>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Task #128 phase 2: side-by-side duplicate review panel */}
+      <PaymentDetailsDialog
+        record={viewingRecord}
+        onClose={() => setViewingRecord(null)}
+      />
       <DuplicateReviewSheet
-        kind={reviewPair?.kind ?? 'transaction'}
+        kind={reviewPair?.kind ?? 'payment'}
         id={reviewPair?.id ?? null}
         open={!!reviewPair}
         onOpenChange={(o) => { if (!o) setReviewPair(null); }}
       />
+    </div>
+  );
+}
+
+function PaymentDetailsDialog({
+  record,
+  onClose,
+}: {
+  record: FeePaymentRecordWithDetails | null;
+  onClose: () => void;
+}) {
+  const isSplit = !!record && !record.student;
+
+  const { data: splits, isLoading: splitsLoading } = useQuery<
+    (FeePaymentStudentSplit & {
+      student?: { studentId: string; user?: { firstName: string; lastName: string }; class?: { name: string } };
+    })[]
+  >({
+    queryKey: ["/api/payments/records", record?.id, "splits"],
+    enabled: !!record && isSplit,
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/payments/records/${record!.id}/splits`, {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) throw new Error("Failed to fetch payment splits");
+      return res.json();
+    },
+  });
+
+  if (!record) return null;
+
+  const dateStr = formatPaymentDate(record.paymentDate);
+  const statusLabel =
+    record.status === "confirmed" ? "Confirmed" : record.status === "reversed" ? "Reversed" : "Pending";
+
+  const reversedAtStr = record.reversedAt
+    ? new Date(record.reversedAt).toLocaleString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+  const reverserName = record.reversedByUser
+    ? `${record.reversedByUser.firstName} ${record.reversedByUser.lastName}`.trim()
+    : "—";
+
+  return (
+    <Dialog open={!!record} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Payment Details</DialogTitle>
+          <DialogDescription>Full information for this payment record.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 text-sm">
+          <DetailRow label="Date" value={dateStr} />
+          <DetailRow label="Amount" value={`₦${parseFloat(record.amount).toLocaleString()}`} bold />
+          <DetailRow label="Purpose" value={record.purpose || "—"} />
+          <DetailRow label="Method" value={METHOD_LABELS[record.paymentMethod] ?? record.paymentMethod} />
+          <DetailRow label="Reference" value={record.reference || "—"} mono />
+          <DetailRow label="Term / Session" value={`${record.term || "—"} / ${record.session || "—"}`} />
+          <DetailRow label="Status" value={statusLabel} />
+          <DetailRow label="Depositor" value={record.depositorName || "—"} />
+          <DetailRow
+            label="Recorded By"
+            value={
+              record.recordedByUser
+                ? `${record.recordedByUser.firstName} ${record.recordedByUser.lastName}`.trim()
+                : "—"
+            }
+          />
+          {record.notes && <DetailRow label="Notes" value={record.notes} />}
+
+          {record.status === "reversed" && (
+            <>
+              <Separator />
+              <div className="space-y-2" data-testid="payment-reversal-section">
+                <div className="text-xs uppercase text-red-700 dark:text-red-400 tracking-wide font-medium">
+                  Reversal
+                </div>
+                <div className="rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 p-3 space-y-2">
+                  <div>
+                    <div className="text-muted-foreground text-xs mb-1">Reason</div>
+                    <div
+                      className="whitespace-pre-wrap break-words text-foreground"
+                      data-testid="payment-reversal-reason"
+                    >
+                      {record.reversalReason || "—"}
+                    </div>
+                  </div>
+                  <DetailRow label="Reversed by" value={reverserName} />
+                  <DetailRow label="Reversed at" value={reversedAtStr} />
+                </div>
+              </div>
+            </>
+          )}
+
+          <Separator />
+
+          {record.student ? (
+            <>
+              <div className="text-xs uppercase text-muted-foreground tracking-wide">Student</div>
+              <div className="border rounded-md p-3">
+                <div className="font-medium">
+                  {record.student.user?.lastName} {record.student.user?.firstName}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  ID: {record.student.studentId} · {record.student.class?.name || "No class"}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="text-xs uppercase text-muted-foreground tracking-wide">Split Between Students</div>
+                <Badge variant="secondary" className="text-xs">
+                  {splits?.length ?? record.splitCount ?? "…"} students
+                </Badge>
+              </div>
+              {splitsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : splits && splits.length > 0 ? (
+                <div className="border rounded-md divide-y max-h-60 overflow-y-auto">
+                  {splits.map((s) => (
+                    <div key={s.id} className="p-3 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {s.student?.user ? `${s.student.user.lastName} ${s.student.user.firstName}` : "—"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {s.student?.studentId || "—"} · {s.student?.class?.name || "No class"}
+                        </div>
+                      </div>
+                      <div className="font-medium text-sm flex-shrink-0 pl-3">
+                        ₦{parseFloat(s.amount).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">No split details available.</div>
+              )}
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ label, value, bold, mono }: { label: string; value: string; bold?: boolean; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`text-right ${bold ? "font-semibold" : ""} ${mono ? "font-mono text-xs" : ""}`}>
+        {value}
+      </span>
     </div>
   );
 }
