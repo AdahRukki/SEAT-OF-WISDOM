@@ -4351,7 +4351,6 @@ export class DatabaseStorage implements IStorage {
         schoolId: bankStatements.schoolId,
         fileName: bankStatements.fileName,
         fileType: bankStatements.fileType,
-        fileSize: bankStatements.fileSize,
         bankFormat: bankStatements.bankFormat,
         totalTransactions: bankStatements.totalTransactions,
         newTransactions: bankStatements.newTransactions,
