@@ -3115,7 +3115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Report Card Management routes
-  app.get("/api/admin/generated-reports", authenticate, async (req: Request, res: Response) => {
+  app.get("/api/admin/generated-reports", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const user = (req as any).user;
     
     try {
@@ -3132,7 +3132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/generated-reports/student/:studentId", authenticate, async (req: Request, res: Response) => {
+  app.get("/api/admin/generated-reports/student/:studentId", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const { studentId } = req.params;
     const user = (req as any).user;
     
@@ -3149,7 +3149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/validate-report-data", authenticate, async (req: Request, res: Response) => {
+  app.post("/api/admin/validate-report-data", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const user = (req as any).user;
     
     try {
@@ -3199,7 +3199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/validate-report-data-bulk", authenticate, async (req: Request, res: Response) => {
+  app.post("/api/admin/validate-report-data-bulk", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const user = (req as any).user;
     try {
       if (user.role !== "admin" && user.role !== "sub-admin") {
@@ -3217,7 +3217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/validate-report-data-school", authenticate, async (req: Request, res: Response) => {
+  app.post("/api/admin/validate-report-data-school", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const user = (req as any).user;
     try {
       if (user.role !== "admin" && user.role !== "sub-admin") {
@@ -3236,7 +3236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/generated-reports", authenticate, async (req: Request, res: Response) => {
+  app.post("/api/admin/generated-reports", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const user = (req as any).user;
     
     try {
@@ -3271,7 +3271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/admin/generated-reports/:reportId", authenticate, async (req: Request, res: Response) => {
+  app.delete("/api/admin/generated-reports/:reportId", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const { reportId } = req.params;
     const user = (req as any).user;
     
@@ -3289,7 +3289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get students by class for report validation
-  app.get("/api/admin/students/class/:classId", authenticate, async (req: Request, res: Response) => {
+  app.get("/api/admin/students/class/:classId", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const { classId } = req.params;
     const user = (req as any).user;
     
@@ -4538,7 +4538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   //   1. clear_duplicate_flag           — "this is NOT a duplicate"
   //   2. mark_transaction_ignored_duplicate — "yes, it's a duplicate, dismiss"
   //   3. reverse_as_duplicate            — same as reverse with explicit reason
-  app.post("/api/admin/payments/:id/clear-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/payments/:id/clear-duplicate", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const paymentId = req.params.id;
@@ -4569,7 +4569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/payments/:id/reverse-as-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/payments/:id/reverse-as-duplicate", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const paymentId = req.params.id;
@@ -4609,7 +4609,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/bank-transactions/:id/clear-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/bank-transactions/:id/clear-duplicate", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const txId = req.params.id;
@@ -4771,7 +4771,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/bank-transactions/:id/ignore-as-duplicate", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/bank-transactions/:id/ignore-as-duplicate", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const txId = req.params.id;
@@ -4805,7 +4805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Allocate single bank transaction to multiple students
-  app.post("/api/admin/bank-transactions/:id/allocate", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/bank-transactions/:id/allocate", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const bankTransactionId = req.params.id;

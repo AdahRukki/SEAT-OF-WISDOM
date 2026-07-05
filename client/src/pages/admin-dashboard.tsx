@@ -750,6 +750,17 @@ export default function AdminDashboard() {
   };
   const [activeTab, setActiveTab] = useState(getDefaultTab());
 
+  // Re-align the active tab if permissions load/change after mount and the
+  // current tab is no longer permitted (e.g. admin revokes access while the
+  // sub-admin has that tab open, or permissions arrive after initial render).
+  useEffect(() => {
+    if (user?.role !== 'sub-admin') return;
+    if (!checkPermission(user?.role, user?.permissions, `tab_${activeTab}` as any)) {
+      setActiveTab(getDefaultTab());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role, user?.permissions]);
+
   // Student editing states
   const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentWithDetails | null>(null);
