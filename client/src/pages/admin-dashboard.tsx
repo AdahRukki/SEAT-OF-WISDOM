@@ -139,7 +139,7 @@ import { ObjectUploader } from "@/components/ObjectUploader";
 import { NewsManagement } from "@/components/news-management";
 import { NotificationsManagement } from "@/components/notifications-management";
 import { PaymentRecording } from "@/components/payment-recording";
-import { PaymentRecording as BankStatementReconciliation } from "@/components/payment-reconciliation";
+import { PaymentReconciliation as BankStatementReconciliation } from "@/components/payment-reconciliation";
 import { PaymentLedger } from "@/components/payment-ledger";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 // Logo is now loaded dynamically via useLogo hook
@@ -5320,7 +5320,6 @@ export default function AdminDashboard() {
                 <CardContent>
                   <BankStatementReconciliation
                     schoolId={selectedSchoolId}
-                    userRole={user?.role === 'sub-admin' ? 'sub-admin' : 'admin'}
                   />
                 </CardContent>
               </Card>
