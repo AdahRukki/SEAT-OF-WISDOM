@@ -315,6 +315,7 @@ export interface IStorage {
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
   markStudentsAsGraduated(studentIds: string[], session?: string, term?: string): Promise<void>;
   markStudentsAsWithdrawn(studentIds: string[], session?: string, term?: string): Promise<void>;
+  getStudentSchoolIds(studentIds: string[]): Promise<{ id: string; schoolId: string | null }[]>;
   getGraduatedStudents(schoolId?: string): Promise<StudentWithDetails[]>;
   getWithdrawnStudents(schoolId?: string): Promise<StudentWithDetails[]>;
   reorderClasses(schoolId: string, orderedClassIds: string[]): Promise<void>;
@@ -2230,6 +2231,15 @@ export class DatabaseStorage implements IStorage {
         .set({ isActive: false })
         .where(inArray(users.id, userIds));
     }
+  }
+
+  async getStudentSchoolIds(studentIds: string[]): Promise<{ id: string; schoolId: string | null }[]> {
+    const rows = await db
+      .select({ id: students.id, schoolId: classes.schoolId })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(inArray(students.id, studentIds));
+    return rows;
   }
 
   async markStudentsAsWithdrawn(studentIds: string[], session?: string, term?: string): Promise<void> {

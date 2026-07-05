@@ -616,9 +616,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Withdraw students (stopped/withdrew) — main admin, or sub-admin with permission
   app.post('/api/admin/withdraw-students', authenticate, requirePermission('students_view_withdrawn'), async (req, res) => {
     try {
+      const actor = (req as any).user;
       const { studentIds } = req.body;
       if (!Array.isArray(studentIds) || studentIds.length === 0) {
         return res.status(400).json({ error: "studentIds is required" });
+      }
+      if (actor.role === 'sub-admin') {
+        const targetSchools = await storage.getStudentSchoolIds(studentIds);
+        const outOfScope = targetSchools.some(s => s.schoolId !== actor.schoolId);
+        if (outOfScope || targetSchools.length !== studentIds.length) {
+          return res.status(403).json({ error: "Cannot manage students outside your school" });
+        }
       }
       const currentInfo = await storage.getCurrentAcademicInfo();
       await storage.markStudentsAsWithdrawn(studentIds, currentInfo?.currentSession ?? undefined, currentInfo?.currentTerm ?? undefined);
@@ -632,7 +640,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Graduated students — main admin, or sub-admin with permission
   app.get('/api/admin/students/graduated', authenticate, requirePermission('students_view_graduated'), async (req, res) => {
     try {
-      const schoolId = req.query.schoolId as string | undefined;
+      const actor = (req as any).user;
+      let schoolId = req.query.schoolId as string | undefined;
+      if (actor.role === 'sub-admin') {
+        if (schoolId && schoolId !== actor.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+        schoolId = actor.schoolId;
+      }
       const graduatedStudents = await storage.getGraduatedStudents(schoolId);
       res.json(graduatedStudents);
     } catch (error) {
@@ -644,7 +659,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Withdrawn students — main admin, or sub-admin with permission
   app.get('/api/admin/students/withdrawn', authenticate, requirePermission('students_view_withdrawn'), async (req, res) => {
     try {
-      const schoolId = req.query.schoolId as string | undefined;
+      const actor = (req as any).user;
+      let schoolId = req.query.schoolId as string | undefined;
+      if (actor.role === 'sub-admin') {
+        if (schoolId && schoolId !== actor.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+        schoolId = actor.schoolId;
+      }
       const withdrawnStudents = await storage.getWithdrawnStudents(schoolId);
       res.json(withdrawnStudents);
     } catch (error) {
@@ -4183,7 +4205,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = (req as any).user;
       const file = req.file;
-      const { schoolId } = req.body;
+      let { schoolId } = req.body;
+
+      if (user.role === 'sub-admin') {
+        if (schoolId && schoolId !== user.schoolId) {
+          return res.status(403).json({ error: "Cannot upload statements for another school" });
+        }
+        schoolId = user.schoolId;
+      }
 
       console.log('[POST /api/admin/bank-statements/upload] User:', user.id, 'File:', file?.originalname, 'School:', schoolId);
 
@@ -4343,11 +4372,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/bank-statements", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      const { schoolId } = req.query;
-      
+      let schoolId = req.query.schoolId as string | undefined;
+
+      if (user.role === 'sub-admin') {
+        if (schoolId && schoolId !== user.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+        schoolId = user.schoolId;
+      }
+
       console.log('[GET /api/admin/bank-statements] User:', user.id, 'School:', schoolId);
       
-      const statements = await storage.getBankStatements(schoolId as string | undefined);
+      const statements = await storage.getBankStatements(schoolId);
       
       console.log('[GET /api/admin/bank-statements] Found', statements.length, 'statements');
       res.json(statements);
@@ -4361,6 +4397,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = (req as any).user;
       const { id } = req.params;
+
+      const stmtRows = await db.select().from(bankStatements).where(eq(bankStatements.id, id)).limit(1);
+      const stmt = stmtRows[0];
+      if (!stmt) return res.status(404).json({ error: "Bank statement not found" });
+      if (user.role === 'sub-admin' && stmt.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot delete statements outside your school" });
+      }
 
       const deletedTxCount = await db.delete(bankTransactions).where(eq(bankTransactions.statementId, id)).returning();
       await db.delete(bankStatements).where(eq(bankStatements.id, id));
@@ -4384,11 +4427,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/bank-transactions/unmatched", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      const { schoolId } = req.query;
-      
+      let schoolId = req.query.schoolId as string | undefined;
+
+      if (user.role === 'sub-admin') {
+        if (schoolId && schoolId !== user.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+        schoolId = user.schoolId;
+      }
+
       console.log('[GET /api/admin/bank-transactions/unmatched] User:', user.id, 'School:', schoolId);
       
-      const transactions = await storage.getUnmatchedBankTransactions(schoolId as string | undefined);
+      const transactions = await storage.getUnmatchedBankTransactions(schoolId);
       
       console.log('[GET /api/admin/bank-transactions/unmatched] Found', transactions.length, 'transactions');
       res.json(transactions);
@@ -4402,12 +4452,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/bank-transactions", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
-      const { schoolId, status } = req.query;
+      let schoolId = req.query.schoolId as string | undefined;
+      const { status } = req.query;
+
+      if (user.role === 'sub-admin') {
+        if (schoolId && schoolId !== user.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+        schoolId = user.schoolId;
+      }
 
       console.log('[GET /api/admin/bank-transactions] User:', user.id, 'School:', schoolId, 'Status:', status);
 
       const transactions = await storage.getBankTransactionsWithAllocations({
-        schoolId: schoolId as string | undefined,
+        schoolId,
         status: status as string | undefined,
       });
 
@@ -4755,6 +4813,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const stmtRows = await db.select().from(bankStatements).where(eq(bankStatements.id, statementId)).limit(1);
       const stmt = stmtRows[0];
       if (!stmt) return res.status(404).json({ error: "Bank statement not found" });
+      if (user.role === 'sub-admin' && stmt.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot act on statements outside your school" });
+      }
 
       const result = await storage.rescanStatementForDuplicates(statementId);
 
@@ -4855,6 +4916,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Bank transaction not found or already matched" });
       }
 
+      if (user.role === 'sub-admin' && bankTransaction.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot act on transactions outside your school" });
+      }
+
       // Calculate total allocated amount
       const totalAllocated = validatedData.allocations.reduce((sum, alloc) => sum + alloc.amount, 0);
       
@@ -4866,11 +4931,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Validate all student IDs exist
+      // Validate all student IDs exist (and, for sub-admins, belong to their school)
       for (const allocation of validatedData.allocations) {
         const student = await storage.getStudent(allocation.studentId);
         if (!student) {
           return res.status(404).json({ error: `Student not found: ${allocation.studentId}` });
+        }
+        if (user.role === 'sub-admin') {
+          const [schoolCheck] = await storage.getStudentSchoolIds([allocation.studentId]);
+          if (!schoolCheck || schoolCheck.schoolId !== user.schoolId) {
+            return res.status(403).json({ error: `Cannot allocate to student outside your school: ${allocation.studentId}` });
+          }
         }
       }
 
