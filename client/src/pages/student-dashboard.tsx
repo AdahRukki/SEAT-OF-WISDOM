@@ -259,9 +259,26 @@ export default function StudentDashboard() {
     balanceAfter: number;
     fullyPaid: boolean;
   };
+  // Tuition discount is a fixed amount deducted only from Tuition fee
+  // assignments — non-tuition fees (transport, exam, misc, etc.) are never
+  // reduced. Compute the discounted total for a given set of student fees.
+  const computeDiscountedTotal = (fees: any[], discount: number) => {
+    let tuitionTotal = 0;
+    let nonTuitionTotal = 0;
+    for (const f of fees) {
+      const amount = Number(f?.amount || 0);
+      if (f?.feeType?.isTuition) {
+        tuitionTotal += amount;
+      } else {
+        nonTuitionTotal += amount;
+      }
+    }
+    return Math.max(0, tuitionTotal - discount) + nonTuitionTotal;
+  };
+
   const receiptBalanceById = useMemo(() => {
     const map = new Map<string, ReceiptBalance>();
-    const totalFees = studentFees.reduce((s, f) => s + Number(f.amount || 0), 0);
+    const totalFees = computeDiscountedTotal(studentFees, Number(profile?.discount || 0));
     type TimelineEntry = { ts: number; id: string; source: 'confirmed' | 'legacy'; amount: number };
     const timeline: TimelineEntry[] = [
       ...confirmedPaymentRecords.map((r: any) => ({
@@ -295,7 +312,7 @@ export default function StudentDashboard() {
       }
     }
     return map;
-  }, [studentFees, confirmedPaymentRecords, paymentHistory]);
+  }, [studentFees, confirmedPaymentRecords, paymentHistory, profile?.discount]);
 
   // Per-fee paid allocation. Legacy payments are tied directly to a studentFee
   // via studentFeeId, so they apply 1:1. Bursar-confirmed payment records
@@ -1276,7 +1293,7 @@ export default function StudentDashboard() {
     // Per-receipt running balance is precomputed in `receiptBalanceById` for
     // both this PDF and the Payment Receipts table — they MUST match.
     const balanceInfo = receiptBalanceById.get(String(record.id || '')) ?? {
-      totalFees: studentFees.reduce((s, f) => s + Number(f.amount || 0), 0),
+      totalFees: computeDiscountedTotal(studentFees, Number(profile?.discount || 0)),
       totalPaidUpTo: Number(record.amount || 0),
       balanceAfter: 0,
       fullyPaid: false,
@@ -1891,7 +1908,8 @@ export default function StudentDashboard() {
           {/* Finance Tab - keeping existing content */}
           <TabsContent value="finance" className="space-y-6">
             {(() => {
-              const totalFeesAmount = studentFees.reduce((sum, fee) => sum + Number(fee.amount), 0);
+              const studentDiscount = Number(profile?.discount || 0);
+              const totalFeesAmount = computeDiscountedTotal(studentFees, studentDiscount);
               const totalPaidAmount =
                 paymentHistory.reduce((sum, payment) => sum + Number(payment.amount), 0) +
                 confirmedPaymentRecords.reduce((sum, r) => sum + Number(r.amount), 0);
@@ -1919,6 +1937,11 @@ export default function StudentDashboard() {
                         <p className="text-xs text-muted-foreground">
                           {periodLabel ? `Assigned · ${periodLabel}` : 'This term'}
                         </p>
+                        {studentDiscount > 0 && (
+                          <p className="text-xs text-emerald-600 mt-0.5" data-testid="text-student-discount">
+                            ₦{studentDiscount.toLocaleString()} discount applied
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
 

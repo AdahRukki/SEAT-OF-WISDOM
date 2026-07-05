@@ -48,6 +48,7 @@ import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { hasPermission, validatePermissions, getEffectivePermissions } from "@shared/permissions";
 
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development' ? 'development-jwt-secret-change-in-production' : null);
@@ -1415,6 +1416,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert date string to Date object if provided
       if (studentOnlyData.dateOfBirth && typeof studentOnlyData.dateOfBirth === 'string') {
         studentOnlyData.dateOfBirth = new Date(studentOnlyData.dateOfBirth);
+      }
+
+      // Validate discount: must be a non-negative number when provided.
+      if (studentOnlyData.discount !== undefined && studentOnlyData.discount !== null && studentOnlyData.discount !== '') {
+        const discountResult = z.coerce.number().min(0, "Discount cannot be negative").safeParse(studentOnlyData.discount);
+        if (!discountResult.success) {
+          return res.status(400).json({ error: "Discount must be a non-negative number" });
+        }
+        studentOnlyData.discount = discountResult.data;
       }
       
       // Handle integer fields - convert empty strings to null/undefined

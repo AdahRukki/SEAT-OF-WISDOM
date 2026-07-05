@@ -13,6 +13,7 @@ async function runMigrations() {
       ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS depositor_name VARCHAR(150);
       ALTER TABLE fee_payment_records ADD COLUMN IF NOT EXISTS client_request_id TEXT;
       ALTER TABLE students ADD COLUMN IF NOT EXISTS client_request_id TEXT;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS discount NUMERIC(10,2) DEFAULT 0;
       CREATE UNIQUE INDEX IF NOT EXISTS uniq_fee_payment_records_client_request_id
         ON fee_payment_records (client_request_id) WHERE client_request_id IS NOT NULL;
       CREATE UNIQUE INDEX IF NOT EXISTS uniq_students_client_request_id

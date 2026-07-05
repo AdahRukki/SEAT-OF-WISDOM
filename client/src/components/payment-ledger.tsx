@@ -38,6 +38,7 @@ const COLUMN_DEFS = [
   { key: "className", label: "Class" },
   { key: "parentWhatsapp", label: "Parent WhatsApp" },
   { key: "tuition", label: "Tuition Fee (₦)" },
+  { key: "discount", label: "Discount (₦)" },
   { key: "paid", label: "Total Paid (₦)" },
   { key: "misc", label: "Miscellaneous (₦)" },
   { key: "balance", label: "Balance (₦)" },
@@ -108,6 +109,7 @@ interface LedgerEntry {
   totalPaid: number;
   totalAssigned: number;
   tuitionAssigned: number;
+  discount: number;
   balance: number;
   paymentCount: number;
   lastPaymentDate: string | null;
@@ -310,6 +312,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("studentId")) row["SOWA ID"] = e.studentId || "";
       if (isCol("parentWhatsapp")) row["Parent WhatsApp"] = e.parentWhatsapp || "";
       if (isCol("tuition")) row["Tuition Fee (NGN)"] = tuition;
+      if (isCol("discount")) row["Discount (NGN)"] = e.discount || 0;
       if (isCol("paid")) row["Total Paid (NGN)"] = paid;
       if (isCol("misc")) row["Miscellaneous (NGN)"] = misc;
       if (isCol("balance")) row["Balance (NGN)"] = balance;
@@ -333,13 +336,14 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
           const tuition = e.tuitionAssigned || 0;
           const paid = e.totalPaid || 0;
           acc.tuition += tuition;
+          acc.discount += e.discount || 0;
           acc.tuitionPaid += Math.min(paid, tuition);
           acc.paid += paid;
           acc.misc += Math.max(0, paid - tuition);
           acc.balance += Math.max(0, tuition - paid);
           return acc;
         },
-        { tuition: 0, tuitionPaid: 0, paid: 0, misc: 0, balance: 0 },
+        { tuition: 0, discount: 0, tuitionPaid: 0, paid: 0, misc: 0, balance: 0 },
       );
       const totalRow: Record<string, string | number> = { "#": "" };
       if (isCol("name")) totalRow["Student Name"] = "GRAND TOTAL";
@@ -347,6 +351,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("studentId")) totalRow["SOWA ID"] = "";
       if (isCol("parentWhatsapp")) totalRow["Parent WhatsApp"] = "";
       if (isCol("tuition")) totalRow["Tuition Fee (NGN)"] = totals.tuition;
+      if (isCol("discount")) totalRow["Discount (NGN)"] = totals.discount;
       if (isCol("paid")) totalRow["Total Paid (NGN)"] = totals.paid;
       if (isCol("misc")) totalRow["Miscellaneous (NGN)"] = totals.misc;
       if (isCol("balance")) totalRow["Balance (NGN)"] = totals.balance;
@@ -592,6 +597,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 {isCol("studentId") && <TableHead>SOWA ID</TableHead>}
                 {isCol("parentWhatsapp") && <TableHead>Parent WhatsApp</TableHead>}
                 {isCol("tuition") && <TableHead className="text-right">Tuition Fee (₦)</TableHead>}
+                {isCol("discount") && <TableHead className="text-right">Discount (₦)</TableHead>}
                 {isCol("paid") && <TableHead className="text-right">Total Paid (₦)</TableHead>}
                 {isCol("misc") && <TableHead className="text-right">Miscellaneous (₦)</TableHead>}
                 {isCol("balance") && <TableHead className="text-right">Balance (₦)</TableHead>}
@@ -635,6 +641,16 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   {isCol("tuition") && (
                     <TableCell className="text-right font-semibold">
                       {tuition > 0 ? `₦${tuition.toLocaleString()}` : "—"}
+                      {(entry.discount || 0) > 0 && (
+                        <div className="text-[10px] font-normal text-emerald-600">
+                          -₦{(entry.discount || 0).toLocaleString()} discount applied
+                        </div>
+                      )}
+                    </TableCell>
+                  )}
+                  {isCol("discount") && (
+                    <TableCell className="text-right font-semibold text-emerald-600">
+                      {(entry.discount || 0) > 0 ? `₦${(entry.discount || 0).toLocaleString()}` : "—"}
                     </TableCell>
                   )}
                   {isCol("paid") && (
@@ -679,13 +695,14 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                     const tuition = e.tuitionAssigned || 0;
                     const paid = e.totalPaid || 0;
                     acc.tuition += tuition;
+                    acc.discount += e.discount || 0;
                     acc.tuitionPaid += Math.min(paid, tuition);
                     acc.paid += paid;
                     acc.misc += Math.max(0, paid - tuition);
                     acc.balance += Math.max(0, tuition - paid);
                     return acc;
                   },
-                  { tuition: 0, tuitionPaid: 0, paid: 0, misc: 0, balance: 0 }
+                  { tuition: 0, discount: 0, tuitionPaid: 0, paid: 0, misc: 0, balance: 0 }
                 );
                 return (
                   <TableRow
@@ -703,6 +720,9 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                         <span className="text-muted-foreground font-normal"> / </span>
                         <span>₦{totals.tuition.toLocaleString()}</span>
                       </TableCell>
+                    )}
+                    {isCol("discount") && (
+                      <TableCell className="text-right text-emerald-600">₦{totals.discount.toLocaleString()}</TableCell>
                     )}
                     {isCol("paid") && (
                       <TableCell className="text-right text-green-600">₦{totals.paid.toLocaleString()}</TableCell>

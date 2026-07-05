@@ -1537,6 +1537,7 @@ export class DatabaseStorage implements IStorage {
         c.name AS "className",
         s.class_id AS "classId",
         s.parent_whatsapp AS "parentWhatsapp",
+        s.discount AS "discount",
         (
           COALESCE((
             SELECT SUM(fpr.amount) FROM fee_payment_records fpr
@@ -1601,7 +1602,7 @@ export class DatabaseStorage implements IStorage {
       JOIN users u ON s.user_id = u.id
       LEFT JOIN classes c ON s.class_id = c.id
       WHERE ${studentWhereClause}
-      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id, s.parent_whatsapp
+      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id, s.parent_whatsapp, s.discount
       ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
     `);
 
@@ -1639,7 +1640,9 @@ export class DatabaseStorage implements IStorage {
     const entries = (rows.rows || rows).map((r: any) => {
       const totalPaid = Number(r.totalPaid) || 0;
       const sfAssigned = Number(r.sfAssigned) || 0;
-      const tuitionAssigned = tuitionMap.get(r.classId) || 0;
+      const discount = Number(r.discount) || 0;
+      const rawTuitionAssigned = tuitionMap.get(r.classId) || 0;
+      const tuitionAssigned = Math.max(0, rawTuitionAssigned - discount);
       const totalAssigned = sfAssigned + tuitionAssigned;
       return {
         studentDbId: r.studentDbId,
@@ -1649,6 +1652,7 @@ export class DatabaseStorage implements IStorage {
         className: r.className || '',
         classId: r.classId,
         parentWhatsapp: r.parentWhatsapp ?? null,
+        discount,
         totalPaid,
         totalAssigned,
         tuitionAssigned,
@@ -1701,6 +1705,7 @@ export class DatabaseStorage implements IStorage {
     const paidRows = await db.execute(sql`
       SELECT s.id AS "studentDbId",
              s.class_id AS "classId",
+             s.discount AS "discount",
              (
                COALESCE((
                  SELECT SUM(fpr.amount) FROM fee_payment_records fpr
@@ -1728,11 +1733,15 @@ export class DatabaseStorage implements IStorage {
       WHERE u.is_active = true AND u.school_id = ${schoolId}
     `);
 
-    return ((paidRows as any).rows || paidRows).map((r: any) => ({
-      studentDbId: r.studentDbId,
-      tuitionAssigned: r.classId ? (perClass.get(r.classId) || 0) : 0,
-      tuitionPaid: Number(r.tuitionPaid) || 0,
-    }));
+    return ((paidRows as any).rows || paidRows).map((r: any) => {
+      const rawAssigned = r.classId ? (perClass.get(r.classId) || 0) : 0;
+      const discount = Number(r.discount) || 0;
+      return {
+        studentDbId: r.studentDbId,
+        tuitionAssigned: Math.max(0, rawAssigned - discount),
+        tuitionPaid: Number(r.tuitionPaid) || 0,
+      };
+    });
   }
 
   // Per-student confirmed-payment totals using the same UNION the Payment
@@ -1801,7 +1810,7 @@ export class DatabaseStorage implements IStorage {
     const studentsRows = await db.execute(sql`
       SELECT s.id, s.student_id AS "sowaId", s.class_id AS "classId",
              u.first_name AS "firstName", u.last_name AS "lastName",
-             c.name AS "className"
+             c.name AS "className", s.discount AS "discount"
       FROM students s
       JOIN users u ON s.user_id = u.id
       LEFT JOIN classes c ON s.class_id = c.id
@@ -1861,7 +1870,8 @@ export class DatabaseStorage implements IStorage {
         classGroupMap.set(s.classId, { classId: s.classId, className: s.className || s.classId, students: [] });
       }
       const sfAssigned = feesMap.get(s.id) || 0;
-      const tuitionAssigned = tuitionMap.get(s.classId) || 0;
+      const discount = Number(s.discount) || 0;
+      const tuitionAssigned = Math.max(0, (tuitionMap.get(s.classId) || 0) - discount);
       const totalAssigned = sfAssigned + tuitionAssigned;
       const totalPaid = paymentsMap.get(s.id) || 0;
       const balance = totalAssigned - totalPaid;
@@ -1923,13 +1933,13 @@ export class DatabaseStorage implements IStorage {
     const totalRevenue = Number(revenueRow?.total || 0);
 
     const activeStudentsRows = await db.execute(sql`
-      SELECT s.id, s.class_id AS "classId"
+      SELECT s.id, s.class_id AS "classId", s.discount AS "discount"
       FROM students s
       JOIN users u ON s.user_id = u.id
       WHERE u.is_active = true
         ${schoolId ? sql`AND u.school_id = ${schoolId}` : sql``}
     `);
-    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string }[];
+    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string; discount: string | number | null }[];
 
     const tuitionFeeConditions: any[] = [eq(feeTypes.isTuition, true), eq(feeTypes.isActive, true)];
     if (schoolId) tuitionFeeConditions.push(eq(feeTypes.schoolId, schoolId));
@@ -1952,8 +1962,10 @@ export class DatabaseStorage implements IStorage {
       for (const student of allActiveStudents) {
         const classAmount = student.classId ? classAmountMap.get(student.classId) : undefined;
         if (classAmount && classAmount > 0) {
-          studentOwedMap.set(student.id, classAmount);
-          totalTuitionOwed += classAmount;
+          const discount = Number(student.discount) || 0;
+          const owed = Math.max(0, classAmount - discount);
+          studentOwedMap.set(student.id, owed);
+          totalTuitionOwed += owed;
         }
       }
 

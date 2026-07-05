@@ -784,7 +784,8 @@ export default function AdminDashboard() {
     parentWhatsApp: "",
     address: "",
     newPassword: "",
-    isActive: true
+    isActive: true,
+    discount: ""
   });
   
   // Profile image upload states
@@ -2514,10 +2515,12 @@ export default function AdminDashboard() {
         classId: "",
         dateOfBirth: "",
         gender: "",
+        profileImage: "",
         parentWhatsApp: "",
         address: "",
         newPassword: "",
-        isActive: true
+        isActive: true,
+        discount: ""
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       if (user?.schoolId) {
@@ -2549,7 +2552,8 @@ export default function AdminDashboard() {
       parentWhatsApp: student.parentWhatsapp || "",
       address: student.address || "",
       newPassword: "",
-      isActive: student.user?.isActive ?? true
+      isActive: student.user?.isActive ?? true,
+      discount: student.discount != null ? String(student.discount) : ""
     });
     setIsEditStudentDialogOpen(true);
   };
@@ -8428,6 +8432,35 @@ export default function AdminDashboard() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Financial Information */}
+              <Card className="border-l-4 border-l-emerald-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <DollarSign className="h-5 w-5 text-emerald-500" />
+                    Financial Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-w-xs">
+                    <Label htmlFor="discount" className="text-sm font-medium text-gray-700 dark:text-gray-300">Tuition Discount (₦)</Label>
+                    <Input
+                      id="discount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={studentEditForm.discount}
+                      onChange={(e) => setStudentEditForm(prev => ({...prev, discount: e.target.value}))}
+                      placeholder="0"
+                      className="transition-all duration-200 focus:ring-2 focus:ring-emerald-500"
+                      data-testid="input-student-discount"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Fixed amount deducted from this student's tuition every term. Leave as 0 if no discount applies.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
             
             {/* Action Buttons */}
@@ -8449,7 +8482,8 @@ export default function AdminDashboard() {
                   if (editingStudent) {
                     updateStudentMutation.mutate({
                       id: editingStudent.id,
-                      ...studentEditForm
+                      ...studentEditForm,
+                      discount: studentEditForm.discount === "" ? 0 : parseFloat(studentEditForm.discount)
                     });
                   }
                 }}
