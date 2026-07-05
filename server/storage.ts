@@ -312,7 +312,11 @@ export interface IStorage {
   
   // Student promotion system
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
-  markStudentsAsGraduated(studentIds: string[]): Promise<void>;
+  markStudentsAsGraduated(studentIds: string[], session?: string, term?: string): Promise<void>;
+  markStudentsAsWithdrawn(studentIds: string[], session?: string, term?: string): Promise<void>;
+  getGraduatedStudents(schoolId?: string): Promise<StudentWithDetails[]>;
+  getWithdrawnStudents(schoolId?: string): Promise<StudentWithDetails[]>;
+  reorderClasses(schoolId: string, orderedClassIds: string[]): Promise<void>;
   
   // Attendance tracking
   getStudentAttendance(studentId: string, term?: string, session?: string): Promise<Attendance[]>;
@@ -653,7 +657,15 @@ export class DatabaseStorage implements IStorage {
       // Create readable ID: SCH1-JSS1, SCH2-SS2, etc.
       classData.id = `SCH${schoolNumber}-${classPrefix}${nextNumber}`;
     }
-    
+
+    if (classData.sortOrder === undefined || classData.sortOrder === null) {
+      const [maxRow] = await db
+        .select({ maxOrder: sql<number>`COALESCE(MAX(${classes.sortOrder}), 0)` })
+        .from(classes)
+        .where(eq(classes.schoolId, classData.schoolId!));
+      classData.sortOrder = (maxRow?.maxOrder || 0) + 1;
+    }
+
     const [classRecord] = await db
       .insert(classes)
       .values(classData)
@@ -663,6 +675,17 @@ export class DatabaseStorage implements IStorage {
 
   async deleteClass(classId: string): Promise<void> {
     await db.delete(classes).where(eq(classes.id, classId));
+  }
+
+  async reorderClasses(schoolId: string, orderedClassIds: string[]): Promise<void> {
+    await Promise.all(
+      orderedClassIds.map((classId, index) =>
+        db
+          .update(classes)
+          .set({ sortOrder: index + 1, updatedAt: new Date() })
+          .where(and(eq(classes.id, classId), eq(classes.schoolId, schoolId)))
+      )
+    );
   }
 
   async createSubject(subjectData: InsertSubject): Promise<Subject> {
@@ -789,6 +812,7 @@ export class DatabaseStorage implements IStorage {
       name: classes.name,
       description: classes.description,
       schoolId: classes.schoolId,
+      sortOrder: classes.sortOrder,
       createdAt: classes.createdAt,
       updatedAt: classes.updatedAt,
       school: {
@@ -805,9 +829,9 @@ export class DatabaseStorage implements IStorage {
     }).from(classes).innerJoin(schools, eq(classes.schoolId, schools.id));
     
     if (schoolId) {
-      return await baseQuery.where(eq(classes.schoolId, schoolId));
+      return await baseQuery.where(eq(classes.schoolId, schoolId)).orderBy(asc(classes.sortOrder), asc(classes.name));
     }
-    return await baseQuery;
+    return await baseQuery.orderBy(asc(classes.sortOrder), asc(classes.name));
   }
 
   async getAllSubjects(): Promise<Subject[]> {
@@ -2167,14 +2191,88 @@ export class DatabaseStorage implements IStorage {
       .where(inArray(students.id, studentIds));
   }
 
-  async markStudentsAsGraduated(studentIds: string[]): Promise<void> {
+  async markStudentsAsGraduated(studentIds: string[], session?: string, term?: string): Promise<void> {
+    const targetStudents = await db
+      .select({ userId: students.userId })
+      .from(students)
+      .where(inArray(students.id, studentIds));
+
     await db
       .update(students)
       .set({ 
         status: 'graduated',
+        statusSession: session,
+        statusTerm: term,
         updatedAt: new Date()
       })
       .where(inArray(students.id, studentIds));
+
+    const userIds = targetStudents.map(s => s.userId).filter(Boolean) as string[];
+    if (userIds.length > 0) {
+      await db
+        .update(users)
+        .set({ isActive: false })
+        .where(inArray(users.id, userIds));
+    }
+  }
+
+  async markStudentsAsWithdrawn(studentIds: string[], session?: string, term?: string): Promise<void> {
+    const targetStudents = await db
+      .select({ userId: students.userId })
+      .from(students)
+      .where(inArray(students.id, studentIds));
+
+    await db
+      .update(students)
+      .set({
+        status: 'withdrawn',
+        statusSession: session,
+        statusTerm: term,
+        updatedAt: new Date()
+      })
+      .where(inArray(students.id, studentIds));
+
+    const userIds = targetStudents.map(s => s.userId).filter(Boolean) as string[];
+    if (userIds.length > 0) {
+      await db
+        .update(users)
+        .set({ isActive: false })
+        .where(inArray(users.id, userIds));
+    }
+  }
+
+  async getGraduatedStudents(schoolId?: string): Promise<StudentWithDetails[]> {
+    let query = db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(schoolId ? and(eq(classes.schoolId, schoolId), eq(students.status, 'graduated')) : eq(students.status, 'graduated'));
+
+    const studentsData = await query;
+    return studentsData.map(({ students: student, users: user, classes: classData }) => ({
+      ...student,
+      user: user!,
+      class: classData!,
+      assessments: []
+    }));
+  }
+
+  async getWithdrawnStudents(schoolId?: string): Promise<StudentWithDetails[]> {
+    let query = db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(schoolId ? and(eq(classes.schoolId, schoolId), eq(students.status, 'withdrawn')) : eq(students.status, 'withdrawn'));
+
+    const studentsData = await query;
+    return studentsData.map(({ students: student, users: user, classes: classData }) => ({
+      ...student,
+      user: user!,
+      class: classData!,
+      assessments: []
+    }));
   }
 
   // Enhanced student creation helper methods

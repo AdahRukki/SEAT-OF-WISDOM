@@ -1,2 +1,3 @@
 - [SMS bank-alert ingestion](sms-ingestion.md) — Tasker→webhook credit-alert ingestion; epoch-seconds gotcha, 200-on-skip contract, shared-secret public webhook, balance-keyed fingerprint dedupe, masked-account routing.
 - [Drizzle phantom select column](drizzle-phantom-select-column.md) — a `.select()` key pointing to a non-existent column → 500 "Cannot convert undefined or null to object"; list looks empty. Check server 500s, not empty DB.
+- [Duplicate PaymentRecording components](duplicate-payment-recording-components.md) — payment-recording.tsx & payment-reconciliation.tsx both export `PaymentRecording`; alias imports, don't rename exports.

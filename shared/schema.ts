@@ -68,6 +68,7 @@ export const classes = pgTable("classes", {
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
+  sortOrder: integer("sort_order").default(0), // Admin-defined academic order (1 = lowest class)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -132,6 +133,8 @@ export const students = pgTable("students", {
   parentWhatsapp: varchar("parent_whatsapp", { length: 20 }).notNull(), // WhatsApp number for parents (required)
   address: text("address"),
   status: varchar("status", { length: 20 }).default("active"), // active, graduated
+  statusSession: varchar("status_session", { length: 20 }), // Session when graduated/withdrawn (e.g. "2025/2026")
+  statusTerm: varchar("status_term", { length: 50 }), // Term when graduated/withdrawn (e.g. "Third Term")
   clientRequestId: text("client_request_id"), // Idempotency key from client; partial unique index where not null
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -126,7 +126,9 @@ import {
   Search,
   CloudOff,
   Inbox,
-  BarChart3
+  BarChart3,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { InquiriesManagement } from "@/components/inquiries-management";
@@ -136,7 +138,7 @@ import { ObjectUploader } from "@/components/ObjectUploader";
 import { NewsManagement } from "@/components/news-management";
 import { NotificationsManagement } from "@/components/notifications-management";
 import { PaymentRecording } from "@/components/payment-recording";
-import { PaymentReconciliation } from "@/components/payment-reconciliation";
+import { PaymentRecording as BankStatementReconciliation } from "@/components/payment-reconciliation";
 import { PaymentLedger } from "@/components/payment-ledger";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 // Logo is now loaded dynamically via useLogo hook
@@ -1223,6 +1225,49 @@ export default function AdminDashboard() {
     enabled: user?.role === 'admin'
   });
 
+  // Graduated & withdrawn students — main admin only
+  const { data: graduatedStudents = [], isLoading: graduatedStudentsLoading } = useQuery<StudentWithDetails[]>({
+    queryKey: ['/api/admin/students/graduated', selectedSchoolId],
+    queryFn: () => apiRequest(selectedSchoolId ? `/api/admin/students/graduated?schoolId=${selectedSchoolId}` : '/api/admin/students/graduated'),
+    enabled: user?.role === 'admin'
+  });
+
+  const { data: withdrawnStudents = [], isLoading: withdrawnStudentsLoading } = useQuery<StudentWithDetails[]>({
+    queryKey: ['/api/admin/students/withdrawn', selectedSchoolId],
+    queryFn: () => apiRequest(selectedSchoolId ? `/api/admin/students/withdrawn?schoolId=${selectedSchoolId}` : '/api/admin/students/withdrawn'),
+    enabled: user?.role === 'admin'
+  });
+
+  const groupStudentsBySessionTerm = (list: StudentWithDetails[]) => {
+    const groups = new Map<string, StudentWithDetails[]>();
+    for (const student of list) {
+      const key = (student as any).statusSession && (student as any).statusTerm
+        ? `${(student as any).statusSession} – ${(student as any).statusTerm}`
+        : 'Unspecified';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(student);
+    }
+    return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  };
+
+  const withdrawStudentsMutation = useMutation({
+    mutationFn: async (studentIds: string[]) => {
+      return apiRequest('/api/admin/withdraw-students', {
+        method: 'POST',
+        body: { studentIds }
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Student marked as withdrawn" });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/inactive'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/withdrawn'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to mark student as withdrawn", variant: "destructive" });
+    }
+  });
+
   // Helper functions for user management
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -1354,6 +1399,32 @@ export default function AdminDashboard() {
       toast({ title: "Error", description: "Failed to create class", variant: "destructive" });
     }
   });
+
+  // Reorder classes mutation
+  const reorderClassesMutation = useMutation({
+    mutationFn: async (orderedClassIds: string[]) => {
+      return apiRequest('/api/admin/classes/reorder', {
+        method: 'POST',
+        body: { schoolId: selectedSchoolId || user?.schoolId, orderedClassIds }
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update class order", variant: "destructive" });
+    }
+  });
+
+  const moveClassOrder = (classItem: any, direction: 'up' | 'down') => {
+    const ordered = sortClassesByOrder([...classes]);
+    const index = ordered.findIndex((c) => c.id === classItem.id);
+    if (index === -1) return;
+    const swapWith = direction === 'up' ? index - 1 : index + 1;
+    if (swapWith < 0 || swapWith >= ordered.length) return;
+    [ordered[index], ordered[swapWith]] = [ordered[swapWith], ordered[index]];
+    reorderClassesMutation.mutate(ordered.map((c) => c.id));
+  };
 
   // Delete class mutation
   const deleteClassMutation = useMutation({
@@ -1821,45 +1892,32 @@ export default function AdminDashboard() {
   };
 
   // Helper function to sort classes in proper order
-  const sortClassesByOrder = (classes: any[]) => {
-    const classOrder = ["J.S.S 1", "J.S.S 2", "J.S.S 3", "S.S.S 1", "S.S.S 2", "S.S.S 3"];
-    return classes.sort((a, b) => {
-      const aIndex = classOrder.indexOf(a.name);
-      const bIndex = classOrder.indexOf(b.name);
-      if (aIndex === -1 && bIndex === -1) return a.name.localeCompare(b.name);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
+  // Sorts classes by the admin-defined sortOrder (falls back to name order for legacy/unset values)
+  const sortClassesByOrder = (classesToSort: any[]) => {
+    return [...classesToSort].sort((a, b) => {
+      const aOrder = a.sortOrder ?? 0;
+      const bOrder = b.sortOrder ?? 0;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (a.name || "").localeCompare(b.name || "");
     });
   };
 
-  // Helper function to get next class in progression
-  const getNextClass = (currentClassName: string): { nextClass: string | null; isGraduation: boolean } => {
-    const classProgression = {
-      "J.S.S 1": "J.S.S 2",
-      "JSS1": "JSS2", 
-      "JSS 1": "JSS 2",
-      "J.S.S 2": "J.S.S 3",
-      "JSS2": "JSS3",
-      "JSS 2": "JSS 3", 
-      "J.S.S 3": "S.S.S 1",
-      "JSS3": "S.S.S 1",
-      "JSS 3": "S.S.S 1",
-      "S.S.S 1": "S.S.S 2",
-      "SSS1": "S.S.S 2",
-      "SSS 1": "S.S.S 2",
-      "S.S.S 2": "S.S.S 3", 
-      "SSS2": "S.S.S 3",
-      "SSS 2": "S.S.S 3",
-      "S.S.S 3": "Graduated",
-      "SSS3": "Graduated",
-      "SSS 3": "Graduated"
-    };
-
-    const nextClass = classProgression[currentClassName as keyof typeof classProgression] || null;
-    const isGraduation = nextClass === "Graduated";
-    
-    return { nextClass, isGraduation };
+  // Helper function to get next class in progression using the school's admin-defined class order.
+  // The class with the highest sortOrder within the same school is treated as the final/graduating class.
+  const getNextClass = (currentClass: { id: string; name: string; schoolId?: string }): { nextClass: string | null; nextClassId: string | null; isGraduation: boolean } => {
+    const sameSchoolClasses = sortClassesByOrder(
+      classes.filter((c: any) => !currentClass.schoolId || c.schoolId === currentClass.schoolId)
+    );
+    const index = sameSchoolClasses.findIndex((c: any) => c.id === currentClass.id);
+    if (index === -1) {
+      return { nextClass: null, nextClassId: null, isGraduation: false };
+    }
+    const isGraduation = index === sameSchoolClasses.length - 1;
+    if (isGraduation) {
+      return { nextClass: "Graduated", nextClassId: null, isGraduation: true };
+    }
+    const next = sameSchoolClasses[index + 1];
+    return { nextClass: next.name, nextClassId: next.id, isGraduation: false };
   };
 
   // Logo upload mutation
@@ -4207,7 +4265,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {sortClassesByOrder(classes).map((classItem) => {
+                  {sortClassesByOrder(classes).map((classItem, index, sortedClasses) => {
                     const studentsInClass = allStudents.filter(s => s.classId === classItem.id);
                     return (
                       <Card key={classItem.id} className="hover:shadow-md transition-shadow">
@@ -4218,6 +4276,28 @@ export default function AdminDashboard() {
                               <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded">
                                 {classItem.id}
                               </span>
+                              <div className="flex flex-col">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => moveClassOrder(classItem, 'up')}
+                                  disabled={index === 0 || reorderClassesMutation.isPending}
+                                  className="h-4 w-6 p-0"
+                                  data-testid={`button-class-up-${classItem.id}`}
+                                >
+                                  <ChevronUp className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => moveClassOrder(classItem, 'down')}
+                                  disabled={index === sortedClasses.length - 1 || reorderClassesMutation.isPending}
+                                  className="h-4 w-6 p-0"
+                                  data-testid={`button-class-down-${classItem.id}`}
+                                >
+                                  <ChevronDown className="h-3 w-3" />
+                                </Button>
+                              </div>
                               {user?.role === 'admin' && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -4472,6 +4552,88 @@ export default function AdminDashboard() {
                 )}
               </CardContent>
             </Card>
+
+            {user?.role === 'admin' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 text-green-600" />
+                    Graduated Students
+                  </CardTitle>
+                  <CardDescription>Students who completed the final class, grouped by session &amp; term</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {graduatedStudentsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                    </div>
+                  ) : graduatedStudents.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-6">No graduated students yet</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {groupStudentsBySessionTerm(graduatedStudents).map(([groupKey, students]) => (
+                        <div key={groupKey} className="border rounded-lg">
+                          <div className="px-3 py-2 bg-green-50 dark:bg-green-900/20 border-b font-medium text-sm text-green-800 dark:text-green-300">
+                            {groupKey} ({students.length})
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {students.map((student) => (
+                              <div key={student.id} className="flex items-center justify-between px-3 py-2 gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{student.user?.name}</p>
+                                  <p className="text-xs text-gray-500 truncate">{student.studentId} • {student.class?.name}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {user?.role === 'admin' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <UserX className="h-5 w-5 text-red-600" />
+                    Inactive (Withdrawn) Students
+                  </CardTitle>
+                  <CardDescription>Students withdrawn from the academy, grouped by session &amp; term</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {withdrawnStudentsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                    </div>
+                  ) : withdrawnStudents.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-6">No withdrawn students</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {groupStudentsBySessionTerm(withdrawnStudents).map(([groupKey, students]) => (
+                        <div key={groupKey} className="border rounded-lg">
+                          <div className="px-3 py-2 bg-red-50 dark:bg-red-900/20 border-b font-medium text-sm text-red-800 dark:text-red-300">
+                            {groupKey} ({students.length})
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {students.map((student) => (
+                              <div key={student.id} className="flex items-center justify-between px-3 py-2 gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{student.user?.name}</p>
+                                  <p className="text-xs text-gray-500 truncate">{student.studentId} • {student.class?.name}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Scores Management Tab */}
@@ -5086,8 +5248,9 @@ export default function AdminDashboard() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <PaymentReconciliation
+                  <BankStatementReconciliation
                     schoolId={selectedSchoolId}
+                    userRole={user?.role === 'sub-admin' ? 'sub-admin' : 'admin'}
                   />
                 </CardContent>
               </Card>
@@ -8191,7 +8354,7 @@ export default function AdminDashboard() {
                     if (selectedStudentForReport && nextTermResumptionDate) {
                       // Check if it's third term for promotion
                       if (isThirdTerm(reportTerm)) {
-                        const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class.name);
+                        const { nextClass } = getNextClass(selectedStudentForReport.class);
                         if (nextClass) {
                           // Set up promotion dialog
                           setStudentsToPromote([selectedStudentForReport.id]);
@@ -8232,7 +8395,7 @@ export default function AdminDashboard() {
             
             <div className="space-y-4">
               {selectedStudentForReport && (() => {
-                const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class.name);
+                const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class);
                 
                 return (
                   <div className="p-4 bg-blue-50 rounded-lg">
@@ -8284,7 +8447,7 @@ export default function AdminDashboard() {
                 <Button
                   onClick={() => {
                     if (selectedStudentForReport) {
-                      const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class.name);
+                      const { nextClass, nextClassId, isGraduation } = getNextClass(selectedStudentForReport.class);
                       
                       if (nextClass && nextTermResumptionDate) {
                         // Generate report WITH promotion information
@@ -8296,17 +8459,19 @@ export default function AdminDashboard() {
                           nextClass
                         );
                         
-                        // If not graduation, actually promote the student in the database
-                        if (!isGraduation) {
-                          // Find next class ID from available classes
-                          const nextClassObj = classes?.find(c => c.name === nextClass);
-                          if (nextClassObj) {
-                            promoteStudentsMutation.mutate({
-                              currentClassId: selectedStudentForReport.classId,
-                              nextClassId: nextClassObj.id,
-                              studentIds: [selectedStudentForReport.id]
-                            });
-                          }
+                        if (isGraduation) {
+                          // Final class: mark the student as graduated instead of moving them
+                          promoteStudentsMutation.mutate({
+                            currentClassId: selectedStudentForReport.classId,
+                            nextClassId: 'graduated',
+                            studentIds: [selectedStudentForReport.id]
+                          });
+                        } else if (nextClassId) {
+                          promoteStudentsMutation.mutate({
+                            currentClassId: selectedStudentForReport.classId,
+                            nextClassId: nextClassId,
+                            studentIds: [selectedStudentForReport.id]
+                          });
                         }
                       }
                     }

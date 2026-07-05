@@ -71,6 +71,18 @@ async function runMigrations() {
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      -- Admin-settable class sort order + graduation/withdrawal tracking.
+      ALTER TABLE classes ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS status_session VARCHAR(20);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS status_term VARCHAR(50);
+      -- Seed default sort order for existing classes (one-time; only when unset).
+      UPDATE classes SET sort_order = 1 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'J.S.S 1';
+      UPDATE classes SET sort_order = 2 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'J.S.S 2';
+      UPDATE classes SET sort_order = 3 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'J.S.S 3';
+      UPDATE classes SET sort_order = 4 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'S.S.S 1';
+      UPDATE classes SET sort_order = 5 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'S.S.S 2';
+      UPDATE classes SET sort_order = 6 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'S.S.S 3';
       CREATE TABLE IF NOT EXISTS admissions_applications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         student_name VARCHAR(200) NOT NULL,

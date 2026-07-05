@@ -579,9 +579,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/promote-students', authenticate, requireAdmin, async (req, res) => {
     try {
       const { currentClassId, nextClassId, studentIds } = req.body;
-      
+
       if (nextClassId === 'graduated') {
-        await storage.markStudentsAsGraduated(studentIds);
+        const currentInfo = await storage.getCurrentAcademicInfo();
+        await storage.markStudentsAsGraduated(studentIds, currentInfo?.currentSession ?? undefined, currentInfo?.currentTerm ?? undefined);
       } else {
         await storage.promoteStudentsToNextClass(currentClassId, nextClassId, studentIds);
       }
@@ -590,6 +591,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Promote students error:", error);
       res.status(400).json({ error: "Failed to promote students" });
+    }
+  });
+
+  // Withdraw students (stopped/withdrew) — main admin only
+  app.post('/api/admin/withdraw-students', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { studentIds } = req.body;
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ error: "studentIds is required" });
+      }
+      const currentInfo = await storage.getCurrentAcademicInfo();
+      await storage.markStudentsAsWithdrawn(studentIds, currentInfo?.currentSession ?? undefined, currentInfo?.currentTerm ?? undefined);
+      res.json({ message: "Students marked as withdrawn" });
+    } catch (error) {
+      console.error("Withdraw students error:", error);
+      res.status(400).json({ error: "Failed to withdraw students" });
+    }
+  });
+
+  // Graduated students — main admin only
+  app.get('/api/admin/students/graduated', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const schoolId = req.query.schoolId as string | undefined;
+      const graduatedStudents = await storage.getGraduatedStudents(schoolId);
+      res.json(graduatedStudents);
+    } catch (error) {
+      console.error("Get graduated students error:", error);
+      res.status(500).json({ error: "Failed to fetch graduated students" });
+    }
+  });
+
+  // Withdrawn students — main admin only
+  app.get('/api/admin/students/withdrawn', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const schoolId = req.query.schoolId as string | undefined;
+      const withdrawnStudents = await storage.getWithdrawnStudents(schoolId);
+      res.json(withdrawnStudents);
+    } catch (error) {
+      console.error("Get withdrawn students error:", error);
+      res.status(500).json({ error: "Failed to fetch withdrawn students" });
     }
   });
 
@@ -646,6 +687,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Delete class error:", error);
       res.status(400).json({ error: "Failed to delete class" });
+    }
+  });
+
+  // Reorder classes within a school
+  app.post('/api/admin/classes/reorder', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { schoolId, orderedClassIds } = req.body;
+
+      if (!schoolId || !Array.isArray(orderedClassIds) || orderedClassIds.length === 0) {
+        return res.status(400).json({ error: "schoolId and orderedClassIds are required" });
+      }
+      if (user.role === 'sub-admin' && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Access denied to this school's data" });
+      }
+
+      await storage.reorderClasses(schoolId, orderedClassIds);
+      res.json({ message: "Class order updated" });
+    } catch (error) {
+      console.error("Reorder classes error:", error);
+      res.status(400).json({ error: "Failed to reorder classes" });
     }
   });
 
