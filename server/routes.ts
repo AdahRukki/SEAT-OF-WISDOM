@@ -821,9 +821,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const actor = (req as any).user;
       const adminOnly = req.query.adminOnly === 'true';
       const users = await storage.getAllUsers(adminOnly);
-      // Sub-admins with the Users permission can manage other sub-admins/students,
-      // but never see or act on main admin accounts.
-      const visibleUsers = actor.role === 'sub-admin' ? users.filter(u => u.role !== 'admin') : users;
+      // Sub-admins with the Users permission can manage other sub-admins/students
+      // within their own school only — never main admin accounts or other schools' users.
+      const visibleUsers = actor.role === 'sub-admin'
+        ? users.filter(u => u.role !== 'admin' && u.schoolId === actor.schoolId)
+        : users;
       const sanitizedUsers = visibleUsers.map(({ password, passwordUpdatedAt, ...user }) => user);
       res.json(sanitizedUsers);
     } catch (error) {
@@ -847,6 +849,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (actor.role === 'sub-admin' && existingUser.role === 'admin') {
         return res.status(403).json({ error: 'Access denied' });
+      }
+      if (actor.role === 'sub-admin' && existingUser.schoolId !== actor.schoolId) {
+        return res.status(403).json({ error: 'Cannot manage users outside your school' });
       }
       
       // Prepare update data
@@ -893,6 +898,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (actor.role === 'sub-admin' && existingUser.role === 'admin') {
         return res.status(403).json({ error: 'Access denied' });
       }
+      if (actor.role === 'sub-admin' && existingUser.schoolId !== actor.schoolId) {
+        return res.status(403).json({ error: 'Cannot manage users outside your school' });
+      }
       if (actor.role === 'sub-admin' && 'role' in otherData && otherData.role !== existingUser.role) {
         return res.status(403).json({ error: 'You cannot change a user\'s role' });
       }
@@ -931,6 +939,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (user.role === 'admin') {
         return res.status(403).json({ error: 'Cannot delete admin users' });
+      }
+      if (actor.role === 'sub-admin' && user.schoolId !== actor.schoolId) {
+        return res.status(403).json({ error: 'Cannot manage users outside your school' });
       }
 
       const requiredPermission = user.role === 'student' ? 'students_delete' : 'tab_users';
@@ -1426,7 +1437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all students (admin only, school-aware)
-  app.get('/api/admin/students/inactive', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/students/inactive', authenticate, requirePermission('students_view_withdrawn'), async (req, res) => {
     try {
       const user = (req as any).user;
       const schoolId = req.query.schoolId as string || user.schoolId;
