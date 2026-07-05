@@ -378,6 +378,7 @@ function ClassTuitionBreakdownDialog({
       return apiRequest(`/api/payments/ledger?${params.toString()}`);
     },
     enabled: open && !!schoolId,
+    staleTime: 0,
   });
 
   const rows: ClassTuitionRow[] = (() => {
@@ -1377,7 +1378,8 @@ export default function AdminDashboard() {
       url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin',
+    staleTime: 0
   });
 
   const { data: financeLedgerResp } = useQuery<{ entries: Array<{ tuitionAssigned: number; totalPaid: number }> }>({
@@ -1389,7 +1391,8 @@ export default function AdminDashboard() {
       if (selectedFinanceSession) params.set('session', selectedFinanceSession);
       return apiRequest(`/api/payments/ledger?${params.toString()}`);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin'
+    enabled: !!selectedSchoolId || user?.role === 'sub-admin',
+    staleTime: 0
   });
 
   const ledgerCollectionRate: number | null = (() => {
