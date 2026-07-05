@@ -336,7 +336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Endpoint for updating profile image after upload
-  app.put("/api/students/:studentId/profile-image", authenticate, requireAdmin, async (req, res) => {
+  app.put("/api/students/:studentId/profile-image", authenticate, requirePermission('tab_students'), async (req, res) => {
     if (!req.body.profileImageURL) {
       return res.status(400).json({ error: "profileImageURL is required" });
     }
@@ -1227,7 +1227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes - Student management
-  app.post('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/students', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {
       const { 
         firstName, 
@@ -1386,7 +1386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update student details (admin only)
-  app.patch('/api/admin/students/:id', authenticate, requireAdmin, async (req, res) => {
+  app.patch('/api/admin/students/:id', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {
       const { id } = req.params;
       const updateData = req.body;
@@ -1464,7 +1464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/classes/:classId/students', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/classes/:classId/students', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {
       const { classId } = req.params;
       const students = await storage.getStudentsByClass(classId);
@@ -1491,7 +1491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/students', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/students', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {
       const user = (req as any).user;
       const schoolId = req.query.schoolId as string || user.schoolId;
@@ -1510,7 +1510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Download Excel template for batch student upload
-  app.get('/api/admin/students/batch-template/:classId', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/students/batch-template/:classId', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {
       const { classId } = req.params;
       
@@ -1571,7 +1571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk student upload from Excel
-  app.post('/api/admin/students/batch-upload', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
+  app.post('/api/admin/students/batch-upload', authenticate, requirePermission('tab_students'), upload.single('file'), async (req, res) => {
     try {
       const { classId } = req.body;
       
@@ -1738,7 +1738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get assessments for class and subject
-  app.get('/api/admin/assessments', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/assessments', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { classId, subjectId, term, session } = req.query;
       const assessments = await storage.getClassAssessments(
@@ -1755,7 +1755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk score update endpoint
-  app.post('/api/admin/scores/bulk-update', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/scores/bulk-update', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { scores } = req.body;
       
@@ -2048,7 +2048,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get students by class (for teacher interface)
-  app.get('/api/admin/students/by-class/:classId', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/students/by-class/:classId', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { classId } = req.params;
       const students = await storage.getStudentsByClass(classId);
@@ -2060,7 +2060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get assessments with filtering (for teacher interface)
-  app.get('/api/admin/assessments/:classId/:term/:session', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/assessments/:classId/:term/:session', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { classId, term, session } = req.params;
       const assessments = await storage.getAssessmentsByClassTermSession(classId, term, session);
@@ -2072,7 +2072,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Non-academic ratings endpoints
-  app.get('/api/admin/non-academic-ratings/:classId/:term/:session', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/non-academic-ratings/:classId/:term/:session', authenticate, requirePermission('tab_grading'), async (req, res) => {
     try {
       const { classId, term, session } = req.params;
       const ratings = await storage.getNonAcademicRatingsByClass(classId, term, session);
@@ -2083,7 +2083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/non-academic-ratings', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/non-academic-ratings', authenticate, requirePermission('tab_grading'), async (req, res) => {
     try {
       const user = (req as any).user;
       const ratingData = req.body;
@@ -2100,7 +2100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin/Teacher routes - Assessment management
-  app.delete('/api/admin/assessments/:assessmentId', authenticate, requireAdmin, async (req, res) => {
+  app.delete('/api/admin/assessments/:assessmentId', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { assessmentId } = req.params;
       await storage.deleteAssessment(assessmentId);
@@ -2111,7 +2111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/admin/assessments', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/assessments', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const assessmentData = addScoreSchema.parse(req.body);
       
@@ -2544,7 +2544,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Report card template routes
-  app.get('/api/admin/report-templates', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/report-templates', authenticate, requirePermission('tab_reports'), async (req, res) => {
     try {
       const templates = await storage.getReportCardTemplates();
       res.json(templates);
@@ -2812,7 +2812,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/admin/tuition-amounts/:feeTypeId', authenticate, requireAdmin, async (req, res) => {
+  app.put('/api/admin/tuition-amounts/:feeTypeId', authenticate, requirePermission('tab_finance'), async (req, res) => {
     try {
       const user = (req as any).user;
       const { feeTypeId } = req.params;
@@ -2839,7 +2839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Student Fees Management
-  app.post('/api/admin/student-fees', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/student-fees', authenticate, requirePermission('tab_finance'), async (req, res) => {
     try {
       const { studentId, feeTypeId, term, session, amount } = req.body;
       
@@ -2851,7 +2851,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/student-fees', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/student-fees', authenticate, requirePermission('tab_finance'), async (req, res) => {
     try {
       const user = (req as any).user;
       const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
@@ -2893,7 +2893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Payments Management
-  app.post('/api/admin/payments', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/payments', authenticate, requirePermission('tab_finance'), async (req, res) => {
     try {
       const user = (req as any).user;
       const paymentData = recordPaymentSchema.parse(req.body);
@@ -2928,7 +2928,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Assign fee to class
-  app.post('/api/admin/assign-fee', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/assign-fee', authenticate, requirePermission('tab_finance'), async (req, res) => {
     try {
       const assignmentData = assignFeeSchema.parse(req.body);
       
@@ -2954,7 +2954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/payments', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/payments', authenticate, requirePermission('tab_finance'), async (req, res) => {
     try {
       const user = (req as any).user;
       const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
@@ -3070,7 +3070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Financial Summary
-  app.get('/api/admin/financial-summary', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/financial-summary', authenticate, requirePermission('tab_finance'), async (req, res) => {
     try {
       const user = (req as any).user;
       const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
