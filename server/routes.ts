@@ -875,6 +875,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (actor.role === 'sub-admin' && existingUser.schoolId !== actor.schoolId) {
         return res.status(403).json({ error: 'Cannot manage users outside your school' });
       }
+      if (actor.role === 'sub-admin' && schoolId !== undefined && schoolId !== existingUser.schoolId) {
+        return res.status(403).json({ error: 'Sub-admins cannot change a user\'s school' });
+      }
       
       // Prepare update data
       const updateData: any = {
@@ -884,8 +887,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive
       };
       
-      // Only update schoolId for sub-admin users
-      if (existingUser.role === 'sub-admin' && schoolId !== undefined) {
+      // Only main admin can reassign a sub-admin's schoolId
+      if (actor.role === 'admin' && existingUser.role === 'sub-admin' && schoolId !== undefined) {
         updateData.schoolId = schoolId;
       }
       
@@ -929,14 +932,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (actor.role === 'sub-admin' && 'permissions' in otherData) {
         return res.status(403).json({ error: 'Only main admins can change permissions' });
       }
+      if (actor.role === 'sub-admin' && 'schoolId' in otherData && otherData.schoolId !== existingUser.schoolId) {
+        return res.status(403).json({ error: 'Sub-admins cannot change a user\'s school' });
+      }
+
+      // Sub-admins may only edit a limited, safe field set — everything else
+      // (schoolId, role, permissions, id, etc.) is stripped from the payload
+      // even if it matches the existing value, preventing any smuggled fields.
+      let updatePayload = otherData;
+      if (actor.role === 'sub-admin') {
+        const allowedFields = ['firstName', 'lastName', 'email', 'isActive'];
+        updatePayload = Object.fromEntries(
+          Object.entries(otherData).filter(([key]) => allowedFields.includes(key))
+        );
+      }
       
       // Update password if provided
       if (password) {
         await storage.updateUserPassword(id, password);
         res.json({ message: 'Password updated successfully' });
-      } else if (Object.keys(otherData).length > 0) {
+      } else if (Object.keys(updatePayload).length > 0) {
         // Handle other profile updates
-        const updatedUser = await storage.updateUserProfile(id, otherData);
+        const updatedUser = await storage.updateUserProfile(id, updatePayload);
         res.json(updatedUser);
       } else {
         res.status(400).json({ error: 'No data provided for update' });
