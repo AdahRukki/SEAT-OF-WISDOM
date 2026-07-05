@@ -48,6 +48,7 @@ import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
+import { hasPermission, validatePermissions, getEffectivePermissions } from "@shared/permissions";
 
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development' ? 'development-jwt-secret-change-in-production' : null);
 
@@ -167,6 +168,21 @@ const requireBursarOrAdmin = (req: Request, res: Response, next: NextFunction) =
   const user = (req as any).user;
   if (user.role !== 'admin' && user.role !== 'sub-admin' && user.role !== 'bursar') {
     return res.status(403).json({ error: "Bursar or admin access required" });
+  }
+  next();
+};
+
+// Middleware factory for per-sub-admin tab/feature permission checks (Task #152).
+// Main admins always pass. Sub-admins pass only if the permission key is enabled
+// for them (or is part of the legacy default set when they have no permissions saved).
+// Any other role (bursar, student) is rejected, matching the routes this replaces.
+const requirePermission = (permissionKey: string) => (req: Request, res: Response, next: NextFunction) => {
+  const user = (req as any).user;
+  if (!user || (user.role !== 'admin' && user.role !== 'sub-admin')) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  if (!hasPermission(user.role, user.permissions, permissionKey)) {
+    return res.status(403).json({ error: "You do not have permission to access this feature" });
   }
   next();
 };
@@ -381,7 +397,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           firstName: user.firstName,
           middleName: user.middleName,
           lastName: user.lastName,
-          role: user.role
+          role: user.role,
+          schoolId: user.schoolId,
+          permissions: getEffectivePermissions(user.role, user.permissions)
         }
       });
     } catch (error) {
@@ -403,7 +421,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       middleName: user.middleName,
       lastName: user.lastName,
       role: user.role,
-      schoolId: user.schoolId
+      schoolId: user.schoolId,
+      permissions: getEffectivePermissions(user.role, user.permissions)
     });
   });
 
@@ -594,8 +613,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Withdraw students (stopped/withdrew) — main admin only
-  app.post('/api/admin/withdraw-students', authenticate, requireMainAdmin, async (req, res) => {
+  // Withdraw students (stopped/withdrew) — main admin, or sub-admin with permission
+  app.post('/api/admin/withdraw-students', authenticate, requirePermission('students_view_withdrawn'), async (req, res) => {
     try {
       const { studentIds } = req.body;
       if (!Array.isArray(studentIds) || studentIds.length === 0) {
@@ -610,8 +629,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Graduated students — main admin only
-  app.get('/api/admin/students/graduated', authenticate, requireMainAdmin, async (req, res) => {
+  // Graduated students — main admin, or sub-admin with permission
+  app.get('/api/admin/students/graduated', authenticate, requirePermission('students_view_graduated'), async (req, res) => {
     try {
       const schoolId = req.query.schoolId as string | undefined;
       const graduatedStudents = await storage.getGraduatedStudents(schoolId);
@@ -622,8 +641,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Withdrawn students — main admin only
-  app.get('/api/admin/students/withdrawn', authenticate, requireMainAdmin, async (req, res) => {
+  // Withdrawn students — main admin, or sub-admin with permission
+  app.get('/api/admin/students/withdrawn', authenticate, requirePermission('students_view_withdrawn'), async (req, res) => {
     try {
       const schoolId = req.query.schoolId as string | undefined;
       const withdrawnStudents = await storage.getWithdrawnStudents(schoolId);
@@ -797,11 +816,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Users routes (main admin only - sub-admins cannot access user management)
-  app.get('/api/admin/users', authenticate, requireMainAdmin, async (req, res) => {
+  app.get('/api/admin/users', authenticate, requirePermission('tab_users'), async (req, res) => {
     try {
+      const actor = (req as any).user;
       const adminOnly = req.query.adminOnly === 'true';
       const users = await storage.getAllUsers(adminOnly);
-      const sanitizedUsers = users.map(({ password, passwordUpdatedAt, ...user }) => user);
+      // Sub-admins with the Users permission can manage other sub-admins/students,
+      // but never see or act on main admin accounts.
+      const visibleUsers = actor.role === 'sub-admin' ? users.filter(u => u.role !== 'admin') : users;
+      const sanitizedUsers = visibleUsers.map(({ password, passwordUpdatedAt, ...user }) => user);
       res.json(sanitizedUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -809,9 +832,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update user (main admin only)
-  app.put('/api/admin/users/:id', authenticate, requireMainAdmin, async (req, res) => {
+  // Update user (main admin, or sub-admin with Users permission managing non-admin accounts)
+  app.put('/api/admin/users/:id', authenticate, requirePermission('tab_users'), async (req, res) => {
     try {
+      const actor = (req as any).user;
       const { id } = req.params;
       const { firstName, lastName, email, schoolId, isActive, password } = req.body;
       
@@ -819,6 +843,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingUser = await storage.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (actor.role === 'sub-admin' && existingUser.role === 'admin') {
+        return res.status(403).json({ error: 'Access denied' });
       }
       
       // Prepare update data
@@ -849,9 +877,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // PATCH user (main admin only) - for partial updates like password changes
-  app.patch('/api/admin/users/:id', authenticate, requireMainAdmin, async (req, res) => {
+  // PATCH user (main admin, or sub-admin with Users permission managing non-admin accounts) - for partial updates like password changes
+  app.patch('/api/admin/users/:id', authenticate, requirePermission('tab_users'), async (req, res) => {
     try {
+      const actor = (req as any).user;
       const { id } = req.params;
       const { password, ...otherData } = req.body;
       
@@ -859,6 +888,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingUser = await storage.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (actor.role === 'sub-admin' && existingUser.role === 'admin') {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      if (actor.role === 'sub-admin' && 'role' in otherData && otherData.role !== existingUser.role) {
+        return res.status(403).json({ error: 'You cannot change a user\'s role' });
+      }
+      if (actor.role === 'sub-admin' && 'permissions' in otherData) {
+        return res.status(403).json({ error: 'Only main admins can change permissions' });
       }
       
       // Update password if provided
@@ -878,9 +917,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete user (main admin only)
-  app.delete('/api/admin/users/:id', authenticate, requireMainAdmin, async (req, res) => {
+  // Delete user (main admin, or sub-admin with Users/Students-delete permission for non-admin accounts)
+  app.delete('/api/admin/users/:id', authenticate, async (req, res) => {
     try {
+      const actor = (req as any).user;
       const { id } = req.params;
       
       // Prevent deletion of admin users
@@ -891,6 +931,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (user.role === 'admin') {
         return res.status(403).json({ error: 'Cannot delete admin users' });
+      }
+
+      const requiredPermission = user.role === 'student' ? 'students_delete' : 'tab_users';
+      if (!hasPermission(actor.role, actor.permissions, requiredPermission)) {
+        return res.status(403).json({ error: 'You do not have permission to delete this user' });
       }
       
       await storage.deleteUser(id);
@@ -909,6 +954,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create user error:", error);
       res.status(400).json({ error: "Failed to create user" });
+    }
+  });
+
+  // Set a sub-admin's tab/feature permissions (Task #152) - main admin only.
+  // Sub-admins can never edit permissions, including their own, to prevent self-escalation.
+  app.patch('/api/admin/users/:id/permissions', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const targetUser = await storage.getUserById(id);
+      if (!targetUser) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      if (targetUser.role !== 'sub-admin') {
+        return res.status(400).json({ error: 'Permissions can only be set for sub-admin accounts' });
+      }
+
+      const permissions = validatePermissions(req.body.permissions);
+      const updated = await storage.updateUserPermissions(id, permissions);
+      const { password, passwordUpdatedAt, ...sanitized } = updated as any;
+      res.json(sanitized);
+    } catch (error: any) {
+      console.error('Error updating user permissions:', error);
+      res.status(400).json({ error: error.message || 'Failed to update permissions' });
     }
   });
 
@@ -2579,7 +2647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ===== FINANCIAL MANAGEMENT ROUTES =====
 
   // Fee Types Management
-  app.post('/api/admin/fee-types', authenticate, requireAdmin, async (req, res) => {
+  app.post('/api/admin/fee-types', authenticate, requirePermission('finance_fee_types_management'), async (req, res) => {
     try {
       const user = (req as any).user;
       const { classAmounts, term: tuitionTerm, session: tuitionSession, ...bodyData } = req.body;
@@ -2624,7 +2692,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/admin/fee-types/:id', authenticate, requireAdmin, async (req, res) => {
+  app.put('/api/admin/fee-types/:id', authenticate, requirePermission('finance_fee_types_management'), async (req, res) => {
     try {
       const user = (req as any).user;
       const { id } = req.params;
@@ -2649,7 +2717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/admin/fee-types/:id', authenticate, requireMainAdmin, async (req, res) => {
+  app.delete('/api/admin/fee-types/:id', authenticate, requirePermission('finance_fee_types_management'), async (req, res) => {
     try {
       const { id } = req.params;
       await storage.deleteFeeType(id);
@@ -3264,8 +3332,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const objectStorageService = new ObjectStorageService();
     
     try {
-      if (user.role !== "admin") {
-        return res.status(403).json({ error: "Only main admins can create news" });
+      if (!hasPermission(user.role, user.permissions, "tab_news")) {
+        return res.status(403).json({ error: "You do not have permission to create news" });
       }
 
       // Validate request body using Zod schema
@@ -3343,8 +3411,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { id } = req.params;
     
     try {
-      if (user.role !== "admin") {
-        return res.status(403).json({ error: "Only main admins can delete news" });
+      if (!hasPermission(user.role, user.permissions, "tab_news")) {
+        return res.status(403).json({ error: "You do not have permission to delete news" });
       }
 
       await storage.deleteNews(id);
@@ -4083,7 +4151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== BANK STATEMENT & PAYMENT CONFIRMATION (ADMIN ONLY) ====================
   
   // Upload bank statement (PDF or Excel) - admin only
-  app.post("/api/admin/bank-statements/upload", authenticate, requireMainAdmin, upload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/admin/bank-statements/upload", authenticate, requirePermission('finance_bank_reconciliation'), upload.single("file"), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const file = req.file;
@@ -4244,7 +4312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get bank statements (admin only)
-  app.get("/api/admin/bank-statements", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/bank-statements", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const { schoolId } = req.query;
@@ -4261,7 +4329,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/admin/bank-statements/:id", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.delete("/api/admin/bank-statements/:id", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const { id } = req.params;
@@ -4285,7 +4353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get unmatched bank transactions (admin only)
-  app.get("/api/admin/bank-transactions/unmatched", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/bank-transactions/unmatched", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const { schoolId } = req.query;
@@ -4303,7 +4371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get bank transactions filtered by status, enriched with linked payment allocations (admin only)
-  app.get("/api/admin/bank-transactions", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/bank-transactions", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const { schoolId, status } = req.query;
@@ -4652,7 +4720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Task #128 phase 2: re-scan an old statement for similar duplicates.
   // Admin-only. Respects cleared-pair memory. Never overwrites an existing
   // duplicateOfTransactionId. Writes per-flag + summary audit logs.
-  app.post("/api/admin/bank-statements/:id/rescan-duplicates", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/bank-statements/:id/rescan-duplicates", authenticate, requirePermission('finance_bank_reconciliation'), async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;
       const statementId = req.params.id;
@@ -4896,7 +4964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: list contact submissions
-  app.get("/api/admin/contact-submissions", authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/admin/contact-submissions", authenticate, requirePermission('tab_inquiries'), async (_req: Request, res: Response) => {
     try {
       const rows = await db.select().from(contactSubmissions).orderBy(desc(contactSubmissions.createdAt));
       res.json(rows);
@@ -4907,7 +4975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: mark contact submission as read/unread
-  app.patch("/api/admin/contact-submissions/:id/read", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/admin/contact-submissions/:id/read", authenticate, requirePermission('tab_inquiries'), async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const isRead = req.body?.isRead === false ? false : true;
@@ -4924,7 +4992,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: list admissions applications
-  app.get("/api/admin/admissions", authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/admin/admissions", authenticate, requirePermission('tab_inquiries'), async (_req: Request, res: Response) => {
     try {
       const rows = await db.select().from(admissionsApplications).orderBy(desc(admissionsApplications.createdAt));
       res.json(rows);
@@ -4935,7 +5003,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin: mark admissions application as read/unread
-  app.patch("/api/admin/admissions/:id/read", authenticate, requireAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/admin/admissions/:id/read", authenticate, requirePermission('tab_inquiries'), async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const isRead = req.body?.isRead === false ? false : true;

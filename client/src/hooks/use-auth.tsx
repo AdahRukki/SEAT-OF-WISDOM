@@ -12,6 +12,7 @@ interface AuthUser {
   lastName: string;
   role: string;
   schoolId?: string;
+  permissions?: string[] | null;
 }
 
 interface AuthContextType {
@@ -108,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         lastName: authUser.lastName,
         role: authUser.role,
         schoolId: authUser.schoolId,
+        permissions: authUser.permissions,
       });
     }
   }, [user]);

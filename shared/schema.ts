@@ -103,6 +103,9 @@ export const users = pgTable("users", {
   schoolId: uuid("school_id").references(() => schools.id), // sub-admins and students are tied to specific schools
   isActive: boolean("is_active").default(true),
   passwordUpdatedAt: timestamp("password_updated_at").defaultNow(), // For session invalidation after password changes
+  // Per-sub-admin tab/feature permission toggles. NULL means "use legacy default permissions"
+  // (Students, Scores, Grading, Finance tabs on; everything else off). Ignored for role 'admin'.
+  permissions: text("permissions").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

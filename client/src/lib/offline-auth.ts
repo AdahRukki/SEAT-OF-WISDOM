@@ -12,6 +12,7 @@ interface CachedAuthEntry {
     lastName: string;
     role: string;
     schoolId?: string;
+    permissions?: string[] | null;
   };
   cachedAt: number;
 }

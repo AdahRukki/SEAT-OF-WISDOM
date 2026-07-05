@@ -8,6 +8,7 @@ import type { OfflineStudent } from "@/lib/offline-queue";
 import { onPrefetchStart, onPrefetchDone, isPrefetchRunning } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { hasPermission as checkPermission, TAB_PERMISSIONS, FEATURE_PERMISSIONS, DEFAULT_SUB_ADMIN_PERMISSIONS } from "@shared/permissions";
 import { useLogo } from "@/hooks/use-logo";
 import { firebaseSync } from "@/lib/offline-firebase-sync";
 import { 
@@ -677,6 +678,7 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
+  const perm = (key: string) => checkPermission(user?.role, user?.permissions, key);
   const { logoUrl: currentLogoUrl, isLoading: logoLoading } = useLogo();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -729,8 +731,24 @@ export default function AdminDashboard() {
   // School selection for main admin
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
 
-  // Active tab state — sub-admins start on Students (no Overview access)
-  const [activeTab, setActiveTab] = useState(user?.role === 'sub-admin' ? 'students' : 'overview');
+  // Active tab state — pick the first tab the user has permission to see
+  const getDefaultTab = () => {
+    if (user?.role !== 'sub-admin') return 'overview';
+    const order: Array<[string, string]> = [
+      ['tab_overview', 'overview'],
+      ['tab_students', 'students'],
+      ['tab_scores', 'scores'],
+      ['tab_grading', 'grading'],
+      ['tab_finance', 'finance'],
+      ['tab_reports', 'reports'],
+      ['tab_users', 'users'],
+      ['tab_news', 'news'],
+      ['tab_inquiries', 'inquiries'],
+    ];
+    const permitted = order.find(([key]) => checkPermission(user?.role, user?.permissions, key));
+    return permitted ? permitted[1] : 'students';
+  };
+  const [activeTab, setActiveTab] = useState(getDefaultTab());
 
   // Student editing states
   const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
@@ -802,6 +820,9 @@ export default function AdminDashboard() {
   const [selectedUserForProfile, setSelectedUserForProfile] = useState<User | null>(null);
   const [isEditUserDialogOpen, setIsEditUserDialogOpen] = useState(false);
   const [selectedUserForEdit, setSelectedUserForEdit] = useState<User | null>(null);
+  const [isManageAccessDialogOpen, setIsManageAccessDialogOpen] = useState(false);
+  const [selectedUserForAccess, setSelectedUserForAccess] = useState<User | null>(null);
+  const [pendingPermissions, setPendingPermissions] = useState<string[]>([]);
   
   // User form states
   const [adminFirstName, setAdminFirstName] = useState("");
@@ -1729,6 +1750,32 @@ export default function AdminDashboard() {
       toast({
         title: "Update Failed",
         description: error.message || "Failed to update user. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const updateUserPermissionsMutation = useMutation({
+    mutationFn: async (data: { id: string; permissions: string[] }) => {
+      return apiRequest(`/api/admin/users/${data.id}/permissions`, {
+        method: 'PATCH',
+        body: { permissions: data.permissions }
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Access Updated",
+        description: "Sub-admin permissions have been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
+      setIsManageAccessDialogOpen(false);
+      setSelectedUserForAccess(null);
+      setPendingPermissions([]);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update permissions. Please try again.",
         variant: "destructive",
       });
     }
@@ -4103,47 +4150,55 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
           <TabsList className={`grid w-full gap-0.5 h-auto p-1 bg-muted/60 ${user?.role === 'sub-admin' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-9'}`}>
-            {user?.role === 'admin' && (
+            {perm('tab_overview') && (
               <TabsTrigger value="overview" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <LayoutDashboard className="h-4 w-4 shrink-0" />
                 <span>Overview</span>
               </TabsTrigger>
             )}
-            <TabsTrigger value="students" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-              <Users className="h-4 w-4 shrink-0" />
-              <span>Students</span>
-            </TabsTrigger>
-            <TabsTrigger value="scores" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-              <BookOpen className="h-4 w-4 shrink-0" />
-              <span>Scores</span>
-            </TabsTrigger>
-            <TabsTrigger value="grading" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-              <ClipboardCheck className="h-4 w-4 shrink-0" />
-              <span>Ratings</span>
-            </TabsTrigger>
-            <TabsTrigger value="finance" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-              <Wallet className="h-4 w-4 shrink-0" />
-              <span>Finance</span>
-            </TabsTrigger>
-            {user?.role === 'admin' && (
+            {perm('tab_students') && (
+              <TabsTrigger value="students" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <Users className="h-4 w-4 shrink-0" />
+                <span>Students</span>
+              </TabsTrigger>
+            )}
+            {perm('tab_scores') && (
+              <TabsTrigger value="scores" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <BookOpen className="h-4 w-4 shrink-0" />
+                <span>Scores</span>
+              </TabsTrigger>
+            )}
+            {perm('tab_grading') && (
+              <TabsTrigger value="grading" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <ClipboardCheck className="h-4 w-4 shrink-0" />
+                <span>Ratings</span>
+              </TabsTrigger>
+            )}
+            {perm('tab_finance') && (
+              <TabsTrigger value="finance" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+                <Wallet className="h-4 w-4 shrink-0" />
+                <span>Finance</span>
+              </TabsTrigger>
+            )}
+            {perm('tab_reports') && (
               <TabsTrigger value="reports" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <FileText className="h-4 w-4 shrink-0" />
                 <span>Reports</span>
               </TabsTrigger>
             )}
-            {user?.role === 'admin' && (
+            {perm('tab_users') && (
               <TabsTrigger value="users" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Shield className="h-4 w-4 shrink-0" />
                 <span>Settings</span>
               </TabsTrigger>
             )}
-            {user?.role === 'admin' && (
+            {perm('tab_news') && (
               <TabsTrigger value="news" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Bell className="h-4 w-4 shrink-0" />
                 <span>News</span>
               </TabsTrigger>
             )}
-            {user?.role === 'admin' && (
+            {perm('tab_inquiries') && (
               <TabsTrigger value="inquiries" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Inbox className="h-4 w-4 shrink-0" />
                 <span>Inquiries</span>
@@ -4151,8 +4206,8 @@ export default function AdminDashboard() {
             )}
           </TabsList>
 
-          {/* Overview Tab - Admin Only */}
-          {user?.role === 'admin' && <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+          {/* Overview Tab */}
+          {perm('tab_overview') && <TabsContent value="overview" className="space-y-4 sm:space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -4473,7 +4528,7 @@ export default function AdminDashboard() {
                               {isActive ? <UserX className="h-3 w-3 sm:mr-1" /> : <UserCheck className="h-3 w-3 sm:mr-1" />}
                               <span className="hidden sm:inline">{isActive ? 'Deactivate' : 'Activate'}</span>
                             </Button>
-                            {user?.role === 'admin' && (
+                            {perm('students_delete') && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -4553,7 +4608,7 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {user?.role === 'admin' && (
+            {perm('students_view_graduated') && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -4594,7 +4649,7 @@ export default function AdminDashboard() {
               </Card>
             )}
 
-            {user?.role === 'admin' && (
+            {perm('students_view_withdrawn') && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -4996,7 +5051,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-2 xl:grid-cols-5' : 'grid-cols-2'}`}>
-              {user?.role === 'admin' && (
+              {perm('finance_total_revenue') && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
                     <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
@@ -5014,7 +5069,7 @@ export default function AdminDashboard() {
                 </Card>
               )}
 
-              {user?.role === 'admin' && (
+              {perm('finance_outstanding_fees') && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
                     <CardTitle className="text-xs sm:text-sm font-medium">Outstanding Fees</CardTitle>
@@ -5059,7 +5114,7 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
 
-              {user?.role === 'admin' && (
+              {perm('finance_pos_fees') && (
                 <Card data-testid="card-pos-fees">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
                     <CardTitle className="text-xs sm:text-sm font-medium">POS Fees Absorbed</CardTitle>
@@ -5077,7 +5132,7 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {user?.role === 'admin' && (
+            {perm('finance_class_tuition_breakdown') && (
               <div className="mb-4">
                 <Button
                   variant="outline"
@@ -5100,8 +5155,8 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {/* Fee Types Management - Admin Only */}
-            {user?.role === 'admin' && (<Card>
+            {/* Fee Types Management */}
+            {perm('finance_fee_types_management') && (<Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>Fee Types Management</CardTitle>
@@ -5238,8 +5293,8 @@ export default function AdminDashboard() {
               )}
             </Card>
 
-            {/* Bank Statement Upload & Reconciliation (Admin Only) */}
-            {user?.role === 'admin' && (
+            {/* Bank Statement Upload & Reconciliation */}
+            {perm('finance_bank_reconciliation') && (
               <Card>
                 <CardHeader>
                   <CardTitle>Bank Statement Reconciliation</CardTitle>
@@ -5257,8 +5312,8 @@ export default function AdminDashboard() {
             )}
           </TabsContent>
 
-          {/* Report Cards Tab - Admin Only */}
-          {user?.role === 'admin' && (
+          {/* Report Cards Tab */}
+          {perm('tab_reports') && (
             <TabsContent value="reports" className="space-y-6 table-container">
               <ReportCardManagement 
                 classes={classes}
@@ -5270,7 +5325,7 @@ export default function AdminDashboard() {
           )}
 
           {/* User Management Tab - Admin Only */}
-          {user?.role === 'admin' && <TabsContent value="users" className="space-y-6 table-container">
+          {perm('tab_users') && <TabsContent value="users" className="space-y-6 table-container">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -5366,6 +5421,25 @@ export default function AdminDashboard() {
                               >
                                 <Edit className="w-4 h-4" />
                               </Button>
+                              {user?.role === 'admin' && adminUser.role === 'sub-admin' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedUserForAccess(adminUser);
+                                    setPendingPermissions(
+                                      adminUser.permissions && adminUser.permissions.length > 0
+                                        ? adminUser.permissions
+                                        : DEFAULT_SUB_ADMIN_PERMISSIONS
+                                    );
+                                    setIsManageAccessDialogOpen(true);
+                                  }}
+                                  data-testid={`button-manage-access-${adminUser.id}`}
+                                >
+                                  <Shield className="w-4 h-4 sm:mr-1" />
+                                  <span className="hidden sm:inline">Manage Access</span>
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -5618,6 +5692,100 @@ export default function AdminDashboard() {
                 <div className="flex justify-end">
                   <Button variant="outline" onClick={() => setIsUserProfileDialogOpen(false)}>
                     Close
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Manage Access (Permissions) Dialog */}
+            <Dialog open={isManageAccessDialogOpen} onOpenChange={setIsManageAccessDialogOpen}>
+              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Manage Access</DialogTitle>
+                  <DialogDescription>
+                    {selectedUserForAccess ? `Choose which tabs and features ${selectedUserForAccess.firstName} ${selectedUserForAccess.lastName} can access.` : ''}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6 py-2">
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2">Tabs</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {TAB_PERMISSIONS.map((p) => (
+                        <div key={p.key} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`perm-${p.key}`}
+                            checked={pendingPermissions.includes(p.key)}
+                            onChange={(e) => {
+                              setPendingPermissions((prev) =>
+                                e.target.checked
+                                  ? Array.from(new Set([...prev, p.key]))
+                                  : prev.filter((k) => k !== p.key)
+                              );
+                            }}
+                            className="rounded border-gray-300"
+                            data-testid={`checkbox-${p.key}`}
+                          />
+                          <Label htmlFor={`perm-${p.key}`} className="text-sm font-normal">{p.label}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2">Granular Features</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {FEATURE_PERMISSIONS.map((p) => (
+                        <div key={p.key} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`perm-${p.key}`}
+                            checked={pendingPermissions.includes(p.key)}
+                            onChange={(e) => {
+                              setPendingPermissions((prev) =>
+                                e.target.checked
+                                  ? Array.from(new Set([...prev, p.key]))
+                                  : prev.filter((k) => k !== p.key)
+                              );
+                            }}
+                            className="rounded border-gray-300"
+                            data-testid={`checkbox-${p.key}`}
+                          />
+                          <Label htmlFor={`perm-${p.key}`} className="text-sm font-normal">{p.label}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {pendingPermissions.filter((k) => TAB_PERMISSIONS.some((t) => t.key === k)).length === 0 && (
+                    <p className="text-xs text-red-600">At least one tab must remain enabled.</p>
+                  )}
+                </div>
+                <div className="flex justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsManageAccessDialogOpen(false);
+                      setSelectedUserForAccess(null);
+                      setPendingPermissions([]);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (!selectedUserForAccess) return;
+                      updateUserPermissionsMutation.mutate({
+                        id: selectedUserForAccess.id,
+                        permissions: pendingPermissions,
+                      });
+                    }}
+                    disabled={
+                      !selectedUserForAccess ||
+                      pendingPermissions.filter((k) => TAB_PERMISSIONS.some((t) => t.key === k)).length === 0 ||
+                      updateUserPermissionsMutation.isPending
+                    }
+                    data-testid="button-save-access"
+                  >
+                    {updateUserPermissionsMutation.isPending ? "Saving..." : "Save Access"}
                   </Button>
                 </div>
               </DialogContent>
@@ -6091,8 +6259,8 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>}
 
-          {/* News & Notifications Tab - Main Admin Only */}
-          {user.role === 'admin' && (
+          {/* News & Notifications Tab */}
+          {perm('tab_news') && (
             <TabsContent value="news" className="space-y-6">
               <NewsManagement />
               <Separator />
@@ -6100,8 +6268,8 @@ export default function AdminDashboard() {
             </TabsContent>
           )}
 
-          {/* Inquiries Tab - Main Admin Only */}
-          {user.role === 'admin' && (
+          {/* Inquiries Tab */}
+          {perm('tab_inquiries') && (
             <TabsContent value="inquiries" className="space-y-6">
               <InquiriesManagement />
             </TabsContent>

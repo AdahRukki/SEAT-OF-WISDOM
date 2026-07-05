@@ -76,6 +76,8 @@ async function runMigrations() {
       ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
       ALTER TABLE students ADD COLUMN IF NOT EXISTS status_session VARCHAR(20);
       ALTER TABLE students ADD COLUMN IF NOT EXISTS status_term VARCHAR(50);
+      -- Task #152: per-sub-admin tab/feature permission toggles.
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[];
       -- Seed default sort order for existing classes (one-time; only when unset).
       UPDATE classes SET sort_order = 1 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'J.S.S 1';
       UPDATE classes SET sort_order = 2 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'J.S.S 2';

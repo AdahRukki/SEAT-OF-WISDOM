@@ -119,6 +119,7 @@ export interface IStorage {
   getAllUsers(adminOnly?: boolean): Promise<(User & { school?: School })[]>;
   createUser(userData: InsertUser): Promise<User>;
   deleteUser(userId: string): Promise<void>;
+  updateUserPermissions(userId: string, permissions: string[]): Promise<User>;
   updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School>;
   updateSchoolPrincipalSignature(schoolId: string, signatureUrl: string): Promise<School>;
   createStudent(studentData: InsertStudent): Promise<Student>;
@@ -511,6 +512,20 @@ export class DatabaseStorage implements IStorage {
     await db.delete(users).where(eq(users.id, userId));
   }
 
+  async updateUserPermissions(userId: string, permissions: string[]): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ permissions })
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!updated) {
+      throw new Error('User not found');
+    }
+
+    return updated;
+  }
+
 
 
   async createStudent(studentData: InsertStudent): Promise<Student> {
@@ -760,6 +775,7 @@ export class DatabaseStorage implements IStorage {
         role: users.role,
         schoolId: users.schoolId,
         isActive: users.isActive,
+        permissions: users.permissions,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
         school: {
