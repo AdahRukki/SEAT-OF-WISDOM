@@ -1248,26 +1248,26 @@ export default function AdminDashboard() {
   // User Management queries
   const { data: adminUsers = [] } = useQuery<User[]>({
     queryKey: ['/api/admin/users?adminOnly=true'],
-    enabled: user?.role === 'admin'
+    enabled: perm('tab_users')
   });
 
   const { data: inactiveStudents = [], isLoading: inactiveStudentsLoading } = useQuery<StudentWithDetails[]>({
     queryKey: ['/api/admin/students/inactive', selectedSchoolId],
     queryFn: () => apiRequest(selectedSchoolId ? `/api/admin/students/inactive?schoolId=${selectedSchoolId}` : '/api/admin/students/inactive'),
-    enabled: user?.role === 'admin'
+    enabled: perm('students_view_withdrawn')
   });
 
-  // Graduated & withdrawn students — main admin only
+  // Graduated & withdrawn students — gated by their own granular permissions
   const { data: graduatedStudents = [], isLoading: graduatedStudentsLoading } = useQuery<StudentWithDetails[]>({
     queryKey: ['/api/admin/students/graduated', selectedSchoolId],
     queryFn: () => apiRequest(selectedSchoolId ? `/api/admin/students/graduated?schoolId=${selectedSchoolId}` : '/api/admin/students/graduated'),
-    enabled: user?.role === 'admin'
+    enabled: perm('students_view_graduated')
   });
 
   const { data: withdrawnStudents = [], isLoading: withdrawnStudentsLoading } = useQuery<StudentWithDetails[]>({
     queryKey: ['/api/admin/students/withdrawn', selectedSchoolId],
     queryFn: () => apiRequest(selectedSchoolId ? `/api/admin/students/withdrawn?schoolId=${selectedSchoolId}` : '/api/admin/students/withdrawn'),
-    enabled: user?.role === 'admin'
+    enabled: perm('students_view_withdrawn')
   });
 
   const groupStudentsBySessionTerm = (list: StudentWithDetails[]) => {
