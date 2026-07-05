@@ -1295,6 +1295,7 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students/inactive'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students/withdrawn'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to mark student as withdrawn", variant: "destructive" });
@@ -2526,6 +2527,7 @@ export default function AdminDashboard() {
       if (user?.schoolId) {
         queryClient.invalidateQueries({ queryKey: ['/api/admin/students', user.schoolId] });
       }
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
     },
     onError: (error: any) => {
       toast({
