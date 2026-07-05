@@ -3027,7 +3027,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const term = req.query.term as string;
       const session = req.query.session as string;
       
-      const summary = await storage.getFinancialSummary(schoolId, term, session);
+      const summary: any = await storage.getFinancialSummary(schoolId, term, session);
+
+      // Strip granular Finance card data the caller isn't permitted to see.
+      // studentsOwing/collectionRate stay visible to anyone with the Finance
+      // tab (those cards aren't individually toggleable per the permission spec).
+      if (!hasPermission(user.role, user.permissions, 'finance_total_revenue')) {
+        delete summary.totalRevenue;
+        delete summary.totalPaid;
+        delete summary.actualTuitionCollected;
+      }
+      if (!hasPermission(user.role, user.permissions, 'finance_outstanding_fees')) {
+        delete summary.totalOutstanding;
+        delete summary.totalFees;
+      }
+      if (!hasPermission(user.role, user.permissions, 'finance_pos_fees')) {
+        delete summary.totalPosFees;
+      }
+
       res.json(summary);
     } catch (error) {
       console.error("Get financial summary error:", error);
@@ -3036,7 +3053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Per-class tuition collection breakdown
-  app.get('/api/admin/financial-summary/by-class', authenticate, requireAdmin, async (req, res) => {
+  app.get('/api/admin/financial-summary/by-class', authenticate, requirePermission('finance_class_tuition_breakdown'), async (req, res) => {
     try {
       const user = (req as any).user;
       const schoolId = user.role === 'sub-admin' ? user.schoolId : req.query.schoolId as string;
