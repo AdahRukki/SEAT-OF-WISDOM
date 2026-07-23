@@ -61,6 +61,9 @@ import {
   RefreshCw,
   CalendarDays,
   BookOpen,
+  ChevronDown,
+  ChevronRight,
+  UserX,
 } from "lucide-react";
 import { calculateGrade } from "@shared/schema";
 
@@ -75,6 +78,15 @@ interface ValidationResult {
   hasAllScores: boolean;
   hasAttendance: boolean;
   missingSubjects: string[];
+}
+
+interface SkippedStudent {
+  studentId: string;
+  studentName: string;
+  classId: string;
+  className: string;
+  missingSubjects: string[];
+  hasAttendance: boolean;
 }
 
 interface GeneratedReportCard {
@@ -311,6 +323,14 @@ export function ReportCardManagement({
   );
   const [isGeneratingReports, setIsGeneratingReports] = useState(false);
 
+  // Skipped students state (populated after bulk generation)
+  const [skippedStudents, setSkippedStudents] = useState<SkippedStudent[]>([]);
+  const [generationSummary, setGenerationSummary] = useState<{ generated: number; skipped: number } | null>(null);
+  const [skippedPanelOpen, setSkippedPanelOpen] = useState(true);
+  const [individualValidating, setIndividualValidating] = useState<Set<string>>(new Set());
+  const [individualValidationResults, setIndividualValidationResults] = useState<Record<string, ValidationResult>>({});
+  const [individuallyGenerated, setIndividuallyGenerated] = useState<Set<string>>(new Set());
+
   // Filter state for generated reports list
   const [filterSearch, setFilterSearch] = useState("");
   const [filterClass, setFilterClass] = useState("");
@@ -411,19 +431,11 @@ export function ReportCardManagement({
       return;
     }
 
-    // Validate all students have been checked
-    if (!isAllStudentsValidated) {
-      toast({
-        title: "Validation Required",
-        description:
-          "All students must be validated before generating reports.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsGeneratingReports(true);
     setShowResumptionDateDialog(false);
+    setSkippedStudents([]);
+    setGenerationSummary(null);
+    setIndividuallyGenerated(new Set());
 
     try {
       // Use selected term/session from dropdown (prioritize user selection)
@@ -432,8 +444,10 @@ export function ReportCardManagement({
       const isThirdTerm = currentTerm === "Third Term";
       const resumptionDateStr = format(resumptionDate, "PPP");
 
-      // Build validated student list from validation results
+      // Split students into validated and skipped groups
       const validatedStudentIds = new Set<string>();
+      const newSkippedStudents: SkippedStudent[] = [];
+
       Object.entries(validationResults).forEach(([studentId, validation]) => {
         if (validation.hasAllScores && validation.hasAttendance) {
           validatedStudentIds.add(studentId);
@@ -443,20 +457,42 @@ export function ReportCardManagement({
       if (validatedStudentIds.size === 0) {
         toast({
           title: "No Validated Students",
-          description: "No students found with complete validation data.",
+          description: "No students found with complete validation data. Please ensure at least one student has all scores and attendance recorded.",
           variant: "destructive",
         });
         return;
       }
 
-      let totalReports = validatedStudentIds.size;
-      let generatedReports = 0;
+      let generatedCount = 0;
 
-      // Publish scores and generate reports for validated students
+      // Publish scores and generate reports for validated students only
       for (const classId in schoolValidationResults) {
         const classResult = schoolValidationResults[classId];
-        if (classResult.validatedStudents > 0) {
-          // Publish scores for this class with next term resume date
+
+        // Get students for this class
+        const classStudents = await apiRequest(
+          `/api/admin/students/class/${classId}`,
+        );
+
+        // Collect skipped students for this class
+        for (const student of classStudents) {
+          if (!validatedStudentIds.has(student.id)) {
+            const validation = validationResults[student.id];
+            newSkippedStudents.push({
+              studentId: student.id,
+              studentName: `${student.user.firstName} ${student.user.lastName}`,
+              classId,
+              className: classResult.className,
+              missingSubjects: validation?.missingSubjects || [],
+              hasAttendance: validation?.hasAttendance || false,
+            });
+          }
+        }
+
+        const classHasValidatedStudents = classStudents.some((s: any) => validatedStudentIds.has(s.id));
+
+        if (classHasValidatedStudents) {
+          // Publish scores for this class (only affects validated students server-side)
           try {
             await apiRequest('/api/admin/publish-scores', {
               method: 'POST',
@@ -472,16 +508,9 @@ export function ReportCardManagement({
             throw publishError;
           }
 
-          // Get students for this class
-          const classStudents = await apiRequest(
-            `/api/admin/students/class/${classId}`,
-          );
-
           for (const student of classStudents) {
-            // Only generate for validated students
             if (validatedStudentIds.has(student.id)) {
               try {
-                // Create report card record with resumption date
                 await createReportMutation.mutateAsync({
                   studentId: student.id,
                   classId: classId,
@@ -489,46 +518,43 @@ export function ReportCardManagement({
                   session: currentSession,
                   studentName: `${student.user.firstName} ${student.user.lastName}`,
                   className: classResult.className,
-                  totalScore: "0", // Would be calculated from actual scores
-                  averageScore: "0", // Would be calculated from actual scores
-                  attendancePercentage: "0", // Would be calculated from attendance data
-                  resumptionDate: resumptionDateStr, // Include resumption date
+                  totalScore: "0",
+                  averageScore: "0",
+                  attendancePercentage: "0",
+                  resumptionDate: resumptionDateStr,
                 });
-
-                generatedReports++;
+                generatedCount++;
               } catch (error) {
                 console.error(
                   `Failed to generate report for student ${student.id}:`,
                   error,
                 );
-                throw error; // Stop process if report generation fails
+                throw error;
               }
             }
           }
         }
       }
 
-      const allReportsGenerated = generatedReports === totalReports;
-
-      if (!allReportsGenerated) {
-        throw new Error(
-          `Only ${generatedReports}/${totalReports} reports generated successfully`,
-        );
-      }
+      setSkippedStudents(newSkippedStudents);
+      setGenerationSummary({ generated: generatedCount, skipped: newSkippedStudents.length });
+      setSkippedPanelOpen(true);
 
       toast({
-        title: "All Reports Generated Successfully",
-        description: `Generated ${generatedReports} reports. ${isThirdTerm ? "Promoting students..." : "Advancing term..."}`,
+        title: "Reports Generated",
+        description: `Reports generated for ${generatedCount} student${generatedCount !== 1 ? "s" : ""}. ${newSkippedStudents.length > 0 ? `${newSkippedStudents.length} student${newSkippedStudents.length !== 1 ? "s were" : " was"} skipped due to incomplete data.` : ""}`.trim(),
       });
 
       // Sequential execution: Promote first (if third term), then advance term
       try {
         if (isThirdTerm) {
-          await promoteStudentsToNextClass();
+          const skippedIds = new Set(newSkippedStudents.map((s) => s.studentId));
+          await promoteStudentsToNextClass(skippedIds);
           toast({
             title: "Students Promoted",
-            description:
-              "All students have been promoted to their next classes.",
+            description: newSkippedStudents.length > 0
+              ? `Validated students promoted. ${newSkippedStudents.length} skipped student${newSkippedStudents.length !== 1 ? "s were" : " was"} not promoted.`
+              : "All students have been promoted to their next classes.",
           });
         }
 
@@ -561,8 +587,8 @@ export function ReportCardManagement({
     }
   };
 
-  // Student promotion logic for third term
-  const promoteStudentsToNextClass = async () => {
+  // Student promotion logic for third term — skippedIds are excluded from promotion
+  const promoteStudentsToNextClass = async (skippedIds: Set<string> = new Set()) => {
     console.log("Starting student promotion process...");
 
     try {
@@ -578,12 +604,15 @@ export function ReportCardManagement({
             `/api/admin/students/class/${classId}`,
           );
 
+          // Exclude skipped students from promotion
+          const eligibleStudents = classStudents.filter((s: any) => !skippedIds.has(s.id));
+
           // Determine next class for this class
           const nextClassId = getNextClass(classId);
 
           if (nextClassId === "GRADUATE") {
             // Students graduate (SS3 → Graduate)
-            const studentIds = classStudents.map((s: any) => s.id);
+            const studentIds = eligibleStudents.map((s: any) => s.id);
             if (studentIds.length > 0) {
               await apiRequest("/api/admin/promote-students", {
                 method: "POST",
@@ -600,7 +629,7 @@ export function ReportCardManagement({
             }
           } else if (nextClassId) {
             // Promote to next class
-            const studentIds = classStudents.map((s: any) => s.id);
+            const studentIds = eligibleStudents.map((s: any) => s.id);
             if (studentIds.length > 0) {
               await apiRequest("/api/admin/promote-students", {
                 method: "POST",
@@ -714,6 +743,84 @@ export function ReportCardManagement({
 
   const handleAdvanceTerm = () => {
     advanceAcademicTerm.mutate();
+  };
+
+  // Handle individual validate & generate for a skipped student
+  const handleIndividualValidateAndGenerate = async (skipped: SkippedStudent) => {
+    setIndividualValidating((prev) => new Set(prev).add(skipped.studentId));
+    try {
+      const result = await apiRequest("/api/admin/validate-report-data-bulk", {
+        method: "POST",
+        body: {
+          classId: skipped.classId,
+          term: selectedTerm || academicInfo?.currentTerm,
+          session: selectedSession || academicInfo?.currentSession,
+        },
+      });
+      const studentResult: ValidationResult = result.results?.[skipped.studentId] || {
+        hasAllScores: false,
+        hasAttendance: false,
+        missingSubjects: skipped.missingSubjects,
+      };
+      setIndividualValidationResults((prev) => ({
+        ...prev,
+        [skipped.studentId]: studentResult,
+      }));
+    } catch {
+      toast({
+        title: "Validation Error",
+        description: `Failed to validate ${skipped.studentName}. Please try again.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIndividualValidating((prev) => {
+        const next = new Set(prev);
+        next.delete(skipped.studentId);
+        return next;
+      });
+    }
+  };
+
+  const handleForceGenerateSkipped = async (skipped: SkippedStudent) => {
+    try {
+      const currentTerm = selectedTerm || academicInfo?.currentTerm;
+      const currentSession = selectedSession || academicInfo?.currentSession;
+      const resumptionDateStr = resumptionDate ? format(resumptionDate, "PPP") : undefined;
+
+      await createReportMutation.mutateAsync({
+        studentId: skipped.studentId,
+        classId: skipped.classId,
+        term: currentTerm,
+        session: currentSession,
+        studentName: skipped.studentName,
+        className: skipped.className,
+        totalScore: "0",
+        averageScore: "0",
+        attendancePercentage: "0",
+        ...(resumptionDateStr ? { resumptionDate: resumptionDateStr } : {}),
+      });
+
+      // Remove from skipped list
+      setSkippedStudents((prev) => prev.filter((s) => s.studentId !== skipped.studentId));
+      setIndividuallyGenerated((prev) => new Set(prev).add(skipped.studentId));
+      setIndividualValidationResults((prev) => {
+        const next = { ...prev };
+        delete next[skipped.studentId];
+        return next;
+      });
+      setGenerationSummary((prev) => prev ? { ...prev, skipped: prev.skipped - 1, generated: prev.generated + 1 } : prev);
+
+      toast({
+        title: "Report Generated",
+        description: `Report card generated for ${skipped.studentName}.`,
+      });
+    } catch {
+      toast({
+        title: "Generation Failed",
+        description: `Could not generate report for ${skipped.studentName}. Please try again.`,
+        variant: "destructive",
+      });
+    }
   };
 
   const getValidationStatus = (studentId: string) => {
@@ -1746,7 +1853,11 @@ export function ReportCardManagement({
 
               <Button
                 onClick={() => setShowResumptionDateDialog(true)}
-                disabled={!isAllStudentsValidated || isGeneratingReports}
+                disabled={
+                  Object.keys(schoolValidationResults).length === 0 ||
+                  !Object.values(validationResults).some((v) => v.hasAllScores && v.hasAttendance) ||
+                  isGeneratingReports
+                }
                 size="sm"
                 className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
                 data-testid="button-generate-all-reports"
@@ -1760,6 +1871,12 @@ export function ReportCardManagement({
               <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2.5 py-1.5">
                 <CheckCircle className="w-3.5 h-3.5 shrink-0" />
                 All students validated — ready to generate report cards.
+              </div>
+            )}
+            {!isAllStudentsValidated && Object.keys(schoolValidationResults).length > 0 && Object.values(validationResults).some((v) => v.hasAllScores && v.hasAttendance) && (
+              <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Some students have incomplete data. Fully-validated students will be generated; incomplete ones will be listed for individual handling.
               </div>
             )}
           </div>
@@ -1851,6 +1968,155 @@ export function ReportCardManagement({
               })}
             </div>
           </CardContent>
+        </Card>
+      )}
+
+      {/* Generation Summary Banner */}
+      {generationSummary && (
+        <div className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm ${generationSummary.skipped === 0 ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+          <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            Reports generated for <strong>{generationSummary.generated}</strong> student{generationSummary.generated !== 1 ? "s" : ""}.
+            {generationSummary.skipped > 0 && (
+              <> <strong>{generationSummary.skipped}</strong> student{generationSummary.skipped !== 1 ? "s were" : " was"} skipped due to incomplete data.</>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Skipped Students Panel */}
+      {skippedStudents.length > 0 && (
+        <Card className="border-amber-200">
+          <CardHeader className="pb-2">
+            <button
+              onClick={() => setSkippedPanelOpen((o) => !o)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <div className="flex items-center gap-2">
+                <UserX className="w-4 h-4 text-amber-600" />
+                <CardTitle className="text-sm font-semibold text-amber-800">
+                  Skipped Students ({skippedStudents.length})
+                </CardTitle>
+              </div>
+              {skippedPanelOpen ? (
+                <ChevronDown className="w-4 h-4 text-amber-600" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-amber-600" />
+              )}
+            </button>
+            <CardDescription className="text-xs mt-1">
+              These students had incomplete data and were skipped during bulk generation. Validate and generate their reports individually below.
+            </CardDescription>
+          </CardHeader>
+          {skippedPanelOpen && (
+            <CardContent>
+              {/* Group by class */}
+              {(() => {
+                const byClass: Record<string, SkippedStudent[]> = {};
+                skippedStudents.forEach((s) => {
+                  if (!byClass[s.classId]) byClass[s.classId] = [];
+                  byClass[s.classId].push(s);
+                });
+                return Object.entries(byClass).map(([classId, students]) => (
+                  <div key={classId} className="mb-4 last:mb-0">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                      {students[0].className}
+                    </p>
+                    <div className="divide-y divide-border rounded-lg border overflow-hidden">
+                      {students.map((skipped) => {
+                        const indivResult = individualValidationResults[skipped.studentId];
+                        const isValidating = individualValidating.has(skipped.studentId);
+                        const isGenerating = createReportMutation.isPending;
+                        return (
+                          <div key={skipped.studentId} className="px-3 py-2.5 bg-background">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">{skipped.studentName}</p>
+                                {/* Show known missing info */}
+                                {!indivResult && (
+                                  <div className="flex flex-wrap gap-x-3 mt-0.5">
+                                    {skipped.missingSubjects.length > 0 && (
+                                      <span className="text-[11px] text-red-600">
+                                        Missing scores: {skipped.missingSubjects.slice(0, 3).join(", ")}{skipped.missingSubjects.length > 3 ? ` +${skipped.missingSubjects.length - 3}` : ""}
+                                      </span>
+                                    )}
+                                    {!skipped.hasAttendance && (
+                                      <span className="text-[11px] text-orange-600">No attendance</span>
+                                    )}
+                                  </div>
+                                )}
+                                {/* Show inline validation result */}
+                                {indivResult && (
+                                  <div className="mt-1.5 rounded border border-border bg-muted/40 p-2 space-y-1">
+                                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Validation Result</p>
+                                    {indivResult.hasAllScores && indivResult.hasAttendance ? (
+                                      <p className="text-[11px] text-green-700 flex items-center gap-1">
+                                        <CheckCircle className="w-3 h-3" /> All data complete — ready to generate.
+                                      </p>
+                                    ) : (
+                                      <>
+                                        {!indivResult.hasAllScores && indivResult.missingSubjects.length > 0 && (
+                                          <p className="text-[11px] text-red-600 flex items-center gap-1">
+                                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                                            Missing scores: {indivResult.missingSubjects.join(", ")}
+                                          </p>
+                                        )}
+                                        {!indivResult.hasAllScores && indivResult.missingSubjects.length === 0 && (
+                                          <p className="text-[11px] text-red-600 flex items-center gap-1">
+                                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                                            Missing scores
+                                          </p>
+                                        )}
+                                        {!indivResult.hasAttendance && (
+                                          <p className="text-[11px] text-orange-600 flex items-center gap-1">
+                                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                                            No attendance recorded
+                                          </p>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1.5 shrink-0 items-end">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleIndividualValidateAndGenerate(skipped)}
+                                  disabled={isValidating || isGenerating}
+                                  className="h-7 px-2 text-xs border-amber-300 text-amber-800 hover:bg-amber-50"
+                                >
+                                  {isValidating ? (
+                                    <><RefreshCw className="w-3 h-3 mr-1 animate-spin" />Validating…</>
+                                  ) : (
+                                    <><CheckCircle className="w-3 h-3 mr-1" />Validate &amp; Generate</>
+                                  )}
+                                </Button>
+                                {indivResult && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleForceGenerateSkipped(skipped)}
+                                    disabled={isGenerating}
+                                    className="h-7 px-2 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                                  >
+                                    {isGenerating ? (
+                                      <><RefreshCw className="w-3 h-3 mr-1 animate-spin" />Generating…</>
+                                    ) : (
+                                      <><Download className="w-3 h-3 mr-1" />Generate Report Anyway</>
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </CardContent>
+          )}
         </Card>
       )}
 
