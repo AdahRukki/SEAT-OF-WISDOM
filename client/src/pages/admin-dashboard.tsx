@@ -3481,7 +3481,7 @@ export default function AdminDashboard() {
         <body>
           <div class="report-card">
             <div class="header">
-              <img src="/assets/academy-logo.png" alt="School Logo" class="header-logo" />
+              <img src="${currentLogoUrl || '/assets/academy-logo.png'}" alt="School Logo" class="header-logo" />
               <div class="header-text">
                 <div class="school-name">SEAT OF WISDOM ACADEMY</div>
                 <div class="school-motto">ASABA, DELTA STATE &nbsp;|&nbsp; PRE NURSERY, NURSERY, PRIMARY &amp; SECONDARY</div>
