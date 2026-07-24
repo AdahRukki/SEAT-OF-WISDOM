@@ -2073,6 +2073,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get class statistics (averages and per-student positions) for admin/sub-admin report card generation
+  app.get('/api/admin/class-stats', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'admin' && user.role !== 'sub-admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { term, session, classId, studentId } = req.query;
+      if (!classId || !term || !session) {
+        return res.status(400).json({ error: "classId, term, and session are required" });
+      }
+
+      const allAssessments = await storage.getAssessmentsByClassTermSession(
+        classId as string,
+        term as string,
+        session as string
+      );
+
+      const subjectStats: Record<string, { classAverage: number; position: number; totalStudents: number }> = {};
+      const subjectGroups: Record<string, { studentId: string; total: number }[]> = {};
+
+      for (const assessment of allAssessments) {
+        if (!subjectGroups[assessment.subjectId]) {
+          subjectGroups[assessment.subjectId] = [];
+        }
+        subjectGroups[assessment.subjectId].push({
+          studentId: assessment.studentId,
+          total: Number(assessment.total) || 0,
+        });
+      }
+
+      for (const [subjectId, scores] of Object.entries(subjectGroups)) {
+        const totalStudents = scores.length;
+        const sum = scores.reduce((acc, s) => acc + s.total, 0);
+        const classAverage = totalStudents > 0 ? Math.round(sum / totalStudents) : 0;
+        const sorted = [...scores].sort((a, b) => b.total - a.total);
+        const targetStudentId = studentId as string | undefined;
+        const position = targetStudentId
+          ? (sorted.findIndex(s => s.studentId === targetStudentId) + 1) || 0
+          : 0;
+        subjectStats[subjectId] = { classAverage, position, totalStudents };
+      }
+
+      res.json(subjectStats);
+    } catch (error) {
+      console.error("Get admin class stats error:", error);
+      res.status(500).json({ error: "Failed to fetch class statistics" });
+    }
+  });
+
   // Get students by class (for teacher interface)
   app.get('/api/admin/students/by-class/:classId', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {

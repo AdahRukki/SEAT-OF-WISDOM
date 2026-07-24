@@ -161,6 +161,8 @@ import {
 } from "@shared/schema";
 import type { z } from "zod";
 import * as XLSX from 'xlsx';
+import { generateReportCardHtml, getPrincipalComment, getBehavioralInterpretationText } from "@/lib/report-card-template";
+import type { ReportSubjectRow } from "@/lib/report-card-template";
 
 type FeeTypeForm = z.infer<typeof insertFeeTypeSchema>;
 
@@ -3414,54 +3416,32 @@ export default function AdminDashboard() {
     setIsReportDialogOpen(true);
   };
 
-  // Generate the actual report card — unified template matching Report Card Management
+  // Generate the actual report card — uses the shared gold template (same as Report Card Management)
   const generateReportCard = async (student: any, nextTermDate: string, term: string, session: string, promotedToClass?: string) => {
     const reportWindow = window.open('', '_blank');
     if (!reportWindow) return;
 
-    // Helper: principal comment based on average %
-    const getPrincipalComment = (avg: number): string => {
-      if (avg >= 90) return "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
-      if (avg >= 80) return "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
-      if (avg >= 75) return "Good work! You show clear understanding of your subjects. With a bit more effort, you can reach the top.";
-      if (avg >= 70) return "A fairly good performance. You are doing well, but there is still room for improvement. Aim higher next term.";
-      if (avg >= 65) return "You have tried, but you can do much better. Put in more effort and stay focused on your studies.";
-      if (avg >= 60) return "A fair attempt, but there is a need for greater dedication. Work harder to improve your overall performance.";
-      if (avg >= 50) return "You passed, but this performance is not satisfactory. More seriousness and consistent study habits are required.";
-      if (avg >= 45) return "You barely passed. Try to be more attentive in class and spend more time revising your work.";
-      if (avg >= 40) return "A poor result. You need to put in significant effort and seek help from teachers to strengthen weak areas.";
-      return "Very poor performance. You must work very hard and take your studies seriously. Consistent supervision is advised.";
-    };
-
-    // Helper: behavioral interpretation
-    const getBehavioralInterpretation = (r: any): string => {
-      const avg = ([r.attendancePunctuality, r.neatnessOrganization, r.respectPoliteness, r.participationTeamwork, r.responsibility].map(v => v || 3).reduce((s: number, v: number) => s + v, 0)) / 5;
-      if (avg >= 4.5) return 'Excellent Behavior';
-      if (avg >= 3.5) return 'Very Good Behavior';
-      if (avg >= 2.5) return 'Good Behavior';
-      if (avg >= 1.5) return 'Fair Behavior - Needs Improvement';
-      return 'Poor Behavior - Urgent Attention Required';
-    };
-
-    // Fetch extra data in parallel
-    let attendanceData: any[] = [];
+    // Fetch attendance, behavioral data, and class stats in parallel
+    let attendanceDataRaw: any[] = [];
     let behavioralRating: any = null;
+    let classStats: Record<string, { classAverage: number; position: number; totalStudents: number }> = {};
     try {
-      const [attendanceResp, behavioralResp] = await Promise.all([
+      const [attendanceResp, behavioralResp, classStatsResp] = await Promise.all([
         apiRequest(`/api/admin/attendance/class/${student.classId}?term=${encodeURIComponent(term)}&session=${encodeURIComponent(session)}`).catch(() => []),
         apiRequest(`/api/admin/non-academic-ratings/${student.classId}/${encodeURIComponent(term)}/${encodeURIComponent(session)}`).catch(() => []),
+        apiRequest(`/api/admin/class-stats?classId=${encodeURIComponent(student.classId)}&term=${encodeURIComponent(term)}&session=${encodeURIComponent(session)}&studentId=${encodeURIComponent(student.id)}`).catch(() => ({})),
       ]);
-      attendanceData = attendanceResp || [];
+      attendanceDataRaw = attendanceResp || [];
       const ratings = behavioralResp || [];
       behavioralRating = ratings.find((r: any) => r.studentId === student.id) || null;
+      classStats = classStatsResp || {};
     } catch {
-      // silently continue with no attendance/behavioral data
+      // silently continue with no extra data
     }
 
-    const studentAttendance = attendanceData.find((a: any) => a.studentId === student.id);
-    const attendanceRecorded = studentAttendance && studentAttendance.totalDays > 0;
-    const attendanceDays = attendanceRecorded
-      ? `${studentAttendance.presentDays} / ${studentAttendance.totalDays} days`
+    const studentAttendance = attendanceDataRaw.find((a: any) => a.studentId === student.id);
+    const attendanceDaysData = (studentAttendance && studentAttendance.totalDays > 0)
+      ? { total: studentAttendance.totalDays, present: studentAttendance.presentDays }
       : null;
 
     // Only show subjects that have scores
@@ -3470,15 +3450,43 @@ export default function AdminDashboard() {
       return ((a?.firstCA || 0) + (a?.secondCA || 0) + (a?.exam || 0)) > 0;
     });
 
-    const totalMarks = subjectsWithScores.reduce((sum, subject) => {
-      const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
-      return sum + ((assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0));
-    }, 0);
+    const subjectRows: ReportSubjectRow[] = subjectsWithScores.map(subject => {
+      const a = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+      const firstCA = Number(a?.firstCA || 0);
+      const secondCA = Number(a?.secondCA || 0);
+      const exam = Number(a?.exam || 0);
+      const total = firstCA + secondCA + exam;
+      const { grade, remark } = calculateGrade(total);
+      const stat = classStats[subject.id];
+      return {
+        name: subject.name,
+        firstCA,
+        secondCA,
+        exam,
+        total,
+        grade,
+        remark,
+        classAverage: stat?.classAverage ?? null,
+        position: stat?.position ?? null,
+      };
+    });
 
-    const averagePercentage = subjectsWithScores.length ? (totalMarks / (subjectsWithScores.length * 100)) * 100 : 0;
-    const principalComment = getPrincipalComment(averagePercentage);
+    const totalMarks = subjectRows.reduce((s, r) => s + r.total, 0);
+    const averagePercentage = subjectRows.length ? (totalMarks / (subjectRows.length * 100)) * 100 : 0;
+    const principalCommentText = getPrincipalComment(averagePercentage);
+    const behavioralInterpretation = getBehavioralInterpretationText(behavioralRating);
 
     const studentName = [student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ');
+
+    const ageDisplay = student.dateOfBirth ? (() => {
+      const b = new Date(student.dateOfBirth);
+      const t = new Date();
+      if (isNaN(b.getTime()) || b > t) return 'N/A';
+      let a = t.getFullYear() - b.getFullYear();
+      const m = t.getMonth() - b.getMonth();
+      if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--;
+      return (a < 0 || a > 150) ? 'N/A' : a + ' yrs';
+    })() : 'N/A';
 
     const promotionText = promotedToClass === "Graduated"
       ? "🎓 CONGRATULATIONS! Student has successfully GRADUATED from the academy."
@@ -3486,241 +3494,28 @@ export default function AdminDashboard() {
         ? `Promoted to ${promotedToClass} for next academic session`
         : "";
 
-    const reportHTML = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Report Card - ${studentName}</title>
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            @page { size: A4 portrait; margin: 12mm; }
-            body { font-family: 'Inter', 'Segoe UI', sans-serif; background: #e8eeff; color: #1e3a8a; line-height: 1.4; }
-            .report-card { width: 100%; max-width: 760px; margin: 20px auto; background: #fdfbf7; box-shadow: 0 4px 20px rgba(30,58,138,0.15); border: 1px solid #c7d2fe; }
+    // Get principal signature from the school of this student
+    const studentSchool = schools.find((s: any) => s.id === student.class?.schoolId);
+    const principalSignatureUrl = studentSchool?.principalSignature || null;
 
-            /* HEADER */
-            .header { background: linear-gradient(to right, #1e3a8a, #1d4ed8, #1e3a8a); padding: 28px 28px 22px 28px; display: flex; align-items: center; gap: 20px; border-bottom: 4px solid #d4af37; color: white; }
-            .header-logo { width: 80px; height: 80px; border-radius: 50%; border: 3px solid #d4af37; background: white; object-fit: cover; flex-shrink: 0; }
-            .header-text { flex: 1; text-align: center; }
-            .school-name { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; letter-spacing: 1px; margin-bottom: 3px; }
-            .school-levels { font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #d4af37; margin-bottom: 3px; }
-            .school-location { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #bfdbfe; margin-bottom: 4px; }
-            .school-motto { font-family: 'Playfair Display', serif; font-style: italic; color: #d4af37; font-size: 11px; margin-bottom: 10px; }
-            .report-title-wrap { display: inline-block; border-top: 1px solid #d4af37; border-bottom: 1px solid #d4af37; padding: 5px 24px; }
-            .report-title { font-family: 'Playfair Display', serif; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
-
-            /* STUDENT INFO */
-            .student-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 16px 24px; background: #f0f4ff; border-bottom: 2px solid #d4af37; }
-            .info-item { }
-            .info-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1e3a8a; display: block; margin-bottom: 2px; }
-            .info-value { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 12px; font-weight: 600; color: #0f172a; font-variant-numeric: tabular-nums; }
-            .info-name { font-family: 'Playfair Display', serif; font-size: 12px; font-weight: 600; color: #0f172a; }
-
-            /* BODY */
-            .body { padding: 20px 24px; }
-
-            /* SECTION HEADING */
-            .section-heading { font-family: 'Playfair Display', serif; font-size: 13px; font-weight: 700; color: #1e3a8a; text-transform: uppercase; letter-spacing: 2px; border-bottom: 2px solid #1e3a8a; padding-bottom: 5px; margin-bottom: 12px; }
-
-            /* SUBJECTS TABLE */
-            .subjects-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
-            .subjects-table th { background: linear-gradient(to right, #1e3a8a, #1d4ed8, #1e3a8a); color: white; padding: 8px 6px; text-align: center; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #1e3a8a; }
-            .subjects-table th.subject-col { text-align: left; }
-            .subjects-table td { padding: 7px 6px; text-align: center; border: 1px solid #1e3a8a; font-size: 9px; font-variant-numeric: tabular-nums; }
-            .subjects-table td.subject-col { text-align: left; font-weight: 600; color: #0f172a; font-variant-numeric: normal; }
-            .subjects-table tr:nth-child(even) td { background: #f0f4ff; }
-            .subjects-table tr:nth-child(odd) td { background: #ffffff; }
-            .subjects-table td.total-col { font-weight: 700; background: #e8eeff !important; }
-            .subjects-table td.grade-col { font-weight: 700; color: #1e3a8a; }
-
-            /* TWO COL */
-            .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-            .panel { background: #f0f4ff; border: 1px solid #c7d2fe; padding: 12px; }
-            .panel-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(212,175,55,0.2); font-size: 10px; }
-            .panel-row:last-child { border-bottom: none; }
-            .panel-val { font-weight: 700; color: #1e3a8a; font-variant-numeric: tabular-nums; }
-
-            /* BEHAVIORAL */
-            .behavioral-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-            .behavioral-item { display: flex; justify-content: space-between; font-size: 9px; padding: 4px 0; border-bottom: 1px solid rgba(212,175,55,0.15); }
-            .behavioral-val { font-weight: 700; }
-
-            /* PRINCIPAL COMMENT */
-            .comment-section { border-left: 4px solid #1e3a8a; padding: 10px 14px; margin-bottom: 16px; background: #f8faff; }
-            .comment-label { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 11px; color: #1e3a8a; margin-bottom: 5px; }
-            .comment-text { font-size: 9px; font-style: italic; line-height: 1.6; color: #1e3a8a; }
-
-            /* PROMOTION */
-            .promotion-section { background: linear-gradient(to right, #1e3a8a, #1d4ed8, #1e3a8a); color: white; text-align: center; padding: 12px; border: 2px solid #d4af37; margin-bottom: 20px; }
-            .promotion-label { font-size: 8px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; margin-bottom: 4px; }
-            .promotion-text { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; letter-spacing: 1px; }
-
-            /* BOTTOM GRID */
-            .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: end; margin-bottom: 20px; }
-            .grade-key { background: #f0f4ff; border: 1px solid #c7d2fe; padding: 10px 12px; }
-            .grade-key-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1e3a8a; border-bottom: 1px solid rgba(212,175,55,0.4); padding-bottom: 4px; margin-bottom: 6px; }
-            .grade-key-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; font-size: 8px; font-weight: 600; color: #1e3a8a; }
-            .sig-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: center; }
-            .sig-line { border-bottom: 1px solid #1e3a8a; height: 36px; margin-bottom: 4px; }
-            .sig-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1e3a8a; }
-
-            /* PRINT BUTTON */
-            .print-button { display: block; width: 220px; margin: 16px auto 8px; padding: 11px 24px; background: #1e3a8a; color: white; border: none; border-radius: 20px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; }
-
-            @media print {
-              * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
-              body { background: white !important; margin: 0 !important; }
-              .report-card { margin: 0 !important; box-shadow: none !important; border: none !important; max-width: 100% !important; }
-              .print-button { display: none !important; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="report-card">
-
-            <div class="header">
-              <img src="${currentLogoUrl || '/assets/academy-logo.png'}" alt="School Logo" class="header-logo" />
-              <div class="header-text">
-                <div class="school-name">SEAT OF WISDOM ACADEMY</div>
-                <div class="school-levels">Pre-Nursery, Nursery, Primary &amp; Secondary</div>
-                <div class="school-location">Asaba, Delta State</div>
-                <div class="school-motto">"The Fear of the Lord is the Beginning of Wisdom"</div>
-                <div class="report-title-wrap">
-                  <div class="report-title">${term.toUpperCase()} Assessment Report &mdash; ${session} Session</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="student-info">
-              <div class="info-item"><span class="info-label">Student Name</span><span class="info-name">${studentName}</span></div>
-              <div class="info-item"><span class="info-label">Student ID</span><span class="info-value">${student.studentId}</span></div>
-              <div class="info-item"><span class="info-label">Class</span><span class="info-value">${student.class?.name || ''}</span></div>
-              <div class="info-item"><span class="info-label">Gender</span><span class="info-value">${student.gender || 'N/A'}</span></div>
-              <div class="info-item"><span class="info-label">Age</span><span class="info-value">${student.dateOfBirth ? (() => { const b = new Date(student.dateOfBirth); const t = new Date(); if (isNaN(b.getTime()) || b > t) return 'N/A'; let a = t.getFullYear() - b.getFullYear(); const m = t.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--; return (a < 0 || a > 150) ? 'N/A' : a + ' yrs'; })() : 'N/A'}</span></div>
-              <div class="info-item"><span class="info-label">Next Term Begins</span><span class="info-value">${nextTermDate ? new Date(nextTermDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'TBA'}</span></div>
-            </div>
-
-            <div class="body">
-
-              <div class="section-heading">Academic Performance</div>
-              <table class="subjects-table">
-                <thead>
-                  <tr>
-                    <th class="subject-col">Subject</th>
-                    <th>1st CA<br><span style="font-size:7px;font-weight:400;opacity:0.85">(20)</span></th>
-                    <th>2nd CA<br><span style="font-size:7px;font-weight:400;opacity:0.85">(20)</span></th>
-                    <th>Exam<br><span style="font-size:7px;font-weight:400;opacity:0.85">(60)</span></th>
-                    <th style="background:#1d4ed8;">Total<br><span style="font-size:7px;font-weight:400;opacity:0.85">(100)</span></th>
-                    <th>Grade</th>
-                    <th>Remark</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${subjectsWithScores.map((subject) => {
-                    const a = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
-                    const firstCA = a?.firstCA || 0;
-                    const secondCA = a?.secondCA || 0;
-                    const exam = a?.exam || 0;
-                    const total = firstCA + secondCA + exam;
-                    const { grade, remark } = calculateGrade(total);
-                    return `<tr>
-                      <td class="subject-col">${subject.name}</td>
-                      <td>${firstCA}</td>
-                      <td>${secondCA}</td>
-                      <td>${exam}</td>
-                      <td class="total-col">${total}</td>
-                      <td class="grade-col">${grade}</td>
-                      <td style="font-style:italic;">${remark}</td>
-                    </tr>`;
-                  }).join('')}
-                </tbody>
-              </table>
-
-              <div class="two-col">
-                <div>
-                  <div class="section-heading">Summary</div>
-                  <div class="panel">
-                    <div class="panel-row"><span>Total Score</span><span class="panel-val">${totalMarks} / ${subjectsWithScores.length * 100}</span></div>
-                    <div class="panel-row" style="border-bottom:none;"><span>Average</span><span class="panel-val">${averagePercentage.toFixed(1)}%</span></div>
-                  </div>
-                  ${attendanceRecorded ? `
-                  <div class="section-heading" style="margin-top:14px;">Attendance</div>
-                  <table style="width:100%;border-collapse:collapse;font-size:9px;">
-                    <tr>
-                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#f0f4ff;font-weight:600;">Days School Opened</td>
-                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#ffffff;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;">${studentAttendance.totalDays}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#f0f4ff;font-weight:600;">Days Present</td>
-                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#e8eeff;text-align:center;font-weight:700;color:#1e3a8a;font-variant-numeric:tabular-nums;">${studentAttendance.presentDays}</td>
-                    </tr>
-                  </table>
-                  ` : ''}
-                </div>
-                <div>
-                  <div class="section-heading">Behavioral Assessment</div>
-                  <div class="panel">
-                    ${behavioralRating ? `
-                    <div class="behavioral-grid">
-                      <div class="behavioral-item"><span>Attendance</span><span class="behavioral-val">${getRatingText(behavioralRating.attendancePunctuality || 3)}</span></div>
-                      <div class="behavioral-item"><span>Punctuality</span><span class="behavioral-val">${getRatingText(behavioralRating.attendancePunctuality || 3)}</span></div>
-                      <div class="behavioral-item"><span>Neatness</span><span class="behavioral-val">${getRatingText(behavioralRating.neatnessOrganization || 3)}</span></div>
-                      <div class="behavioral-item"><span>Respect</span><span class="behavioral-val">${getRatingText(behavioralRating.respectPoliteness || 3)}</span></div>
-                      <div class="behavioral-item"><span>Participation</span><span class="behavioral-val">${getRatingText(behavioralRating.participationTeamwork || 3)}</span></div>
-                      <div class="behavioral-item"><span>Responsibility</span><span class="behavioral-val">${getRatingText(behavioralRating.responsibility || 3)}</span></div>
-                    </div>
-                    <div style="text-align:center;margin-top:6px;font-size:9px;font-weight:700;color:#1e3a8a;">${getBehavioralInterpretation(behavioralRating)}</div>
-                    ` : '<div style="font-size:9px;color:#64748b;font-style:italic;">No behavioral data recorded.</div>'}
-                  </div>
-                </div>
-              </div>
-
-              <div class="comment-section">
-                <div class="comment-label">Principal's Comment</div>
-                <p class="comment-text">${principalComment}</p>
-              </div>
-
-              ${promotionText ? `
-              <div class="promotion-section">
-                <div class="promotion-label">Final Decision</div>
-                <div class="promotion-text">${promotionText}</div>
-              </div>
-              ` : ''}
-
-              <div class="bottom-grid">
-                <div class="grade-key">
-                  <div class="grade-key-title">Grading Key (WAEC Standard)</div>
-                  <div class="grade-key-grid">
-                    <div><strong>A1</strong>: 75-100 Excellent</div>
-                    <div><strong>C6</strong>: 50-54 Credit</div>
-                    <div><strong>B2</strong>: 70-74 Very Good</div>
-                    <div><strong>D7</strong>: 45-49 Pass</div>
-                    <div><strong>B3</strong>: 65-69 Good</div>
-                    <div><strong>E8</strong>: 40-44 Pass</div>
-                    <div><strong>C4</strong>: 60-64 Credit</div>
-                    <div><strong>F9</strong>: 0-39 Fail</div>
-                    <div><strong>C5</strong>: 55-59 Credit</div>
-                  </div>
-                </div>
-                <div class="sig-section">
-                  <div>
-                    <div class="sig-line"></div>
-                    <div class="sig-label">Class Teacher</div>
-                  </div>
-                  <div>
-                    <div class="sig-line"></div>
-                    <div class="sig-label">Principal</div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-          <button class="print-button" onclick="window.print()">Print Report Card</button>
-        </body>
-      </html>
-    `;
+    const reportHTML = generateReportCardHtml({
+      studentName,
+      studentId: student.studentId,
+      className: student.class?.name || '',
+      gender: student.gender || 'N/A',
+      ageDisplay,
+      term,
+      session,
+      nextTermDate: nextTermDate || null,
+      logoUrl: currentLogoUrl || null,
+      subjects: subjectRows,
+      attendanceDays: attendanceDaysData,
+      behavioralRating,
+      principalComment: principalCommentText,
+      behavioralInterpretation: behavioralInterpretation || null,
+      promotionText: promotionText || null,
+      principalSignatureUrl,
+    });
 
     reportWindow.document.write(reportHTML);
     reportWindow.document.close();
