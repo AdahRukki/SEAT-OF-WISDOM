@@ -632,7 +632,8 @@ export function ReportCardManagement({
     console.log("Starting student promotion process...");
 
     try {
-      // SNAPSHOT: fetch all student lists BEFORE any DB writes to prevent cascade re-promotion
+      // SNAPSHOT: fetch all student lists BEFORE any DB writes to prevent cascade re-promotion.
+      // Phase 1: classes that went through school-wide validation (have assessed students)
       const snapshot: Record<string, string[]> = {};
       for (const classId in schoolValidationResults) {
         if (schoolValidationResults[classId].validatedStudents > 0) {
@@ -640,6 +641,24 @@ export function ReportCardManagement({
           snapshot[classId] = classStudents
             .filter((s: any) => !skippedIds.has(s.id))
             .map((s: any) => s.id);
+        }
+      }
+
+      // Phase 2: classes NOT in schoolValidationResults (finance-only / no subjects / SS3 with
+      // no scores). These still need their students promoted or graduated.
+      const validatedClassIds = new Set(Object.keys(schoolValidationResults));
+      const unvalidatedClasses = classes.filter(
+        (c: any) =>
+          (!activeSchoolId || c.schoolId === activeSchoolId) &&
+          !validatedClassIds.has(c.id)
+      );
+      for (const cls of unvalidatedClasses) {
+        const classStudents = await apiRequest(`/api/admin/students/class/${cls.id}`);
+        const ids = classStudents
+          .filter((s: any) => !skippedIds.has(s.id))
+          .map((s: any) => s.id);
+        if (ids.length > 0) {
+          snapshot[cls.id] = ids;
         }
       }
 
@@ -924,7 +943,8 @@ export function ReportCardManagement({
       const studentAttendance = attendance.find(
         (att: any) => att.studentId === student.id,
       );
-      const attendanceRecorded = studentAttendance && studentAttendance.totalDays > 0;
+      const classIgnoresAttendance = !!(classes as any[]).find((c: any) => c.id === report.classId)?.ignoreAttendance;
+      const attendanceRecorded = !classIgnoresAttendance && studentAttendance && studentAttendance.totalDays > 0;
       const attendanceDays = attendanceRecorded
         ? `${studentAttendance.presentDays} / ${studentAttendance.totalDays} days`
         : null;

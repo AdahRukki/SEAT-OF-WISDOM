@@ -2090,6 +2090,20 @@ export default function AdminDashboard() {
     }
   });
 
+  // Update class ignore-attendance flag
+  const updateClassSettingsMutation = useMutation({
+    mutationFn: async ({ classId, ignoreAttendance }: { classId: string; ignoreAttendance: boolean }) => {
+      return await apiRequest(`/api/admin/classes/${classId}/settings`, { method: 'PATCH', body: { ignoreAttendance } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
+      toast({ title: "Class settings saved" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save class settings", variant: "destructive" });
+    }
+  });
+
   // Update per-class subject name override mutation
   const updateClassSubjectNameMutation = useMutation({
     mutationFn: async ({ classId, subjectId, customName }: { classId: string; subjectId: string; customName: string }) => {
@@ -6222,6 +6236,23 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+              </div>
+
+              {/* Report Card Settings */}
+              <div className="border-t pt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Skip Attendance on Report Cards</p>
+                  <p className="text-xs text-gray-500">For finance-only or non-report-card classes</p>
+                </div>
+                <Switch
+                  checked={!!(selectedClassForDetails as any)?.ignoreAttendance}
+                  onCheckedChange={(checked) => {
+                    if (selectedClassForDetails?.id) {
+                      updateClassSettingsMutation.mutate({ classId: selectedClassForDetails.id, ignoreAttendance: checked });
+                    }
+                  }}
+                  disabled={updateClassSettingsMutation.isPending}
+                />
               </div>
 
               {/* Students Section */}

@@ -69,6 +69,7 @@ export const classes = pgTable("classes", {
   description: text("description"),
   schoolId: uuid("school_id").references(() => schools.id, { onDelete: "cascade" }),
   sortOrder: integer("sort_order").default(0), // Admin-defined academic order (1 = lowest class)
+  ignoreAttendance: boolean("ignore_attendance").default(false), // Skip attendance section on report cards
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

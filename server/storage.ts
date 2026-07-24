@@ -142,6 +142,7 @@ export interface IStorage {
   getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
   getClassSubjects(classId: string): Promise<(Subject & { customName: string | null })[]>;
   updateClassSubjectCustomName(classId: string, subjectId: string, customName: string | null): Promise<void>;
+  updateClassIgnoreAttendance(classId: string, ignoreAttendance: boolean): Promise<void>;
   getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
   
   // Assessment operations
@@ -1172,6 +1173,13 @@ export class DatabaseStorage implements IStorage {
           eq(classSubjects.subjectId, subjectId)
         )
       );
+  }
+
+  async updateClassIgnoreAttendance(classId: string, ignoreAttendance: boolean): Promise<void> {
+    await db
+      .update(classes)
+      .set({ ignoreAttendance })
+      .where(eq(classes.id, classId));
   }
 
   async getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {

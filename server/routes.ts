@@ -854,6 +854,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update class ignore-attendance flag
+  app.patch('/api/admin/classes/:classId/settings', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId } = req.params;
+      const { ignoreAttendance } = req.body;
+      if (typeof ignoreAttendance === 'boolean') {
+        await storage.updateClassIgnoreAttendance(classId, ignoreAttendance);
+      }
+      res.json({ message: "Class settings updated successfully" });
+    } catch (error) {
+      console.error("Update class settings error:", error);
+      res.status(500).json({ error: "Failed to update class settings" });
+    }
+  });
+
   // Update per-class subject name override
   app.patch('/api/admin/classes/:classId/subjects/:subjectId/name', authenticate, requireAdmin, async (req, res) => {
     try {
