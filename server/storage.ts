@@ -151,6 +151,7 @@ export interface IStorage {
   getStudentAssessments(studentId: string, term: string, session: string, classId?: string): Promise<(Assessment & { subject: Subject })[]>;
   getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
   getStudentsByClassTermSession(classId: string, term: string, session: string): Promise<StudentWithDetails[]>;
+  getStudentsByClassTermSessionForFinance(classId: string, term: string, session: string): Promise<StudentWithDetails[]>;
   getStudentEnrolledClasses(studentId: string): Promise<Class[]>;
   
   // Non-academic rating operations
@@ -3201,7 +3202,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudentsByClassTermSession(classId: string, term: string, session: string): Promise<StudentWithDetails[]> {
-    // Primary lookup: students who had assessments in this class+term+session
+    // Strictly assessment-derived: used by the scores tab.
+    // Returns ONLY students who have assessment records for this class+term+session.
+    // No payment fallback — avoids polluting the scores roster with unrelated students.
+    const distinctRows = await db
+      .selectDistinct({ studentId: assessments.studentId })
+      .from(assessments)
+      .where(
+        and(
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+
+    if (distinctRows.length === 0) return [];
+
+    const ids = distinctRows.map(r => r.studentId);
+
+    const studentsData = await db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(inArray(students.id, ids));
+
+    return studentsData.map(({ students: student, users: user, classes: classData }) => ({
+      ...student,
+      user: user!,
+      class: classData!,
+      assessments: []
+    }));
+  }
+
+  async getStudentsByClassTermSessionForFinance(classId: string, term: string, session: string): Promise<StudentWithDetails[]> {
+    // Finance-aware roster: used by the finance tab's class filter.
+    // Primary: assessment-derived (same as scores, covers classes with both scores and fees).
+    // Fallback for finance-only classes (no assessed subjects): students whose current
+    // classId matches AND who have payment records for the selected session.
+    // Finance-only classes don't have academic promotions, so current classId is a
+    // reliable proxy for historical class membership, and joining payment records
+    // ensures we only surface students who actually paid in that session.
     const distinctRows = await db
       .selectDistinct({ studentId: assessments.studentId })
       .from(assessments)
@@ -3216,29 +3257,21 @@ export class DatabaseStorage implements IStorage {
     let ids: string[] = distinctRows.map(r => r.studentId);
 
     if (ids.length === 0) {
-      // Finance-only class fallback: no assessments exist for this class+term+session.
-      // Derive students from fee payment records for the same school+term+session so that
-      // finance-only classes (no scored subjects) still surface their payers.
-      const classRecord = await db
-        .select({ schoolId: classes.schoolId })
-        .from(classes)
-        .where(eq(classes.id, classId))
-        .limit(1);
-
-      if (classRecord.length > 0 && classRecord[0].schoolId) {
-        const paymentRows = await db
-          .selectDistinct({ studentId: feePaymentRecords.studentId })
-          .from(feePaymentRecords)
-          .where(
-            and(
-              eq(feePaymentRecords.schoolId, classRecord[0].schoolId),
-              eq(feePaymentRecords.term, term),
-              eq(feePaymentRecords.session, session),
-              isNotNull(feePaymentRecords.studentId)
-            )
-          );
-        ids = paymentRows.map(r => r.studentId!);
-      }
+      // Finance-only class fallback: scoped to class membership via current classId
+      // joined with payment records for the selected session.
+      const payerRows = await db
+        .selectDistinct({ studentId: feePaymentRecords.studentId })
+        .from(feePaymentRecords)
+        .innerJoin(students, eq(feePaymentRecords.studentId, students.id))
+        .where(
+          and(
+            eq(students.classId, classId),
+            eq(feePaymentRecords.term, term),
+            eq(feePaymentRecords.session, session),
+            isNotNull(feePaymentRecords.studentId)
+          )
+        );
+      ids = payerRows.map(r => r.studentId!);
     }
 
     if (ids.length === 0) return [];

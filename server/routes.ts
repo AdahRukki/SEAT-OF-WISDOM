@@ -2189,11 +2189,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   }, async (req: Request, res: Response) => {
     try {
-      const { classId, term, session } = req.query as { classId: string; term: string; session: string };
+      const { classId, term, session, context } = req.query as {
+        classId: string; term: string; session: string; context?: string;
+      };
       if (!classId || !term || !session) {
         return res.status(400).json({ error: "classId, term, and session are required" });
       }
-      const students = await storage.getStudentsByClassTermSession(classId, term, session);
+      // Use finance-aware method (with class-scoped fallback for finance-only classes)
+      // when called from the finance tab; otherwise strict assessment-only for scores.
+      const students = context === 'finance'
+        ? await storage.getStudentsByClassTermSessionForFinance(classId, term, session)
+        : await storage.getStudentsByClassTermSession(classId, term, session);
       res.json(students);
     } catch (error) {
       console.error("Get historical students by class error:", error);

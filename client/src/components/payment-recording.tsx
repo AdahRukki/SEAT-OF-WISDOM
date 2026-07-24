@@ -332,8 +332,8 @@ export function PaymentRecording({
   // Fetch historical class membership so the class filter works for past sessions
   // (after promotion students have a new classId, so s.classId !== classFilter would exclude them)
   const { data: historicalClassStudents = [] } = useQuery<Student[]>({
-    queryKey: ['/api/admin/students/historical-by-class', classFilter, filterTerm, filterSession],
-    queryFn: () => apiRequest(`/api/admin/students/historical-by-class?classId=${classFilter}&term=${encodeURIComponent(filterTerm)}&session=${encodeURIComponent(filterSession)}`),
+    queryKey: ['/api/admin/students/historical-by-class', classFilter, filterTerm, filterSession, 'finance'],
+    queryFn: () => apiRequest(`/api/admin/students/historical-by-class?classId=${classFilter}&term=${encodeURIComponent(filterTerm)}&session=${encodeURIComponent(filterSession)}&context=finance`),
     enabled: classFilter !== "all" && !!filterTerm && !!filterSession,
   });
   const historicalClassStudentIds = useMemo(
