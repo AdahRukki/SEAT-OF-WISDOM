@@ -644,21 +644,18 @@ export function ReportCardManagement({
         }
       }
 
-      // Phase 2: classes NOT in schoolValidationResults (finance-only / no subjects / SS3 with
-      // no scores). These still need their students promoted or graduated.
-      const validatedClassIds = new Set(Object.keys(schoolValidationResults));
-      const unvalidatedClasses = classes.filter(
-        (c: any) =>
-          (!activeSchoolId || c.schoolId === activeSchoolId) &&
-          !validatedClassIds.has(c.id)
-      );
-      for (const cls of unvalidatedClasses) {
-        const classStudents = await apiRequest(`/api/admin/students/class/${cls.id}`);
-        const ids = classStudents
-          .filter((s: any) => !skippedIds.has(s.id))
-          .map((s: any) => s.id);
-        if (ids.length > 0) {
-          snapshot[cls.id] = ids;
+      // Phase 2: classes that ARE in schoolValidationResults but have validatedStudents === 0
+      // (finance-only / no subjects / SS3 with no scores). These are already in
+      // schoolValidationResults so Phase 1 skipped them — fetch & include their students now.
+      for (const classId in schoolValidationResults) {
+        if (schoolValidationResults[classId].validatedStudents === 0 && !(classId in snapshot)) {
+          const classStudents = await apiRequest(`/api/admin/students/class/${classId}`);
+          const ids = classStudents
+            .filter((s: any) => !skippedIds.has(s.id))
+            .map((s: any) => s.id);
+          if (ids.length > 0) {
+            snapshot[classId] = ids;
+          }
         }
       }
 
@@ -1632,7 +1629,7 @@ export function ReportCardManagement({
                 onClick={() => setShowResumptionDateDialog(true)}
                 disabled={
                   Object.keys(schoolValidationResults).length === 0 ||
-                  !Object.values(validationResults).some((v) => v.hasAllScores) ||
+                  (selectedTerm !== "Third Term" && !Object.values(validationResults).some((v) => v.hasAllScores)) ||
                   isGeneratingReports
                 }
                 size="sm"
@@ -1654,6 +1651,12 @@ export function ReportCardManagement({
               <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 Some students have incomplete data. Fully-validated students will be generated; incomplete ones will be listed for individual handling.
+              </div>
+            )}
+            {selectedTerm === "Third Term" && Object.keys(schoolValidationResults).length > 0 && (
+              <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2.5 py-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span><strong>Third Term:</strong> After generating, students will be promoted to their next class. Final-year (SS3) students will be <strong>graduated</strong>. Classes with no subjects will also be promoted.</span>
               </div>
             )}
           </div>
