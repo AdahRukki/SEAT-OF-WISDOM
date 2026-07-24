@@ -3575,12 +3575,21 @@ export default function AdminDashboard() {
                   <div class="section-heading">Summary</div>
                   <div class="panel">
                     <div class="panel-row"><span>Total Score</span><span class="panel-val">${totalMarks} / ${subjectsWithScores.length * 100}</span></div>
-                    <div class="panel-row"><span>Average</span><span class="panel-val">${averagePercentage.toFixed(1)}%</span></div>
-                    ${attendanceRecorded ? `
-                    <div class="panel-row"><span>Days School Opened</span><span class="panel-val">${studentAttendance.totalDays}</span></div>
-                    <div class="panel-row"><span>Days Present</span><span class="panel-val">${studentAttendance.presentDays}</span></div>
-                    ` : ''}
+                    <div class="panel-row" style="border-bottom:none;"><span>Average</span><span class="panel-val">${averagePercentage.toFixed(1)}%</span></div>
                   </div>
+                  ${attendanceRecorded ? `
+                  <div class="section-heading" style="margin-top:14px;">Attendance</div>
+                  <table style="width:100%;border-collapse:collapse;font-size:9px;">
+                    <tr>
+                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#f0f4ff;font-weight:600;">Days School Opened</td>
+                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#ffffff;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;">${studentAttendance.totalDays}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#f0f4ff;font-weight:600;">Days Present</td>
+                      <td style="padding:6px 8px;border:1px solid #1e3a8a;background:#e8eeff;text-align:center;font-weight:700;color:#1e3a8a;font-variant-numeric:tabular-nums;">${studentAttendance.presentDays}</td>
+                    </tr>
+                  </table>
+                  ` : ''}
                 </div>
                 <div>
                   <div class="section-heading">Behavioral Assessment</div>
