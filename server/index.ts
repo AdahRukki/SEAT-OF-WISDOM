@@ -80,6 +80,7 @@ async function runMigrations() {
       -- Task #152: per-sub-admin tab/feature permission toggles.
       ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[];
       ALTER TABLE password_reset_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP;
+      ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS custom_name TEXT;
       -- Seed default sort order for existing classes (one-time; only when unset).
       UPDATE classes SET sort_order = 1 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'J.S.S 1';
       UPDATE classes SET sort_order = 2 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'J.S.S 2';

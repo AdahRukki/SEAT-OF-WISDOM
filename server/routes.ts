@@ -854,6 +854,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update per-class subject name override
+  app.patch('/api/admin/classes/:classId/subjects/:subjectId/name', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId, subjectId } = req.params;
+      const { customName } = req.body;
+      await storage.updateClassSubjectCustomName(classId, subjectId, customName ?? null);
+      res.json({ message: "Class subject name updated successfully" });
+    } catch (error) {
+      console.error("Update class subject name error:", error);
+      res.status(500).json({ error: "Failed to update class subject name" });
+    }
+  });
+
   // Users routes (main admin only - sub-admins cannot access user management)
   app.get('/api/admin/users', authenticate, requirePermission('tab_users'), async (req, res) => {
     try {

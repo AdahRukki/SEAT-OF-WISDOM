@@ -721,6 +721,8 @@ export default function AdminDashboard() {
   const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
   const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false);
   const [selectedClassForDetails, setSelectedClassForDetails] = useState<Class | null>(null);
+  const [editingClassSubjectId, setEditingClassSubjectId] = useState<string | null>(null);
+  const [editingClassSubjectName, setEditingClassSubjectName] = useState("");
 
   // Form states
   const [className, setClassName] = useState("");
@@ -2082,6 +2084,25 @@ export default function AdminDashboard() {
       setEditingSubjectId(null);
       setEditingSubjectName("");
       toast({ title: "Subject updated", description: "Subject name updated successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update subject name", variant: "destructive" });
+    }
+  });
+
+  // Update per-class subject name override mutation
+  const updateClassSubjectNameMutation = useMutation({
+    mutationFn: async ({ classId, subjectId, customName }: { classId: string; subjectId: string; customName: string }) => {
+      return await apiRequest(`/api/admin/classes/${classId}/subjects/${subjectId}/name`, {
+        method: 'PATCH',
+        body: { customName: customName.trim() || null }
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes', selectedClassForDetails?.id, 'subjects'] });
+      setEditingClassSubjectId(null);
+      setEditingClassSubjectName("");
+      toast({ title: "Subject renamed", description: "Class subject name updated successfully" });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update subject name", variant: "destructive" });
@@ -6124,25 +6145,73 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {selectedClassSubjects.map((subject) => (
                     <div key={subject.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
-                      <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                        {subject.name.toUpperCase()}
-                      </span>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="h-6 w-6 p-0 text-blue-600 hover:text-red-600"
-                        onClick={() => {
-                          if (selectedClassForDetails?.id) {
-                            removeSubjectMutation.mutate({
-                              classId: selectedClassForDetails.id,
-                              subjectId: subject.id
-                            });
-                          }
-                        }}
-                        disabled={removeSubjectMutation.isPending}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
+                      {editingClassSubjectId === subject.id ? (
+                        <div className="flex items-center gap-1 flex-1 mr-1">
+                          <input
+                            className="text-xs font-medium flex-1 min-w-0 border border-blue-400 rounded px-1 py-0.5 bg-white dark:bg-blue-950 text-blue-800 dark:text-blue-200 focus:outline-none"
+                            value={editingClassSubjectName}
+                            onChange={e => setEditingClassSubjectName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && editingClassSubjectName.trim() && selectedClassForDetails?.id) {
+                                updateClassSubjectNameMutation.mutate({ classId: selectedClassForDetails.id, subjectId: subject.id, customName: editingClassSubjectName });
+                              }
+                              if (e.key === 'Escape') { setEditingClassSubjectId(null); setEditingClassSubjectName(""); }
+                            }}
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            className="h-5 px-1 text-xs"
+                            onClick={() => { if (selectedClassForDetails?.id) updateClassSubjectNameMutation.mutate({ classId: selectedClassForDetails.id, subjectId: subject.id, customName: editingClassSubjectName }); }}
+                            disabled={updateClassSubjectNameMutation.isPending || !editingClassSubjectName.trim()}
+                          >✓</Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-5 px-1 text-xs"
+                            onClick={() => { setEditingClassSubjectId(null); setEditingClassSubjectName(""); }}
+                          >✕</Button>
+                        </div>
+                      ) : (
+                        <span className="text-sm font-medium text-blue-800 dark:text-blue-200 flex-1 truncate">
+                          {subject.name.toUpperCase()}
+                          {(subject as any).customName && (
+                            <span className="ml-1 text-xs text-blue-400 font-normal">(custom)</span>
+                          )}
+                        </span>
+                      )}
+                      {editingClassSubjectId !== subject.id && (
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-blue-400 hover:text-blue-700"
+                            title="Rename for this class"
+                            onClick={() => {
+                              setEditingClassSubjectId(subject.id);
+                              setEditingClassSubjectName(subject.name);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-blue-600 hover:text-red-600"
+                            onClick={() => {
+                              if (selectedClassForDetails?.id) {
+                                removeSubjectMutation.mutate({
+                                  classId: selectedClassForDetails.id,
+                                  subjectId: subject.id
+                                });
+                              }
+                            }}
+                            disabled={removeSubjectMutation.isPending}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

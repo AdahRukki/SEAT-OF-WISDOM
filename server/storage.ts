@@ -140,7 +140,8 @@ export interface IStorage {
   getStudentsByClass(classId: string): Promise<StudentWithDetails[]>;
   getStudentByUserId(userId: string): Promise<StudentWithDetails | undefined>;
   getAllStudentsWithDetails(schoolId?: string): Promise<StudentWithDetails[]>;
-  getClassSubjects(classId: string): Promise<Subject[]>;
+  getClassSubjects(classId: string): Promise<(Subject & { customName: string | null })[]>;
+  updateClassSubjectCustomName(classId: string, subjectId: string, customName: string | null): Promise<void>;
   getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]>;
   
   // Assessment operations
@@ -1147,14 +1148,30 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getClassSubjects(classId: string): Promise<Subject[]> {
+  async getClassSubjects(classId: string): Promise<(Subject & { customName: string | null })[]> {
     const subjectsData = await db
       .select()
       .from(subjects)
       .innerJoin(classSubjects, eq(subjects.id, classSubjects.subjectId))
       .where(eq(classSubjects.classId, classId));
 
-    return subjectsData.map(({ subjects: subject }) => subject);
+    return subjectsData.map(({ subjects: subject, class_subjects: cs }) => ({
+      ...subject,
+      name: cs.customName ?? subject.name,
+      customName: cs.customName ?? null,
+    }));
+  }
+
+  async updateClassSubjectCustomName(classId: string, subjectId: string, customName: string | null): Promise<void> {
+    await db
+      .update(classSubjects)
+      .set({ customName: customName || null })
+      .where(
+        and(
+          eq(classSubjects.classId, classId),
+          eq(classSubjects.subjectId, subjectId)
+        )
+      );
   }
 
   async getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {

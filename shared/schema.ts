@@ -88,6 +88,7 @@ export const classSubjects = pgTable("class_subjects", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   classId: varchar("class_id", { length: 50 }).notNull().references(() => classes.id, { onDelete: "cascade" }),
   subjectId: uuid("subject_id").notNull().references(() => subjects.id, { onDelete: "cascade" }),
+  customName: text("custom_name"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
