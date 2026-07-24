@@ -827,6 +827,9 @@ export default function AdminDashboard() {
   const [reportSession, setReportSession] = useState("");
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
   const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
+  const [selectedStudentsForClassChange, setSelectedStudentsForClassChange] = useState<Set<string>>(new Set());
+  const [isChangeClassDialogOpen, setIsChangeClassDialogOpen] = useState(false);
+  const [targetClassForChange, setTargetClassForChange] = useState("");
 
   // User Management states
   const [isCreateSubAdminDialogOpen, setIsCreateSubAdminDialogOpen] = useState(false);
@@ -2720,6 +2723,25 @@ export default function AdminDashboard() {
     }
   });
 
+  const changeStudentClassMutation = useMutation({
+    mutationFn: async ({ studentIds, nextClassId }: { studentIds: string[]; nextClassId: string }) => {
+      return await apiRequest('/api/admin/promote-students', {
+        method: 'POST',
+        body: { currentClassId: selectedClassForStudents, nextClassId, studentIds }
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Success", description: "Student class updated successfully" });
+      setIsChangeClassDialogOpen(false);
+      setSelectedStudentsForClassChange(new Set());
+      setTargetClassForChange("");
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to change student class", variant: "destructive" });
+    }
+  });
+
   const assignFeeMutation = useMutation({
     mutationFn: async (assignmentData: AssignFeeForm) => {
       return await apiRequest('/api/admin/assign-fee', {
@@ -4335,14 +4357,64 @@ export default function AdminDashboard() {
 
                 {/* Students List - Compact mobile-friendly */}
                 {selectedClassForStudents ? (
+                  <>
+                  {/* Select-all bar + Change Class action */}
+                  {(() => {
+                    const classStudentsList = allStudents.filter(s => s.classId === selectedClassForStudents);
+                    const allSelected = classStudentsList.length > 0 && classStudentsList.every(s => selectedStudentsForClassChange.has(s.id));
+                    return (
+                      <div className="flex items-center gap-3 mb-2">
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded"
+                            checked={allSelected}
+                            onChange={() => {
+                              if (allSelected) {
+                                setSelectedStudentsForClassChange(new Set());
+                              } else {
+                                setSelectedStudentsForClassChange(new Set(classStudentsList.map(s => s.id)));
+                              }
+                            }}
+                          />
+                          Select all
+                        </label>
+                        {selectedStudentsForClassChange.size > 0 && (
+                          <Button
+                            size="sm"
+                            className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={() => { setTargetClassForChange(""); setIsChangeClassDialogOpen(true); }}
+                          >
+                            Change Class ({selectedStudentsForClassChange.size})
+                          </Button>
+                        )}
+                        {selectedStudentsForClassChange.size > 0 && (
+                          <button className="text-xs text-muted-foreground underline" onClick={() => setSelectedStudentsForClassChange(new Set())}>
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="border rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
                     {allStudents
                       .filter(student => student.classId === selectedClassForStudents)
                       .sort((a, b) => a.studentId.localeCompare(b.studentId))
                       .map((student) => {
                         const isActive = student.user?.isActive ?? true;
+                        const isChecked = selectedStudentsForClassChange.has(student.id);
                         return (
-                        <div key={student.id} className={`flex items-center justify-between px-3 py-2 gap-2 ${!isActive ? 'opacity-60 bg-gray-50 dark:bg-gray-800/40' : ''}`}>
+                        <div key={student.id} className={`flex items-center justify-between px-3 py-2 gap-2 ${!isActive ? 'opacity-60 bg-gray-50 dark:bg-gray-800/40' : ''} ${isChecked ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded shrink-0"
+                            checked={isChecked}
+                            onChange={() => {
+                              const next = new Set(selectedStudentsForClassChange);
+                              if (isChecked) next.delete(student.id); else next.add(student.id);
+                              setSelectedStudentsForClassChange(next);
+                            }}
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -4444,6 +4516,7 @@ export default function AdminDashboard() {
                       </div>
                     )}
                   </div>
+                  </>
                 ) : (
                   <div className="text-center py-12 border rounded-lg bg-gray-50 dark:bg-gray-800/50">
                     <School className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -8673,6 +8746,45 @@ export default function AdminDashboard() {
             </div>
           </DialogContent>
         </Dialog>
+      {/* Change Student Class Dialog */}
+      <Dialog open={isChangeClassDialogOpen} onOpenChange={(open) => { setIsChangeClassDialogOpen(open); if (!open) { setTargetClassForChange(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change Class</DialogTitle>
+            <DialogDescription>
+              Move {selectedStudentsForClassChange.size} student{selectedStudentsForClassChange.size !== 1 ? 's' : ''} to a different class.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Move to class</Label>
+              <Select value={targetClassForChange} onValueChange={setTargetClassForChange}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select target class..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortClassesByOrder(
+                    classes.filter((c: any) => c.id !== selectedClassForStudents)
+                  ).map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsChangeClassDialogOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!targetClassForChange || changeStudentClassMutation.isPending}
+                onClick={() => changeStudentClassMutation.mutate({ studentIds: Array.from(selectedStudentsForClassChange), nextClassId: targetClassForChange })}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {changeStudentClassMutation.isPending ? "Moving..." : "Move Students"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       </div>
     </TooltipProvider>
   );
