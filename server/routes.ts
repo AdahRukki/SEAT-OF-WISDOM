@@ -2174,6 +2174,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Historical student roster: returns students who had assessments in a given class+term+session
+  // Used to show correct students in scores/finance tabs after promotion
+  app.get('/api/admin/students/historical-by-class', authenticate, requirePermission('tab_scores'), async (req, res) => {
+    try {
+      const { classId, term, session } = req.query as { classId: string; term: string; session: string };
+      if (!classId || !term || !session) {
+        return res.status(400).json({ error: "classId, term, and session are required" });
+      }
+      const students = await storage.getStudentsByClassTermSession(classId, term, session);
+      res.json(students);
+    } catch (error) {
+      console.error("Get historical students by class error:", error);
+      res.status(500).json({ error: "Failed to fetch historical students" });
+    }
+  });
+
   // Get assessments with filtering (for teacher interface)
   app.get('/api/admin/assessments/:classId/:term/:session', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {

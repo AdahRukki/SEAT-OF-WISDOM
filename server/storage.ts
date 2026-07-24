@@ -150,6 +150,7 @@ export interface IStorage {
   deleteAssessment(assessmentId: string): Promise<void>;
   getStudentAssessments(studentId: string, term: string, session: string, classId?: string): Promise<(Assessment & { subject: Subject })[]>;
   getAssessmentsByClassTermSession(classId: string, term: string, session: string): Promise<(Assessment & { subject: Subject })[]>;
+  getStudentsByClassTermSession(classId: string, term: string, session: string): Promise<StudentWithDetails[]>;
   getStudentEnrolledClasses(studentId: string): Promise<Class[]>;
   
   // Non-academic rating operations
@@ -3197,6 +3198,37 @@ export class DatabaseStorage implements IStorage {
       ...row,
       subject: row.subject as Subject
     })) as (Assessment & { subject: Subject })[];
+  }
+
+  async getStudentsByClassTermSession(classId: string, term: string, session: string): Promise<StudentWithDetails[]> {
+    const distinctRows = await db
+      .selectDistinct({ studentId: assessments.studentId })
+      .from(assessments)
+      .where(
+        and(
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        )
+      );
+
+    if (distinctRows.length === 0) return [];
+
+    const ids = distinctRows.map(r => r.studentId);
+
+    const studentsData = await db
+      .select()
+      .from(students)
+      .leftJoin(users, eq(students.userId, users.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(inArray(students.id, ids));
+
+    return studentsData.map(({ students: student, users: user, classes: classData }) => ({
+      ...student,
+      user: user!,
+      class: classData!,
+      assessments: []
+    }));
   }
 
   async createOrUpdateNonAcademicRating(ratingData: InsertNonAcademicRating): Promise<NonAcademicRating> {

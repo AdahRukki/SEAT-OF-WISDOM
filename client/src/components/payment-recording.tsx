@@ -329,6 +329,18 @@ export function PaymentRecording({
     enabled: !!schoolId,
   });
 
+  // Fetch historical class membership so the class filter works for past sessions
+  // (after promotion students have a new classId, so s.classId !== classFilter would exclude them)
+  const { data: historicalClassStudents = [] } = useQuery<Student[]>({
+    queryKey: ['/api/admin/students/historical-by-class', classFilter, filterTerm, filterSession],
+    queryFn: () => apiRequest(`/api/admin/students/historical-by-class?classId=${classFilter}&term=${encodeURIComponent(filterTerm)}&session=${encodeURIComponent(filterSession)}`),
+    enabled: classFilter !== "all" && !!filterTerm && !!filterSession,
+  });
+  const historicalClassStudentIds = useMemo(
+    () => new Set(historicalClassStudents.map((s: Student) => s.id)),
+    [historicalClassStudents]
+  );
+
   const { data: schoolClasses = [] } = useQuery<SchoolClass[]>({
     queryKey: ["/api/admin/classes", schoolId],
     queryFn: async () => {
@@ -797,7 +809,7 @@ export function PaymentRecording({
   const filteredStudents = students.filter((s) => {
     if (!searchQuery.trim() && classFilter === "all") return false;
     if (selectedIds.has(s.id)) return false;
-    if (classFilter !== "all" && s.classId !== classFilter) return false;
+    if (classFilter !== "all" && s.classId !== classFilter && !historicalClassStudentIds.has(s.id)) return false;
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     const firstName = (s.user?.firstName || s.firstName || '').toLowerCase();

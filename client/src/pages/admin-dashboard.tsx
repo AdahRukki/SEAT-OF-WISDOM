@@ -1358,6 +1358,22 @@ export default function AdminDashboard() {
     enabled: !!scoresClassId && !!scoresSubjectId && !!scoresTerm && !!scoresSession
   });
 
+  // Historical scores: detect when viewing a past session (differs from the active one)
+  const isHistoricalScores = !!(scoresTerm && scoresSession && academicInfo &&
+    (scoresTerm !== academicInfo.currentTerm || scoresSession !== academicInfo.currentSession));
+
+  // Fetch students who had assessments in the selected historical class+term+session
+  const { data: historicalScoresStudents = [] } = useQuery<StudentWithDetails[]>({
+    queryKey: ['/api/admin/students/historical-by-class', scoresClassId, scoresTerm, scoresSession],
+    queryFn: () => apiRequest(`/api/admin/students/historical-by-class?classId=${scoresClassId}&term=${encodeURIComponent(scoresTerm)}&session=${encodeURIComponent(scoresSession)}`),
+    enabled: isHistoricalScores && !!scoresClassId && !!scoresTerm && !!scoresSession
+  });
+
+  // For current session: all active students currently in the class.
+  // For historical sessions: students who actually had assessments in that class+session.
+  const studentsForScores: StudentWithDetails[] = isHistoricalScores
+    ? historicalScoresStudents
+    : allStudents.filter(s => s.classId === scoresClassId);
 
   // Class students query for details view
   const { data: classStudents = [] } = useQuery<StudentWithDetails[]>({ 
@@ -3040,7 +3056,7 @@ export default function AdminDashboard() {
     }
     
     // Collect scores for all students in the class, merging edited values with existing values
-    const studentsInClass = allStudents.filter(student => student.classId === scoresClassId);
+    const studentsInClass = studentsForScores;
     
     const scoresData = studentsInClass.map(student => {
       const assessment = classAssessments.find(a => a.studentId === student.id);
@@ -3190,8 +3206,7 @@ export default function AdminDashboard() {
       e.preventDefault();
       e.stopPropagation();
       
-      const studentsInClass = allStudents
-        .filter(student => student.classId === scoresClassId)
+      const studentsInClass = [...studentsForScores]
         .sort((a, b) => a.studentId.localeCompare(b.studentId));
       const currentIndex = studentsInClass.findIndex(student => student.id === currentStudentId);
       
@@ -3227,8 +3242,7 @@ export default function AdminDashboard() {
       e.preventDefault();
       e.stopPropagation();
       
-      const studentsInClass = allStudents
-        .filter(student => student.classId === scoresClassId)
+      const studentsInClass = [...studentsForScores]
         .sort((a, b) => a.studentId.localeCompare(b.studentId));
       const currentIndex = studentsInClass.findIndex(student => student.id === currentStudentId);
       
@@ -4581,8 +4595,7 @@ export default function AdminDashboard() {
 
                 {scoresClassId && scoresSubjectId ? (
                   (() => {
-                    const filteredStudents = allStudents
-                      .filter(student => student.classId === scoresClassId)
+                    const filteredStudents = [...studentsForScores]
                       .sort((a, b) => a.studentId.localeCompare(b.studentId));
                     const filledCount = filteredStudents.filter(s => {
                       const sc = scoreInputs[s.id] || {};
