@@ -84,23 +84,23 @@ export function Elegant() {
                 </div>
                 <div>
                   <span className="block text-xs uppercase tracking-wider text-[#1e3a8a] font-semibold mb-1">Student ID</span>
-                  <span className="font-medium">SOWA/2021/0442</span>
+                  <span className="font-semibold tabular-nums">SOWA/2021/0442</span>
                 </div>
                 <div>
                   <span className="block text-xs uppercase tracking-wider text-[#1e3a8a] font-semibold mb-1">Class</span>
-                  <span className="font-medium">Primary 6</span>
+                  <span className="font-semibold">Primary 6</span>
                 </div>
                 <div>
                   <span className="block text-xs uppercase tracking-wider text-[#1e3a8a] font-semibold mb-1">Gender</span>
-                  <span className="font-medium">Female</span>
+                  <span className="font-semibold">Female</span>
                 </div>
                 <div>
                   <span className="block text-xs uppercase tracking-wider text-[#1e3a8a] font-semibold mb-1">Age</span>
-                  <span className="font-medium">11 Years</span>
+                  <span className="font-semibold tabular-nums">11 Years</span>
                 </div>
                 <div>
                   <span className="block text-xs uppercase tracking-wider text-[#1e3a8a] font-semibold mb-1">Next Term Begins</span>
-                  <span className="font-medium">9th Sept, 2024</span>
+                  <span className="font-semibold tabular-nums">9th Sept, 2024</span>
                 </div>
               </div>
             </section>
@@ -125,11 +125,11 @@ export function Elegant() {
                     {subjects.map((sub, idx) => (
                       <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#f0f4ff]'}>
                         <td className="py-2 px-4 border border-[#1e3a8a] font-medium">{sub.name}</td>
-                        <td className="py-2 px-2 border border-[#1e3a8a] text-center">{sub.ca1}</td>
-                        <td className="py-2 px-2 border border-[#1e3a8a] text-center">{sub.ca2}</td>
-                        <td className="py-2 px-2 border border-[#1e3a8a] text-center">{sub.exam}</td>
-                        <td className="py-2 px-2 border border-[#1e3a8a] text-center font-bold bg-[#e8eeff]">{sub.total}</td>
-                        <td className="py-2 px-2 border border-[#1e3a8a] text-center font-bold text-[#1e3a8a]">{sub.grade}</td>
+                        <td className="py-2 px-2 border border-[#1e3a8a] text-center tabular-nums">{sub.ca1}</td>
+                        <td className="py-2 px-2 border border-[#1e3a8a] text-center tabular-nums">{sub.ca2}</td>
+                        <td className="py-2 px-2 border border-[#1e3a8a] text-center tabular-nums">{sub.exam}</td>
+                        <td className="py-2 px-2 border border-[#1e3a8a] text-center font-bold bg-[#e8eeff] tabular-nums">{sub.total}</td>
+                        <td className="py-2 px-2 border border-[#1e3a8a] text-center font-bold text-[#1e3a8a] tabular-nums">{sub.grade}</td>
                         <td className="py-2 px-4 border border-[#1e3a8a] italic text-sm">{sub.remark}</td>
                       </tr>
                     ))}
@@ -145,15 +145,15 @@ export function Elegant() {
                 <div className="bg-[#f0f4ff] p-4 rounded-sm border border-[#c7d2fe]">
                   <div className="flex justify-between items-center py-2 border-b border-[#d4af37]/30">
                     <span className="text-sm font-medium">Total Score</span>
-                    <span className="font-bold text-[#1e3a8a]">678 / 800</span>
+                    <span className="font-bold text-[#1e3a8a] tabular-nums">678 / 800</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-[#d4af37]/30">
                     <span className="text-sm font-medium">Average</span>
-                    <span className="font-bold text-[#1e3a8a]">84.75%</span>
+                    <span className="font-bold text-[#1e3a8a] tabular-nums">84.75%</span>
                   </div>
                   <div className="flex justify-between items-center py-2">
                     <span className="text-sm font-medium">Attendance</span>
-                    <span className="font-bold text-[#1e3a8a]">98%</span>
+                    <span className="font-bold text-[#1e3a8a] tabular-nums">98%</span>
                   </div>
                 </div>
               </div>

@@ -3446,7 +3446,8 @@ export default function AdminDashboard() {
             .student-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 16px 24px; background: #f0f4ff; border-bottom: 2px solid #d4af37; }
             .info-item { }
             .info-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #1e3a8a; display: block; margin-bottom: 2px; }
-            .info-value { font-family: 'Playfair Display', serif; font-size: 12px; font-weight: 600; color: #0f172a; }
+            .info-value { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 12px; font-weight: 600; color: #0f172a; font-variant-numeric: tabular-nums; }
+            .info-name { font-family: 'Playfair Display', serif; font-size: 12px; font-weight: 600; color: #0f172a; }
 
             /* BODY */
             .body { padding: 20px 24px; }
@@ -3458,8 +3459,8 @@ export default function AdminDashboard() {
             .subjects-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
             .subjects-table th { background: linear-gradient(to right, #1e3a8a, #1d4ed8, #1e3a8a); color: white; padding: 8px 6px; text-align: center; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid #1e3a8a; }
             .subjects-table th.subject-col { text-align: left; }
-            .subjects-table td { padding: 7px 6px; text-align: center; border: 1px solid #1e3a8a; font-size: 9px; }
-            .subjects-table td.subject-col { text-align: left; font-weight: 600; color: #0f172a; }
+            .subjects-table td { padding: 7px 6px; text-align: center; border: 1px solid #1e3a8a; font-size: 9px; font-variant-numeric: tabular-nums; }
+            .subjects-table td.subject-col { text-align: left; font-weight: 600; color: #0f172a; font-variant-numeric: normal; }
             .subjects-table tr:nth-child(even) td { background: #f0f4ff; }
             .subjects-table tr:nth-child(odd) td { background: #ffffff; }
             .subjects-table td.total-col { font-weight: 700; background: #e8eeff !important; }
@@ -3470,7 +3471,7 @@ export default function AdminDashboard() {
             .panel { background: #f0f4ff; border: 1px solid #c7d2fe; padding: 12px; }
             .panel-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(212,175,55,0.2); font-size: 10px; }
             .panel-row:last-child { border-bottom: none; }
-            .panel-val { font-weight: 700; color: #1e3a8a; }
+            .panel-val { font-weight: 700; color: #1e3a8a; font-variant-numeric: tabular-nums; }
 
             /* BEHAVIORAL */
             .behavioral-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
@@ -3524,7 +3525,7 @@ export default function AdminDashboard() {
             </div>
 
             <div class="student-info">
-              <div class="info-item"><span class="info-label">Student Name</span><span class="info-value">${studentName}</span></div>
+              <div class="info-item"><span class="info-label">Student Name</span><span class="info-name">${studentName}</span></div>
               <div class="info-item"><span class="info-label">Student ID</span><span class="info-value">${student.studentId}</span></div>
               <div class="info-item"><span class="info-label">Class</span><span class="info-value">${student.class?.name || ''}</span></div>
               <div class="info-item"><span class="info-label">Gender</span><span class="info-value">${student.gender || 'N/A'}</span></div>
