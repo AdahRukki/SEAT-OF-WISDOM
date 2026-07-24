@@ -3201,6 +3201,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudentsByClassTermSession(classId: string, term: string, session: string): Promise<StudentWithDetails[]> {
+    // Primary lookup: students who had assessments in this class+term+session
     const distinctRows = await db
       .selectDistinct({ studentId: assessments.studentId })
       .from(assessments)
@@ -3212,9 +3213,35 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    if (distinctRows.length === 0) return [];
+    let ids: string[] = distinctRows.map(r => r.studentId);
 
-    const ids = distinctRows.map(r => r.studentId);
+    if (ids.length === 0) {
+      // Finance-only class fallback: no assessments exist for this class+term+session.
+      // Derive students from fee payment records for the same school+term+session so that
+      // finance-only classes (no scored subjects) still surface their payers.
+      const classRecord = await db
+        .select({ schoolId: classes.schoolId })
+        .from(classes)
+        .where(eq(classes.id, classId))
+        .limit(1);
+
+      if (classRecord.length > 0 && classRecord[0].schoolId) {
+        const paymentRows = await db
+          .selectDistinct({ studentId: feePaymentRecords.studentId })
+          .from(feePaymentRecords)
+          .where(
+            and(
+              eq(feePaymentRecords.schoolId, classRecord[0].schoolId),
+              eq(feePaymentRecords.term, term),
+              eq(feePaymentRecords.session, session),
+              isNotNull(feePaymentRecords.studentId)
+            )
+          );
+        ids = paymentRows.map(r => r.studentId!);
+      }
+    }
+
+    if (ids.length === 0) return [];
 
     const studentsData = await db
       .select()

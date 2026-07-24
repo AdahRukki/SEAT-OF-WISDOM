@@ -2175,8 +2175,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Historical student roster: returns students who had assessments in a given class+term+session
-  // Used to show correct students in scores/finance tabs after promotion
-  app.get('/api/admin/students/historical-by-class', authenticate, requirePermission('tab_scores'), async (req, res) => {
+  // Used to show correct students in scores/finance tabs after promotion.
+  // Requires tab_scores OR tab_finance (finance bursars need this for historical class lookups).
+  app.get('/api/admin/students/historical-by-class', authenticate, (req: Request, res: Response, next: NextFunction) => {
+    const user = (req as any).user;
+    if (!user || (user.role !== 'admin' && user.role !== 'sub-admin')) {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    if (!hasPermission(user.role, user.permissions, 'tab_scores') &&
+        !hasPermission(user.role, user.permissions, 'tab_finance')) {
+      return res.status(403).json({ error: "You do not have permission to access this feature" });
+    }
+    next();
+  }, async (req: Request, res: Response) => {
     try {
       const { classId, term, session } = req.query as { classId: string; term: string; session: string };
       if (!classId || !term || !session) {
