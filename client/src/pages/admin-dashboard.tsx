@@ -4724,7 +4724,7 @@ export default function AdminDashboard() {
                     }).length;
 
                     return (
-                      <div className="rounded-xl border border-border overflow-hidden">
+                      <div key={scoresSubjectId} className="rounded-xl border border-border overflow-hidden">
                         {/* Summary bar */}
                         <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">{filteredStudents.length} students</span>
