@@ -614,6 +614,43 @@ export default function StudentDashboard() {
   });
 
   // Helper functions for report generation
+  const getNextClass = (currentClassId: string): string | null => {
+    const match = currentClassId.match(/^(SCH\d+)-([A-Z]+)(\d+)$/);
+    if (!match) return null;
+    const [, schoolPrefix, classType, classNumber] = match;
+    const currentNumber = parseInt(classNumber);
+    if (classType === "JSS") {
+      if (currentNumber === 1) return `${schoolPrefix}-JSS2`;
+      if (currentNumber === 2) return `${schoolPrefix}-JSS3`;
+      if (currentNumber === 3) return `${schoolPrefix}-SS1`;
+    } else if (classType === "SS") {
+      if (currentNumber === 1) return `${schoolPrefix}-SS2`;
+      if (currentNumber === 2) return `${schoolPrefix}-SS3`;
+      if (currentNumber === 3) return "GRADUATE";
+    } else if (classType === "PRI") {
+      if (currentNumber < 6) return `${schoolPrefix}-PRI${currentNumber + 1}`;
+      if (currentNumber === 6) return `${schoolPrefix}-JSS1`;
+    }
+    return null;
+  };
+
+  const getPromotionMessage = (studentClassId: string): string => {
+    const nextClass = getNextClass(studentClassId);
+    if (nextClass === "GRADUATE") {
+      return "Congratulations! You have successfully graduated.";
+    } else if (nextClass) {
+      const match = nextClass.match(/^SCH\d+-([A-Z]+)(\d+)$/);
+      if (match) {
+        const [, classType, number] = match;
+        if (classType === "JSS") return `Promoted to J.S.S ${number}`;
+        if (classType === "SS") return `Promoted to S.S.S ${number}`;
+        if (classType === "PRI") return `Promoted to Primary ${number}`;
+      }
+      return `Promoted to ${nextClass}`;
+    }
+    return "Continue to next session";
+  };
+
   const getPrincipalComment = (avgPercentage: number): string => {
     if (avgPercentage >= 90) {
       return "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
@@ -968,6 +1005,27 @@ export default function StudentDashboard() {
               font-style: italic;
               text-align: justify;
             }
+            .promotion-section {
+              padding: 10px 14px;
+              margin: 0 8px 8px 8px;
+              background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+              border-radius: 6px;
+              text-align: center;
+            }
+            .promotion-section h3 {
+              font-size: 10px;
+              font-weight: 800;
+              color: rgba(255,255,255,0.85);
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin-bottom: 4px;
+            }
+            .promotion-text {
+              font-size: 13px;
+              font-weight: 800;
+              color: #ffffff;
+              letter-spacing: 0.3px;
+            }
             .grade-key {
               padding: 8px;
               margin: 0 8px 8px 8px;
@@ -1245,6 +1303,13 @@ export default function StudentDashboard() {
               <h3>PRINCIPAL'S COMMENT</h3>
               <p class="principal-comment-text">${principalComment}</p>
             </div>
+
+            ${selectedTerm === 'Third Term' && selectedClass ? `
+            <div class="promotion-section">
+              <h3>PROMOTION STATUS</h3>
+              <div class="promotion-text">${getPromotionMessage(selectedClass)}</div>
+            </div>
+            ` : ''}
 
             <div class="grade-key">
               <div class="grade-key-title">GRADE INTERPRETATION (WAEC STANDARD)</div>

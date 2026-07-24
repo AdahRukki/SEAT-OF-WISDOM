@@ -1333,6 +1333,27 @@ export function ReportCardManagement({
                 color: rgba(255,255,255,0.9);
                 margin-top: 2px;
               }
+              .promotion-section {
+                padding: 10px 14px;
+                margin: 0 8px 8px 8px;
+                background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+                border-radius: 6px;
+                text-align: center;
+              }
+              .promotion-section h3 {
+                font-size: 10px;
+                font-weight: 800;
+                color: rgba(255,255,255,0.85);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 4px;
+              }
+              .promotion-text {
+                font-size: 13px;
+                font-weight: 800;
+                color: #ffffff;
+                letter-spacing: 0.3px;
+              }
               @media print {
                 * {
                   print-color-adjust: exact !important;
@@ -1532,6 +1553,13 @@ export function ReportCardManagement({
                 <h3>PRINCIPAL'S COMMENT</h3>
                 <p class="principal-comment-text">${principalComment}</p>
               </div>
+
+              ${report.term === 'Third Term' ? `
+              <div class="promotion-section">
+                <h3>PROMOTION STATUS</h3>
+                <div class="promotion-text">${getPromotionMessage(student.classId)}</div>
+              </div>
+              ` : ''}
 
               <div class="grade-key">
                 <div class="grade-key-title">GRADE INTERPRETATION (WAEC STANDARD)</div>
