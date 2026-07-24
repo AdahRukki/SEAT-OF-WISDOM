@@ -604,69 +604,48 @@ export function ReportCardManagement({
     console.log("Starting student promotion process...");
 
     try {
+      // SNAPSHOT: fetch all student lists BEFORE any DB writes to prevent cascade re-promotion
+      const snapshot: Record<string, string[]> = {};
+      for (const classId in schoolValidationResults) {
+        if (schoolValidationResults[classId].validatedStudents > 0) {
+          const classStudents = await apiRequest(`/api/admin/students/class/${classId}`);
+          snapshot[classId] = classStudents
+            .filter((s: any) => !skippedIds.has(s.id))
+            .map((s: any) => s.id);
+        }
+      }
+
+      // PROMOTE: iterate over snapshot only — no live DB reads inside the loop
       let totalPromoted = 0;
       let totalGraduated = 0;
 
-      // Process each class with validated students
-      for (const classId in schoolValidationResults) {
-        const classResult = schoolValidationResults[classId];
-        if (classResult.validatedStudents > 0) {
-          // Get students for this class
-          const classStudents = await apiRequest(
-            `/api/admin/students/class/${classId}`,
-          );
+      for (const classId in snapshot) {
+        const studentIds = snapshot[classId];
+        if (studentIds.length === 0) continue;
 
-          // Exclude skipped students from promotion
-          const eligibleStudents = classStudents.filter((s: any) => !skippedIds.has(s.id));
+        const { nextClassId, isGraduation } = getNextClass(classId);
 
-          // Determine next class for this class
-          const nextClassId = getNextClass(classId);
-
-          if (nextClassId === "GRADUATE") {
-            // Students graduate (SS3 → Graduate)
-            const studentIds = eligibleStudents.map((s: any) => s.id);
-            if (studentIds.length > 0) {
-              await apiRequest("/api/admin/promote-students", {
-                method: "POST",
-                body: {
-                  currentClassId: classId,
-                  nextClassId: "graduated",
-                  studentIds,
-                },
-              });
-              totalGraduated += studentIds.length;
-              console.log(
-                `Graduated ${studentIds.length} students from ${classId}`,
-              );
-            }
-          } else if (nextClassId) {
-            // Promote to next class
-            const studentIds = eligibleStudents.map((s: any) => s.id);
-            if (studentIds.length > 0) {
-              await apiRequest("/api/admin/promote-students", {
-                method: "POST",
-                body: {
-                  currentClassId: classId,
-                  nextClassId: nextClassId,
-                  studentIds,
-                },
-              });
-              totalPromoted += studentIds.length;
-              console.log(
-                `Promoted ${studentIds.length} students from ${classId} to ${nextClassId}`,
-              );
-            }
-          }
+        if (isGraduation) {
+          await apiRequest("/api/admin/promote-students", {
+            method: "POST",
+            body: { currentClassId: classId, nextClassId: "graduated", studentIds },
+          });
+          totalGraduated += studentIds.length;
+          console.log(`Graduated ${studentIds.length} students from ${classId}`);
+        } else if (nextClassId) {
+          await apiRequest("/api/admin/promote-students", {
+            method: "POST",
+            body: { currentClassId: classId, nextClassId, studentIds },
+          });
+          totalPromoted += studentIds.length;
+          console.log(`Promoted ${studentIds.length} students from ${classId} to ${nextClassId}`);
         }
       }
 
       if (totalPromoted > 0 || totalGraduated > 0) {
         const message = [];
-        if (totalPromoted > 0)
-          message.push(`${totalPromoted} students promoted`);
-        if (totalGraduated > 0)
-          message.push(`${totalGraduated} students graduated`);
-
+        if (totalPromoted > 0) message.push(`${totalPromoted} students promoted`);
+        if (totalGraduated > 0) message.push(`${totalGraduated} students graduated`);
         console.log(`Promotion complete: ${message.join(", ")}`);
       }
     } catch (error) {
@@ -675,50 +654,33 @@ export function ReportCardManagement({
     }
   };
 
-  // Helper function to determine next class for promotion
-  const getNextClass = (currentClassId: string): string | null => {
-    // Extract school number and class info from ID (e.g., "SCH1-JSS1")
-    const match = currentClassId.match(/^(SCH\d+)-([A-Z]+)(\d+)$/);
-    if (!match) return null;
+  // Helper function to determine next class using admin-configured sortOrder
+  const getNextClass = (currentClassId: string): { nextClassId: string | null; nextClassName: string | null; isGraduation: boolean } => {
+    const current = classes.find((c: any) => c.id === currentClassId);
+    if (!current) return { nextClassId: null, nextClassName: null, isGraduation: false };
 
-    const [, schoolPrefix, classType, classNumber] = match;
-    const currentNumber = parseInt(classNumber);
+    const sameSchoolClasses = [...classes]
+      .filter((c: any) => c.schoolId === current.schoolId)
+      .sort((a: any, b: any) => {
+        const diff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+        return diff !== 0 ? diff : (a.name || "").localeCompare(b.name || "");
+      });
 
-    if (classType === "JSS") {
-      if (currentNumber === 1) return `${schoolPrefix}-JSS2`;
-      if (currentNumber === 2) return `${schoolPrefix}-JSS3`;
-      if (currentNumber === 3) return `${schoolPrefix}-SS1`;
-    } else if (classType === "SS") {
-      if (currentNumber === 1) return `${schoolPrefix}-SS2`;
-      if (currentNumber === 2) return `${schoolPrefix}-SS3`;
-      if (currentNumber === 3) return "GRADUATE"; // SS3 graduates
-    } else if (classType === "PRI") {
-      // Primary school progression
-      if (currentNumber < 6) return `${schoolPrefix}-PRI${currentNumber + 1}`;
-      if (currentNumber === 6) return `${schoolPrefix}-JSS1`; // Primary 6 → JSS1
-    }
+    const index = sameSchoolClasses.findIndex((c: any) => c.id === currentClassId);
+    if (index === -1) return { nextClassId: null, nextClassName: null, isGraduation: false };
 
-    return null; // Unknown class type or final year
+    const isGraduation = index === sameSchoolClasses.length - 1;
+    if (isGraduation) return { nextClassId: null, nextClassName: "Graduated", isGraduation: true };
+
+    const next = sameSchoolClasses[index + 1];
+    return { nextClassId: next.id, nextClassName: next.name, isGraduation: false };
   };
 
   // Helper function to get promotion message for report cards
   const getPromotionMessage = (studentClassId: string): string => {
-    const nextClass = getNextClass(studentClassId);
-
-    if (nextClass === "GRADUATE") {
-      return "Congratulations! You have successfully graduated.";
-    } else if (nextClass) {
-      // Convert class ID to readable name (SCH1-JSS2 → "J.S.S 2")
-      const match = nextClass.match(/^SCH\d+-([A-Z]+)(\d+)$/);
-      if (match) {
-        const [, classType, number] = match;
-        if (classType === "JSS") return `Promoted to J.S.S ${number}`;
-        if (classType === "SS") return `Promoted to S.S.S ${number}`;
-        if (classType === "PRI") return `Promoted to Primary ${number}`;
-      }
-      return `Promoted to ${nextClass}`;
-    }
-
+    const { nextClassName, isGraduation } = getNextClass(studentClassId);
+    if (isGraduation) return "Congratulations! You have successfully graduated.";
+    if (nextClassName) return `Promoted to ${nextClassName}`;
     return "Continue to next session";
   };
 
