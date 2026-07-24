@@ -50,11 +50,9 @@ export function Modern() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl"></div>
           
           <div className="flex items-center gap-6 relative z-10">
-            {/* Logo Placeholder */}
-            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center p-2 shadow-lg">
-              <div className="w-full h-full border-4 border-orange-500 rounded-full flex items-center justify-center text-slate-900 font-bold text-xl tracking-tighter">
-                SWA
-              </div>
+            {/* Logo */}
+            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center p-1 shadow-lg overflow-hidden border-4 border-orange-500">
+              <img src="/__mockup/sowa-logo.jpeg" alt="SOWA Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             
             <div>

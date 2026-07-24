@@ -59,8 +59,8 @@ export function Elegant() {
           
           {/* Header */}
           <header className="text-white p-8 text-center border-b-4 border-[#d4af37] relative" style={{ background: 'linear-gradient(to right, #1e3a8a, #1d4ed8, #1e3a8a)' }}>
-            <div className="absolute top-8 left-8 w-24 h-24 rounded-full bg-white flex items-center justify-center border-4 border-[#d4af37]">
-              <span className="text-blue-900 font-playfair font-bold text-sm text-center leading-tight">SOWA<br/>LOGO</span>
+            <div className="absolute top-8 left-8 w-24 h-24 rounded-full bg-white flex items-center justify-center border-4 border-[#d4af37] overflow-hidden">
+              <img src="/__mockup/sowa-logo.jpeg" alt="SOWA Logo" className="w-full h-full object-cover" />
             </div>
             <div className="ml-24">
               <h1 className="font-playfair text-4xl font-bold tracking-wider mb-1">SEAT OF WISDOM ACADEMY</h1>

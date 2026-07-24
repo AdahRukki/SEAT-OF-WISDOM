@@ -63,8 +63,8 @@ export function Classic() {
           
           {/* Header */}
           <div className="relative flex items-center justify-between bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 p-6 shadow-md border-b-4 border-amber-500 rounded-sm">
-            <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center border-4 border-amber-500 shadow-inner flex-shrink-0">
-              <span className="font-bold text-blue-900 text-3xl" style={{ fontFamily: "'Playfair Display', serif" }}>SOWA</span>
+            <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center border-4 border-amber-500 shadow-inner flex-shrink-0 overflow-hidden">
+              <img src="/__mockup/sowa-logo.jpeg" alt="SOWA Logo" className="w-full h-full object-cover" />
             </div>
             
             <div className="flex-1 text-center px-4">
