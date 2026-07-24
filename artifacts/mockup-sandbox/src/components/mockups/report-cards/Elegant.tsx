@@ -68,14 +68,15 @@ export function Elegant() {
         <div className="w-full max-w-[800px] bg-[#fdfbf7] shadow-xl border border-[#e8dfc8] relative pb-12">
           
           {/* Header */}
-          <header className="bg-[#1a3c28] text-[#fdfbf7] p-8 text-center border-b-8 border-[#d4af37] relative">
-            <div className="absolute top-8 left-8 w-24 h-24 rounded-full bg-[#fdfbf7] flex items-center justify-center border-4 border-[#d4af37]">
-              <span className="text-[#1a3c28] font-playfair font-bold text-sm text-center leading-tight">SOWA<br/>LOGO</span>
+          <header className="text-white p-8 text-center border-b-4 border-[#d4af37] relative" style={{ background: 'linear-gradient(to right, #1e3a8a, #1d4ed8, #1e3a8a)' }}>
+            <div className="absolute top-8 left-8 w-24 h-24 rounded-full bg-white flex items-center justify-center border-4 border-[#d4af37]">
+              <span className="text-blue-900 font-playfair font-bold text-sm text-center leading-tight">SOWA<br/>LOGO</span>
             </div>
             
             <div className="ml-24">
-              <h1 className="font-playfair text-4xl font-bold tracking-wider mb-2">SEAT OF WISDOM ACADEMY</h1>
-              <p className="text-sm tracking-widest uppercase opacity-90 mb-1">Asaba, Delta State</p>
+              <h1 className="font-playfair text-4xl font-bold tracking-wider mb-1">SEAT OF WISDOM ACADEMY</h1>
+              <p className="text-[#d4af37] text-xs font-semibold tracking-[0.25em] uppercase mb-1">PRE-NURSERY, NURSERY, PRIMARY &amp; SECONDARY</p>
+              <p className="text-sm tracking-widest uppercase text-blue-200 mb-1">Asaba, Delta State</p>
               <p className="font-playfair italic text-[#d4af37] mb-4">"The Fear of the Lord is the Beginning of Wisdom"</p>
               
               <div className="inline-block border-t border-b border-[#d4af37] py-2 px-8 mt-2">
