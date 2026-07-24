@@ -4665,7 +4665,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase tracking-wide">Class</Label>
-                    <Select value={scoresClassId} onValueChange={setScoresClassId}>
+                    <Select value={scoresClassId} onValueChange={(classId) => { setScoresClassId(classId); setScoresSubjectId(""); setScoreInputs({}); }}>
                       <SelectTrigger className="h-9 text-sm">
                         <SelectValue placeholder="Select class" />
                       </SelectTrigger>
@@ -4682,6 +4682,7 @@ export default function AdminDashboard() {
                     <Label className="text-xs text-muted-foreground uppercase tracking-wide">Subject</Label>
                     <Select value={scoresSubjectId} onValueChange={(subjectId) => {
                       setScoresSubjectId(subjectId);
+                      setScoreInputs({});
                       if (scoresClassId && subjectId && scoresTerm && scoresSession) {
                         queryClient.invalidateQueries({ 
                           queryKey: ['/api/admin/assessments', scoresClassId, subjectId, scoresTerm, scoresSession] 
