@@ -1811,19 +1811,6 @@ export default function StudentDashboard() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Session</label>
-                  <Select value={selectedSession} onValueChange={setSelectedSession}>
-                    <SelectTrigger data-testid="select-session" className="h-8 sm:h-9 text-xs sm:text-sm">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2024/2025">2024/2025</SelectItem>
-                      <SelectItem value="2025/2026">2025/2026</SelectItem>
-                      <SelectItem value="2026/2027">2026/2027</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
                   <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Term</label>
                   <Select value={selectedTerm} onValueChange={setSelectedTerm}>
                     <SelectTrigger data-testid="select-term" className="h-8 sm:h-9 text-xs sm:text-sm">
@@ -2067,7 +2054,7 @@ export default function StudentDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
                       <SelectTrigger>
                         <SelectValue placeholder={enrolledClasses.length > 0 ? "Select class" : "Loading..."} />
@@ -2077,16 +2064,6 @@ export default function StudentDashboard() {
                           <SelectItem key={classItem.id} value={classItem.id}>
                             {classItem.name}
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={selectedSession} onValueChange={setSelectedSession}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select session" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableSessions.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
