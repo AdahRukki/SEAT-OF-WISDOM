@@ -858,6 +858,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/admin/classes/:classId/settings', authenticate, requireAdmin, async (req, res) => {
     try {
       const { classId } = req.params;
+      const actor = (req as any).user;
+
+      // Sub-admins may only modify classes that belong to their own school
+      if (actor.role === 'sub-admin') {
+        const cls = await storage.getClassById(classId);
+        if (!cls || cls.schoolId !== actor.schoolId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
       const { ignoreAttendance } = req.body;
       if (typeof ignoreAttendance === 'boolean') {
         await storage.updateClassIgnoreAttendance(classId, ignoreAttendance);

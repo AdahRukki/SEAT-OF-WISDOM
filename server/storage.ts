@@ -834,6 +834,7 @@ export class DatabaseStorage implements IStorage {
       description: classes.description,
       schoolId: classes.schoolId,
       sortOrder: classes.sortOrder,
+      ignoreAttendance: classes.ignoreAttendance,
       createdAt: classes.createdAt,
       updatedAt: classes.updatedAt,
       school: {

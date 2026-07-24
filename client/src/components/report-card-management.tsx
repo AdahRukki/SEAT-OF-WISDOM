@@ -494,7 +494,7 @@ export function ReportCardManagement({
         }
       });
 
-      if (validatedStudentIds.size === 0) {
+      if (validatedStudentIds.size === 0 && !isThirdTerm) {
         toast({
           title: "No Validated Students",
           description: "No students found with complete scores. Please ensure at least one student has all scores recorded.",

@@ -3475,7 +3475,8 @@ export default function AdminDashboard() {
     }
 
     const studentAttendance = attendanceDataRaw.find((a: any) => a.studentId === student.id);
-    const attendanceDaysData = (studentAttendance && studentAttendance.totalDays > 0)
+    const studentClass = (classes as any[]).find((c: any) => c.id === student.classId);
+    const attendanceDaysData = (!studentClass?.ignoreAttendance && studentAttendance && studentAttendance.totalDays > 0)
       ? { total: studentAttendance.totalDays, present: studentAttendance.presentDays }
       : null;
 
