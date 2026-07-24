@@ -1242,12 +1242,8 @@ export function ReportCardManagement({
                     </div>
                   </div>
                   <div class="sig-section">
-                    <div>
-                      <div class="sig-line"></div>
-                      <div class="sig-label">Class Teacher</div>
-                    </div>
-                    <div>
-                      <div class="sig-line"></div>
+                    <div style="text-align:center;">
+                      ${principalSignature ? `<div style="height:36px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${principalSignature}" alt="Principal Signature" style="max-height:36px;max-width:150px;" crossorigin="anonymous" /></div>` : `<div class="sig-line"></div>`}
                       <div class="sig-label">Principal</div>
                     </div>
                   </div>
