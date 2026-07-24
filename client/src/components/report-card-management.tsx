@@ -1191,7 +1191,10 @@ export function ReportCardManagement({
                     <div class="panel">
                       <div class="panel-row"><span>Total Score</span><span class="panel-val">${totalMarks} / ${subjectsWithScores.length * 100}</span></div>
                       <div class="panel-row"><span>Average</span><span class="panel-val">${subjectsWithScores.length ? ((totalMarks / (subjectsWithScores.length * 100)) * 100).toFixed(1) : "0"}%</span></div>
-                      ${attendanceDays ? `<div class="panel-row"><span>Days Present</span><span class="panel-val">${attendanceDays}</span></div>` : ''}
+                      ${attendanceRecorded ? `
+                      <div class="panel-row"><span>Days School Opened</span><span class="panel-val">${studentAttendance.totalDays}</span></div>
+                      <div class="panel-row"><span>Days Present</span><span class="panel-val">${studentAttendance.presentDays}</span></div>
+                      ` : ''}
                     </div>
                   </div>
                   <div>
