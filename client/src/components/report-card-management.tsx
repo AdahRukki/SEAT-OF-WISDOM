@@ -514,9 +514,14 @@ export function ReportCardManagement({
           `/api/admin/students/class/${classId}`,
         );
 
-        // Collect skipped students for this class
+        // Collect skipped students for this class.
+        // In Third Term, students in classes with zero validated students are excluded from
+        // report generation but must NOT be added to skippedStudents — they still need
+        // to be promoted/graduated. Only add to skipped when the class has some validated
+        // students (i.e. the class participates in report generation this term).
+        const classParticipatesInReports = classResult.validatedStudents > 0;
         for (const student of classStudents) {
-          if (!validatedStudentIds.has(student.id)) {
+          if (!validatedStudentIds.has(student.id) && classParticipatesInReports) {
             const validation = validationResults[student.id];
             newSkippedStudents.push({
               studentId: student.id,
@@ -1674,6 +1679,8 @@ export function ReportCardManagement({
                 <div className="space-y-2">
                   {Object.entries(schoolValidationResults).map(([classId, result]) => {
                     const isComplete = result.validatedStudents === result.totalStudents;
+                    const { isGraduation } = getNextClass(classId);
+                    const isThirdTermView = (selectedTerm || academicInfo?.currentTerm) === "Third Term";
                     return (
                       <div key={classId} className={`rounded-lg border p-3 ${isComplete ? 'border-green-200 bg-green-50/50' : 'border-border'}`}>
                         <div className="flex items-center justify-between mb-1">
@@ -1682,6 +1689,16 @@ export function ReportCardManagement({
                             <Badge className={`text-[10px] px-1.5 py-0 ${isComplete ? 'bg-green-500' : result.validatedStudents > 0 ? 'bg-yellow-500' : 'bg-red-500'} text-white`}>
                               {isComplete ? "Complete" : result.validatedStudents > 0 ? "Partial" : "Incomplete"}
                             </Badge>
+                            {isThirdTermView && isGraduation && (
+                              <Badge className="text-[10px] px-1.5 py-0 bg-purple-600 text-white">
+                                🎓 Graduating
+                              </Badge>
+                            )}
+                            {isThirdTermView && !isGraduation && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-blue-600 border-blue-300">
+                                → Promoted
+                              </Badge>
+                            )}
                           </div>
                           <span className="text-xs text-muted-foreground">{result.validatedStudents}/{result.totalStudents}</span>
                         </div>
