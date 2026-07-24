@@ -934,11 +934,10 @@ export function ReportCardManagement({
       const studentAttendance = attendance.find(
         (att: any) => att.studentId === student.id,
       );
-      const attendancePercentage = studentAttendance
-        ? Math.round(
-            (studentAttendance.presentDays / studentAttendance.totalDays) * 100,
-          )
-        : 0;
+      const attendanceRecorded = studentAttendance && studentAttendance.totalDays > 0;
+      const attendanceDays = attendanceRecorded
+        ? `${studentAttendance.presentDays} / ${studentAttendance.totalDays} days`
+        : null;
 
       // Get behavioral rating for this student, or use default rating of 3 (Good)
       const existingRating = behavioralRatings.find(
@@ -1192,7 +1191,7 @@ export function ReportCardManagement({
                     <div class="panel">
                       <div class="panel-row"><span>Total Score</span><span class="panel-val">${totalMarks} / ${subjectsWithScores.length * 100}</span></div>
                       <div class="panel-row"><span>Average</span><span class="panel-val">${subjectsWithScores.length ? ((totalMarks / (subjectsWithScores.length * 100)) * 100).toFixed(1) : "0"}%</span></div>
-                      <div class="panel-row"><span>Attendance</span><span class="panel-val">${attendancePercentage}%</span></div>
+                      ${attendanceDays ? `<div class="panel-row"><span>Days Present</span><span class="panel-val">${attendanceDays}</span></div>` : ''}
                     </div>
                   </div>
                   <div>

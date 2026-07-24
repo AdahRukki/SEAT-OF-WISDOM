@@ -3392,8 +3392,9 @@ export default function AdminDashboard() {
     }
 
     const studentAttendance = attendanceData.find((a: any) => a.studentId === student.id);
-    const attendancePct = studentAttendance && studentAttendance.totalDays > 0
-      ? Math.round((studentAttendance.presentDays / studentAttendance.totalDays) * 100)
+    const attendanceRecorded = studentAttendance && studentAttendance.totalDays > 0;
+    const attendanceDays = attendanceRecorded
+      ? `${studentAttendance.presentDays} / ${studentAttendance.totalDays} days`
       : null;
 
     // Only show subjects that have scores
@@ -3575,7 +3576,7 @@ export default function AdminDashboard() {
                   <div class="panel">
                     <div class="panel-row"><span>Total Score</span><span class="panel-val">${totalMarks} / ${subjectsWithScores.length * 100}</span></div>
                     <div class="panel-row"><span>Average</span><span class="panel-val">${averagePercentage.toFixed(1)}%</span></div>
-                    <div class="panel-row"><span>Attendance</span><span class="panel-val">${attendancePct !== null ? attendancePct + '%' : 'N/A'}</span></div>
+                    ${attendanceDays ? `<div class="panel-row"><span>Days Present</span><span class="panel-val">${attendanceDays}</span></div>` : ''}
                   </div>
                 </div>
                 <div>
