@@ -246,8 +246,8 @@ export function generateReportCardHtml(params: ReportCardParams): string {
 
         ${promotionText ? `
         <div style="background:linear-gradient(to right,#1e3a8a,#1d4ed8,#1e3a8a);color:white;text-align:center;padding:12px;border:2px solid #d4af37;margin-bottom:20px;">
-          <div style="font-size:8px;text-transform:uppercase;letter-spacing:2px;opacity:0.8;margin-bottom:4px;">Final Decision</div>
-          <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;letter-spacing:1px;">${promotionText}</div>
+          <div style="font-family:'Inter',sans-serif;font-size:8px;text-transform:uppercase;letter-spacing:2px;opacity:0.8;margin-bottom:4px;">Final Decision</div>
+          <div style="font-family:'Inter',sans-serif;font-size:16px;font-weight:700;letter-spacing:1px;">${promotionText}</div>
         </div>
         ` : ''}
 
@@ -262,15 +262,9 @@ export function generateReportCardHtml(params: ReportCardParams): string {
               <div><strong>C5</strong>: 55-59 Credit</div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;text-align:center;">
-            <div>
-              <div style="border-bottom:1px solid #1e3a8a;height:36px;margin-bottom:4px;"></div>
-              <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;">Class Teacher</div>
-            </div>
-            <div>
-              ${signatureHtml}
-              <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;">Principal</div>
-            </div>
+          <div style="text-align:center;">
+            ${signatureHtml}
+            <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#1e3a8a;">Principal</div>
           </div>
         </div>
 
