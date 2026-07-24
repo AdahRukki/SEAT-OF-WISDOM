@@ -129,7 +129,8 @@ import {
   Inbox,
   BarChart3,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { InquiriesManagement } from "@/components/inquiries-management";
@@ -1055,6 +1056,8 @@ export default function AdminDashboard() {
   
   // Universal settings management
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [isAdvanceTermDialogOpen, setIsAdvanceTermDialogOpen] = useState(false);
+  const [schoolToAdvanceTerm, setSchoolToAdvanceTerm] = useState<any | null>(null);
   const [globalTerm, setGlobalTerm] = useState("");
   const [globalSession, setGlobalSession] = useState("");
   
@@ -1335,6 +1338,13 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/classes', scoresClassId, 'subjects'],
     queryFn: () => apiRequest(`/api/admin/classes/${scoresClassId}/subjects`),
     enabled: !!scoresClassId 
+  });
+
+  // Per-school academic info for the advance-term confirmation dialog
+  const { data: advanceTermSchoolInfo } = useQuery<any>({
+    queryKey: ['/api/current-academic-info', schoolToAdvanceTerm?.id],
+    queryFn: () => apiRequest(`/api/current-academic-info?schoolId=${schoolToAdvanceTerm?.id}`),
+    enabled: !!schoolToAdvanceTerm && isAdvanceTermDialogOpen
   });
 
   // Class assessments query - MUST include term and session to prevent data loss when saving
@@ -1971,6 +1981,16 @@ export default function AdminDashboard() {
     });
   };
 
+  const getNextTermInfo = (currentTerm: string, currentSession: string) => {
+    if (currentTerm === 'First Term') return { term: 'Second Term', session: currentSession };
+    if (currentTerm === 'Second Term') return { term: 'Third Term', session: currentSession };
+    if (currentTerm === 'Third Term') {
+      const [start, end] = currentSession.split('/');
+      return { term: 'First Term', session: `${parseInt(start) + 1}/${parseInt(end) + 1}` };
+    }
+    return { term: 'Unknown', session: currentSession };
+  };
+
   // Helper function to get next class in progression using the school's admin-defined class order.
   // The class with the highest sortOrder within the same school is treated as the final/graduating class.
   const getNextClass = (currentClass: { id: string; name: string; schoolId?: string }): { nextClass: string | null; nextClassId: string | null; isGraduation: boolean } => {
@@ -2415,6 +2435,22 @@ export default function AdminDashboard() {
   };
 
   // Universal settings management - now uses the same academic calendar system as Report Cards
+  const advanceTermMutation = useMutation({
+    mutationFn: async (schoolId: string) => {
+      return await apiRequest('/api/admin/advance-term', { method: 'POST', body: { schoolId } });
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Term Advanced", description: `Now on ${data.newTerm}, ${data.newSession}` });
+      setIsAdvanceTermDialogOpen(false);
+      setSchoolToAdvanceTerm(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/academic-info'] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to advance term", variant: "destructive" });
+    }
+  });
+
   const updateGlobalSettings = useMutation({
     mutationFn: async (settings: {term: string, session: string, schoolId?: string}) => {
       // Step 1: Ensure the session exists
@@ -6033,6 +6069,36 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                {/* Term Advancement */}
+                <div className="border-t pt-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-medium">Term Advancement</h3>
+                      <p className="text-sm text-gray-500">Manually move a school branch to its next academic term</p>
+                    </div>
+                    <div className="space-y-3">
+                      {schools?.map((school: any) => (
+                        <div key={school.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div>
+                            <h4 className="font-medium">{school.name}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {school.current_term || academicInfo?.currentTerm || '—'} &middot; {school.current_session || academicInfo?.currentSession || '—'}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setSchoolToAdvanceTerm(school); setIsAdvanceTermDialogOpen(true); }}
+                          >
+                            <ChevronRight className="h-4 w-4 mr-1" />
+                            Advance Term
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* System Information */}
                 <div className="border-t pt-6">
                   <div className="space-y-4">
@@ -8747,6 +8813,57 @@ export default function AdminDashboard() {
             </div>
           </DialogContent>
         </Dialog>
+      {/* Advance Term Dialog */}
+      <Dialog open={isAdvanceTermDialogOpen} onOpenChange={(open) => { setIsAdvanceTermDialogOpen(open); if (!open) setSchoolToAdvanceTerm(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Advance Term</DialogTitle>
+            <DialogDescription>
+              Move <strong>{schoolToAdvanceTerm?.name}</strong> to the next academic term.
+            </DialogDescription>
+          </DialogHeader>
+          {advanceTermSchoolInfo ? (() => {
+            const cur = { term: advanceTermSchoolInfo.currentTerm, session: advanceTermSchoolInfo.currentSession };
+            const next = getNextTermInfo(cur.term, cur.session);
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-muted rounded-lg text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Current</p>
+                    <p className="text-sm font-semibold">{cur.term}</p>
+                    <p className="text-xs text-muted-foreground">{cur.session}</p>
+                  </div>
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-center border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-muted-foreground mb-1">Will become</p>
+                    <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">{next.term}</p>
+                    <p className="text-xs text-muted-foreground">{next.session}</p>
+                  </div>
+                </div>
+                {next.session !== cur.session && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2.5 rounded-lg">
+                    ⚠ This will also start a new session: <strong>{next.session}</strong>
+                  </p>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsAdvanceTermDialogOpen(false)}>Cancel</Button>
+                  <Button
+                    onClick={() => advanceTermMutation.mutate(schoolToAdvanceTerm!.id)}
+                    disabled={advanceTermMutation.isPending}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {advanceTermMutation.isPending ? "Advancing…" : "Confirm Advance"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })() : (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Change Student Class Dialog */}
       <Dialog open={isChangeClassDialogOpen} onOpenChange={(open) => { setIsChangeClassDialogOpen(open); if (!open) { setTargetClassForChange(""); } }}>
         <DialogContent className="max-w-sm">
