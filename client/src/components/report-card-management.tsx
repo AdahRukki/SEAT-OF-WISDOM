@@ -238,6 +238,27 @@ export function ReportCardManagement({
     },
   });
 
+  // Bulk clear reports mutation
+  const clearReportsMutation = useMutation({
+    mutationFn: async (opts: { schoolId: string; classId?: string; term?: string; session?: string }) => {
+      return await apiRequest("/api/admin/generated-reports/bulk", {
+        method: "DELETE",
+        body: opts,
+      });
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/generated-reports", activeSchoolId] });
+      setIsClearDialogOpen(false);
+      toast({
+        title: "Reports Cleared",
+        description: result.message || "Report cards removed successfully",
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to clear report cards", variant: "destructive" });
+    },
+  });
+
   // Create report card record mutation
   const createReportMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -341,6 +362,13 @@ export function ReportCardManagement({
   const [filterSearch, setFilterSearch] = useState("");
   const [filterClass, setFilterClass] = useState("");
   const [filterTermSession, setFilterTermSession] = useState("");
+
+  // Clear reports dialog state
+  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+  const [clearScope, setClearScope] = useState<"class" | "all">("class");
+  const [clearClassId, setClearClassId] = useState("");
+  const [clearTerm, setClearTerm] = useState("__all__");
+  const [clearSession, setClearSession] = useState("__all__");
 
   // Tab state — resets on navigation away (component unmount/remount)
   const [activeTab, setActiveTab] = useState("validate");
@@ -1909,8 +1937,142 @@ export function ReportCardManagement({
                     {filteredReports.length} of {generatedReports.length} reports
                   </CardDescription>
                 </div>
+                {generatedReports.length > 0 && activeSchoolId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 shrink-0"
+                    onClick={() => {
+                      setClearScope("class");
+                      setClearClassId(selectedClass || (reportClasses[0]?.classId ?? ""));
+                      setClearTerm("__all__");
+                      setClearSession("__all__");
+                      setIsClearDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    Clear Reports
+                  </Button>
+                )}
               </div>
             </CardHeader>
+
+            {/* Clear Reports Dialog */}
+            <Dialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-red-600">
+                    <Trash2 className="w-4 h-4" />
+                    Clear Report Cards
+                  </DialogTitle>
+                  <DialogDescription>
+                    Remove generated report cards so students can no longer view them. This cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  {/* Scope */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Scope</Label>
+                    <Select value={clearScope} onValueChange={(v) => setClearScope(v as "class" | "all")}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="class">Selected class only</SelectItem>
+                        <SelectItem value="all">All classes in this school</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Class selector — only shown when scope = class */}
+                  {clearScope === "class" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Class</Label>
+                      <Select value={clearClassId} onValueChange={setClearClassId}>
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="Select a class" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {reportClasses.map((c) => (
+                            <SelectItem key={c.classId} value={c.classId}>{c.className}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Term */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Term</Label>
+                    <Select value={clearTerm} onValueChange={setClearTerm}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All terms</SelectItem>
+                        {Array.from(new Set(generatedReports.map((r) => r.term))).sort().map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Session */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Session</Label>
+                    <Select value={clearSession} onValueChange={setClearSession}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All sessions</SelectItem>
+                        {Array.from(new Set(generatedReports.map((r) => r.session))).sort().map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+                    {(() => {
+                      const scopeLabel = clearScope === "all"
+                        ? "all classes"
+                        : (reportClasses.find((c) => c.classId === clearClassId)?.className || "selected class");
+                      const termLabel = clearTerm === "__all__" ? "all terms" : clearTerm;
+                      const sessionLabel = clearSession === "__all__" ? "all sessions" : clearSession;
+                      const matchCount = generatedReports.filter((r) => {
+                        const matchClass = clearScope === "all" || r.classId === clearClassId;
+                        const matchTerm = clearTerm === "__all__" || r.term === clearTerm;
+                        const matchSession = clearSession === "__all__" || r.session === clearSession;
+                        return matchClass && matchTerm && matchSession;
+                      }).length;
+                      return `This will delete ${matchCount} report card${matchCount !== 1 ? "s" : ""} for ${scopeLabel}, ${termLabel}, ${sessionLabel}.`;
+                    })()}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" size="sm" onClick={() => setIsClearDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    disabled={clearReportsMutation.isPending || (clearScope === "class" && !clearClassId)}
+                    onClick={() => {
+                      clearReportsMutation.mutate({
+                        schoolId: activeSchoolId,
+                        classId: clearScope === "class" ? clearClassId : undefined,
+                        term: clearTerm === "__all__" ? undefined : clearTerm,
+                        session: clearSession === "__all__" ? undefined : clearSession,
+                      });
+                    }}
+                  >
+                    {clearReportsMutation.isPending ? "Clearing…" : "Clear Reports"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <CardContent className="space-y-3">
               {/* Filter bar */}
               {generatedReports.length > 0 && (

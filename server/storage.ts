@@ -332,6 +332,7 @@ export interface IStorage {
   getGeneratedReportCardsByClass(classId: string): Promise<GeneratedReportCard[]>;
   createGeneratedReportCard(reportCardData: InsertGeneratedReportCard): Promise<GeneratedReportCard>;
   deleteGeneratedReportCard(reportCardId: string): Promise<void>;
+  clearGeneratedReportCards(opts: { schoolId: string; classId?: string; term?: string; session?: string }): Promise<number>;
   validateReportCardData(studentId: string, classId: string, term: string, session: string): Promise<{ hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
   validateReportCardDataBulk(classId: string, term: string, session: string): Promise<{
     results: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
@@ -2803,6 +2804,25 @@ export class DatabaseStorage implements IStorage {
 
   async deleteGeneratedReportCard(reportCardId: string): Promise<void> {
     await db.delete(generatedReportCards).where(eq(generatedReportCards.id, reportCardId));
+  }
+
+  async clearGeneratedReportCards(opts: { schoolId: string; classId?: string; term?: string; session?: string }): Promise<number> {
+    const { schoolId, classId, term, session } = opts;
+
+    // Build the set of class IDs that belong to this school
+    const schoolClasses = await db.select({ id: classes.id }).from(classes).where(eq(classes.schoolId, schoolId));
+    const schoolClassIds = schoolClasses.map((c) => c.id);
+    if (schoolClassIds.length === 0) return 0;
+
+    // Scope to a specific class if provided, otherwise all school classes
+    const targetClassIds = classId ? [classId] : schoolClassIds;
+
+    const conditions = [inArray(generatedReportCards.classId, targetClassIds)];
+    if (term) conditions.push(eq(generatedReportCards.term, term));
+    if (session) conditions.push(eq(generatedReportCards.session, session));
+
+    const deleted = await db.delete(generatedReportCards).where(and(...conditions)).returning({ id: generatedReportCards.id });
+    return deleted.length;
   }
 
   async validateReportCardData(studentId: string, classId: string, term: string, session: string): Promise<{ hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }> {

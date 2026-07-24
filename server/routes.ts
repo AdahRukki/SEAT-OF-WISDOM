@@ -3409,6 +3409,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/admin/generated-reports/bulk", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    try {
+      if (user.role !== "admin" && user.role !== "sub-admin") {
+        return res.status(403).json({ error: "Only admins and sub-admins can clear report cards" });
+      }
+      const { schoolId, classId, term, session } = req.body;
+      if (!schoolId) return res.status(400).json({ error: "schoolId is required" });
+      const count = await storage.clearGeneratedReportCards({ schoolId, classId, term, session });
+      res.json({ success: true, count, message: `${count} report card(s) deleted` });
+    } catch (error) {
+      console.error("Error clearing report cards:", error);
+      res.status(500).json({ error: "Failed to clear report cards" });
+    }
+  });
+
   app.delete("/api/admin/generated-reports/:reportId", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const { reportId } = req.params;
     const user = (req as any).user;
