@@ -154,7 +154,9 @@ import type {
 import { 
   insertFeeTypeSchema, 
   assignFeeSchema,
-  type AssignFeeForm 
+  type AssignFeeForm,
+  calculateGrade,
+  getRatingText
 } from "@shared/schema";
 import type { z } from "zod";
 import * as XLSX from 'xlsx';
@@ -307,7 +309,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
                 {cls.students.map((st, idx) => (
                   <TableRow key={st.studentId}>
                     <TableCell className="text-center text-xs">{idx + 1}</TableCell>
-                    <TableCell className="text-sm">{st.lastName}, {st.firstName}</TableCell>
+                    <TableCell className="text-sm">{st.lastName}, {[st.firstName, st.middleName].filter(Boolean).join(' ')}</TableCell>
                     <TableCell className="text-sm font-mono">{st.sowaId}</TableCell>
                     <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.totalAssigned.toLocaleString()}` : "—"}</TableCell>
                     <TableCell className="text-right text-sm font-medium text-green-600">{st.totalPaid > 0 ? `₦${st.totalPaid.toLocaleString()}` : "₦0"}</TableCell>
@@ -3323,13 +3325,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const calculateGrade = (total: number) => {
-    if (total >= 75) return 'A';
-    if (total >= 50) return 'C';
-    if (total >= 40) return 'P';
-    return 'F';
-  };
-
   const openClassDetails = (classItem: Class) => {
     setSelectedClassForDetails(classItem);
     setIsClassDetailsDialogOpen(true);
@@ -3352,484 +3347,264 @@ export default function AdminDashboard() {
     setIsReportDialogOpen(true);
   };
 
-  // Generate the actual report card
-  const generateReportCard = (student: any, nextTermDate: string, term: string, session: string, promotedToClass?: string) => {
-    // Create a printable report card
+  // Generate the actual report card — unified template matching Report Card Management
+  const generateReportCard = async (student: any, nextTermDate: string, term: string, session: string, promotedToClass?: string) => {
     const reportWindow = window.open('', '_blank');
     if (!reportWindow) return;
 
-    const totalMarks = subjects.reduce((sum, subject) => {
+    // Helper: principal comment based on average %
+    const getPrincipalComment = (avg: number): string => {
+      if (avg >= 90) return "Outstanding performance! You have demonstrated excellent understanding and consistency. Keep up this remarkable standard.";
+      if (avg >= 80) return "A very good result! You are focused and hardworking. Maintain this level of commitment for even greater success.";
+      if (avg >= 75) return "Good work! You show clear understanding of your subjects. With a bit more effort, you can reach the top.";
+      if (avg >= 70) return "A fairly good performance. You are doing well, but there is still room for improvement. Aim higher next term.";
+      if (avg >= 65) return "You have tried, but you can do much better. Put in more effort and stay focused on your studies.";
+      if (avg >= 60) return "A fair attempt, but there is a need for greater dedication. Work harder to improve your overall performance.";
+      if (avg >= 50) return "You passed, but this performance is not satisfactory. More seriousness and consistent study habits are required.";
+      if (avg >= 45) return "You barely passed. Try to be more attentive in class and spend more time revising your work.";
+      if (avg >= 40) return "A poor result. You need to put in significant effort and seek help from teachers to strengthen weak areas.";
+      return "Very poor performance. You must work very hard and take your studies seriously. Consistent supervision is advised.";
+    };
+
+    // Helper: behavioral interpretation
+    const getBehavioralInterpretation = (r: any): string => {
+      const avg = ([r.attendancePunctuality, r.neatnessOrganization, r.respectPoliteness, r.participationTeamwork, r.responsibility].map(v => v || 3).reduce((s: number, v: number) => s + v, 0)) / 5;
+      if (avg >= 4.5) return 'Excellent Behavior';
+      if (avg >= 3.5) return 'Very Good Behavior';
+      if (avg >= 2.5) return 'Good Behavior';
+      if (avg >= 1.5) return 'Fair Behavior - Needs Improvement';
+      return 'Poor Behavior - Urgent Attention Required';
+    };
+
+    // Fetch extra data in parallel
+    let attendanceData: any[] = [];
+    let behavioralRating: any = null;
+    try {
+      const [attendanceResp, behavioralResp] = await Promise.all([
+        apiRequest(`/api/admin/attendance/class/${student.classId}?term=${encodeURIComponent(term)}&session=${encodeURIComponent(session)}`).catch(() => []),
+        apiRequest(`/api/admin/non-academic-ratings/${student.classId}/${encodeURIComponent(term)}/${encodeURIComponent(session)}`).catch(() => []),
+      ]);
+      attendanceData = attendanceResp || [];
+      const ratings = behavioralResp || [];
+      behavioralRating = ratings.find((r: any) => r.studentId === student.id) || null;
+    } catch {
+      // silently continue with no attendance/behavioral data
+    }
+
+    const studentAttendance = attendanceData.find((a: any) => a.studentId === student.id);
+    const attendancePct = studentAttendance && studentAttendance.totalDays > 0
+      ? Math.round((studentAttendance.presentDays / studentAttendance.totalDays) * 100)
+      : null;
+
+    // Only show subjects that have scores
+    const subjectsWithScores = subjects.filter(subject => {
+      const a = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+      return ((a?.firstCA || 0) + (a?.secondCA || 0) + (a?.exam || 0)) > 0;
+    });
+
+    const totalMarks = subjectsWithScores.reduce((sum, subject) => {
       const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
       return sum + ((assessment?.firstCA || 0) + (assessment?.secondCA || 0) + (assessment?.exam || 0));
     }, 0);
 
-    const promotionText = promotedToClass === "Graduated" 
+    const averagePercentage = subjectsWithScores.length ? (totalMarks / (subjectsWithScores.length * 100)) * 100 : 0;
+    const principalComment = getPrincipalComment(averagePercentage);
+
+    const studentName = [student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ');
+
+    const promotionText = promotedToClass === "Graduated"
       ? "🎓 CONGRATULATIONS! Student has successfully GRADUATED from the academy."
-      : promotedToClass 
-        ? `📈 PROMOTED TO: ${promotedToClass} for next academic session`
+      : promotedToClass
+        ? `Promoted to ${promotedToClass} for next academic session`
         : "";
 
     const reportHTML = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Report Card - ${student.user.firstName} ${student.user.lastName}</title>
+          <title>Report Card - ${studentName}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-              margin: 10px; 
-              line-height: 1.2; 
-              color: #333;
-              background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-              font-size: 12px;
-            }
-            .report-container {
-              background: white;
-              max-width: 210mm;
-              min-height: 297mm;
-              max-height: 297mm;
-              margin: 0 auto;
-              padding: 15px;
-              border-radius: 8px;
-              box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-              overflow: hidden;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 15px;
-              border-bottom: 2px solid #2563eb;
-              padding-bottom: 10px;
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
-              border-radius: 6px;
-              padding: 12px;
-            }
-            .school-logo {
-              width: 40px;
-              height: 40px;
-              margin: 0 auto 6px;
-              background: white;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 2px;
-            }
-            .academy-logo {
-              width: 100%;
-              height: 100%;
-              object-fit: contain;
-              border-radius: 50%;
-              -webkit-print-color-adjust: exact !important;
-              color-adjust: exact !important;
-              display: block !important;
-              visibility: visible !important;
-            }
-            .school-name { 
-              font-size: 16px; 
-              font-weight: bold; 
-              margin-bottom: 3px;
-              text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-            }
-            .school-subtitle {
-              font-size: 10px;
-              margin-bottom: 2px;
-              opacity: 0.9;
-            }
-            .school-motto {
-              font-size: 9px;
-              font-style: italic;
-              opacity: 0.8;
-            }
-            .student-header {
-              display: grid;
-              grid-template-columns: 2fr 1fr 2fr;
-              gap: 10px;
-              margin-bottom: 12px;
-              background: #f8fafc;
-              padding: 10px;
-              border-radius: 6px;
-              border-left: 3px solid #2563eb;
-            }
-            .student-info, .attendance-info, .academic-info {
-              background: white;
-              padding: 8px;
-              border-radius: 4px;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            }
-            .info-title {
-              font-weight: bold;
-              color: #2563eb;
-              margin-bottom: 5px;
-              font-size: 10px;
-              text-transform: uppercase;
-              border-bottom: 1px solid #e2e8f0;
-              padding-bottom: 2px;
-            }
-            .info-item {
-              font-size: 9px;
-              margin-bottom: 2px;
-            }
-            .grades-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 12px;
-              background: white;
-              border-radius: 6px;
-              overflow: hidden;
-              box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-            }
-            .grades-table th {
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
-              padding: 6px 4px;
-              text-align: center;
-              font-weight: bold;
-              font-size: 8px;
-              line-height: 1.1;
-            }
-            .grades-table td {
-              border: 1px solid #e2e8f0;
-              padding: 4px 3px;
-              text-align: center;
-              font-size: 8px;
-              line-height: 1.1;
-            }
-            .grades-table tbody tr:nth-child(even) {
-              background-color: #f8fafc;
-            }
-            .grades-table tbody tr:hover {
-              background-color: #e2e8f0;
-            }
-            .subject-name {
-              text-align: left !important;
-              padding-left: 6px !important;
-              font-weight: 500;
-              font-size: 8px !important;
-              max-width: 120px;
-              word-wrap: break-word;
-            }
-            .total-score {
-              font-weight: bold;
-              color: #2563eb;
-            }
-            .grade-cell {
-              font-weight: bold;
-              padding: 4px 8px !important;
-              border-radius: 4px;
-              color: white;
-            }
-            .grade-a { background-color: #10b981; }
-            .grade-c { background-color: #f59e0b; }
-            .grade-p { background-color: #6b7280; }
-            .grade-f { background-color: #ef4444; }
-            .cumulative-section {
-              background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-              padding: 10px;
-              border-radius: 6px;
-              margin-bottom: 12px;
-              border: 1px solid #cbd5e1;
-            }
-            .cumulative-header {
-              font-weight: bold;
-              color: #2563eb;
-              margin-bottom: 6px;
-              text-align: center;
-              font-size: 11px;
-            }
-            .cumulative-stats {
-              display: grid;
-              grid-template-columns: repeat(5, 1fr);
-              gap: 6px;
-              text-align: center;
-              margin-bottom: 6px;
-            }
-            .stat-item {
-              background: white;
-              padding: 4px;
-              border-radius: 4px;
-              box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            }
-            .stat-label {
-              font-size: 7px;
-              color: #64748b;
-              margin-bottom: 1px;
-            }
-            .stat-value {
-              font-size: 9px;
-              font-weight: bold;
-              color: #2563eb;
-            }
-            .comments-section {
-              display: grid;
-              grid-template-columns: 1fr 1fr;
-              gap: 10px;
-              margin-bottom: 12px;
-            }
-            .comment-box {
-              background: white;
-              padding: 8px;
-              border-radius: 4px;
-              border: 1px solid #e2e8f0;
-              min-height: 50px;
-            }
-            .comment-title {
-              font-weight: bold;
-              color: #2563eb;
-              margin-bottom: 4px;
-              font-size: 9px;
-            }
-            .comment-text {
-              font-size: 8px;
-              color: #4b5563;
-              font-style: italic;
-            }
-            .signature-section {
-              display: grid;
-              grid-template-columns: 1fr 1fr 1fr;
-              gap: 15px;
-              margin-top: 10px;
-            }
-            .signature {
-              text-align: center;
-              border-top: 1px solid #2563eb;
-              padding-top: 4px;
-              font-size: 8px;
-              font-weight: bold;
-              color: #2563eb;
-            }
-            .grading-scale {
-              background: white;
-              padding: 6px;
-              border-radius: 4px;
-              margin-top: 6px;
-              border: 1px solid #e2e8f0;
-            }
-            .scale-title {
-              font-weight: bold;
-              margin-bottom: 3px;
-              font-size: 8px;
-              color: #2563eb;
-            }
-            .scale-item {
-              font-size: 7px;
-              margin-bottom: 1px;
-              display: flex;
-              justify-content: space-between;
-            }
+            @page { size: A4 portrait; margin: 10mm; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; line-height: 1.2; color: #1e3a8a; background: #eff6ff; }
+            .report-card { width: 90%; max-width: 750px; margin: 20px auto; background: #f8faff; box-shadow: 0 4px 6px rgba(37,99,235,0.15); border-radius: 8px; overflow: hidden; padding: 15px; }
+            .header { background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 12px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; color: white; }
+            .header-logo { width: 55px; height: 55px; border-radius: 50%; border: 3px solid white; background: white; padding: 4px; }
+            .header-text { flex: 1; }
+            .school-name { font-size: 20px; font-weight: 800; margin-bottom: 3px; letter-spacing: 0.5px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
+            .school-motto { font-size: 9px; margin-bottom: 3px; opacity: 0.95; font-weight: 500; }
+            .report-title { font-size: 11px; margin-top: 4px; font-weight: 700; background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 12px; display: inline-block; }
+            .student-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 10px; background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); margin: 0 8px 8px 8px; font-size: 9px; border-radius: 6px; color: white; }
+            .info-item { display: flex; gap: 4px; }
+            .info-label { font-weight: 700; min-width: 45px; }
+            .info-value { font-weight: 500; }
+            .subjects-table { width: calc(100% - 16px); margin: 0 8px 8px 8px; border-collapse: collapse; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .subjects-table th { background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%); color: white; padding: 5px 3px; text-align: center; font-size: 8px; font-weight: 700; border: none; }
+            .subjects-table td { padding: 4px; text-align: center; border: none; border-bottom: 1px solid #bfdbfe; font-size: 8px; }
+            .subjects-table tr:nth-child(even) { background: #eff6ff; }
+            .subjects-table tr:nth-child(odd) { background: #f8faff; }
+            .subject-name { text-align: left !important; font-weight: 600; text-transform: uppercase; color: #1e40af; }
+            .grade { font-weight: 800; color: #2563eb; }
+            .stats-section { padding: 8px; margin: 0 8px 8px 8px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 6px; }
+            .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+            .stat-card { background: #f8faff; padding: 6px; text-align: center; border-radius: 6px; box-shadow: 0 2px 4px rgba(37,99,235,0.1); }
+            .stat-label { font-size: 7px; font-weight: 700; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.3px; }
+            .stat-value { font-size: 11px; font-weight: 800; margin-top: 3px; color: #1e40af; }
+            .behavioral-section { padding: 8px; background: linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%); margin: 0 8px 8px 8px; border-radius: 6px; }
+            .behavioral-section h3 { text-align: center; margin-bottom: 6px; font-size: 10px; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; }
+            .behavioral-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+            .behavioral-item { background: #f8faff; padding: 5px 3px; border-radius: 4px; text-align: center; }
+            .behavioral-label { font-size: 7px; font-weight: 700; margin-bottom: 3px; color: #60a5fa; }
+            .behavioral-value { font-size: 8px; font-weight: 800; color: #2563eb; }
+            .principal-comment-section { padding: 10px; margin: 8px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 6px; border-left: 4px solid #2563eb; }
+            .principal-comment-section h3 { text-align: center; margin-bottom: 6px; font-size: 10px; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; }
+            .principal-comment-text { font-size: 8px; line-height: 1.4; color: #1e3a8a; font-style: italic; text-align: justify; }
+            .promotion-section { padding: 10px 14px; margin: 0 8px 8px 8px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); border-radius: 6px; text-align: center; }
+            .promotion-section h3 { font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.85); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+            .promotion-text { font-size: 13px; font-weight: 800; color: #ffffff; letter-spacing: 0.3px; }
+            .grade-key { padding: 8px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); margin: 0 8px 8px 8px; font-size: 7px; border-radius: 6px; border: 2px solid #93c5fd; }
+            .grade-key-title { font-weight: 800; margin-bottom: 5px; font-size: 9px; color: #1e40af; text-align: center; text-transform: uppercase; letter-spacing: 0.5px; }
+            .grade-key-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; color: #1e3a8a; font-weight: 600; }
+            .footer { padding: 10px; text-align: center; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; font-size: 8px; }
+            .signature-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 6px; }
+            .signature { text-align: center; border-top: 2px solid rgba(255,255,255,0.5); padding-top: 5px; font-size: 9px; font-weight: 600; }
+            .print-button { display: block; width: 200px; margin: 15px auto; padding: 12px 24px; background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; }
             @media print {
-              body { margin: 0; background: white; font-size: 11px; }
-              .report-container { 
-                box-shadow: none; 
-                max-height: none;
-                min-height: auto;
-                page-break-inside: avoid;
-              }
-              * { 
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-              }
+              * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+              body { background: white !important; margin: 0 !important; padding: 0 !important; }
+              .report-card { margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; width: 100% !important; max-width: 100% !important; padding: 0 !important; }
+              .print-button { display: none !important; }
+              @page { size: A4 portrait; margin: 10mm; }
             }
           </style>
         </head>
         <body>
-          <div class="report-container">
+          <div class="report-card">
             <div class="header">
-              <div class="school-logo">
-                <img src="${currentLogoUrl}" alt="Seat of Wisdom Academy Logo" class="academy-logo" />
-              </div>
-              <div class="school-name">SEAT OF WISDOM ACADEMY ASABA</div>
-              <div class="school-subtitle">GOVERNMENT, WAEC AND NECO APPROVED</div>
-              <div class="school-motto">"The Fear of the Lord is the Beginning of Wisdom"</div>
-            </div>
-
-            <div class="student-header">
-              <div class="student-info">
-                <div class="info-title">Student Information</div>
-                <div class="info-item"><strong>Name:</strong> ${student.user.firstName} ${student.user.lastName}</div>
-                <div class="info-item"><strong>Student ID:</strong> ${student.studentId}</div>
-                <div class="info-item"><strong>Class:</strong> ${student.class.name}</div>
-                <div class="info-item"><strong>Gender:</strong> Male</div>
-              </div>
-              <div class="attendance-info">
-                <div class="info-title">Attendance</div>
-                <div class="info-item">No in Class: <strong>28</strong></div>
-                <div class="info-item">Present: <strong>114</strong></div>
-                <div class="info-item">Absent: <strong>12</strong></div>
-                <div class="info-item">Total: <strong>126</strong></div>
-              </div>
-              <div class="academic-info">
-                <div class="info-title">Session Details</div>
-                <div class="info-item"><strong>Term:</strong> ${scoresTerm}</div>
-                <div class="info-item"><strong>Session:</strong> ${scoresSession}</div>
-                <div class="info-item"><strong>Report Date:</strong> ${new Date().toLocaleDateString()}</div>
-                <div class="info-item"><strong>Next Term:</strong> 28th April, 2025</div>
+              <img src="/assets/academy-logo.png" alt="School Logo" class="header-logo" />
+              <div class="header-text">
+                <div class="school-name">SEAT OF WISDOM ACADEMY</div>
+                <div class="school-motto">ASABA, DELTA STATE &nbsp;|&nbsp; PRE NURSERY, NURSERY, PRIMARY &amp; SECONDARY</div>
+                <div class="school-motto">GOVERNMENT, WAEC AND NECO APPROVED</div>
+                <div class="report-title">${term.toUpperCase()} ASSESSMENT REPORT - ${session} SESSION</div>
               </div>
             </div>
 
-            <table class="grades-table">
+            <div class="student-info">
+              <div class="info-item"><span class="info-label">Name:</span><span class="info-value">${studentName}</span></div>
+              <div class="info-item"><span class="info-label">ID:</span><span class="info-value">${student.studentId}</span></div>
+              <div class="info-item"><span class="info-label">Class:</span><span class="info-value">${student.class?.name || ''}</span></div>
+              <div class="info-item"><span class="info-label">Gender:</span><span class="info-value">${student.gender || 'N/A'}</span></div>
+              <div class="info-item"><span class="info-label">Age:</span><span class="info-value">${student.dateOfBirth ? (() => { const b = new Date(student.dateOfBirth); const t = new Date(); if (isNaN(b.getTime()) || b > t) return 'N/A'; let a = t.getFullYear() - b.getFullYear(); const m = t.getMonth() - b.getMonth(); if (m < 0 || (m === 0 && t.getDate() < b.getDate())) a--; return (a < 0 || a > 150) ? 'N/A' : a; })() : 'N/A'} yrs</span></div>
+              <div class="info-item"><span class="info-label">Next Term:</span><span class="info-value">${nextTermDate ? new Date(nextTermDate).toLocaleDateString('en-GB') : 'TBA'}</span></div>
+            </div>
+
+            <table class="subjects-table">
               <thead>
                 <tr>
                   <th>SUBJECT</th>
-                  <th>SUBJECT<br>POSITION</th>
-                  <th>1st TEST<br>(20)</th>
-                  <th>2nd TEST<br>(20)</th>
+                  <th>1ST CA<br>(20)</th>
+                  <th>2ND CA<br>(20)</th>
                   <th>EXAM<br>(60)</th>
                   <th>TOTAL<br>(100)</th>
-                  <th>STUDENT<br>AVG (%)</th>
-                  <th>CLASS<br>AVG (%)</th>
                   <th>GRADE</th>
                   <th>REMARK</th>
                 </tr>
               </thead>
               <tbody>
-                ${subjects.map((subject, index) => {
-                  const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
-                  const firstCA = assessment?.firstCA || 0;
-                  const secondCA = assessment?.secondCA || 0;
-                  const exam = assessment?.exam || 0;
+                ${subjectsWithScores.map((subject) => {
+                  const a = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+                  const firstCA = a?.firstCA || 0;
+                  const secondCA = a?.secondCA || 0;
+                  const exam = a?.exam || 0;
                   const total = firstCA + secondCA + exam;
-                  const grade = total >= 75 ? 'A' : total >= 50 ? 'C' : total >= 40 ? 'P' : 'F';
-                  const gradeClass = `grade-${grade.toLowerCase()}`;
-                  const studentAvg = total ? ((total / 100) * 100).toFixed(1) : '0.0';
-                  const classAvg = (Math.random() * 20 + 60).toFixed(1); // Simulated class average
-                  const position = index + 1;
-                  const remark = total >= 75 ? 'Excellent' : 
-                               total >= 50 ? 'Good' : 
-                               total >= 40 ? 'Fair' : 'Poor';
-                  
-                  return `
-                    <tr>
-                      <td class="subject-name">${subject.name}</td>
-                      <td>${position}</td>
-                      <td>${firstCA}</td>
-                      <td>${secondCA}</td>
-                      <td>${exam}</td>
-                      <td class="total-score">${total}</td>
-                      <td>${studentAvg}</td>
-                      <td>${classAvg}</td>
-                      <td class="grade-cell ${gradeClass}">${grade}</td>
-                      <td>${remark}</td>
-                    </tr>
-                  `;
+                  const { grade, remark } = calculateGrade(total);
+                  return `<tr>
+                    <td class="subject-name">${subject.name.toUpperCase()}</td>
+                    <td>${firstCA}</td>
+                    <td>${secondCA}</td>
+                    <td>${exam}</td>
+                    <td><strong>${total}</strong></td>
+                    <td class="grade">${grade}</td>
+                    <td>${remark}</td>
+                  </tr>`;
                 }).join('')}
               </tbody>
             </table>
 
-            <div class="cumulative-section">
-              <div class="cumulative-header">Cumulative Report</div>
-              <div class="cumulative-stats">
-                <div class="stat-item">
-                  <div class="stat-label">1st Test</div>
-                  <div class="stat-value">${subjects.reduce((sum, subject) => {
-                    const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
-                    return sum + (assessment?.firstCA || 0);
-                  }, 0)}</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-label">2nd Test</div>
-                  <div class="stat-value">${subjects.reduce((sum, subject) => {
-                    const assessment = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
-                    return sum + (assessment?.secondCA || 0);
-                  }, 0)}</div>
-                </div>
-                <div class="stat-item">
-                  <div class="stat-label">Total</div>
+            <div class="stats-section">
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-label">TOTAL SCORE</div>
                   <div class="stat-value">${totalMarks}</div>
                 </div>
-                <div class="stat-item">
-                  <div class="stat-label">Avg. (%)</div>
-                  <div class="stat-value">${subjects.length ? (totalMarks / (subjects.length * 100) * 100).toFixed(2) : '0.00'}</div>
+                <div class="stat-card">
+                  <div class="stat-label">AVERAGE</div>
+                  <div class="stat-value">${averagePercentage.toFixed(1)}%</div>
                 </div>
-                <div class="stat-item">
-                  <div class="stat-label">Status</div>
-                  <div class="stat-value">${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</div>
+                <div class="stat-card">
+                  <div class="stat-label">ATTENDANCE</div>
+                  <div class="stat-value">${attendancePct !== null ? attendancePct + '%' : 'N/A'}</div>
                 </div>
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; font-size: 8px;">
-                <div>No of Sub.: <strong>${subjects.length}</strong></div>
-                <div>Total Obtained: <strong>${totalMarks}</strong></div>
-                <div>Result Status: <strong>${(totalMarks / (subjects.length * 100) * 100) >= 40 ? 'PASS' : 'FAIL'}</strong></div>
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; text-align: center; font-size: 8px; margin-top: 3px;">
-                <div>Total Obtainable: <strong>${subjects.length * 100}</strong></div>
-                <div>Average Mark: <strong>${subjects.length ? (totalMarks / (subjects.length * 100) * 100).toFixed(2) : '0.00'} (%)</strong></div>
-                <div>Next Term Fee: <strong>Nil</strong></div>
-              </div>
-              
-              <div class="grading-scale">
-                <div class="scale-title">Grading Scale:</div>
-                <div class="scale-item"><span>A - Excellent:</span> <span>75-100</span></div>
-                <div class="scale-item"><span>C - Credit:</span> <span>50-74.99</span></div>
-                <div class="scale-item"><span>P - Pass:</span> <span>40-49.99</span></div>
-                <div class="scale-item"><span>F - Fail:</span> <span>0-39.99</span></div>
               </div>
             </div>
 
-            <div class="comments-section">
-              <div class="comment-box">
-                <div class="comment-title">CLASS TEACHER'S COMMENT:</div>
-                <div class="comment-text">Calm and regular in school</div>
-                <div style="margin-top: 8px; font-size: 7px;">
-                  <strong>CLASS TEACHER'S NAME:</strong> Nil
-                </div>
+            ${behavioralRating ? `
+            <div class="behavioral-section">
+              <h3>BEHAVIORAL ASSESSMENT</h3>
+              <div class="behavioral-grid">
+                <div class="behavioral-item"><div class="behavioral-label">Attendance</div><div class="behavioral-value">${getRatingText(behavioralRating.attendancePunctuality || 3)}</div></div>
+                <div class="behavioral-item"><div class="behavioral-label">Neatness</div><div class="behavioral-value">${getRatingText(behavioralRating.neatnessOrganization || 3)}</div></div>
+                <div class="behavioral-item"><div class="behavioral-label">Respect</div><div class="behavioral-value">${getRatingText(behavioralRating.respectPoliteness || 3)}</div></div>
+                <div class="behavioral-item"><div class="behavioral-label">Participation</div><div class="behavioral-value">${getRatingText(behavioralRating.participationTeamwork || 3)}</div></div>
+                <div class="behavioral-item"><div class="behavioral-label">Responsibility</div><div class="behavioral-value">${getRatingText(behavioralRating.responsibility || 3)}</div></div>
               </div>
-              <div class="comment-box">
-                <div class="comment-title">THE HEAD'S REMARK:</div>
-                <div class="comment-text">Good result. Work hard!</div>
-                <div style="margin-top: 8px; text-align: center; border: 1px dashed #cbd5e1; padding: 10px; font-size: 7px; color: #64748b;">
-                  HEAD TEACHER'S STAMP
-                </div>
-              </div>
+              <div style="text-align:center;margin-top:6px;font-size:9px;font-weight:700;color:#1e40af;">${getBehavioralInterpretation(behavioralRating)}</div>
+            </div>
+            ` : ''}
+
+            <div class="principal-comment-section">
+              <h3>PRINCIPAL'S COMMENT</h3>
+              <p class="principal-comment-text">${principalComment}</p>
             </div>
 
             ${promotionText ? `
-              <div style="
-                margin: 12px 0;
-                padding: 10px;
-                background: ${promotedToClass === 'Graduated' ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)'};
-                color: white;
-                border-radius: 6px;
-                text-align: center;
-                font-size: 10px;
-                font-weight: bold;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-              ">
-                ${promotionText}
+            <div class="promotion-section">
+              <h3>PROMOTION STATUS</h3>
+              <div class="promotion-text">${promotionText}</div>
+            </div>
+            ` : ''}
+
+            <div class="grade-key">
+              <div class="grade-key-title">GRADE INTERPRETATION (WAEC STANDARD)</div>
+              <div class="grade-key-grid">
+                <div>A1 (75-100): Excellent</div>
+                <div>B2 (70-74): Very Good</div>
+                <div>B3 (65-69): Good</div>
+                <div>C4 (60-64): Credit</div>
+                <div>C5 (55-59): Credit</div>
+                <div>C6 (50-54): Credit</div>
+                <div>D7 (45-49): Pass</div>
+                <div>E8 (40-44): Pass</div>
+                <div>F9 (0-39): Fail</div>
               </div>
-            ` : ''}
-
-            <div style="
-              margin: 10px 0;
-              padding: 8px;
-              background: #f1f5f9;
-              border-radius: 4px;
-              border-left: 3px solid #2563eb;
-              font-size: 8px;
-            ">
-              <div style="margin-bottom: 4px;"><strong>Academic Term:</strong> ${term}</div>
-              <div style="margin-bottom: 4px;"><strong>Academic Session:</strong> ${session}</div>
             </div>
 
-            ${nextTermDate ? `
-            <div style="
-              text-align: center;
-              margin: 12px 0;
-              padding: 10px;
-              background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-              border-radius: 6px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            ">
-              <span style="font-size: 11px; font-weight: bold; color: white;">NEXT TERM RESUMES: ${new Date(nextTermDate).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            <div class="footer">
+              <div class="signature-section">
+                <div class="signature">
+                  <div style="min-height:30px;"></div>
+                  Class Teacher
+                </div>
+                <div class="signature">
+                  <div style="min-height:30px;"></div>
+                  Principal, Seat of Wisdom Academy Asaba
+                </div>
+              </div>
+              <div style="margin-top:6px;font-size:7px;">Generated: ${new Date().toLocaleDateString()}</div>
             </div>
-            ` : ''}
 
-            <div class="signature-section">
-              <div class="signature">CLASS TEACHER</div>
-              <div class="signature">HEAD TEACHER</div>
-              <div class="signature">STUDENT</div>
-            </div>
+            <button class="print-button" onclick="window.print()">🖨️ Print Report Card</button>
           </div>
         </body>
       </html>
@@ -3837,11 +3612,6 @@ export default function AdminDashboard() {
 
     reportWindow.document.write(reportHTML);
     reportWindow.document.close();
-    
-    // Auto-print after a short delay
-    setTimeout(() => {
-      reportWindow.print();
-    }, 500);
   };
 
   if (!user) {
@@ -4429,7 +4199,7 @@ export default function AdminDashboard() {
                               <div className="space-y-1">
                                 {studentsInClass.slice(0, 3).map((student) => (
                                   <div key={student.id} className="text-xs text-gray-700 dark:text-gray-300">
-                                    {student.user.firstName} {student.user.lastName} ({student.studentId})
+                                    {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')} ({student.studentId})
                                   </div>
                                 ))}
                                 {studentsInClass.length > 3 && (
@@ -4522,7 +4292,7 @@ export default function AdminDashboard() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                {student.user.firstName} {student.user.lastName}
+                                {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}
                               </p>
                               {!isActive && <span className="text-[10px] bg-red-100 text-red-700 px-1 rounded shrink-0">Inactive</span>}
                             </div>
@@ -4576,7 +4346,7 @@ export default function AdminDashboard() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
                               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                {student.firstName} {student.lastName}
+                                {[student.firstName, student.middleName, student.lastName].filter(Boolean).join(' ')}
                               </p>
                               <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Pending Sync</span>
                             </div>
@@ -4593,7 +4363,7 @@ export default function AdminDashboard() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
                                 <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                  {student.firstName} {student.lastName}
+                                  {[student.firstName, student.middleName, student.lastName].filter(Boolean).join(' ')}
                                 </p>
                                 {isFailed ? (
                                   <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Failed</span>
@@ -4875,7 +4645,7 @@ export default function AdminDashboard() {
                                   <tr key={student.id} className={`${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'} hover:bg-primary/5 transition-colors ${hasDirtyInput ? 'border-l-2 border-l-amber-400' : ''}`}>
                                     <td className="px-3 py-2">
                                       <div className="font-medium text-sm text-foreground leading-tight">
-                                        {student.user.firstName} {student.user.lastName}
+                                        {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}
                                       </div>
                                       <div className="text-[11px] text-muted-foreground sm:hidden">{student.studentId}</div>
                                     </td>
@@ -6252,7 +6022,7 @@ export default function AdminDashboard() {
                           <TableRow key={student.id}>
                             <TableCell className="font-mono text-sm">{student.studentId}</TableCell>
                             <TableCell className="font-medium">
-                              {student.user?.firstName} {student.user?.lastName}
+                              {[student.user?.firstName, student.user?.middleName, student.user?.lastName].filter(Boolean).join(' ')}
                             </TableCell>
                             <TableCell>{student.class?.name || '—'}</TableCell>
                             <TableCell>
@@ -6455,7 +6225,7 @@ export default function AdminDashboard() {
                             {student.studentId}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                            {student.user.firstName} {student.user.lastName}
+                            {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                             {student.user.email}
@@ -8519,7 +8289,7 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle>Generate Report Card</DialogTitle>
               <DialogDescription>
-                Generate report card for {selectedStudentForReport?.user?.firstName} {selectedStudentForReport?.user?.lastName}
+                Generate report card for {[selectedStudentForReport?.user?.firstName, selectedStudentForReport?.user?.middleName, selectedStudentForReport?.user?.lastName].filter(Boolean).join(' ')}
               </DialogDescription>
             </DialogHeader>
             
@@ -8569,25 +8339,21 @@ export default function AdminDashboard() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => {
+                  onClick={async () => {
                     if (selectedStudentForReport && nextTermResumptionDate) {
-                      // Check if it's third term for promotion
                       if (isThirdTerm(reportTerm)) {
                         const { nextClass } = getNextClass(selectedStudentForReport.class);
                         if (nextClass) {
-                          // Set up promotion dialog
                           setStudentsToPromote([selectedStudentForReport.id]);
                           setIsPromotionDialogOpen(true);
                           setIsReportDialogOpen(false);
                         } else {
-                          // Generate report without promotion
-                          generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
                           setIsReportDialogOpen(false);
+                          await generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
                         }
                       } else {
-                        // Generate report without promotion
-                        generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
                         setIsReportDialogOpen(false);
+                        await generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
                       }
                     }
                   }}
@@ -8622,7 +8388,7 @@ export default function AdminDashboard() {
                       <UserCheck className="h-8 w-8 text-blue-600" />
                       <div>
                         <p className="font-medium">
-                          {selectedStudentForReport.user.firstName} {selectedStudentForReport.user.lastName}
+                          {[selectedStudentForReport.user.firstName, selectedStudentForReport.user.middleName, selectedStudentForReport.user.lastName].filter(Boolean).join(' ')}
                         </p>
                         <p className="text-sm text-gray-600">
                           ID: {selectedStudentForReport.studentId}
@@ -8652,25 +8418,24 @@ export default function AdminDashboard() {
               <div className="flex justify-between space-x-3">
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    // Generate report without promotion
+                  onClick={async () => {
                     if (selectedStudentForReport && nextTermResumptionDate) {
-                      generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
+                      setIsPromotionDialogOpen(false);
+                      await generateReportCard(selectedStudentForReport, nextTermResumptionDate, reportTerm, reportSession);
                     }
-                    setIsPromotionDialogOpen(false);
                   }}
                   className="flex-1"
                 >
                   Skip Promotion
                 </Button>
                 <Button
-                  onClick={() => {
+                  onClick={async () => {
                     if (selectedStudentForReport) {
                       const { nextClass, nextClassId, isGraduation } = getNextClass(selectedStudentForReport.class);
                       
                       if (nextClass && nextTermResumptionDate) {
-                        // Generate report WITH promotion information
-                        generateReportCard(
+                        setIsPromotionDialogOpen(false);
+                        await generateReportCard(
                           selectedStudentForReport,
                           nextTermResumptionDate,
                           reportTerm,
@@ -8817,7 +8582,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center space-x-2 mb-2">
                     <User className="h-4 w-4 text-red-600" />
                     <span className="font-medium text-red-800">
-                      {selectedStudentForDeletion.user.firstName} {selectedStudentForDeletion.user.lastName}
+                      {[selectedStudentForDeletion.user.firstName, selectedStudentForDeletion.user.middleName, selectedStudentForDeletion.user.lastName].filter(Boolean).join(' ')}
                     </span>
                   </div>
                   <p className="text-sm text-red-700">{selectedStudentForDeletion.user.email}</p>
