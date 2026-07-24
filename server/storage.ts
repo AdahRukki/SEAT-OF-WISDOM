@@ -2964,8 +2964,8 @@ export class DatabaseStorage implements IStorage {
 
       results[student.id] = { hasAllScores, hasAttendance, missingSubjects: adjustedMissing };
 
-      if (hasAllScores && hasAttendance) ready++;
-      else if (hasAllScores || hasAttendance) partial++;
+      if (hasAllScores) ready++;
+      else if (adjustedMissing.length < subjects.length) partial++;
       else incomplete++;
     }
 

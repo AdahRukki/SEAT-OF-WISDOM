@@ -461,7 +461,7 @@ export function ReportCardManagement({
       const newSkippedStudents: SkippedStudent[] = [];
 
       Object.entries(validationResults).forEach(([studentId, validation]) => {
-        if (validation.hasAllScores && validation.hasAttendance) {
+        if (validation.hasAllScores) {
           validatedStudentIds.add(studentId);
         }
       });
@@ -469,7 +469,7 @@ export function ReportCardManagement({
       if (validatedStudentIds.size === 0) {
         toast({
           title: "No Validated Students",
-          description: "No students found with complete validation data. Please ensure at least one student has all scores and attendance recorded.",
+          description: "No students found with complete scores. Please ensure at least one student has all scores recorded.",
           variant: "destructive",
         });
         return;
@@ -839,9 +839,9 @@ export function ReportCardManagement({
     const validation = validationResults[studentId];
     if (!validation) return null;
 
-    if (validation.hasAllScores && validation.hasAttendance) {
+    if (validation.hasAllScores) {
       return { status: "complete", color: "bg-green-500", text: "Complete" };
-    } else if (validation.hasAllScores || validation.hasAttendance) {
+    } else if (validation.missingSubjects && validation.missingSubjects.length > 0) {
       return { status: "partial", color: "bg-yellow-500", text: "Partial" };
     } else {
       return { status: "incomplete", color: "bg-red-500", text: "Incomplete" };
@@ -850,7 +850,7 @@ export function ReportCardManagement({
 
   const canGenerateReport = (studentId: string) => {
     const validation = validationResults[studentId];
-    return validation && validation.hasAllScores && validation.hasAttendance;
+    return validation && validation.hasAllScores;
   };
 
   const handleViewReportCard = async (
@@ -1420,7 +1420,7 @@ export function ReportCardManagement({
   // Counts for headers
   const readyCount = students.filter((s: any) => {
     const v = validationResults[s.id];
-    return v && v.hasAllScores && v.hasAttendance;
+    return v && v.hasAllScores;
   }).length;
   const incompleteCount = Object.keys(validationResults).length > 0
     ? Object.keys(validationResults).length - readyCount
@@ -1430,7 +1430,7 @@ export function ReportCardManagement({
   const filteredStudents = students.filter((s: any) => {
     if (studentStatusFilter === "all") return true;
     const v = validationResults[s.id];
-    const isReady = v && v.hasAllScores && v.hasAttendance;
+    const isReady = v && v.hasAllScores;
     if (studentStatusFilter === "ready") return isReady;
     if (studentStatusFilter === "incomplete") return !isReady;
     return true;
@@ -1626,7 +1626,7 @@ export function ReportCardManagement({
                 onClick={() => setShowResumptionDateDialog(true)}
                 disabled={
                   Object.keys(schoolValidationResults).length === 0 ||
-                  !Object.values(validationResults).some((v) => v.hasAllScores && v.hasAttendance) ||
+                  !Object.values(validationResults).some((v) => v.hasAllScores) ||
                   isGeneratingReports
                 }
                 size="sm"
@@ -1644,7 +1644,7 @@ export function ReportCardManagement({
                 All students validated — ready to generate report cards.
               </div>
             )}
-            {!isAllStudentsValidated && Object.keys(schoolValidationResults).length > 0 && Object.values(validationResults).some((v) => v.hasAllScores && v.hasAttendance) && (
+            {!isAllStudentsValidated && Object.keys(schoolValidationResults).length > 0 && Object.values(validationResults).some((v) => v.hasAllScores) && (
               <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                 Some students have incomplete data. Fully-validated students will be generated; incomplete ones will be listed for individual handling.
@@ -1771,7 +1771,7 @@ export function ReportCardManagement({
                                     {indivResult && (
                                       <div className="mt-1.5 rounded border border-border bg-muted/40 p-2 space-y-1">
                                         <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Validation Result</p>
-                                        {indivResult.hasAllScores && indivResult.hasAttendance ? (
+                                        {indivResult.hasAllScores ? (
                                           <p className="text-[11px] text-green-700 flex items-center gap-1">
                                             <CheckCircle className="w-3 h-3" /> All data complete — ready to generate.
                                           </p>
@@ -1886,7 +1886,7 @@ export function ReportCardManagement({
                     {filteredStudents.map((student: any) => {
                       const status = getValidationStatus(student.id);
                       const validation = validationResults[student.id];
-                      const isReady = validation?.hasAllScores && validation?.hasAttendance;
+                      const isReady = validation?.hasAllScores;
                       return (
                         <div key={student.id} className={`flex items-center justify-between px-3 py-2 gap-3 ${isReady ? 'bg-background' : 'bg-red-50/30 dark:bg-red-900/10'}`}>
                           <div className="min-w-0 flex-1">

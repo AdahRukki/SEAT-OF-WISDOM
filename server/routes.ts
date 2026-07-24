@@ -3242,23 +3242,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validation = await storage.validateReportCardData(studentId, classId, term, session);
       
-      // Map validation result to frontend format
-      const status = validation.hasAllScores && validation.hasAttendance ? "complete" : 
-                    validation.hasAllScores || validation.hasAttendance ? "partial" : "incomplete";
+      // Map validation result to frontend format — attendance is optional, only scores are required
+      const status = validation.hasAllScores ? "complete" : 
+                    validation.missingSubjects.length > 0 ? "partial" : "incomplete";
       
       let message = "";
-      if (!validation.hasAllScores && !validation.hasAttendance) {
-        message = validation.missingSubjects.length > 0 ? 
-          `Missing subjects: ${validation.missingSubjects.join(", ")} and attendance data` :
-          "Missing scores and attendance data";
-      } else if (!validation.hasAllScores) {
+      if (!validation.hasAllScores) {
         message = validation.missingSubjects.length > 0 ? 
           `Missing subjects: ${validation.missingSubjects.join(", ")}` :
           "Missing some scores";
-      } else if (!validation.hasAttendance) {
-        message = "Missing attendance data";
       } else {
-        message = "All data complete";
+        message = "All scores complete";
       }
 
       console.log(`[VALIDATION] Student ${studentId}: ${status} - ${message}`);
