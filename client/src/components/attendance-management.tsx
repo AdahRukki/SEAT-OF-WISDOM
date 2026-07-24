@@ -42,9 +42,10 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
     enabled: !!selectedClassId,
   });
 
-  // Fetch current academic info
+  // Fetch current academic info — use per-school term/session when a school is selected
   const { data: academicInfo } = useQuery<{ currentTerm: string | null; currentSession: string | null }>({
-    queryKey: ["/api/current-academic-info"],
+    queryKey: selectedSchoolId ? ["/api/current-academic-info", selectedSchoolId] : ["/api/current-academic-info"],
+    queryFn: () => apiRequest(selectedSchoolId ? `/api/current-academic-info?schoolId=${selectedSchoolId}` : "/api/current-academic-info"),
   });
 
   useEffect(() => {

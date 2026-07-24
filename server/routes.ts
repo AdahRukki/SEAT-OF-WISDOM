@@ -489,6 +489,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Directly set a school's active term and session
+  app.put('/api/admin/schools/:id/academic-info', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { term, session } = req.body;
+      if (!term || !session) {
+        return res.status(400).json({ error: 'term and session are required' });
+      }
+      await storage.setSchoolAcademicInfo(id, term, session);
+      res.json({ schoolId: id, currentTerm: term, currentSession: session });
+    } catch (error) {
+      console.error('Error setting school academic info:', error);
+      res.status(500).json({ error: 'Failed to update school academic info' });
+    }
+  });
+
   // Admin routes - User management (main admin only)
   app.post('/api/admin/users', authenticate, requireMainAdmin, async (req, res) => {
     try {

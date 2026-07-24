@@ -337,6 +337,7 @@ export interface IStorage {
     results: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
     summary: { total: number; ready: number; partial: number; incomplete: number };
   }>;
+  setSchoolAcademicInfo(schoolId: string, term: string, session: string): Promise<void>;
   validateReportCardDataSchool(term: string, session: string, schoolId?: string): Promise<{
     classes: Record<string, {
       className: string;
@@ -2644,6 +2645,14 @@ export class DatabaseStorage implements IStorage {
       console.error("Error advancing academic term for school:", error);
       throw error;
     }
+  }
+
+  // Directly set a school's current term and session
+  async setSchoolAcademicInfo(schoolId: string, term: string, session: string): Promise<void> {
+    await db
+      .update(schools)
+      .set({ currentTerm: term, currentSession: session, updatedAt: new Date() })
+      .where(eq(schools.id, schoolId));
   }
 
   // Attendance tracking methods

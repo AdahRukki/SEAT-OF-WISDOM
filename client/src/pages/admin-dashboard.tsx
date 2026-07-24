@@ -2413,7 +2413,7 @@ export default function AdminDashboard() {
 
   // Universal settings management - now uses the same academic calendar system as Report Cards
   const updateGlobalSettings = useMutation({
-    mutationFn: async (settings: {term: string, session: string}) => {
+    mutationFn: async (settings: {term: string, session: string, schoolId?: string}) => {
       // Step 1: Ensure the session exists
       const sessions = await apiRequest('/api/admin/academic-sessions');
       let sessionId = sessions.find((s: any) => s.sessionYear === settings.session)?.id;
@@ -2450,7 +2450,7 @@ export default function AdminDashboard() {
         termId = newTerm.id;
       }
       
-      // Step 3: Activate the session and term
+      // Step 3: Activate the session and term globally
       await apiRequest(`/api/admin/academic-sessions/${sessionId}/activate`, {
         method: 'PUT'
       });
@@ -2458,6 +2458,15 @@ export default function AdminDashboard() {
       await apiRequest(`/api/admin/academic-terms/${termId}/activate`, {
         method: 'PUT'
       });
+
+      // Step 4: Also write directly to the selected school's per-school columns
+      // so tabs that read per-school academic info pick up the change immediately
+      if (settings.schoolId) {
+        await apiRequest(`/api/admin/schools/${settings.schoolId}/academic-info`, {
+          method: 'PUT',
+          body: { term: settings.term, session: settings.session }
+        });
+      }
       
       return { term: settings.term, session: settings.session };
     },
@@ -7859,7 +7868,7 @@ export default function AdminDashboard() {
                   Cancel
                 </Button>
                 <Button 
-                  onClick={() => updateGlobalSettings.mutate({term: globalTerm, session: globalSession})}
+                  onClick={() => updateGlobalSettings.mutate({term: globalTerm, session: globalSession, schoolId: selectedSchoolId || undefined})}
                   disabled={updateGlobalSettings.isPending}
                 >
                   {updateGlobalSettings.isPending ? "Updating..." : "Update Settings"}
