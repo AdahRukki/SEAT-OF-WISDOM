@@ -4759,7 +4759,7 @@ export default function AdminDashboard() {
                                 const secondCA = Number(currentScores.secondCA ?? assessment?.secondCA ?? 0);
                                 const exam = Number(currentScores.exam ?? assessment?.exam ?? 0);
                                 const total = firstCA + secondCA + exam;
-                                const grade = calculateGrade(total);
+                                const { grade } = calculateGrade(total);
                                 const hasDirtyInput = !!(currentScores.firstCA !== undefined || currentScores.secondCA !== undefined || currentScores.exam !== undefined);
                                 const gradeColors: Record<string, string> = {
                                   A: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
@@ -4832,7 +4832,7 @@ export default function AdminDashboard() {
                                     </td>
                                     <td className="px-2 py-2 text-center">
                                       {total > 0 && (
-                                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${gradeColors[grade] || gradeColors.F}`}>
+                                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${gradeColors[grade[0]] || gradeColors.F}`}>
                                           {grade}
                                         </span>
                                       )}
