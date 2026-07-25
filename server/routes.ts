@@ -748,6 +748,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Resolve the next class in school progression for a given class (server-side, DB-authoritative)
+  app.get('/api/admin/classes/:classId/next-class', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classId } = req.params;
+      const allClasses = await storage.getAllClasses(); // no filter → all schools
+      const currentClass = allClasses.find(c => c.id === classId);
+      if (!currentClass) {
+        return res.json({ nextClass: null, nextClassId: null, isGraduation: false });
+      }
+      // Same school only, sorted by sortOrder then name
+      const sameSchoolClasses = allClasses
+        .filter(c => c.schoolId === currentClass.schoolId)
+        .sort((a, b) => {
+          const aOrder = a.sortOrder ?? 0;
+          const bOrder = b.sortOrder ?? 0;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+      const index = sameSchoolClasses.findIndex(c => c.id === classId);
+      if (index === -1) {
+        return res.json({ nextClass: null, nextClassId: null, isGraduation: false });
+      }
+      const isGraduation = index === sameSchoolClasses.length - 1;
+      if (isGraduation) {
+        return res.json({ nextClass: 'Graduated', nextClassId: null, isGraduation: true });
+      }
+      const next = sameSchoolClasses[index + 1];
+      return res.json({ nextClass: next.name, nextClassId: next.id, isGraduation: false });
+    } catch (error) {
+      console.error('Get next class error:', error);
+      res.status(500).json({ error: 'Failed to get next class' });
+    }
+  });
+
   // Reorder classes within a school
   app.post('/api/admin/classes/reorder', authenticate, requireAdmin, async (req, res) => {
     try {

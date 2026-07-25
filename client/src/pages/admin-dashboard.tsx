@@ -1383,6 +1383,21 @@ export default function AdminDashboard() {
     enabled: isHistoricalScores && !!scoresClassId && !!scoresTerm && !!scoresSession
   });
 
+  // Fetch the next class from the server for the report card being generated.
+  // Server is DB-authoritative: uses the complete, correctly-ordered class list for the
+  // student's school regardless of which school is selected in the top-level selector.
+  const { data: serverNextClassInfo } = useQuery<{ nextClass: string | null; nextClassId: string | null; isGraduation: boolean }>({
+    queryKey: ['/api/admin/classes', selectedStudentForReport?.classId, 'next-class'],
+    queryFn: () => apiRequest(`/api/admin/classes/${selectedStudentForReport?.classId}/next-class`),
+    enabled: !!selectedStudentForReport?.classId,
+  });
+  // Falls back to the local getNextClass helper while the server response is in-flight or on error.
+  const resolvedReportNextClass: { nextClass: string | null; nextClassId: string | null; isGraduation: boolean } =
+    serverNextClassInfo ??
+    (selectedStudentForReport?.class
+      ? getNextClass(selectedStudentForReport.class)
+      : { nextClass: null, nextClassId: null, isGraduation: false });
+
   // For current session: all active students currently in the class.
   // For historical sessions: students who actually had assessments in that class+session.
   const studentsForScores: StudentWithDetails[] = isHistoricalScores
@@ -8471,7 +8486,7 @@ export default function AdminDashboard() {
                   onClick={async () => {
                     if (selectedStudentForReport && nextTermResumptionDate) {
                       if (isThirdTerm(reportTerm)) {
-                        const { nextClass } = getNextClass(selectedStudentForReport.class);
+                        const { nextClass } = resolvedReportNextClass;
                         if (nextClass) {
                           setStudentsToPromote([selectedStudentForReport.id]);
                           setIsPromotionDialogOpen(true);
@@ -8509,7 +8524,7 @@ export default function AdminDashboard() {
             
             <div className="space-y-4">
               {selectedStudentForReport && (() => {
-                const { nextClass, isGraduation } = getNextClass(selectedStudentForReport.class);
+                const { nextClass, isGraduation } = resolvedReportNextClass;
                 
                 return (
                   <div className="p-4 bg-blue-50 rounded-lg">
@@ -8560,7 +8575,7 @@ export default function AdminDashboard() {
                 <Button
                   onClick={async () => {
                     if (selectedStudentForReport) {
-                      const { nextClass, nextClassId, isGraduation } = getNextClass(selectedStudentForReport.class);
+                      const { nextClass, nextClassId, isGraduation } = resolvedReportNextClass;
                       
                       if (nextClass && nextTermResumptionDate) {
                         setIsPromotionDialogOpen(false);
