@@ -241,8 +241,8 @@ export function ReportCardManagement({
   // Bulk clear reports mutation
   const clearReportsMutation = useMutation({
     mutationFn: async (opts: { schoolId: string; classId?: string; term?: string; session?: string }) => {
-      return await apiRequest("/api/admin/generated-reports/bulk", {
-        method: "DELETE",
+      return await apiRequest("/api/admin/generated-reports/clear", {
+        method: "POST",
         body: opts,
       });
     },

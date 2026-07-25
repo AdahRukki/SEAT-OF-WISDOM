@@ -3514,7 +3514,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/admin/generated-reports/bulk", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
+  app.post("/api/admin/generated-reports/clear", authenticate, requirePermission('tab_reports'), async (req: Request, res: Response) => {
     const user = (req as any).user;
     try {
       if (user.role !== "admin" && user.role !== "sub-admin") {
