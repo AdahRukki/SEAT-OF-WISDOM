@@ -2035,6 +2035,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check whether a generated report card exists for the logged-in student
+  app.get('/api/student/report-status', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+
+      const { term, session, classId } = req.query;
+      if (!term || !session) {
+        return res.status(400).json({ error: "term and session are required" });
+      }
+
+      const student = await storage.getStudentByUserId(user.id);
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+
+      const useClassId = (classId as string) || student.classId;
+      const reportCards = await storage.getGeneratedReportCardsByStudent(student.id);
+      const generated = reportCards.some(rc =>
+        rc.term === term &&
+        rc.session === session &&
+        (!useClassId || rc.classId === useClassId)
+      );
+
+      res.json({ generated });
+    } catch (error) {
+      console.error("Get student report status error:", error);
+      res.status(500).json({ error: "Failed to fetch report status" });
+    }
+  });
+
   // Get student behavioral ratings
   app.get('/api/student/behavioral-ratings', authenticate, async (req, res) => {
     try {

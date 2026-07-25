@@ -145,6 +145,13 @@ export default function StudentDashboard() {
     enabled: !!selectedClass && !!selectedTerm && !!selectedSession && scoresPublicationStatus?.published === true
   });
 
+  // Check whether an admin has generated the report card for this student/class/term/session
+  const { data: reportStatus, isLoading: reportStatusLoading } = useQuery<{ generated: boolean }>({
+    queryKey: ['/api/student/report-status', selectedClass, selectedTerm, selectedSession],
+    queryFn: () => apiRequest(`/api/student/report-status?classId=${selectedClass}&term=${selectedTerm}&session=${selectedSession}`),
+    enabled: !!selectedClass && !!selectedTerm && !!selectedSession && scoresPublicationStatus?.published === true
+  });
+
   // Student financial data — fetch ALL records (no term/session filter)
   // so the Fees tab can show data even when school-level current term/session
   // isn't set. Filtering by selected term/session happens client-side below.
@@ -1367,7 +1374,8 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    {/* Report Buttons */}
+                    {/* Report Buttons — only when the admin has generated the report card */}
+                    {reportStatus?.generated ? (
                     <div className="flex gap-2">
                       <Button
                         onClick={() => {
@@ -1397,6 +1405,18 @@ export default function StudentDashboard() {
                         <span className="sm:hidden">Download</span>
                       </Button>
                     </div>
+                    ) : (
+                    <div className="text-center py-4 px-4 border rounded-lg bg-gray-50 dark:bg-gray-800" data-testid="report-card-not-ready">
+                      <AlertCircle className="mx-auto h-8 w-8 text-orange-500 mb-2" />
+                      <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                        Report Card Not Ready
+                      </h4>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                        Your report card for {selectedTerm}, {selectedSession} has not been generated yet. 
+                        Please check back later or contact your school administrator.
+                      </p>
+                    </div>
+                    )}
                   </>
                 )}
               </CardContent>
