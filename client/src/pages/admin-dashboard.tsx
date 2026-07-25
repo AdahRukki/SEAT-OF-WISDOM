@@ -2042,7 +2042,8 @@ export default function AdminDashboard() {
 
   // Helper function to get next class in progression using the school's admin-defined class order.
   // The class with the highest sortOrder within the same school is treated as the final/graduating class.
-  const getNextClass = (currentClass: { id: string; name: string; schoolId?: string }): { nextClass: string | null; nextClassId: string | null; isGraduation: boolean } => {
+  // Declared as a function (not const arrow) so it is hoisted and safe to reference earlier in the file.
+  function getNextClass(currentClass: { id: string; name: string; schoolId?: string }): { nextClass: string | null; nextClassId: string | null; isGraduation: boolean } {
     const sameSchoolClasses = sortClassesByOrder(
       classes.filter((c: any) => !currentClass.schoolId || c.schoolId === currentClass.schoolId)
     );
@@ -2056,7 +2057,7 @@ export default function AdminDashboard() {
     }
     const next = sameSchoolClasses[index + 1];
     return { nextClass: next.name, nextClassId: next.id, isGraduation: false };
-  };
+  }
 
   // Logo upload mutation
   const uploadLogoMutation = useMutation({
