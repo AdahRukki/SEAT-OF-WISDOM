@@ -1397,9 +1397,11 @@ export default function AdminDashboard() {
     enabled: !!scoresClassId && !!scoresSubjectId && !!scoresTerm && !!scoresSession
   });
 
-  // Derive the school for the currently selected scores class so historical detection
-  // uses the right school's current session — not the top-level selectedSchoolId which
-  // may be null when an admin is browsing all schools.
+  // FIX (Bug B): Derive the school from the selected scores class — NOT from the
+  // top-level selectedSchoolId which can be null when a main admin hasn't filtered
+  // to a specific school. Without this, isHistoricalScores would compare against the
+  // wrong school's current session and incorrectly show current students instead of
+  // the historical roster.
   const scoresClassSchoolId = (classes as any[]).find((c: any) => c.id === scoresClassId)?.schoolId as string | undefined;
   const { data: scoresAcademicInfo } = useQuery<{ currentSession: string | null; currentTerm: string | null }>({
     queryKey: ['/api/current-academic-info', scoresClassSchoolId],
@@ -1407,10 +1409,8 @@ export default function AdminDashboard() {
     enabled: !!scoresClassSchoolId
   });
 
-  // Historical scores: detect when viewing a past term/session.
-  // Prefer scoresAcademicInfo (school-specific, derived from the selected class) over the
-  // top-level academicInfo so the comparison is always against the correct school's active
-  // term/session even when the admin's top-level school selector is null or a different school.
+  // Prefer scoresAcademicInfo (class-school-specific) over the top-level academicInfo
+  // so the historical detection is always against the correct school's active term/session.
   const _scoresInfoForComparison = scoresAcademicInfo ?? academicInfo;
   const isHistoricalScores = !!(scoresTerm && scoresSession && _scoresInfoForComparison &&
     (scoresTerm !== _scoresInfoForComparison.currentTerm || scoresSession !== _scoresInfoForComparison.currentSession));
@@ -2567,6 +2567,8 @@ export default function AdminDashboard() {
       setSchoolToAdvanceTerm(null);
       queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/academic-info'] });
+      // FIX (Bug A): Invalidate student caches so all tabs reflect the new term immediately.
+      // Without this, the Students/Scores tabs keep showing students in the old class/term.
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students/inactive'] });
     },
