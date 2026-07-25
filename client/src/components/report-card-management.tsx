@@ -1244,7 +1244,7 @@ export function ReportCardManagement({
                 ${report.term === 'Third Term' ? `
                 <div class="promotion-section">
                   <div class="promotion-label">Final Decision</div>
-                  <div class="promotion-text">${getPromotionMessage(student.classId)}</div>
+                  <div class="promotion-text">${getPromotionMessage(report.classId)}</div>
                 </div>
                 ` : ''}
 
