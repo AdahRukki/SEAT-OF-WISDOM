@@ -1358,9 +1358,23 @@ export default function AdminDashboard() {
     enabled: !!scoresClassId && !!scoresSubjectId && !!scoresTerm && !!scoresSession
   });
 
-  // Historical scores: detect when viewing a past session (differs from the active one)
-  const isHistoricalScores = !!(scoresTerm && scoresSession && academicInfo &&
-    (scoresTerm !== academicInfo.currentTerm || scoresSession !== academicInfo.currentSession));
+  // Derive the school for the currently selected scores class so historical detection
+  // uses the right school's current session — not the top-level selectedSchoolId which
+  // may be null when an admin is browsing all schools.
+  const scoresClassSchoolId = (classes as any[]).find((c: any) => c.id === scoresClassId)?.schoolId as string | undefined;
+  const { data: scoresAcademicInfo } = useQuery<{ currentSession: string | null; currentTerm: string | null }>({
+    queryKey: ['/api/current-academic-info', scoresClassSchoolId],
+    queryFn: () => apiRequest(`/api/current-academic-info?schoolId=${scoresClassSchoolId}`),
+    enabled: !!scoresClassSchoolId
+  });
+
+  // Historical scores: detect when viewing a past term/session.
+  // Prefer scoresAcademicInfo (school-specific, derived from the selected class) over the
+  // top-level academicInfo so the comparison is always against the correct school's active
+  // term/session even when the admin's top-level school selector is null or a different school.
+  const _scoresInfoForComparison = scoresAcademicInfo ?? academicInfo;
+  const isHistoricalScores = !!(scoresTerm && scoresSession && _scoresInfoForComparison &&
+    (scoresTerm !== _scoresInfoForComparison.currentTerm || scoresSession !== _scoresInfoForComparison.currentSession));
 
   // Fetch students who had assessments in the selected historical class+term+session
   const { data: historicalScoresStudents = [] } = useQuery<StudentWithDetails[]>({
@@ -2498,6 +2512,8 @@ export default function AdminDashboard() {
       setSchoolToAdvanceTerm(null);
       queryClient.invalidateQueries({ queryKey: ['/api/current-academic-info'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/academic-info'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/inactive'] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to advance term", variant: "destructive" });
@@ -2792,10 +2808,15 @@ export default function AdminDashboard() {
         body: data
       });
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      const nextClass = (classes as any[]).find((c: any) => c.id === variables.nextClassId);
+      const nextClassName = nextClass?.name ?? 'the next class';
+      const isGrad = variables.nextClassId === 'graduated';
       toast({ 
-        title: "Success", 
-        description: "Students promoted successfully" 
+        title: "Promotion successful", 
+        description: isGrad
+          ? "Students have been marked as graduated."
+          : `Students moved to ${nextClassName}. Select that class in the Students or Scores tab to view them.`
       });
       setIsPromotionDialogOpen(false);
       setStudentsToPromote([]);
