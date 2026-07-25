@@ -2816,10 +2816,15 @@ export default function AdminDashboard() {
         title: "Promotion successful", 
         description: isGrad
           ? "Students have been marked as graduated."
-          : `Students moved to ${nextClassName}. Select that class in the Students or Scores tab to view them.`
+          : `Students moved to ${nextClassName}. The Students and Scores tabs have been switched to that class.`
       });
       setIsPromotionDialogOpen(false);
       setStudentsToPromote([]);
+      // Auto-switch class selectors to the new class so tabs immediately show promoted students
+      if (!isGrad && variables.nextClassId) {
+        setScoresClassId(variables.nextClassId);
+        setSelectedClassForStudents(variables.nextClassId);
+      }
       // Refresh student data
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
