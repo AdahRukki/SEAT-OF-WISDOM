@@ -3383,10 +3383,18 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(classes, eq(students.classId, classes.id))
       .where(inArray(students.id, ids));
 
+    // The roster is for a specific historical class+term+session, so return each
+    // student with THAT class — not their current class. Students may have since been
+    // promoted (e.g. JSS1 → JSS2); using their current class here would make report
+    // cards compute the wrong "Promoted to" class and fetch attendance/behavioral
+    // data against the wrong class.
+    const [historicalClass] = await db.select().from(classes).where(eq(classes.id, classId));
+
     return studentsData.map(({ students: student, users: user, classes: classData }) => ({
       ...student,
+      classId: historicalClass ? classId : student.classId,
       user: user!,
-      class: classData!,
+      class: (historicalClass ?? classData)!,
       assessments: []
     }));
   }

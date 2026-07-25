@@ -787,8 +787,11 @@ export default function StudentDashboard() {
       behavioralRating: behavioralRating || null,
       principalComment,
       behavioralInterpretation: behavioralInterpretation || null,
-      promotionText: selectedTerm === 'Third Term' && profile.classId
-        ? getPromotionMessage(profile.classId)
+      promotionText: selectedTerm === 'Third Term' && (selectedClass || profile.classId)
+        // Use the class the report is FOR (selectedClass) — not the student's current
+        // class. A student promoted since that session (e.g. JSS1 → JSS2) would
+        // otherwise see "Promoted to JSS3" on their old JSS1 report.
+        ? getPromotionMessage(selectedClass || profile.classId)
         : null,
       principalSignatureUrl: school?.principalSignature || null,
     });
