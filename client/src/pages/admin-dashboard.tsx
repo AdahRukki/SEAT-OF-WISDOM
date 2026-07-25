@@ -4678,12 +4678,38 @@ export default function AdminDashboard() {
                         {/* No-history students */}
                         {mismatchData.noHistory.length > 0 && (
                           <div className="space-y-2">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center gap-3 justify-between">
                               <p className="text-sm font-medium">
                                 Students with no score history
                                 <span className="ml-1.5 text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded-full">{mismatchData.noHistory.length}</span>
                               </p>
-                              <p className="text-xs text-muted-foreground">Pick a target class for each, then check the box</p>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs text-muted-foreground">Set all to:</span>
+                                <Select
+                                  value=""
+                                  onValueChange={classId => {
+                                    setNoHistoryTargets(prev => {
+                                      const next = new Map(prev);
+                                      mismatchData.noHistory.forEach(s => next.set(s.id, classId));
+                                      return next;
+                                    });
+                                    setSelectedRollbackIds(prev => {
+                                      const next = new Set(prev);
+                                      mismatchData.noHistory.forEach(s => next.add(s.id));
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 text-xs w-44">
+                                    <SelectValue placeholder="Choose class…" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {sortClassesByOrder(classes).map(c => (
+                                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
                             <div className="rounded-md border overflow-x-auto">
                               <Table>
@@ -4768,8 +4794,28 @@ export default function AdminDashboard() {
                               <AlertDialogContent>
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Move students back?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This will move {selectedRollbackIds.size} student(s) back to their previous class and restore them to active status if they were marked as graduated. This cannot be undone automatically.
+                                  <AlertDialogDescription asChild>
+                                    <div className="space-y-2 text-sm text-muted-foreground">
+                                      <p>The following {selectedRollbackIds.size} student(s) will be moved back and set to active. This cannot be undone automatically.</p>
+                                      <div className="max-h-48 overflow-y-auto rounded border divide-y text-xs">
+                                        {mismatchData.mismatched
+                                          .filter(s => selectedRollbackIds.has(s.id))
+                                          .map(s => (
+                                            <div key={s.id} className="flex items-center justify-between px-2 py-1 gap-2">
+                                              <span className="font-medium truncate">{[s.lastName, s.firstName].filter(Boolean).join(', ')}</span>
+                                              <span className="text-muted-foreground shrink-0">{s.currentClassName} → {s.resolvedClassName}</span>
+                                            </div>
+                                          ))}
+                                        {mismatchData.noHistory
+                                          .filter(s => selectedRollbackIds.has(s.id) && noHistoryTargets.get(s.id))
+                                          .map(s => (
+                                            <div key={s.id} className="flex items-center justify-between px-2 py-1 gap-2">
+                                              <span className="font-medium truncate">{[s.lastName, s.firstName].filter(Boolean).join(', ')}</span>
+                                              <span className="text-muted-foreground shrink-0">{s.currentClassName} → {classes.find(c => c.id === noHistoryTargets.get(s.id))?.name ?? '?'}</span>
+                                            </div>
+                                          ))}
+                                      </div>
+                                    </div>
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>

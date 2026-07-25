@@ -2395,11 +2395,36 @@ export class DatabaseStorage implements IStorage {
     const recentClassByStudent = new Map<string, string>();
 
     if (withoutTermIds.length > 0) {
+      // Numeric order for terms so we can compare correctly
+      const termOrderVal = term === 'First Term' ? 1 : term === 'Second Term' ? 2 : 3;
+
+      // Only include assessments from periods <= selected term/session
+      // (exclude post-promotion records that could give wrong rollback targets)
+      const notFutureFilter = sql`(
+        ${assessments.session} < ${session}
+        OR (
+          ${assessments.session} = ${session}
+          AND CASE ${assessments.term}
+            WHEN 'First Term' THEN 1
+            WHEN 'Second Term' THEN 2
+            WHEN 'Third Term' THEN 3
+            ELSE 0
+          END <= ${termOrderVal}
+        )
+      )`;
+
       const recentRows = await db
         .select({ studentId: assessments.studentId, classId: assessments.classId })
         .from(assessments)
-        .where(inArray(assessments.studentId, withoutTermIds))
-        .orderBy(desc(assessments.session), desc(assessments.term), desc(assessments.createdAt));
+        .where(and(
+          inArray(assessments.studentId, withoutTermIds),
+          notFutureFilter
+        ))
+        .orderBy(
+          desc(assessments.session),
+          sql`CASE ${assessments.term} WHEN 'Third Term' THEN 3 WHEN 'Second Term' THEN 2 WHEN 'First Term' THEN 1 ELSE 0 END DESC`,
+          desc(assessments.createdAt)
+        );
 
       for (const a of recentRows) {
         if (!recentClassByStudent.has(a.studentId)) recentClassByStudent.set(a.studentId, a.classId);
