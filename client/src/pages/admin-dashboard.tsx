@@ -4530,6 +4530,280 @@ export default function AdminDashboard() {
               </Card>
             )}
 
+            {/* Rollback Promotions — main admin only */}
+            {user?.role === 'admin' && (
+              <Card>
+                <CardHeader
+                  className="cursor-pointer select-none"
+                  onClick={() => setRollbackOpen(v => !v)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <RefreshCw className="h-5 w-5 text-orange-500" />
+                        Rollback Promotions
+                      </CardTitle>
+                      <CardDescription>Undo accidental promotions — move students back to their correct class</CardDescription>
+                    </div>
+                    {rollbackOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </div>
+                </CardHeader>
+
+                {rollbackOpen && (
+                  <CardContent className="space-y-4">
+                    {/* Filters */}
+                    <div className="flex flex-wrap gap-3 items-end">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Term</Label>
+                        <Select value={rollbackTerm} onValueChange={setRollbackTerm}>
+                          <SelectTrigger className="w-40 h-8 text-sm">
+                            <SelectValue placeholder="Select term…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="First Term">First Term</SelectItem>
+                            <SelectItem value="Second Term">Second Term</SelectItem>
+                            <SelectItem value="Third Term">Third Term</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Session</Label>
+                        <Select value={rollbackSession} onValueChange={setRollbackSession}>
+                          <SelectTrigger className="w-40 h-8 text-sm">
+                            <SelectValue placeholder="Select session…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {academicSessions.map(s => (
+                              <SelectItem key={s.id} value={s.sessionYear}>{s.sessionYear}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {!selectedSchoolId && (
+                        <p className="text-xs text-amber-600 self-end pb-1">Select a school at the top of the page first.</p>
+                      )}
+                    </div>
+
+                    {/* Results */}
+                    {mismatchLoading && (
+                      <div className="flex items-center gap-2 py-6 justify-center text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Checking for mismatches…
+                      </div>
+                    )}
+
+                    {mismatchEnabled && !mismatchLoading && mismatchData && (
+                      <>
+                        {mismatchData.mismatched.length === 0 && mismatchData.noHistory.length === 0 && (
+                          <div className="text-center py-8 text-sm text-muted-foreground">
+                            <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500 opacity-70" />
+                            All students are in their correct class for this term and session.
+                          </div>
+                        )}
+
+                        {/* Auto-detected mismatches */}
+                        {mismatchData.mismatched.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium">
+                                Students in wrong class
+                                <span className="ml-1.5 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">{mismatchData.mismatched.length}</span>
+                              </p>
+                              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="w-3.5 h-3.5"
+                                  checked={mismatchData.mismatched.every(s => selectedRollbackIds.has(s.id))}
+                                  onChange={() => {
+                                    const allIds = mismatchData.mismatched.map(s => s.id);
+                                    const allSelected = allIds.every(id => selectedRollbackIds.has(id));
+                                    setSelectedRollbackIds(prev => {
+                                      const next = new Set(prev);
+                                      allIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
+                                      return next;
+                                    });
+                                  }}
+                                />
+                                Select all
+                              </label>
+                            </div>
+                            <div className="rounded-md border overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-muted/40">
+                                    <TableHead className="w-8 text-center"></TableHead>
+                                    <TableHead>Student</TableHead>
+                                    <TableHead>Current Class</TableHead>
+                                    <TableHead>Move Back To</TableHead>
+                                    <TableHead>Status</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {mismatchData.mismatched.map(s => (
+                                    <TableRow key={s.id} className={selectedRollbackIds.has(s.id) ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
+                                      <TableCell className="text-center">
+                                        <input
+                                          type="checkbox"
+                                          className="w-3.5 h-3.5"
+                                          checked={selectedRollbackIds.has(s.id)}
+                                          onChange={() => {
+                                            setSelectedRollbackIds(prev => {
+                                              const next = new Set(prev);
+                                              next.has(s.id) ? next.delete(s.id) : next.add(s.id);
+                                              return next;
+                                            });
+                                          }}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <p className="text-sm font-medium">{[s.lastName, s.firstName, s.middleName].filter(Boolean).join(' ')}</p>
+                                        <p className="text-xs text-muted-foreground">{s.studentId}</p>
+                                      </TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{s.currentClassName}</TableCell>
+                                      <TableCell className="text-sm font-medium text-green-700">{s.resolvedClassName}</TableCell>
+                                      <TableCell>
+                                        {s.status === 'graduated' ? (
+                                          <Badge className="bg-green-100 text-green-800 text-[10px]">Graduated</Badge>
+                                        ) : (
+                                          <Badge className="bg-orange-100 text-orange-800 text-[10px]">Promoted</Badge>
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* No-history students */}
+                        {mismatchData.noHistory.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium">
+                                Students with no score history
+                                <span className="ml-1.5 text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded-full">{mismatchData.noHistory.length}</span>
+                              </p>
+                              <p className="text-xs text-muted-foreground">Pick a target class for each, then check the box</p>
+                            </div>
+                            <div className="rounded-md border overflow-x-auto">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-muted/40">
+                                    <TableHead className="w-8 text-center"></TableHead>
+                                    <TableHead>Student</TableHead>
+                                    <TableHead>Current Class</TableHead>
+                                    <TableHead>Move To</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {mismatchData.noHistory.map(s => (
+                                    <TableRow key={s.id} className={selectedRollbackIds.has(s.id) ? 'bg-orange-50 dark:bg-orange-950/20' : ''}>
+                                      <TableCell className="text-center">
+                                        <input
+                                          type="checkbox"
+                                          className="w-3.5 h-3.5"
+                                          disabled={!noHistoryTargets.get(s.id)}
+                                          checked={selectedRollbackIds.has(s.id)}
+                                          onChange={() => {
+                                            if (!noHistoryTargets.get(s.id)) return;
+                                            setSelectedRollbackIds(prev => {
+                                              const next = new Set(prev);
+                                              next.has(s.id) ? next.delete(s.id) : next.add(s.id);
+                                              return next;
+                                            });
+                                          }}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <p className="text-sm font-medium">{[s.lastName, s.firstName, s.middleName].filter(Boolean).join(' ')}</p>
+                                        <p className="text-xs text-muted-foreground">{s.studentId}</p>
+                                      </TableCell>
+                                      <TableCell className="text-sm text-muted-foreground">{s.currentClassName}</TableCell>
+                                      <TableCell>
+                                        <Select
+                                          value={noHistoryTargets.get(s.id) ?? ''}
+                                          onValueChange={classId => {
+                                            setNoHistoryTargets(prev => {
+                                              const next = new Map(prev);
+                                              next.set(s.id, classId);
+                                              return next;
+                                            });
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-7 text-xs w-44">
+                                            <SelectValue placeholder="Choose class…" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {sortClassesByOrder(classes).map(c => (
+                                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Confirm button */}
+                        {(mismatchData.mismatched.length > 0 || mismatchData.noHistory.length > 0) && (
+                          <div className="flex justify-end pt-2">
+                            <AlertDialog open={rollbackConfirmOpen} onOpenChange={setRollbackConfirmOpen}>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  disabled={selectedRollbackIds.size === 0 || rollbackMutation.isPending}
+                                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                                >
+                                  {rollbackMutation.isPending ? (
+                                    <><Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> Moving…</>
+                                  ) : (
+                                    <><RefreshCw className="h-3 w-3 mr-1.5" /> Move Back {selectedRollbackIds.size > 0 ? `(${selectedRollbackIds.size})` : ''}</>
+                                  )}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Move students back?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will move {selectedRollbackIds.size} student(s) back to their previous class and restore them to active status if they were marked as graduated. This cannot be undone automatically.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-orange-600 hover:bg-orange-700"
+                                    onClick={() => {
+                                      const autoMoves = mismatchData.mismatched
+                                        .filter(s => selectedRollbackIds.has(s.id))
+                                        .map(s => ({ studentId: s.id, targetClassId: s.resolvedClassId }));
+                                      const manualMoves = mismatchData.noHistory
+                                        .filter(s => selectedRollbackIds.has(s.id) && noHistoryTargets.get(s.id))
+                                        .map(s => ({ studentId: s.id, targetClassId: noHistoryTargets.get(s.id)! }));
+                                      rollbackMutation.mutate([...autoMoves, ...manualMoves]);
+                                    }}
+                                  >
+                                    Move Back
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {mismatchEnabled && !mismatchLoading && !mismatchData && (
+                      <p className="text-sm text-muted-foreground text-center py-4">Select a term and session to check for promotion mismatches.</p>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
             {perm('students_view_withdrawn') && (
               <Card>
                 <CardHeader>
