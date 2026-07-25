@@ -1310,6 +1310,21 @@ export default function StudentDashboard() {
                       Please check back later or contact your school administrator.
                     </p>
                   </div>
+                ) : reportStatusLoading ? (
+                  <div className="text-center py-12 px-4" data-testid="report-status-loading">
+                    <p className="text-gray-600 dark:text-gray-400">Loading…</p>
+                  </div>
+                ) : !reportStatus?.generated ? (
+                  <div className="text-center py-12 px-4" data-testid="report-card-not-ready">
+                    <AlertCircle className="mx-auto h-16 w-16 text-orange-500 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      Report Card Not Ready
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                      Your report card for {selectedTerm}, {selectedSession} has not been generated yet. 
+                      Please check back later or contact your school administrator.
+                    </p>
+                  </div>
                 ) : assessments.length === 0 ? (
                   <div className="text-center py-12 px-4">
                     <div className="mb-4">
@@ -1374,8 +1389,7 @@ export default function StudentDashboard() {
                       </div>
                     </div>
 
-                    {/* Report Buttons — only when the admin has generated the report card */}
-                    {reportStatus?.generated ? (
+                    {/* Report Buttons — report card is generated at this point */}
                     <div className="flex gap-2">
                       <Button
                         onClick={() => {
@@ -1405,18 +1419,6 @@ export default function StudentDashboard() {
                         <span className="sm:hidden">Download</span>
                       </Button>
                     </div>
-                    ) : (
-                    <div className="text-center py-4 px-4 border rounded-lg bg-gray-50 dark:bg-gray-800" data-testid="report-card-not-ready">
-                      <AlertCircle className="mx-auto h-8 w-8 text-orange-500 mb-2" />
-                      <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                        Report Card Not Ready
-                      </h4>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-                        Your report card for {selectedTerm}, {selectedSession} has not been generated yet. 
-                        Please check back later or contact your school administrator.
-                      </p>
-                    </div>
-                    )}
                   </>
                 )}
               </CardContent>
