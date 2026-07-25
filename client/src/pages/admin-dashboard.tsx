@@ -8486,7 +8486,17 @@ export default function AdminDashboard() {
                   onClick={async () => {
                     if (selectedStudentForReport && nextTermResumptionDate) {
                       if (isThirdTerm(reportTerm)) {
-                        const { nextClass } = resolvedReportNextClass;
+                        let nextClassResult: { nextClass: string | null; nextClassId: string | null; isGraduation: boolean };
+                        try {
+                          nextClassResult = await queryClient.fetchQuery({
+                            queryKey: ['/api/admin/classes', selectedStudentForReport.classId, 'next-class'],
+                            queryFn: () => apiRequest(`/api/admin/classes/${selectedStudentForReport.classId}/next-class`),
+                            staleTime: 5 * 60 * 1000,
+                          });
+                        } catch {
+                          nextClassResult = getNextClass(selectedStudentForReport.class);
+                        }
+                        const { nextClass } = nextClassResult;
                         if (nextClass) {
                           setStudentsToPromote([selectedStudentForReport.id]);
                           setIsPromotionDialogOpen(true);
@@ -8575,7 +8585,17 @@ export default function AdminDashboard() {
                 <Button
                   onClick={async () => {
                     if (selectedStudentForReport) {
-                      const { nextClass, nextClassId, isGraduation } = resolvedReportNextClass;
+                      let nextClassResult2: { nextClass: string | null; nextClassId: string | null; isGraduation: boolean };
+                      try {
+                        nextClassResult2 = await queryClient.fetchQuery({
+                          queryKey: ['/api/admin/classes', selectedStudentForReport.classId, 'next-class'],
+                          queryFn: () => apiRequest(`/api/admin/classes/${selectedStudentForReport.classId}/next-class`),
+                          staleTime: 5 * 60 * 1000,
+                        });
+                      } catch {
+                        nextClassResult2 = getNextClass(selectedStudentForReport.class);
+                      }
+                      const { nextClass, nextClassId, isGraduation } = nextClassResult2;
                       
                       if (nextClass && nextTermResumptionDate) {
                         setIsPromotionDialogOpen(false);
