@@ -1032,6 +1032,45 @@ export default function AdminDashboard() {
   const [scoresSubjectId, setScoresSubjectId] = useState("");
   const [scoresTerm, setScoresTerm] = useState("");
   const [scoresSession, setScoresSession] = useState("");
+
+  // Rollback Promotions panel state
+  const [rollbackOpen, setRollbackOpen] = useState(false);
+  const [rollbackTerm, setRollbackTerm] = useState("");
+  const [rollbackSession, setRollbackSession] = useState("");
+  const [selectedRollbackIds, setSelectedRollbackIds] = useState<Set<string>>(new Set());
+  const [noHistoryTargets, setNoHistoryTargets] = useState<Map<string, string>>(new Map());
+  const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
+
+  type MismatchStudent = { id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; resolvedClassId: string; resolvedClassName: string; status: string };
+  type NoHistoryStudent = { id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; status: string };
+
+  const mismatchEnabled = rollbackOpen && !!selectedSchoolId && !!rollbackTerm && !!rollbackSession;
+  const { data: mismatchData, isLoading: mismatchLoading } = useQuery<{ mismatched: MismatchStudent[]; noHistory: NoHistoryStudent[] }>({
+    queryKey: ['/api/admin/students/promotion-mismatches', selectedSchoolId, rollbackTerm, rollbackSession],
+    queryFn: () => {
+      const params = new URLSearchParams({ schoolId: selectedSchoolId, term: rollbackTerm, session: rollbackSession });
+      return apiRequest(`/api/admin/students/promotion-mismatches?${params.toString()}`);
+    },
+    enabled: mismatchEnabled,
+    staleTime: 0,
+  });
+
+  const rollbackMutation = useMutation({
+    mutationFn: (moves: { studentId: string; targetClassId: string }[]) =>
+      apiRequest('/api/admin/students/rollback-class', { method: 'POST', body: { moves } }),
+    onSuccess: (data: any) => {
+      toast({ title: 'Done', description: data?.message || 'Students moved back successfully' });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/graduated'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/promotion-mismatches'] });
+      setSelectedRollbackIds(new Set());
+      setNoHistoryTargets(new Map());
+      setRollbackConfirmOpen(false);
+    },
+    onError: () => {
+      toast({ title: 'Error', description: 'Failed to move students back', variant: 'destructive' });
+    },
+  });
   const [scoreInputs, setScoreInputs] = useState<{[key: string]: {firstCA: string, secondCA: string, exam: string}}>({});
   
   // Class-based student viewing

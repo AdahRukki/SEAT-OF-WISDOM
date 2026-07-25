@@ -322,6 +322,11 @@ export interface IStorage {
   getStudentSchoolIds(studentIds: string[]): Promise<{ id: string; schoolId: string | null }[]>;
   getGraduatedStudents(schoolId?: string): Promise<StudentWithDetails[]>;
   getWithdrawnStudents(schoolId?: string): Promise<StudentWithDetails[]>;
+  getPromotionMismatches(schoolId: string, term: string, session: string): Promise<{
+    mismatched: Array<{ id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; resolvedClassId: string; resolvedClassName: string; status: string }>;
+    noHistory: Array<{ id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; status: string }>;
+  }>;
+  rollbackStudentClasses(moves: { studentId: string; targetClassId: string }[]): Promise<number>;
   reorderClasses(schoolId: string, orderedClassIds: string[]): Promise<void>;
   
   // Attendance tracking
@@ -2341,6 +2346,132 @@ export class DatabaseStorage implements IStorage {
       class: classData!,
       assessments: []
     }));
+  }
+
+  async getPromotionMismatches(schoolId: string, term: string, session: string): Promise<{
+    mismatched: Array<{ id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; resolvedClassId: string; resolvedClassName: string; status: string }>;
+    noHistory: Array<{ id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; status: string }>;
+  }> {
+    // 1. All active+graduated students in this school
+    const schoolStudents = await db
+      .select({
+        id: students.id,
+        userId: students.userId,
+        classId: students.classId,
+        studentId: students.studentId,
+        status: students.status,
+        firstName: users.firstName,
+        middleName: users.middleName,
+        lastName: users.lastName,
+        currentClassName: classes.name,
+      })
+      .from(students)
+      .innerJoin(classes, eq(students.classId, classes.id))
+      .innerJoin(users, eq(students.userId, users.id))
+      .where(and(
+        eq(classes.schoolId, schoolId),
+        inArray(students.status, ['active', 'graduated'])
+      ));
+
+    if (schoolStudents.length === 0) return { mismatched: [], noHistory: [] };
+
+    const studentIds = schoolStudents.map(s => s.id);
+
+    // 2. Distinct (studentId, classId) for the given term+session
+    const termRows = await db
+      .selectDistinct({ studentId: assessments.studentId, classId: assessments.classId })
+      .from(assessments)
+      .where(and(
+        inArray(assessments.studentId, studentIds),
+        eq(assessments.term, term),
+        eq(assessments.session, session)
+      ));
+
+    const termClassByStudent = new Map<string, string>();
+    for (const a of termRows) termClassByStudent.set(a.studentId, a.classId);
+
+    // 3. For students with no term assessment, fall back to most recent from any term
+    const withoutTermIds = studentIds.filter(id => !termClassByStudent.has(id));
+    const recentClassByStudent = new Map<string, string>();
+
+    if (withoutTermIds.length > 0) {
+      const recentRows = await db
+        .select({ studentId: assessments.studentId, classId: assessments.classId })
+        .from(assessments)
+        .where(inArray(assessments.studentId, withoutTermIds))
+        .orderBy(desc(assessments.session), desc(assessments.term), desc(assessments.createdAt));
+
+      for (const a of recentRows) {
+        if (!recentClassByStudent.has(a.studentId)) recentClassByStudent.set(a.studentId, a.classId);
+      }
+    }
+
+    // 4. Fetch class names for all resolved class IDs
+    const resolvedIds = new Set([...termClassByStudent.values(), ...recentClassByStudent.values()]);
+    const classNameMap = new Map<string, string>();
+    if (resolvedIds.size > 0) {
+      const classRows = await db
+        .select({ id: classes.id, name: classes.name })
+        .from(classes)
+        .where(inArray(classes.id, [...resolvedIds]));
+      for (const c of classRows) classNameMap.set(c.id, c.name);
+    }
+
+    // 5. Categorise
+    const mismatched: Array<any> = [];
+    const noHistory: Array<any> = [];
+
+    for (const s of schoolStudents) {
+      const resolvedClassId = termClassByStudent.get(s.id) ?? recentClassByStudent.get(s.id);
+      const base = {
+        id: s.id, studentId: s.studentId,
+        firstName: s.firstName, middleName: s.middleName, lastName: s.lastName,
+        currentClassId: s.classId, currentClassName: s.currentClassName, status: s.status,
+      };
+      if (!resolvedClassId) {
+        noHistory.push(base);
+      } else if (resolvedClassId !== s.classId || s.status === 'graduated') {
+        mismatched.push({ ...base, resolvedClassId, resolvedClassName: classNameMap.get(resolvedClassId) ?? '' });
+      }
+    }
+
+    return { mismatched, noHistory };
+  }
+
+  async rollbackStudentClasses(moves: { studentId: string; targetClassId: string }[]): Promise<number> {
+    if (moves.length === 0) return 0;
+
+    const studentIds = moves.map(m => m.studentId);
+
+    // Fetch user IDs so we can reactivate deactivated (graduated) users
+    const studentUsers = await db
+      .select({ id: students.id, userId: students.userId })
+      .from(students)
+      .where(inArray(students.id, studentIds));
+
+    const userIdByStudentId = new Map<string, string>();
+    for (const s of studentUsers) {
+      if (s.userId) userIdByStudentId.set(s.id, s.userId);
+    }
+
+    // Update each student
+    for (const move of moves) {
+      await db.update(students).set({
+        classId: move.targetClassId,
+        status: 'active',
+        statusSession: null,
+        statusTerm: null,
+        updatedAt: new Date(),
+      }).where(eq(students.id, move.studentId));
+    }
+
+    // Reactivate user accounts (graduated students have isActive=false on their user)
+    const userIds = [...new Set(moves.map(m => userIdByStudentId.get(m.studentId)).filter(Boolean))] as string[];
+    if (userIds.length > 0) {
+      await db.update(users).set({ isActive: true }).where(inArray(users.id, userIds));
+    }
+
+    return moves.length;
   }
 
   // Enhanced student creation helper methods

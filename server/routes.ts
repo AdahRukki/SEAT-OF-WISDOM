@@ -630,6 +630,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get promotion mismatches (students whose current class differs from their assessment class for a term)
+  app.get('/api/admin/students/promotion-mismatches', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { schoolId, term, session } = req.query as { schoolId?: string; term?: string; session?: string };
+      if (!schoolId) return res.status(400).json({ error: 'schoolId is required' });
+      if (!term || !session) return res.status(400).json({ error: 'term and session are required' });
+      const result = await storage.getPromotionMismatches(schoolId, term, session);
+      res.json(result);
+    } catch (error) {
+      console.error('Get promotion mismatches error:', error);
+      res.status(500).json({ error: 'Failed to get promotion mismatches' });
+    }
+  });
+
+  // Rollback student class assignments (undo accidental promotions)
+  app.post('/api/admin/students/rollback-class', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { moves } = req.body as { moves: { studentId: string; targetClassId: string }[] };
+      if (!Array.isArray(moves) || moves.length === 0) return res.status(400).json({ error: 'moves array is required' });
+      const count = await storage.rollbackStudentClasses(moves);
+      res.json({ success: true, count, message: `${count} student(s) moved back successfully` });
+    } catch (error) {
+      console.error('Rollback student classes error:', error);
+      res.status(500).json({ error: 'Failed to rollback student classes' });
+    }
+  });
+
   // Withdraw students (stopped/withdrew) — main admin, or sub-admin with permission
   app.post('/api/admin/withdraw-students', authenticate, requirePermission('students_view_withdrawn'), async (req, res) => {
     try {
