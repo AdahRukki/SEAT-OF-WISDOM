@@ -2871,7 +2871,7 @@ export default function AdminDashboard() {
         title: "Promotion successful", 
         description: isGrad
           ? "Students have been marked as graduated."
-          : `Students moved to ${nextClassName}. The Students and Scores tabs have been switched to that class.`
+          : `Students moved to ${nextClassName}. Switch to ${nextClassName} in the current session to see them.`
       });
       setIsPromotionDialogOpen(false);
       setStudentsToPromote([]);
