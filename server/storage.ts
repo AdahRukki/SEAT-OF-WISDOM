@@ -170,6 +170,7 @@ export interface IStorage {
   deleteNews(newsId: string): Promise<void>;
   
   // Notification operations
+  createNotification(userId: string, message: string): Promise<Notification>;
   createNotificationForAllStudents(message: string, schoolId?: string): Promise<Notification[]>;
   getNotificationsByUser(userId: string): Promise<Notification[]>;
   getUnreadNotificationCount(userId: string): Promise<number>;
@@ -339,6 +340,7 @@ export interface IStorage {
   getAllGeneratedReportCards(schoolId?: string): Promise<GeneratedReportCard[]>;
   getGeneratedReportCardsByStudent(studentId: string): Promise<GeneratedReportCard[]>;
   getGeneratedReportCardsByClass(classId: string): Promise<GeneratedReportCard[]>;
+  hasGeneratedReportCard(studentId: string, classId: string, term: string, session: string): Promise<boolean>;
   createGeneratedReportCard(reportCardData: InsertGeneratedReportCard): Promise<GeneratedReportCard>;
   deleteGeneratedReportCard(reportCardId: string): Promise<void>;
   clearGeneratedReportCards(opts: { schoolId: string; classId?: string; term?: string; session?: string }): Promise<number>;
@@ -2978,6 +2980,19 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(generatedReportCards.generatedAt));
   }
 
+  async hasGeneratedReportCard(studentId: string, classId: string, term: string, session: string): Promise<boolean> {
+    const [existing] = await db.select({ id: generatedReportCards.id })
+      .from(generatedReportCards)
+      .where(and(
+        eq(generatedReportCards.studentId, studentId),
+        eq(generatedReportCards.classId, classId),
+        eq(generatedReportCards.term, term),
+        eq(generatedReportCards.session, session),
+      ))
+      .limit(1);
+    return !!existing;
+  }
+
   async createGeneratedReportCard(reportCardData: InsertGeneratedReportCard): Promise<GeneratedReportCard> {
     const [newReportCard] = await db
       .insert(generatedReportCards)
@@ -3627,6 +3642,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Notification operations
+  async createNotification(userId: string, message: string): Promise<Notification> {
+    const [notification] = await db.insert(notifications).values({
+      userId,
+      message,
+    }).returning();
+    return notification;
+  }
+
   async createNotificationForAllStudents(message: string, schoolId?: string): Promise<Notification[]> {
     // Get all students, optionally filtered by school
     let studentQuery = db

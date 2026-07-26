@@ -3566,7 +3566,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         generatedBy: user.id
       };
 
+      // Check BEFORE creating so re-generating an existing report doesn't
+      // spam the student with duplicate "ready" notifications.
+      const alreadyGenerated = await storage.hasGeneratedReportCard(studentId, classId, term, session);
+
       const reportCard = await storage.createGeneratedReportCard(reportCardData);
+
+      // Notify the student their report card is ready (only on first generation
+      // for this class/term/session). Notification failure must not fail generation.
+      if (!alreadyGenerated) {
+        try {
+          const student = await storage.getStudent(studentId);
+          if (student?.userId) {
+            await storage.createNotification(
+              student.userId,
+              `Your report card for ${term}, ${session} is now ready. Open the Results tab to view it.`
+            );
+          }
+        } catch (notifyError) {
+          console.error("Failed to create report-ready notification:", notifyError);
+        }
+      }
+
       res.json(reportCard);
     } catch (error) {
       console.error("Error creating report card record:", error);
