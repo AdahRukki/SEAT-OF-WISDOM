@@ -960,6 +960,46 @@ export class DatabaseStorage implements IStorage {
       );
 
     if (existing) {
+      // Preserve the class an existing PAST-SESSION score was filed under.
+      // The upsert matches on student+subject+term+session (ignoring class), so without
+      // this guard, re-saving after a promotion re-files old-session scores under the
+      // student's NEW class and past-session rosters look empty.
+      let classIdToStore = assessmentData.classId;
+      if (existing.classId && existing.classId !== assessmentData.classId) {
+        try {
+          // 1) Promotion ledger is the source of truth: if a promotion record for this
+          //    student+session says they were promoted FROM the stored class, keep it —
+          //    even if the school's session hasn't been advanced yet (promotion happens
+          //    at end of Third Term, before the session rolls over).
+          const [ledger] = await db
+            .select({ id: promotionRecords.id })
+            .from(promotionRecords)
+            .where(
+              and(
+                eq(promotionRecords.studentId, existing.studentId),
+                eq(promotionRecords.session, existing.session),
+                eq(promotionRecords.fromClassId, existing.classId)
+              )
+            )
+            .limit(1);
+          if (ledger) {
+            classIdToStore = existing.classId;
+          } else {
+            // 2) Otherwise, still never re-file scores from a PAST session.
+            const [cls] = await db
+              .select({ schoolId: classes.schoolId })
+              .from(classes)
+              .where(eq(classes.id, existing.classId));
+            const info = await this.getCurrentAcademicInfo(cls?.schoolId);
+            if (!info.currentSession || existing.session !== info.currentSession) {
+              classIdToStore = existing.classId; // past session: keep original class
+            }
+          }
+        } catch {
+          classIdToStore = existing.classId; // safest default: don't move the row
+        }
+      }
+
       // MERGE new values with existing values - only update fields that have real values
       // This fixes the bug where editing one field (e.g., CA2) would clear others (CA1, Exam)
       const mergedFirstCA = (assessmentData.firstCA !== undefined && assessmentData.firstCA !== null && Number(assessmentData.firstCA) > 0) 
@@ -979,7 +1019,7 @@ export class DatabaseStorage implements IStorage {
       const [updated] = await db
         .update(assessments)
         .set({
-          classId: assessmentData.classId,
+          classId: classIdToStore,
           firstCA: mergedFirstCA,
           secondCA: mergedSecondCA,
           exam: mergedExam,

@@ -4953,7 +4953,7 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase tracking-wide">Term</Label>
-                    <Select value={scoresTerm} onValueChange={setScoresTerm}>
+                    <Select value={scoresTerm} onValueChange={(term) => { setScoresTerm(term); setScoreInputs({}); }}>
                       <SelectTrigger className="h-9 text-sm" data-testid="select-scores-term">
                         <SelectValue placeholder="Select term" />
                       </SelectTrigger>
@@ -4966,7 +4966,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase tracking-wide">Session</Label>
-                    <Select value={scoresSession} onValueChange={setScoresSession}>
+                    <Select value={scoresSession} onValueChange={(session) => { setScoresSession(session); setScoreInputs({}); }}>
                       <SelectTrigger className="h-9 text-sm" data-testid="select-academic-session">
                         <SelectValue placeholder="Session" />
                       </SelectTrigger>
@@ -5032,10 +5032,16 @@ export default function AdminDashboard() {
                   (() => {
                     const filteredStudents = [...studentsForScores]
                       .sort((a, b) => a.studentId.localeCompare(b.studentId));
+                    // A field counts as scored if the user typed a value (non-empty),
+                    // or (when untouched) the server has a saved value — 0 included.
+                    const fieldHasScore = (typed: string | undefined, saved: number | null | undefined) => {
+                      if (typed !== undefined) return typed !== '';
+                      return saved !== null && saved !== undefined;
+                    };
                     const filledCount = filteredStudents.filter(s => {
                       const sc = scoreInputs[s.id] || {};
                       const as = classAssessments.find(a => a.studentId === s.id);
-                      return (sc.firstCA || as?.firstCA) || (sc.secondCA || as?.secondCA) || (sc.exam || as?.exam);
+                      return fieldHasScore(sc.firstCA, as?.firstCA) || fieldHasScore(sc.secondCA, as?.secondCA) || fieldHasScore(sc.exam, as?.exam);
                     }).length;
 
                     return (
@@ -5090,6 +5096,7 @@ export default function AdminDashboard() {
                                 const total = firstCA + secondCA + exam;
                                 const { grade } = calculateGrade(total);
                                 const hasDirtyInput = !!(currentScores.firstCA !== undefined || currentScores.secondCA !== undefined || currentScores.exam !== undefined);
+                                const hasAnyScore = fieldHasScore(currentScores.firstCA, assessment?.firstCA) || fieldHasScore(currentScores.secondCA, assessment?.secondCA) || fieldHasScore(currentScores.exam, assessment?.exam);
                                 const gradeColors: Record<string, string> = {
                                   A: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
                                   B: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
@@ -5159,11 +5166,11 @@ export default function AdminDashboard() {
                                     </td>
                                     <td className="px-2 py-2 text-center">
                                       <span className={`text-sm font-bold ${total >= 70 ? 'text-green-600' : total >= 50 ? 'text-blue-600' : total > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                                        {total > 0 ? total : '—'}
+                                        {hasAnyScore ? total : '—'}
                                       </span>
                                     </td>
                                     <td className="px-2 py-2 text-center">
-                                      {total > 0 && (
+                                      {hasAnyScore && (
                                         <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${gradeColors[grade[0]] || gradeColors.F}`}>
                                           {grade}
                                         </span>
