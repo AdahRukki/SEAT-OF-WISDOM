@@ -10,6 +10,15 @@ rootElement.innerHTML = '<div style="display:flex;align-items:center;justify-con
 // Render app function
 function renderApp() {
   createRoot(rootElement).render(<App />);
+  // Signal the stale-cache recovery watchdog (inline script in index.html)
+  // that the app booted successfully, and clear the one-shot recovery guard
+  // so a future failure in this session can trigger recovery again.
+  (window as any).__APP_BOOTED__ = true;
+  try {
+    sessionStorage.removeItem('sowa-cache-recovery-attempted');
+  } catch {
+    // sessionStorage unavailable — guard just stays set, which is safe.
+  }
 }
 
 // Initialize Firebase with timeout to ensure app loads

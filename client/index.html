@@ -30,6 +30,134 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Stale-cache self-recovery: if the cached app shell references JS bundles
+         that no longer exist on the server, the app never boots. This inline
+         script (which always runs, even when hashed bundles 404) detects that
+         state and — only when the server is reachable — clears service workers
+         and caches, then reloads once. A session-scoped guard prevents reload
+         loops; offline devices are left untouched so offline mode keeps working. -->
+    <script>
+      (function () {
+        var GUARD_KEY = 'sowa-cache-recovery-attempted';
+        var recovering = false;
+
+        function guardSet() {
+          try { return sessionStorage.getItem(GUARD_KEY) === '1'; }
+          catch (e) { return true; } // no sessionStorage → never auto-wipe repeatedly
+        }
+        function setGuard() {
+          try { sessionStorage.setItem(GUARD_KEY, '1'); } catch (e) {}
+        }
+
+        function showMessage(text, sub) {
+          var root = document.getElementById('root');
+          if (!root) return;
+          root.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#444;padding:24px;text-align:center;">' +
+              '<div>' +
+                '<div style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:sowaspin 0.8s linear infinite;margin:0 auto 16px;"></div>' +
+                '<div style="font-size:16px;font-weight:600;">' + text + '</div>' +
+                (sub ? '<div style="font-size:14px;color:#777;margin-top:8px;max-width:320px;">' + sub + '</div>' : '') +
+              '</div>' +
+            '</div>' +
+            '<style>@keyframes sowaspin{to{transform:rotate(360deg)}}</style>';
+        }
+
+        // Distinguish "online but shell broken" from "offline serving cached shell".
+        // The service worker answers uncached /api/ requests with a 503 stub when
+        // the network is down, and the cache-busting query ensures no cache hit.
+        function serverReachable() {
+          if (navigator.onLine === false) return Promise.resolve(false);
+          return fetch('/api/__recovery-ping?ts=' + Date.now(), { cache: 'no-store' })
+            .then(function (res) { return res.status !== 503; })
+            .catch(function () { return false; });
+        }
+
+        function clearAndReload() {
+          var steps = [];
+          if ('serviceWorker' in navigator) {
+            steps.push(
+              navigator.serviceWorker.getRegistrations()
+                .then(function (regs) {
+                  return Promise.all(regs.map(function (r) { return r.unregister(); }));
+                })
+                .catch(function () {})
+            );
+          }
+          if (window.caches && caches.keys) {
+            steps.push(
+              caches.keys()
+                .then(function (names) {
+                  return Promise.all(names.map(function (n) { return caches.delete(n); }));
+                })
+                .catch(function () {})
+            );
+          }
+          var reloaded = false;
+          function reload() {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+          }
+          Promise.all(steps).then(reload, reload);
+          setTimeout(reload, 5000); // safety net if a step hangs
+        }
+
+        function recover() {
+          if (recovering || window.__APP_BOOTED__) return;
+          recovering = true;
+          serverReachable().then(function (reachable) {
+            if (window.__APP_BOOTED__) { recovering = false; return; }
+            if (!reachable) {
+              // Genuinely offline (or server down): keep the cached shell,
+              // never wipe caches — offline mode must keep working.
+              recovering = false;
+              return;
+            }
+            if (guardSet()) {
+              // Already tried once this session and it didn't help.
+              showMessage(
+                'Something went wrong loading the app.',
+                'Please close this tab and reopen the site. If the problem continues, clear this site\u2019s data in your browser settings.'
+              );
+              return;
+            }
+            setGuard();
+            showMessage('Updating the app\u2026', 'This will only take a moment.');
+            clearAndReload();
+          });
+        }
+
+        window.__sowaRecover = recover;
+
+        // 1) Failed loads of same-origin scripts/styles (e.g. 404 on stale hashed
+        //    bundles). Resource errors don't bubble, so listen in capture phase.
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          if (!t || !t.tagName) return;
+          var tag = t.tagName.toUpperCase();
+          if (tag !== 'SCRIPT' && tag !== 'LINK') return;
+          var src = t.src || t.href || '';
+          // Ignore third-party resources (e.g. analytics) failing to load.
+          if (src && src.indexOf(window.location.origin) !== 0) return;
+          recover();
+        }, true);
+
+        // 2) Dynamic import (lazy chunk) failures during boot.
+        window.addEventListener('unhandledrejection', function (e) {
+          var msg = '';
+          try { msg = (e.reason && (e.reason.message || String(e.reason))) || ''; } catch (err) {}
+          if (/dynamically imported module|Importing a module script failed|Failed to fetch dynamically imported|error loading dynamically imported|Loading chunk|Loading CSS chunk/i.test(msg)) {
+            recover();
+          }
+        });
+
+        // 3) Watchdog: the app never rendered past the initial spinner.
+        setTimeout(function () {
+          if (!window.__APP_BOOTED__) recover();
+        }, 15000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
