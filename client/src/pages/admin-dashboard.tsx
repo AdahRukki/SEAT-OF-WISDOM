@@ -833,6 +833,8 @@ export default function AdminDashboard() {
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
   const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
   const [selectedStudentsForClassChange, setSelectedStudentsForClassChange] = useState<Set<string>>(new Set());
+  const [showInactiveStudents, setShowInactiveStudents] = useState(false);
+  const [showInactiveInScores, setShowInactiveInScores] = useState(false);
   const [isChangeClassDialogOpen, setIsChangeClassDialogOpen] = useState(false);
   const [targetClassForChange, setTargetClassForChange] = useState("");
 
@@ -1440,8 +1442,25 @@ export default function AdminDashboard() {
   // For current session: all active students currently in the class.
   // For historical sessions: students who actually had assessments in that class+session.
   const studentsForScores: StudentWithDetails[] = isHistoricalScores
-    ? historicalScoresStudents
+    ? (showInactiveInScores
+        ? historicalScoresStudents
+        : historicalScoresStudents.filter(s => s.user?.isActive !== false))
     : allStudents.filter(s => s.classId === scoresClassId);
+  const hiddenInactiveScoresCount = isHistoricalScores && !showInactiveInScores
+    ? historicalScoresStudents.filter(s => s.user?.isActive === false).length
+    : 0;
+
+  // Students tab roster: active students, plus inactive ones when the toggle is on.
+  // Deduped by id in case both lists briefly overlap while queries refresh.
+  const studentsForClassTab: StudentWithDetails[] = showInactiveStudents
+    ? Array.from(new Map([...allStudents, ...inactiveStudents].map(s => [s.id, s])).values())
+    : allStudents;
+
+  // Avoid silently dropping unsaved score edits on hidden inactive rows:
+  // reset the scores "show inactive" toggle whenever the roster context changes.
+  useEffect(() => {
+    setShowInactiveInScores(false);
+  }, [scoresClassId, scoresTerm, scoresSession]);
 
   // Class students query for details view
   const { data: classStudents = [] } = useQuery<StudentWithDetails[]>({ 
@@ -2704,6 +2723,8 @@ export default function AdminDashboard() {
         discount: ""
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/inactive'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students/withdrawn'] });
       if (user?.schoolId) {
         queryClient.invalidateQueries({ queryKey: ['/api/admin/students', user.schoolId] });
       }
@@ -4312,7 +4333,7 @@ export default function AdminDashboard() {
                     <SelectContent>
                       {sortClassesByOrder(classes).map((classItem) => (
                         <SelectItem key={classItem.id} value={classItem.id}>
-                          {classItem.name} ({allStudents.filter(s => s.classId === classItem.id).length + offlineStudents.filter(s => s.classId === classItem.id).length} students)
+                          {classItem.name} ({studentsForClassTab.filter(s => s.classId === classItem.id).length + offlineStudents.filter(s => s.classId === classItem.id).length} students)
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -4324,7 +4345,7 @@ export default function AdminDashboard() {
                   <>
                   {/* Select-all bar + Change Class action */}
                   {(() => {
-                    const classStudentsList = allStudents.filter(s => s.classId === selectedClassForStudents);
+                    const classStudentsList = studentsForClassTab.filter(s => s.classId === selectedClassForStudents);
                     const allSelected = classStudentsList.length > 0 && classStudentsList.every(s => selectedStudentsForClassChange.has(s.id));
                     return (
                       <div className="flex items-center gap-3 mb-2">
@@ -4343,6 +4364,17 @@ export default function AdminDashboard() {
                           />
                           Select all
                         </label>
+                        {perm('students_view_withdrawn') && (
+                          <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground" data-testid="toggle-show-inactive-students">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded"
+                              checked={showInactiveStudents}
+                              onChange={(e) => setShowInactiveStudents(e.target.checked)}
+                            />
+                            Show inactive
+                          </label>
+                        )}
                         {selectedStudentsForClassChange.size > 0 && (
                           <Button
                             size="sm"
@@ -4361,7 +4393,7 @@ export default function AdminDashboard() {
                     );
                   })()}
                   <div className="border rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
-                    {allStudents
+                    {studentsForClassTab
                       .filter(student => student.classId === selectedClassForStudents)
                       .sort((a, b) => a.studentId.localeCompare(b.studentId))
                       .map((student) => {
@@ -4472,7 +4504,7 @@ export default function AdminDashboard() {
                           </div>
                         );
                       })}
-                    {allStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && extraPendingStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
+                    {studentsForClassTab.filter(s => s.classId === selectedClassForStudents).length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && extraPendingStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
                       <div className="text-center py-8">
                         <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No students in this class</h3>
@@ -5011,7 +5043,20 @@ export default function AdminDashboard() {
                         {/* Summary bar */}
                         <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">{filteredStudents.length} students</span>
-                          <span>{filledCount} / {filteredStudents.length} scored</span>
+                          <div className="flex items-center gap-3">
+                            {isHistoricalScores && (showInactiveInScores || hiddenInactiveScoresCount > 0) && (
+                              <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid="toggle-show-inactive-scores">
+                                <input
+                                  type="checkbox"
+                                  className="w-3.5 h-3.5 rounded"
+                                  checked={showInactiveInScores}
+                                  onChange={(e) => setShowInactiveInScores(e.target.checked)}
+                                />
+                                Show inactive{hiddenInactiveScoresCount > 0 ? ` (${hiddenInactiveScoresCount})` : ''}
+                              </label>
+                            )}
+                            <span>{filledCount} / {filteredStudents.length} scored</span>
+                          </div>
                         </div>
 
                         {/* Table */}
@@ -5055,8 +5100,11 @@ export default function AdminDashboard() {
                                 return (
                                   <tr key={student.id} className={`${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'} hover:bg-primary/5 transition-colors ${hasDirtyInput ? 'border-l-2 border-l-amber-400' : ''}`}>
                                     <td className="px-3 py-2">
-                                      <div className="font-medium text-sm text-foreground leading-tight">
-                                        {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}
+                                      <div className="font-medium text-sm text-foreground leading-tight flex items-center gap-1.5">
+                                        <span>{[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}</span>
+                                        {student.user?.isActive === false && (
+                                          <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 px-1 rounded shrink-0 font-medium">Inactive</span>
+                                        )}
                                       </div>
                                       <div className="text-[11px] text-muted-foreground sm:hidden">{student.studentId}</div>
                                     </td>
