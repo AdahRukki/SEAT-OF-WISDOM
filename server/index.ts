@@ -89,6 +89,23 @@ async function runMigrations() {
       UPDATE classes SET sort_order = 4 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'S.S.S 1';
       UPDATE classes SET sort_order = 5 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'S.S.S 2';
       UPDATE classes SET sort_order = 6 WHERE (sort_order IS NULL OR sort_order = 0) AND name = 'S.S.S 3';
+      -- Task #198: promotion ledger (idempotency guard + audit for third-term promotions)
+      CREATE TABLE IF NOT EXISTS promotion_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+        session VARCHAR(20) NOT NULL,
+        student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        from_class_id VARCHAR(50) NOT NULL,
+        to_class_id VARCHAR(50) NOT NULL,
+        is_bulk BOOLEAN NOT NULL DEFAULT TRUE,
+        promoted_by UUID REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_promotion_records_school_session ON promotion_records (school_id, session);
+      -- DB-level guard: a student can only appear in ONE bulk promotion per school+session.
+      -- Two concurrent bulk runs insert the same students -> the second transaction fails and rolls back.
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_promotion_records_bulk_student
+        ON promotion_records (school_id, session, student_id) WHERE is_bulk;
       CREATE TABLE IF NOT EXISTS admissions_applications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         student_name VARCHAR(200) NOT NULL,

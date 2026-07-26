@@ -253,6 +253,22 @@ export const generatedReportCards = pgTable("generated_report_cards", {
   generatedAt: timestamp("generated_at").defaultNow(),
 });
 
+// Promotion records — audit trail + idempotency guard for third-term promotions.
+// One row per promoted/graduated student. A bulk promotion for a school+session
+// may only happen once; individual promotions (e.g. previously-skipped students)
+// are always allowed and recorded with isBulk=false.
+export const promotionRecords = pgTable("promotion_records", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  session: varchar("session", { length: 20 }).notNull(),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  fromClassId: varchar("from_class_id", { length: 50 }).notNull(),
+  toClassId: varchar("to_class_id", { length: 50 }).notNull(), // class id or 'graduated'
+  isBulk: boolean("is_bulk").notNull().default(true),
+  promotedBy: uuid("promoted_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Fee Types table (different types of fees like tuition, books, etc.)
 export const feeTypes = pgTable("fee_types", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -611,22 +611,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Student Promotion System
+  // Student Promotion System — individual/manual promotions (always allowed).
+  // Recorded in the promotion ledger with isBulk=false for audit purposes.
   app.post('/api/admin/promote-students', authenticate, requireAdmin, async (req, res) => {
     try {
+      const user = (req as any).user;
       const { currentClassId, nextClassId, studentIds } = req.body;
 
+      const currentInfo = await storage.getCurrentAcademicInfo();
       if (nextClassId === 'graduated') {
-        const currentInfo = await storage.getCurrentAcademicInfo();
         await storage.markStudentsAsGraduated(studentIds, currentInfo?.currentSession ?? undefined, currentInfo?.currentTerm ?? undefined);
       } else {
         await storage.promoteStudentsToNextClass(currentClassId, nextClassId, studentIds);
       }
-      
+
+      // Ledger (best-effort audit; never blocks the promotion itself)
+      try {
+        const classSchools = await storage.getStudentSchoolIds(studentIds);
+        const session = currentInfo?.currentSession;
+        if (session && classSchools.length > 0) {
+          await storage.recordPromotions(classSchools.filter(s => !!s.schoolId).map(s => ({
+            schoolId: s.schoolId as string,
+            session,
+            studentId: s.id,
+            fromClassId: currentClassId,
+            toClassId: nextClassId,
+            isBulk: false,
+            promotedBy: user?.id,
+          })));
+        }
+      } catch (ledgerErr) {
+        console.error("Promotion ledger write failed (individual):", ledgerErr);
+      }
+
       res.json({ message: "Students promoted successfully" });
     } catch (error) {
       console.error("Promote students error:", error);
       res.status(400).json({ error: "Failed to promote students" });
+    }
+  });
+
+  // Bulk third-term promotion — one atomic request per school+session, guarded
+  // so it can only ever run ONCE per session (Task #198). Regenerating reports
+  // never re-triggers this; the client must call it explicitly.
+  app.post('/api/admin/promote-students/bulk', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { schoolId, promotions } = req.body as {
+        schoolId?: string;
+        promotions?: { currentClassId: string; nextClassId: string; studentIds: string[] }[];
+      };
+      if (!schoolId) return res.status(400).json({ error: "schoolId is required" });
+      if (user.role === 'sub-admin' && schoolId !== user.schoolId) {
+        return res.status(403).json({ error: "Cannot promote students outside your school" });
+      }
+      if (!Array.isArray(promotions) || promotions.length === 0) {
+        return res.status(400).json({ error: "promotions array is required" });
+      }
+
+      const currentInfo = await storage.getCurrentAcademicInfo(schoolId);
+      const session = currentInfo?.currentSession;
+      if (!session) return res.status(400).json({ error: "School has no current session set" });
+
+      const existing = await storage.hasBulkPromotionForSession(schoolId, session);
+      if (existing.promoted) {
+        return res.status(409).json({
+          error: "Students were already promoted for this session",
+          alreadyPromoted: true,
+          promotedAt: existing.promotedAt,
+        });
+      }
+
+      const validPromotions = promotions.filter(p =>
+        p.currentClassId && p.nextClassId && Array.isArray(p.studentIds) && p.studentIds.length > 0
+      );
+      if (validPromotions.length === 0) {
+        return res.status(400).json({ error: "No valid promotions provided" });
+      }
+
+      // Single transaction: ledger insert + all class updates commit or roll back
+      // together. The unique index on bulk ledger rows blocks concurrent double-runs.
+      const { totalPromoted, totalGraduated } = await storage.executeBulkPromotion({
+        schoolId,
+        session,
+        term: currentInfo?.currentTerm ?? undefined,
+        promotedBy: user?.id,
+        promotions: validPromotions,
+      });
+
+      res.json({ message: "Bulk promotion complete", totalPromoted, totalGraduated, session });
+    } catch (error: any) {
+      console.error("Bulk promote students error:", error);
+      // Unique-index violation from a concurrent/duplicate bulk run
+      if (error?.code === '23505' || /duplicate key/i.test(error?.message || '')) {
+        return res.status(409).json({ error: "Students were already promoted for this session", alreadyPromoted: true });
+      }
+      res.status(400).json({ error: "Failed to promote students" });
+    }
+  });
+
+  // Whether the one-time bulk promotion already ran for a school's session
+  app.get('/api/admin/promotion-status', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const actor = (req as any).user;
+      const schoolId = req.query.schoolId as string;
+      let session = req.query.session as string | undefined;
+      if (!schoolId) return res.status(400).json({ error: "schoolId is required" });
+      if (actor.role === 'sub-admin' && schoolId !== actor.schoolId) {
+        return res.status(403).json({ error: "Access denied to this school's data" });
+      }
+      if (!session) {
+        const info = await storage.getCurrentAcademicInfo(schoolId);
+        session = info?.currentSession ?? undefined;
+      }
+      if (!session) return res.json({ promoted: false, promotedAt: null, session: null });
+      const status = await storage.hasBulkPromotionForSession(schoolId, session);
+      res.json({ ...status, session });
+    } catch (error) {
+      console.error("Promotion status error:", error);
+      res.status(500).json({ error: "Failed to fetch promotion status" });
     }
   });
 

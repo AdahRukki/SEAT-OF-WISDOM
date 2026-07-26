@@ -163,6 +163,13 @@ export function ReportCardManagement({
     queryFn: () => apiRequest(activeSchoolId ? `/api/current-academic-info?schoolId=${activeSchoolId}` : "/api/current-academic-info"),
   });
 
+  // Task #198: has the one-time bulk promotion already run for this school's session?
+  const { data: promotionStatus } = useQuery<{ promoted: boolean; promotedAt: string | null; session: string | null }>({
+    queryKey: ["/api/admin/promotion-status", activeSchoolId],
+    queryFn: () => apiRequest(`/api/admin/promotion-status?schoolId=${activeSchoolId}`),
+    enabled: !!activeSchoolId,
+  });
+
   // Fetch academic sessions
   const { data: academicSessions = [] } = useQuery<{ id: string; sessionYear: string; isActive: boolean }[]>({
     queryKey: ['/api/admin/academic-sessions'],
@@ -349,6 +356,11 @@ export function ReportCardManagement({
     undefined,
   );
   const [isGeneratingReports, setIsGeneratingReports] = useState(false);
+
+  // Task #198: explicit promotion step state — set after third-term generation
+  const [showPromotionPrompt, setShowPromotionPrompt] = useState(false);
+  const [pendingSkippedIds, setPendingSkippedIds] = useState<Set<string>>(new Set());
+  const [isPromoting, setIsPromoting] = useState(false);
 
   // Skipped students state (populated after bulk generation)
   const [skippedStudents, setSkippedStudents] = useState<SkippedStudent[]>([]);
@@ -590,34 +602,24 @@ export function ReportCardManagement({
         description: `Reports generated for ${generatedCount} student${generatedCount !== 1 ? "s" : ""}. ${newSkippedStudents.length > 0 ? `${newSkippedStudents.length} student${newSkippedStudents.length !== 1 ? "s were" : " was"} skipped due to incomplete data.` : ""}`.trim(),
       });
 
-      // Sequential execution: Promote first (if third term), then advance term
-      try {
-        if (isThirdTerm) {
-          const skippedIds = new Set(newSkippedStudents.map((s) => s.studentId));
-          await promoteStudentsToNextClass(skippedIds);
+      // Task #198: generation NEVER promotes or advances the term by itself.
+      // Third term: surface the explicit "Promote & Advance" step instead.
+      // Other terms: advancing the term remains part of the generation flow.
+      if (isThirdTerm) {
+        setPendingSkippedIds(new Set(newSkippedStudents.map((s) => s.studentId)));
+        setShowPromotionPrompt(true);
+      } else {
+        try {
+          await advanceAcademicTerm.mutateAsync();
+        } catch (advanceError) {
+          console.error("Failed during term advancement:", advanceError);
           toast({
-            title: "Students Promoted",
-            description: newSkippedStudents.length > 0
-              ? `Validated students promoted. ${newSkippedStudents.length} skipped student${newSkippedStudents.length !== 1 ? "s were" : " was"} not promoted.`
-              : "All students have been promoted to their next classes.",
+            title: "Process Failed",
+            description: "Term advancement failed.",
+            variant: "destructive",
           });
+          throw advanceError;
         }
-
-        // Only advance term if promotion succeeded (or not needed)
-        await advanceAcademicTerm.mutateAsync();
-      } catch (promotionOrAdvanceError) {
-        console.error(
-          "Failed during promotion or term advancement:",
-          promotionOrAdvanceError,
-        );
-        toast({
-          title: "Process Failed",
-          description: isThirdTerm
-            ? "Student promotion failed. Term not advanced."
-            : "Term advancement failed.",
-          variant: "destructive",
-        });
-        throw promotionOrAdvanceError;
       }
     } catch (error) {
       console.error("Report generation process failed:", error);
@@ -629,6 +631,60 @@ export function ReportCardManagement({
       });
     } finally {
       setIsGeneratingReports(false);
+    }
+  };
+
+  // Task #198: explicit "Promote & Advance" handler — the ONLY place promotion runs.
+  const handlePromoteAndAdvance = async () => {
+    setIsPromoting(true);
+    try {
+      await promoteStudentsToNextClass(pendingSkippedIds);
+      toast({
+        title: "Students Promoted",
+        description: pendingSkippedIds.size > 0
+          ? `Validated students promoted. ${pendingSkippedIds.size} skipped student${pendingSkippedIds.size !== 1 ? "s were" : " was"} not promoted.`
+          : "All students have been promoted to their next classes.",
+      });
+      await advanceAcademicTerm.mutateAsync();
+      setShowPromotionPrompt(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promotion-status", activeSchoolId] });
+    } catch (error: any) {
+      if (error?.alreadyPromoted) {
+        // Promotion already ran (possibly a prior attempt where advance-term failed).
+        // If the school is still stuck on Third Term, finish the advance now.
+        if (academicInfo?.currentTerm === "Third Term") {
+          try {
+            await advanceAcademicTerm.mutateAsync();
+            toast({
+              title: "Term Advanced",
+              description: "Students were already promoted; the term has now been advanced.",
+            });
+          } catch {
+            toast({
+              title: "Term Advance Failed",
+              description: "Students were already promoted, but advancing the term failed. Retry to advance the term.",
+              variant: "destructive",
+            });
+            return; // keep prompt open so the user can retry the advance
+          }
+        } else {
+          toast({
+            title: "Already Promoted",
+            description: "Students were already promoted for this session. No changes were made.",
+          });
+        }
+        setShowPromotionPrompt(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/promotion-status", activeSchoolId] });
+      } else {
+        console.error("Promote & advance failed:", error);
+        toast({
+          title: "Promotion Failed",
+          description: "Student promotion failed. The term was not advanced. You can retry safely.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsPromoting(false);
     }
   };
 
@@ -664,41 +720,35 @@ export function ReportCardManagement({
         }
       }
 
-      // PROMOTE: iterate over snapshot only — no live DB reads inside the loop
-      let totalPromoted = 0;
-      let totalGraduated = 0;
-
+      // PROMOTE: one atomic, server-guarded bulk request (Task #198).
+      // The server rejects a second bulk promotion for the same school+session.
+      const promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] = [];
       for (const classId in snapshot) {
         const studentIds = snapshot[classId];
         if (studentIds.length === 0) continue;
-
         const { nextClassId, isGraduation } = getNextClass(classId);
-
         if (isGraduation) {
-          await apiRequest("/api/admin/promote-students", {
-            method: "POST",
-            body: { currentClassId: classId, nextClassId: "graduated", studentIds },
-          });
-          totalGraduated += studentIds.length;
-          console.log(`Graduated ${studentIds.length} students from ${classId}`);
+          promotions.push({ currentClassId: classId, nextClassId: "graduated", studentIds });
         } else if (nextClassId) {
-          await apiRequest("/api/admin/promote-students", {
-            method: "POST",
-            body: { currentClassId: classId, nextClassId, studentIds },
-          });
-          totalPromoted += studentIds.length;
-          console.log(`Promoted ${studentIds.length} students from ${classId} to ${nextClassId}`);
+          promotions.push({ currentClassId: classId, nextClassId, studentIds });
         }
       }
 
-      if (totalPromoted > 0 || totalGraduated > 0) {
-        const message = [];
-        if (totalPromoted > 0) message.push(`${totalPromoted} students promoted`);
-        if (totalGraduated > 0) message.push(`${totalGraduated} students graduated`);
-        console.log(`Promotion complete: ${message.join(", ")}`);
+      if (promotions.length === 0) {
+        console.log("No classes eligible for promotion.");
+        return;
       }
-    } catch (error) {
+
+      const result = await apiRequest("/api/admin/promote-students/bulk", {
+        method: "POST",
+        body: { schoolId: activeSchoolId, promotions },
+      });
+      console.log(`Promotion complete: ${result.totalPromoted} promoted, ${result.totalGraduated} graduated`);
+    } catch (error: any) {
       console.error("Error promoting students:", error);
+      if (error?.alreadyPromoted || /already promoted/i.test(error?.message || "")) {
+        throw Object.assign(new Error("Students were already promoted for this session"), { alreadyPromoted: true });
+      }
       throw new Error("Failed to promote students to next classes");
     }
   };
@@ -1661,7 +1711,59 @@ export function ReportCardManagement({
             {selectedTerm === "Third Term" && Object.keys(schoolValidationResults).length > 0 && (
               <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2.5 py-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span><strong>Third Term:</strong> After generating, students will be promoted to their next class. Final-year (SS3) students will be <strong>graduated</strong>. Classes with no subjects will also be promoted.</span>
+                <span><strong>Third Term:</strong> Generating reports does <strong>not</strong> move anyone. Afterwards you'll get a separate "Promote Students &amp; Advance Term" step — promotion can only run <strong>once per session</strong>, so regenerating reports is always safe.</span>
+              </div>
+            )}
+            {selectedTerm === "Third Term" && promotionStatus?.promoted && (
+              <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2.5 py-1.5" data-testid="promotion-already-done">
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Students were already promoted for the {promotionStatus.session} session{promotionStatus.promotedAt ? ` on ${format(new Date(promotionStatus.promotedAt), "PPP")}` : ""}. Regenerating reports will not move them again.</span>
+              </div>
+            )}
+            {showPromotionPrompt && !promotionStatus?.promoted && (
+              <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 space-y-2" data-testid="promotion-prompt">
+                <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  Reports generated — ready to promote students?
+                </div>
+                <p className="text-xs text-blue-700">
+                  This will move all validated students to their next class, graduate final-year students, and advance the school to the next term/session. It can only be done <strong>once per session</strong> and cannot be repeated by regenerating reports.
+                  {pendingSkippedIds.size > 0 && ` ${pendingSkippedIds.size} skipped student${pendingSkippedIds.size !== 1 ? "s" : ""} will NOT be promoted.`}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={handlePromoteAndAdvance}
+                    disabled={isPromoting}
+                    data-testid="button-promote-and-advance"
+                  >
+                    {isPromoting ? "Promoting…" : "Promote Students & Advance Term"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => setShowPromotionPrompt(false)}
+                    disabled={isPromoting}
+                    data-testid="button-promote-later"
+                  >
+                    Not now
+                  </Button>
+                </div>
+              </div>
+            )}
+            {selectedTerm === "Third Term" && !showPromotionPrompt && !promotionStatus?.promoted && generatedReports.length > 0 && academicInfo?.currentTerm === "Third Term" && (
+              <div className="flex items-center justify-between gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2.5 py-1.5" data-testid="promotion-pending-reminder">
+                <span>Third-term reports exist but students have not been promoted yet for this session.</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-blue-300 text-blue-700"
+                  onClick={() => setShowPromotionPrompt(true)}
+                >
+                  Promote now
+                </Button>
               </div>
             )}
           </div>

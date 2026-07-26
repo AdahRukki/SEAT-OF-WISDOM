@@ -9,6 +9,7 @@ import {
   attendance,
   reportCardTemplates,
   generatedReportCards,
+  promotionRecords,
   feeTypes,
   tuitionClassAmounts,
   studentFees,
@@ -318,6 +319,9 @@ export interface IStorage {
   
   // Student promotion system
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
+  hasBulkPromotionForSession(schoolId: string, session: string): Promise<{ promoted: boolean; promotedAt: Date | null; count: number }>;
+  recordPromotions(rows: { schoolId: string; session: string; studentId: string; fromClassId: string; toClassId: string; isBulk: boolean; promotedBy?: string }[]): Promise<void>;
+  executeBulkPromotion(args: { schoolId: string; session: string; term?: string; promotedBy?: string; promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] }): Promise<{ totalPromoted: number; totalGraduated: number }>;
   markStudentsAsGraduated(studentIds: string[], session?: string, term?: string): Promise<void>;
   markStudentsAsWithdrawn(studentIds: string[], session?: string, term?: string): Promise<void>;
   getStudentSchoolIds(studentIds: string[]): Promise<{ id: string; schoolId: string | null }[]>;
@@ -2255,6 +2259,79 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date()
       })
       .where(inArray(students.id, studentIds));
+  }
+
+  async hasBulkPromotionForSession(schoolId: string, session: string): Promise<{ promoted: boolean; promotedAt: Date | null; count: number }> {
+    const rows = await db
+      .select({ createdAt: promotionRecords.createdAt })
+      .from(promotionRecords)
+      .where(and(
+        eq(promotionRecords.schoolId, schoolId),
+        eq(promotionRecords.session, session),
+        eq(promotionRecords.isBulk, true)
+      ));
+    return {
+      promoted: rows.length > 0,
+      promotedAt: rows.length > 0 ? rows[0].createdAt : null,
+      count: rows.length,
+    };
+  }
+
+  async recordPromotions(rows: { schoolId: string; session: string; studentId: string; fromClassId: string; toClassId: string; isBulk: boolean; promotedBy?: string }[]): Promise<void> {
+    if (rows.length === 0) return;
+    await db.insert(promotionRecords).values(rows);
+  }
+
+  async executeBulkPromotion(args: { schoolId: string; session: string; term?: string; promotedBy?: string; promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] }): Promise<{ totalPromoted: number; totalGraduated: number }> {
+    const { schoolId, session, term, promotedBy, promotions } = args;
+    let totalPromoted = 0;
+    let totalGraduated = 0;
+
+    await db.transaction(async (tx) => {
+      // Ledger rows FIRST: the unique partial index (school_id, session, student_id)
+      // WHERE is_bulk makes a concurrent second bulk run fail here and roll back
+      // before any student rows are touched.
+      const ledgerRows = promotions.flatMap(p =>
+        p.studentIds.map(studentId => ({
+          schoolId,
+          session,
+          studentId,
+          fromClassId: p.currentClassId,
+          toClassId: p.nextClassId,
+          isBulk: true,
+          promotedBy,
+        }))
+      );
+      if (ledgerRows.length === 0) return;
+      await tx.insert(promotionRecords).values(ledgerRows);
+
+      for (const p of promotions) {
+        if (p.studentIds.length === 0) continue;
+        if (p.nextClassId === 'graduated') {
+          const targetStudents = await tx
+            .select({ userId: students.userId })
+            .from(students)
+            .where(inArray(students.id, p.studentIds));
+          await tx
+            .update(students)
+            .set({ status: 'graduated', statusSession: session, statusTerm: term, updatedAt: new Date() })
+            .where(inArray(students.id, p.studentIds));
+          const userIds = targetStudents.map(s => s.userId).filter(Boolean) as string[];
+          if (userIds.length > 0) {
+            await tx.update(users).set({ isActive: false }).where(inArray(users.id, userIds));
+          }
+          totalGraduated += p.studentIds.length;
+        } else {
+          await tx
+            .update(students)
+            .set({ classId: p.nextClassId, updatedAt: new Date() })
+            .where(inArray(students.id, p.studentIds));
+          totalPromoted += p.studentIds.length;
+        }
+      }
+    });
+
+    return { totalPromoted, totalGraduated };
   }
 
   async markStudentsAsGraduated(studentIds: string[], session?: string, term?: string): Promise<void> {
