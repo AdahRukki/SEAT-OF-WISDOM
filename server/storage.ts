@@ -94,7 +94,7 @@ import {
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, asc, desc, sql, inArray, ne, isNotNull } from "drizzle-orm";
+import { eq, and, or, asc, desc, sql, inArray, ne, isNotNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -1197,6 +1197,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getClassAssessments(classId: string, subjectId: string, term: string, session: string): Promise<(Assessment & { student: StudentWithDetails })[]> {
+    // Also match rows for students whose promotion record for this session says they came
+    // FROM this class, even when the assessment row was mis-filed under a different (newer)
+    // class id. Keeps historical score loading consistent with the promotion-aware roster.
+    // No isActive filter: the caller's roster decides who is displayed (inactive students
+    // can be shown in historical views), and extra rows are simply ignored by the client.
+    const promoRoster = await db
+      .selectDistinct({ studentId: promotionRecords.studentId })
+      .from(promotionRecords)
+      .where(
+        and(
+          eq(promotionRecords.session, session),
+          eq(promotionRecords.fromClassId, classId)
+        )
+      );
+    const rosterIds = promoRoster.map(r => r.studentId);
+    const classMatch = rosterIds.length > 0
+      ? or(eq(assessments.classId, classId), inArray(assessments.studentId, rosterIds))
+      : eq(assessments.classId, classId);
+
     const assessmentsData = await db
       .select()
       .from(assessments)
@@ -1205,11 +1224,10 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(classes, eq(students.classId, classes.id))
       .where(
         and(
-          eq(assessments.classId, classId),
+          classMatch,
           eq(assessments.subjectId, subjectId),
           eq(assessments.term, term),
-          eq(assessments.session, session),
-          eq(users.isActive, true)
+          eq(assessments.session, session)
         )
       );
 
@@ -3450,8 +3468,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudentsByClassTermSession(classId: string, term: string, session: string): Promise<StudentWithDetails[]> {
-    // Strictly assessment-derived: used by the scores tab.
-    // Returns ONLY students who have assessment records for this class+term+session.
+    // Roster for a historical class+term+session. Two sources, merged:
+    // 1. Assessment-derived: students with assessment rows filed under this class+term+session.
+    // 2. Promotion-ledger-derived: students whose promotion record for this session says they
+    //    came FROM this class. This covers rows that were mis-filed under the student's NEW
+    //    (post-promotion) class — without it, the true historical class looks empty.
+    // Additionally, students whose promotion record for this session shows they belonged to a
+    // DIFFERENT class are excluded, so mis-filed rows stop surfacing under the wrong class.
     // No payment fallback — avoids polluting the scores roster with unrelated students.
     const distinctRows = await db
       .selectDistinct({ studentId: assessments.studentId })
@@ -3464,9 +3487,44 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    if (distinctRows.length === 0) return [];
+    const promoFromThisClass = await db
+      .selectDistinct({ studentId: promotionRecords.studentId })
+      .from(promotionRecords)
+      .where(
+        and(
+          eq(promotionRecords.session, session),
+          eq(promotionRecords.fromClassId, classId)
+        )
+      );
 
-    const ids = distinctRows.map(r => r.studentId);
+    const includeIds = new Set<string>([
+      ...distinctRows.map(r => r.studentId),
+      ...promoFromThisClass.map(r => r.studentId),
+    ]);
+    if (includeIds.size === 0) return [];
+
+    // Exclude students whose promotion record(s) for this session never mention this class
+    // as their from-class — they were somewhere else that session (rows mis-filed here).
+    const promoForCandidates = await db
+      .select({ studentId: promotionRecords.studentId, fromClassId: promotionRecords.fromClassId })
+      .from(promotionRecords)
+      .where(
+        and(
+          eq(promotionRecords.session, session),
+          inArray(promotionRecords.studentId, Array.from(includeIds))
+        )
+      );
+    const fromClassesByStudent = new Map<string, Set<string>>();
+    for (const p of promoForCandidates) {
+      if (!fromClassesByStudent.has(p.studentId)) fromClassesByStudent.set(p.studentId, new Set());
+      fromClassesByStudent.get(p.studentId)!.add(p.fromClassId);
+    }
+    for (const [studentId, fromClasses] of Array.from(fromClassesByStudent.entries())) {
+      if (!fromClasses.has(classId)) includeIds.delete(studentId);
+    }
+    if (includeIds.size === 0) return [];
+
+    const ids = Array.from(includeIds);
 
     const studentsData = await db
       .select()
