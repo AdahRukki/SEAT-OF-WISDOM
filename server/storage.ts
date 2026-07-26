@@ -3682,16 +3682,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNonAcademicRatingsByClass(classId: string, term: string, session: string): Promise<NonAcademicRating[]> {
-    return await db
+    // Promotion-aware, mirroring getClassAssessments: ratings may have been saved
+    // under a student's NEW class after promotion. Include ratings for students whose
+    // promotion record for this session says they came FROM this class.
+    const promoRoster = await db
+      .selectDistinct({ studentId: promotionRecords.studentId })
+      .from(promotionRecords)
+      .where(
+        and(
+          eq(promotionRecords.session, session),
+          eq(promotionRecords.fromClassId, classId)
+        )
+      );
+    const rosterIds = promoRoster.map(r => r.studentId);
+    const classMatch = rosterIds.length > 0
+      ? or(eq(nonAcademicRatings.classId, classId), inArray(nonAcademicRatings.studentId, rosterIds))
+      : eq(nonAcademicRatings.classId, classId);
+
+    const rows = await db
       .select()
       .from(nonAcademicRatings)
       .where(
         and(
-          eq(nonAcademicRatings.classId, classId),
+          classMatch,
           eq(nonAcademicRatings.term, term),
           eq(nonAcademicRatings.session, session)
         )
       );
+
+    // De-duplicate: at most one rating per student. Precedence: row filed under the
+    // requested class first, otherwise the most recently updated row. Consumers pick
+    // the first match by studentId, so duplicates would be nondeterministic otherwise.
+    const byStudent = new Map<string, NonAcademicRating>();
+    for (const row of rows) {
+      const prev = byStudent.get(row.studentId);
+      if (!prev) { byStudent.set(row.studentId, row); continue; }
+      const prevExact = prev.classId === classId;
+      const rowExact = row.classId === classId;
+      if (rowExact && !prevExact) { byStudent.set(row.studentId, row); continue; }
+      if (rowExact === prevExact) {
+        const prevTime = prev.updatedAt ? new Date(prev.updatedAt).getTime() : 0;
+        const rowTime = row.updatedAt ? new Date(row.updatedAt).getTime() : 0;
+        if (rowTime > prevTime) byStudent.set(row.studentId, row);
+      }
+    }
+    return Array.from(byStudent.values());
   }
 
   async getNonAcademicRatingByStudent(studentId: string, classId: string, term: string, session: string): Promise<NonAcademicRating | undefined> {
@@ -3706,7 +3741,22 @@ export class DatabaseStorage implements IStorage {
           eq(nonAcademicRatings.session, session)
         )
       );
-    return rating;
+    if (rating) return rating;
+    // Fall back to a class-agnostic match: ratings can sit under a different class
+    // after promotion. Deterministic when duplicates exist: most recently updated wins.
+    const [anyClass] = await db
+      .select()
+      .from(nonAcademicRatings)
+      .where(
+        and(
+          eq(nonAcademicRatings.studentId, studentId),
+          eq(nonAcademicRatings.term, term),
+          eq(nonAcademicRatings.session, session)
+        )
+      )
+      .orderBy(desc(nonAcademicRatings.updatedAt))
+      .limit(1);
+    return anyClass;
   }
 
   async createCalendarEvent(eventData: InsertCalendarEvent): Promise<CalendarEvent> {

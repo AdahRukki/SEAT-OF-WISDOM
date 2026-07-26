@@ -1090,7 +1090,9 @@ export function ReportCardManagement({
       // Fetch school data to get principal signature
       const schools = await apiRequest("/api/admin/schools");
       const studentSchool = schools.find((s: any) => s.id === student.user.schoolId);
-      const principalSignature = studentSchool?.principalSignature || '';
+      // Absolute URL: report HTML is written into a blank window where relative URLs may not resolve
+      const rawSignature = studentSchool?.principalSignature || '';
+      const principalSignature = rawSignature.startsWith('/') ? `${window.location.origin}${rawSignature}` : rawSignature;
 
       // Generate the detailed report card
       const reportWindow = window.open("", "_blank");
@@ -1177,7 +1179,7 @@ export function ReportCardManagement({
             <div class="report-card">
 
               <div class="header">
-                <img src="/assets/academy-logo.png" alt="School Logo" class="header-logo" />
+                <img src="${window.location.origin}/assets/academy-logo.png" alt="School Logo" class="header-logo" />
                 <div class="header-text">
                   <div class="school-name">SEAT OF WISDOM ACADEMY</div>
                   <div class="school-levels">Pre-Nursery, Nursery, Primary &amp; Secondary</div>
@@ -1235,7 +1237,7 @@ export function ReportCardManagement({
                       const total = firstCA + secondCA + exam;
                       const { grade, remark } = calculateGrade(total);
                       return `<tr>
-                        <td class="subject-col">${subject.name}</td>
+                        <td class="subject-col">${String(subject.name || '').toUpperCase()}</td>
                         <td>${firstCA}</td>
                         <td>${secondCA}</td>
                         <td>${exam}</td>
@@ -1315,7 +1317,7 @@ export function ReportCardManagement({
                   </div>
                   <div class="sig-section">
                     <div style="text-align:center;">
-                      ${principalSignature ? `<div style="height:36px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${principalSignature}" alt="Principal Signature" style="max-height:36px;max-width:150px;" crossorigin="anonymous" /></div>` : `<div class="sig-line"></div>`}
+                      ${principalSignature ? `<div style="height:36px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${principalSignature}" alt="Principal Signature" style="max-height:36px;max-width:150px;" crossorigin="anonymous" /></div>` : `<div class="sig-line"></div><div style="font-size:8px;color:#94a3b8;font-style:italic;text-align:center;">No signature uploaded</div>`}
                       <div class="sig-label">Principal</div>
                     </div>
                   </div>

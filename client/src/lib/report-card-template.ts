@@ -97,6 +97,11 @@ export function generateReportCardHtml(params: ReportCardParams): string {
   const averagePercentage = subjects.length ? (totalMarks / (subjects.length * 100)) * 100 : 0;
   const hasClassStats = subjects.some(s => s.classAverage != null || s.position != null);
 
+  // Report HTML is written into a fresh window/print context where relative
+  // URLs may not resolve — always use absolute URLs for images.
+  const absUrl = (u: string | null | undefined) =>
+    u && u.startsWith('/') ? `${window.location.origin}${u}` : (u || '');
+
   const nextTermDisplay = nextTermDate
     ? new Date(nextTermDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : 'TBA';
@@ -115,7 +120,7 @@ export function generateReportCardHtml(params: ReportCardParams): string {
       ? `<td style="text-align:center;border:1px solid #1e3a8a;font-size:9px;padding:7px 6px;background:${bg};">${positionSuffix(sub.position)}</td>`
       : '';
     return `<tr>
-      <td style="text-align:left;font-weight:600;color:#0f172a;border:1px solid #1e3a8a;font-size:9px;padding:7px 6px;background:${bg};">${sub.name}</td>
+      <td style="text-align:left;font-weight:600;color:#0f172a;border:1px solid #1e3a8a;font-size:9px;padding:7px 6px;background:${bg};">${String(sub.name || '').toUpperCase()}</td>
       <td style="text-align:center;border:1px solid #1e3a8a;font-size:9px;padding:7px 6px;background:${bg};">${sub.firstCA}</td>
       <td style="text-align:center;border:1px solid #1e3a8a;font-size:9px;padding:7px 6px;background:${bg};">${sub.secondCA}</td>
       <td style="text-align:center;border:1px solid #1e3a8a;font-size:9px;padding:7px 6px;background:${bg};">${sub.exam}</td>
@@ -153,8 +158,8 @@ export function generateReportCardHtml(params: ReportCardParams): string {
   ` : `<div style="font-size:9px;color:#64748b;font-style:italic;">No behavioral data recorded.</div>`;
 
   const signatureHtml = principalSignatureUrl
-    ? `<div style="height:36px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${principalSignatureUrl}" alt="Principal Signature" style="max-height:36px;max-width:150px;" crossorigin="anonymous" /></div>`
-    : `<div style="border-bottom:1px solid #1e3a8a;height:36px;margin-bottom:4px;"></div>`;
+    ? `<div style="height:36px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${absUrl(principalSignatureUrl)}" alt="Principal Signature" style="max-height:36px;max-width:150px;" crossorigin="anonymous" /></div>`
+    : `<div style="border-bottom:1px solid #1e3a8a;height:36px;margin-bottom:4px;"></div><div style="font-size:8px;color:#94a3b8;font-style:italic;text-align:center;">No signature uploaded</div>`;
 
   return `<!DOCTYPE html>
 <html>
@@ -180,7 +185,7 @@ export function generateReportCardHtml(params: ReportCardParams): string {
     <div class="report-card">
 
       <div style="background:linear-gradient(to right,#1e3a8a,#1d4ed8,#1e3a8a);padding:28px 28px 22px 28px;display:flex;align-items:center;gap:20px;border-bottom:4px solid #d4af37;color:white;">
-        <img src="${logoUrl || '/assets/academy-logo.png'}" alt="School Logo" style="width:80px;height:80px;border-radius:50%;border:3px solid #d4af37;background:white;object-fit:cover;flex-shrink:0;" crossorigin="anonymous" />
+        <img src="${absUrl(logoUrl || '/assets/academy-logo.png')}" alt="School Logo" style="width:80px;height:80px;border-radius:50%;border:3px solid #d4af37;background:white;object-fit:cover;flex-shrink:0;" crossorigin="anonymous" />
         <div style="flex:1;text-align:center;">
           <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:3px;">SEAT OF WISDOM ACADEMY</div>
           <div style="font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#d4af37;margin-bottom:3px;">Pre-Nursery, Nursery, Primary &amp; Secondary</div>
