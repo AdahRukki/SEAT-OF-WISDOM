@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "ufBPOKzRH0ie_yBF-gixN"
+uri = "file://client/public/principal-signature.png"
+type = "image"
+title = "Principal signature currently in the app"
