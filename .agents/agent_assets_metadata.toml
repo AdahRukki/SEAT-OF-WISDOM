@@ -1,14 +1,3 @@
 uploads = []
 generated = []
-
-[[outputs]]
-id = "ufBPOKzRH0ie_yBF-gixN"
-uri = "file://client/public/principal-signature.png"
-type = "image"
-title = "Principal signature currently in the app"
-
-[[outputs]]
-id = "nlj-bbgSxuPL0UoM5D6tv"
-uri = "file://attached_assets/stock_images/SIGNATURE.png"
-type = "image"
-title = "Stamp with signature (Seat of Wisdom Academy)"
+outputs = []

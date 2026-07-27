@@ -1317,7 +1317,7 @@ export function ReportCardManagement({
                   </div>
                   <div class="sig-section">
                     <div style="text-align:center;">
-                      ${principalSignature ? `<div style="height:36px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${principalSignature}" alt="Principal Signature" style="max-height:36px;max-width:150px;" crossorigin="anonymous" /></div>` : `<div class="sig-line"></div><div style="font-size:8px;color:#94a3b8;font-style:italic;text-align:center;">No signature uploaded</div>`}
+                      <div style="height:48px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${principalSignature || `${window.location.origin}/principal-stamp.png`}" alt="Principal Signature" style="max-height:48px;max-width:160px;" crossorigin="anonymous" /></div>
                       <div class="sig-label">Principal</div>
                     </div>
                   </div>

@@ -157,9 +157,7 @@ export function generateReportCardHtml(params: ReportCardParams): string {
     ${behavioralInterpretation ? `<div style="text-align:center;margin-top:6px;font-size:9px;font-weight:700;color:#1e3a8a;">${behavioralInterpretation}</div>` : ''}
   ` : `<div style="font-size:9px;color:#64748b;font-style:italic;">No behavioral data recorded.</div>`;
 
-  const signatureHtml = principalSignatureUrl
-    ? `<div style="height:36px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${absUrl(principalSignatureUrl)}" alt="Principal Signature" style="max-height:36px;max-width:150px;" crossorigin="anonymous" /></div>`
-    : `<div style="border-bottom:1px solid #1e3a8a;height:36px;margin-bottom:4px;"></div><div style="font-size:8px;color:#94a3b8;font-style:italic;text-align:center;">No signature uploaded</div>`;
+  const signatureHtml = `<div style="height:48px;margin-bottom:4px;display:flex;align-items:flex-end;justify-content:center;"><img src="${absUrl(principalSignatureUrl || '/principal-stamp.png')}" alt="Principal Signature" style="max-height:48px;max-width:160px;" crossorigin="anonymous" /></div>`;
 
   return `<!DOCTYPE html>
 <html>
