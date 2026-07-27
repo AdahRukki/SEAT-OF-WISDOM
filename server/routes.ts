@@ -146,6 +146,31 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
   }
 };
 
+// Like authenticate, but continues anonymously when no valid token is present.
+// Used for routes serving public-ACL objects (e.g. images embedded in <img> tags
+// that cannot send Authorization headers).
+const optionalAuthenticate = async (req: Request, _res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (token && !invalidatedTokens.has(token)) {
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; iat?: number };
+      const user = await storage.getUserById(decoded.userId);
+      // Enforce the same session-invalidation rule as `authenticate`:
+      // tokens issued before a password change are treated as anonymous.
+      const staleAfterPasswordChange =
+        !!(decoded.iat && user?.passwordUpdatedAt &&
+          decoded.iat * 1000 < new Date(user.passwordUpdatedAt).getTime());
+      if (user && !staleAfterPasswordChange) {
+        (req as any).user = user;
+        (req as any).token = token;
+      }
+    }
+  } catch {
+    // Invalid token — treat as anonymous
+  }
+  next();
+};
+
 // Middleware for admin-only routes (admin or sub-admin)
 const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
   const user = (req as any).user;
@@ -299,8 +324,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Endpoint for serving private objects with ACL check
-  app.get("/objects/:objectPath(*)", authenticate, async (req, res) => {
-    const userId = (req as any).user.id;
+  app.get("/objects/:objectPath(*)", optionalAuthenticate, async (req, res) => {
+    const userId = (req as any).user?.id;
     const objectStorageService = new ObjectStorageService();
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(
@@ -1437,7 +1462,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "School ID and signature URL are required" });
       }
 
-      const updatedSchool = await storage.updateSchoolPrincipalSignature(schoolId, signatureUrl);
+      // Normalize the raw upload URL to a served /objects/... path and mark it
+      // publicly readable so report-card <img> tags (no auth headers) can load it.
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        signatureUrl,
+        {
+          owner: (req as any).user.id,
+          visibility: "public",
+        },
+      );
+
+      const updatedSchool = await storage.updateSchoolPrincipalSignature(schoolId, objectPath);
       res.json(updatedSchool);
     } catch (error) {
       console.error("Signature upload error:", error);

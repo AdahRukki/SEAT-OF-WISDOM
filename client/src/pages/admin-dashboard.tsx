@@ -3024,7 +3024,7 @@ export default function AdminDashboard() {
     if (signatureFile && selectedSchoolForSignature) {
       try {
         // Get upload URL from Object Storage
-        const { uploadURL } = await apiRequest("/api/objects/upload");
+        const { uploadURL } = await apiRequest("/api/objects/upload", { method: "POST" });
         
         // Upload file to Object Storage
         await fetch(uploadURL, {
@@ -3035,13 +3035,11 @@ export default function AdminDashboard() {
           },
         });
         
-        // Extract the object path from the upload URL
-        const objectPath = new URL(uploadURL).pathname;
-        
-        // Update school with signature URL
+        // Send the full upload URL; the server normalizes it to a served
+        // /objects/... path and makes it publicly readable.
         uploadSignatureMutation.mutate({ 
           schoolId: selectedSchoolForSignature, 
-          signatureUrl: objectPath 
+          signatureUrl: uploadURL 
         });
       } catch (error) {
         console.error("Error uploading signature:", error);
