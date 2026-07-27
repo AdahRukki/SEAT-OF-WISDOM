@@ -6307,7 +6307,46 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                
+                {/* Principal Signature Section */}
+                <div className="border-t pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-medium">Principal Signature</h3>
+                      <p className="text-sm text-gray-500">Upload the principal's signature shown at the bottom of report cards</p>
+                    </div>
+                    <Button
+                      onClick={() => setIsSignatureUploadDialogOpen(true)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                      data-testid="button-open-signature-upload"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Upload Signature
+                    </Button>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {schools?.map((school) => (
+                      <div key={school.id} className="flex items-center space-x-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex-shrink-0 h-14 w-32 flex items-center justify-center rounded-md border border-gray-200 bg-white p-2">
+                          {school.principalSignature ? (
+                            <img
+                              src={school.principalSignature}
+                              alt={`${school.name} principal signature`}
+                              className="max-h-10 max-w-28 object-contain"
+                            />
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">No signature</span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">{school.name}</p>
+                          <p className="text-sm text-gray-500">
+                            {school.principalSignature ? "Signature uploaded" : "No signature uploaded yet"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {/* School Management Section */}
                 <div className="border-t pt-6">
