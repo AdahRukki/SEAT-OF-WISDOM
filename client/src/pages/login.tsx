@@ -245,11 +245,6 @@ export default function Login() {
               </form>
               
               <div className="mt-4 text-center space-y-2">
-                <div className="flex items-center justify-center gap-1 text-sm text-gray-600 dark:text-gray-400">
-                  <Key className="h-3 w-3" />
-                  <span>Default password: <strong className="text-gray-800 dark:text-gray-200">password@123</strong></span>
-                </div>
-                
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button
@@ -275,7 +270,7 @@ export default function Login() {
                       <div className="space-y-3">
                         <div className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">1</div>
-                          <p className="text-sm text-gray-700 dark:text-gray-300">Log in using your Student ID number (e.g., just type <strong>0001</strong>) and the default password <strong>password@123</strong></p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">Log in using your Student ID number (e.g., just type <strong>0001</strong>) and the default password given to you by the school</p>
                         </div>
                         <div className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">2</div>
