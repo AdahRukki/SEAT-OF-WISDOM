@@ -270,7 +270,7 @@ export default function Login() {
                       <div className="space-y-3">
                         <div className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">1</div>
-                          <p className="text-sm text-gray-700 dark:text-gray-300">Log in using your Student ID number (e.g., just type <strong>0001</strong>) and the default password given to you by the school</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">Log in using your Student ID number and the password given to you by the school</p>
                         </div>
                         <div className="flex items-start gap-3">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 text-sm font-medium">2</div>
