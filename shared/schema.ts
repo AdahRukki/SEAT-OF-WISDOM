@@ -518,13 +518,23 @@ export const clearedDuplicatePairs = pgTable("cleared_duplicate_pairs", {
   clearedAt: timestamp("cleared_at").defaultNow(),
 });
 
-// Audit Logs table (tracks all payment-related actions)
+// Activity/Audit Logs table (Task #215: generalised from payment-only auditing
+// to a full activity log covering scores, students, users, terms, report cards,
+// payments and bank statements). The table name is kept as payment_audit_logs
+// so no existing data is lost — all legacy payment entries appear in the same
+// unified Activity Log view.
 export const paymentAuditLogs = pgTable("payment_audit_logs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  action: varchar("action", { length: 50 }).notNull(), // record_payment, confirm_payment, reverse_payment, allocate, upload_statement
-  entityType: varchar("entity_type", { length: 50 }).notNull(), // payment_record, bank_transaction, allocation
-  entityId: uuid("entity_id").notNull(),
-  userId: uuid("user_id").notNull().references(() => users.id),
+  action: varchar("action", { length: 50 }).notNull(), // e.g. record_payment, update_scores, withdraw_student, advance_term
+  entityType: varchar("entity_type", { length: 50 }).notNull(), // payment_record, bank_transaction, bank_statement, allocation, assessment, student, user, term, report_card
+  entityId: uuid("entity_id"), // nullable: bulk/system actions have no single entity
+  // Role the actor held at the time of the action (admin/sub-admin/bursar).
+  // Legacy rows are null — the viewer falls back to the user's current role.
+  actorRole: varchar("actor_role", { length: 30 }),
+  // Immutable snapshot of the actor's name so entries survive actor deletion.
+  actorName: varchar("actor_name", { length: 200 }),
+  // Nullable + ON DELETE SET NULL: audit rows must survive deletion of the actor.
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   schoolId: uuid("school_id").references(() => schools.id),
   previousData: jsonb("previous_data"), // State before change
   newData: jsonb("new_data"), // State after change

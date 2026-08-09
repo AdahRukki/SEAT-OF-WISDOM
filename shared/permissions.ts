@@ -24,6 +24,7 @@ export const TAB_PERMISSIONS: PermissionDef[] = [
   { key: "tab_users", label: "Settings (Users)", group: "Tabs" },
   { key: "tab_news", label: "News", group: "Tabs" },
   { key: "tab_inquiries", label: "Inquiries", group: "Tabs" },
+  { key: "tab_activity", label: "Activity Log", group: "Tabs" },
 ];
 
 // Granular feature toggles nested within tabs.

@@ -41,7 +41,9 @@ import {
   admissionsApplications,
   bankStatements,
   bankTransactions,
-  feePaymentRecords
+  feePaymentRecords,
+  assessments,
+  generatedReportCards
 } from "@shared/schema";
 import { sendContactFormNotification, sendAdmissionsApplicationNotification } from "./resend";
 import { db } from "./db";
@@ -178,6 +180,49 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
     return res.status(403).json({ error: "Admin access required" });
   }
   next();
+};
+
+// Task #215: best-effort activity logging — writes to the unified activity log
+// (payment_audit_logs table). Never blocks or fails the mutating action itself.
+const logActivity = async (req: Request, entry: {
+  action: string;
+  entityType: string; // assessment | student | user | term | report_card | payment_record | bank_statement | ...
+  entityId?: string | null;
+  schoolId?: string | null;
+  previousData?: any;
+  newData?: any;
+}) => {
+  // Durability policy: every call site awaits this, so the audit row is
+  // written before the HTTP response is sent. A write failure is logged
+  // loudly but does not roll back the already-committed business mutation
+  // (auditing must not take user-facing features down with it). Routes that
+  // need audit-before-mutation ordering (e.g. user deletion) call
+  // storage.createActivityLog directly and let failures abort the mutation.
+  try {
+    const user = (req as any).user;
+    if (!user?.id) return;
+    await storage.createActivityLog({
+      action: entry.action,
+      entityType: entry.entityType,
+      entityId: entry.entityId ?? null,
+      userId: user.id,
+      actorRole: user.role,
+      actorName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || null,
+      schoolId: entry.schoolId ?? user.schoolId ?? null,
+      previousData: entry.previousData ?? null,
+      newData: entry.newData ?? null,
+      ipAddress: req.ip || null,
+    });
+  } catch (err) {
+    console.error(`[activity-log] FAILED to persist audit entry '${entry.action}' (${entry.entityType}):`, err);
+  }
+};
+
+// Strip credentials from user objects before storing them in audit snapshots.
+const sanitizeUserForAudit = (u: any) => {
+  if (!u || typeof u !== 'object') return u;
+  const { password, passwordUpdatedAt, ...rest } = u;
+  return rest;
 };
 
 // Middleware for main admin only (access to all schools)
@@ -382,7 +427,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update student profile image in database
       const updatedStudent = await storage.updateStudentProfileImage(studentId, objectPath);
-      
+      const imgClass = (updatedStudent as any)?.classId ? await storage.getClassById((updatedStudent as any).classId) : undefined;
+      await logActivity(req, { action: 'update_student_photo', entityType: 'student', entityId: studentId, schoolId: imgClass?.schoolId ?? undefined, newData: { profileImage: objectPath } });
       res.status(200).json({
         objectPath: objectPath,
         student: updatedStudent
@@ -475,7 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastName,
         email
       });
-
+      await logActivity(req, { action: 'update_own_profile', entityType: 'user', entityId: userId, newData: { firstName, lastName, email } });
       res.json({
         id: updatedUser.id,
         email: updatedUser.email,
@@ -507,6 +553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { name, address, phone, email } = req.body;
       const updatedSchool = await storage.updateSchool(id, { name, address, phone, email });
+      await logActivity(req, { action: 'update_school', entityType: 'school', entityId: id, schoolId: id, newData: { name, address, phone, email } });
       res.json(updatedSchool);
     } catch (error) {
       console.error('Error updating school:', error);
@@ -523,6 +570,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'term and session are required' });
       }
       await storage.setSchoolAcademicInfo(id, term, session);
+      await logActivity(req, {
+        action: 'set_school_academic_info',
+        entityType: 'term',
+        schoolId: id,
+        newData: { term, session },
+      });
       res.json({ schoolId: id, currentTerm: term, currentSession: session });
     } catch (error) {
       console.error('Error setting school academic info:', error);
@@ -535,10 +588,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userData = insertUserSchema.parse(req.body);
       const user = await storage.createUser(userData);
+      await logActivity(req, {
+        action: 'create_user',
+        entityType: 'user',
+        entityId: user.id,
+        schoolId: user.schoolId,
+        newData: sanitizeUserForAudit(user),
+      });
       res.json(user);
     } catch (error) {
       console.error("Create user error:", error);
       res.status(400).json({ error: "Failed to create user" });
+    }
+  });
+
+  // Task #215: unified Activity Log viewer (read-only).
+  // Main admin can query all schools; sub-admins are always scoped to theirs.
+  app.get('/api/admin/activity-logs', authenticate, requirePermission('tab_activity'), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      let schoolId = (req.query.schoolId as string) || undefined;
+      if (user.role === 'sub-admin') {
+        if (schoolId && schoolId !== user.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+        schoolId = user.schoolId;
+      }
+
+      const actionType = (req.query.actionType as string) || undefined; // scores | students | finance | system
+      const userId = (req.query.userId as string) || undefined;
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+      let dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+      if (dateFrom && isNaN(dateFrom.getTime())) return res.status(400).json({ error: 'Invalid dateFrom' });
+      if (dateTo && isNaN(dateTo.getTime())) return res.status(400).json({ error: 'Invalid dateTo' });
+      // Make dateTo inclusive of the whole day when only a date is supplied
+      if (dateTo) { dateTo = new Date(dateTo); dateTo.setHours(23, 59, 59, 999); }
+
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 25));
+
+      const { logs, total } = await storage.getActivityLogs({
+        schoolId,
+        actionType,
+        userId,
+        dateFrom,
+        dateTo,
+        page,
+        pageSize,
+      });
+
+      res.json({ logs, total, page, pageSize });
+    } catch (error) {
+      console.error('Get activity logs error:', error);
+      res.status(500).json({ error: 'Failed to fetch activity logs' });
     }
   });
 
@@ -557,6 +659,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const sessionData = req.body;
       const session = await storage.createAcademicSession(sessionData);
+      await logActivity(req, { action: 'create_session', entityType: 'term', entityId: (session as any)?.id, schoolId: null, newData: session as any });
       res.json(session);
     } catch (error) {
       console.error("Create academic session error:", error);
@@ -579,6 +682,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const termData = req.body;
       const term = await storage.createAcademicTerm(termData);
+      await logActivity(req, { action: 'create_term', entityType: 'term', entityId: (term as any)?.id, schoolId: null, newData: term as any });
       res.json(term);
     } catch (error) {
       console.error("Create academic term error:", error);
@@ -590,6 +694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const session = await storage.setActiveAcademicSession(id);
+      await logActivity(req, { action: 'activate_session', entityType: 'term', entityId: id, schoolId: null, newData: session as any });
       res.json(session);
     } catch (error) {
       console.error("Activate session error:", error);
@@ -601,6 +706,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const term = await storage.setActiveTerm(id);
+      await logActivity(req, { action: 'activate_term', entityType: 'term', entityId: id, schoolId: null, newData: term as any });
       res.json(term);
     } catch (error) {
       console.error("Activate term error:", error);
@@ -614,9 +720,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { schoolId } = req.body;
       if (schoolId) {
         const result = await storage.advanceAcademicTermForSchool(schoolId);
+        await logActivity(req, { action: 'advance_term', entityType: 'term', schoolId, newData: result as any });
         res.json(result);
       } else {
         const result = await storage.advanceAcademicTerm();
+        await logActivity(req, { action: 'advance_term', entityType: 'term', schoolId: null, newData: result as any });
         res.json(result);
       }
     } catch (error) {
@@ -629,6 +737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/initialize-academic-calendar', authenticate, requireAdmin, async (req, res) => {
     try {
       const result = await storage.initializeAcademicCalendar();
+      await logActivity(req, { action: 'initialize_academic_calendar', entityType: 'term', schoolId: null, newData: result as any });
       res.json(result);
     } catch (error) {
       console.error("Initialize academic calendar error:", error);
@@ -669,6 +778,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Promotion ledger write failed (individual):", ledgerErr);
       }
 
+      const fromClass = currentClassId ? await storage.getClassById(currentClassId) : undefined;
+      await logActivity(req, {
+        action: nextClassId === 'graduated' ? 'graduate_students' : 'promote_students',
+        entityType: 'student',
+        schoolId: fromClass?.schoolId ?? undefined,
+        newData: { studentIds, fromClassId: currentClassId, toClassId: nextClassId },
+      });
       res.json({ message: "Students promoted successfully" });
     } catch (error) {
       console.error("Promote students error:", error);
@@ -724,6 +840,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         promotions: validPromotions,
       });
 
+      await logActivity(req, {
+        action: 'bulk_promote_students',
+        entityType: 'student',
+        schoolId,
+        newData: {
+          session,
+          term: currentInfo?.currentTerm ?? null,
+          totalPromoted,
+          totalGraduated,
+          promotions: validPromotions.map(p => ({ fromClassId: p.currentClassId, toClassId: p.nextClassId, studentCount: p.studentIds.length })),
+        },
+      });
       res.json({ message: "Bulk promotion complete", totalPromoted, totalGraduated, session });
     } catch (error: any) {
       console.error("Bulk promote students error:", error);
@@ -778,6 +906,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { moves } = req.body as { moves: { studentId: string; targetClassId: string }[] };
       if (!Array.isArray(moves) || moves.length === 0) return res.status(400).json({ error: 'moves array is required' });
       const count = await storage.rollbackStudentClasses(moves);
+      const moveSchools = await storage.getStudentSchoolIds(moves.map(m => m.studentId));
+      await logActivity(req, {
+        action: 'rollback_student_classes',
+        entityType: 'student',
+        schoolId: moveSchools.find(s => !!s.schoolId)?.schoolId ?? undefined,
+        newData: { moves, count },
+      });
       res.json({ success: true, count, message: `${count} student(s) moved back successfully` });
     } catch (error) {
       console.error('Rollback student classes error:', error);
@@ -802,6 +937,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const currentInfo = await storage.getCurrentAcademicInfo();
       await storage.markStudentsAsWithdrawn(studentIds, currentInfo?.currentSession ?? undefined, currentInfo?.currentTerm ?? undefined);
+      const withdrawnSchools = await storage.getStudentSchoolIds(studentIds);
+      await logActivity(req, {
+        action: 'withdraw_students',
+        entityType: 'student',
+        schoolId: withdrawnSchools.find(s => !!s.schoolId)?.schoolId ?? undefined,
+        previousData: { status: 'active' },
+        newData: { status: 'withdrawn', studentIds, session: currentInfo?.currentSession, term: currentInfo?.currentTerm },
+      });
       res.json({ message: "Students marked as withdrawn" });
     } catch (error) {
       console.error("Withdraw students error:", error);
@@ -874,6 +1017,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const classData = insertClassSchema.parse(req.body);
       const newClass = await storage.createClass(classData);
+      await logActivity(req, { action: 'create_class', entityType: 'class', entityId: undefined, schoolId: (newClass as any)?.schoolId, newData: newClass as any });
       
       // Sync to Firebase after successful creation
       try {
@@ -895,7 +1039,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/classes/:classId', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const { classId } = req.params;
+      const classBefore = await storage.getClassById(classId);
       await storage.deleteClass(classId);
+      await logActivity(req, { action: 'delete_class', entityType: 'class', schoolId: classBefore?.schoolId ?? null, previousData: classBefore ?? { classId } });
       res.json({ message: "Class deleted successfully" });
     } catch (error) {
       console.error("Delete class error:", error);
@@ -951,6 +1097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.reorderClasses(schoolId, orderedClassIds);
+      await logActivity(req, { action: 'reorder_classes', entityType: 'class', schoolId, newData: { orderedClassIds } });
       res.json({ message: "Class order updated" });
     } catch (error) {
       console.error("Reorder classes error:", error);
@@ -973,6 +1120,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const subjectData = insertSubjectSchema.parse(req.body);
       const subject = await storage.createSubject(subjectData);
+      await logActivity(req, { action: 'create_subject', entityType: 'subject', entityId: (subject as any)?.id, schoolId: null, newData: subject as any });
       res.json(subject);
     } catch (error) {
       console.error("Create subject error:", error);
@@ -988,6 +1136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Subject name is required" });
       }
       const updated = await storage.updateSubject(id, name.trim());
+      await logActivity(req, { action: 'update_subject', entityType: 'subject', entityId: id, schoolId: null, newData: { name: name.trim() } });
       res.json(updated);
     } catch (error) {
       console.error("Update subject error:", error);
@@ -1012,6 +1161,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { classId, subjectId } = req.params;
       await storage.assignSubjectToClass(classId, subjectId);
+      const cls = await storage.getClassById(classId);
+      await logActivity(req, { action: 'assign_subject_to_class', entityType: 'subject', entityId: subjectId, schoolId: cls?.schoolId ?? null, newData: { classId, subjectId } });
       res.json({ message: "Subject assigned to class successfully" });
     } catch (error) {
       console.error("Assign subject error:", error);
@@ -1024,6 +1175,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { classId, subjectId } = req.body;
       await storage.assignSubjectToClass(classId, subjectId);
+      const cls = await storage.getClassById(classId);
+      await logActivity(req, { action: 'assign_subject_to_class', entityType: 'subject', entityId: subjectId, schoolId: cls?.schoolId ?? null, newData: { classId, subjectId } });
       res.json({ message: "Subject assigned to class successfully" });
     } catch (error) {
       console.error("Assign subject error:", error);
@@ -1036,6 +1189,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { classId, subjectId } = req.params;
       await storage.removeSubjectFromClass(classId, subjectId);
+      const cls = await storage.getClassById(classId);
+      await logActivity(req, { action: 'remove_subject_from_class', entityType: 'subject', entityId: subjectId, schoolId: cls?.schoolId ?? null, previousData: { classId, subjectId } });
       res.json({ message: "Subject removed from class successfully" });
     } catch (error) {
       console.error("Remove subject error:", error);
@@ -1060,6 +1215,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { ignoreAttendance } = req.body;
       if (typeof ignoreAttendance === 'boolean') {
         await storage.updateClassIgnoreAttendance(classId, ignoreAttendance);
+        const cls = await storage.getClassById(classId);
+        await logActivity(req, { action: 'update_class_settings', entityType: 'class', schoolId: cls?.schoolId ?? null, newData: { classId, ignoreAttendance } });
       }
       res.json({ message: "Class settings updated successfully" });
     } catch (error) {
@@ -1074,6 +1231,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { classId, subjectId } = req.params;
       const { customName } = req.body;
       await storage.updateClassSubjectCustomName(classId, subjectId, customName ?? null);
+      const cls = await storage.getClassById(classId);
+      await logActivity(req, { action: 'rename_class_subject', entityType: 'subject', entityId: subjectId, schoolId: cls?.schoolId ?? null, newData: { classId, subjectId, customName: customName ?? null } });
       res.json({ message: "Class subject name updated successfully" });
     } catch (error) {
       console.error("Update class subject name error:", error);
@@ -1143,7 +1302,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (password) {
         await storage.updateUserPassword(id, password);
       }
-      
+
+      await logActivity(req, {
+        action: 'update_user',
+        entityType: 'user',
+        entityId: id,
+        schoolId: existingUser.schoolId,
+        previousData: sanitizeUserForAudit(existingUser),
+        newData: { ...sanitizeUserForAudit(updatedUser), ...(password ? { passwordChanged: true } : {}) },
+      });
+
       res.json(updatedUser);
     } catch (error) {
       console.error("Error updating user:", error);
@@ -1194,10 +1362,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update password if provided
       if (password) {
         await storage.updateUserPassword(id, password);
+        await logActivity(req, {
+          action: 'change_user_password',
+          entityType: 'user',
+          entityId: id,
+          schoolId: existingUser.schoolId,
+          newData: { passwordChanged: true },
+        });
         res.json({ message: 'Password updated successfully' });
       } else if (Object.keys(updatePayload).length > 0) {
         // Handle other profile updates
         const updatedUser = await storage.updateUserProfile(id, updatePayload);
+        await logActivity(req, {
+          action: 'update_user',
+          entityType: 'user',
+          entityId: id,
+          schoolId: existingUser.schoolId,
+          previousData: sanitizeUserForAudit(existingUser),
+          newData: sanitizeUserForAudit(updatedUser),
+        });
         res.json(updatedUser);
       } else {
         res.status(400).json({ error: 'No data provided for update' });
@@ -1232,6 +1415,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: 'You do not have permission to delete this user' });
       }
       
+      // Write the audit entry BEFORE deleting: if the audit trail cannot be
+      // persisted, the deletion is aborted (audit-before-mutation ordering).
+      await storage.createActivityLog({
+        action: 'delete_user',
+        entityType: 'user',
+        entityId: id,
+        userId: actor.id,
+        actorRole: actor.role,
+        actorName: [actor.firstName, actor.lastName].filter(Boolean).join(' ') || actor.email || null,
+        schoolId: user.schoolId ?? null,
+        previousData: sanitizeUserForAudit(user),
+        newData: null,
+        ipAddress: req.ip || null,
+      });
       await storage.deleteUser(id);
       res.json({ message: 'User deleted successfully' });
     } catch (error) {
@@ -1244,6 +1441,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userData = insertUserSchema.parse(req.body);
       const newUser = await storage.createUser(userData);
+      await logActivity(req, {
+        action: 'create_user',
+        entityType: 'user',
+        entityId: newUser.id,
+        schoolId: newUser.schoolId,
+        newData: sanitizeUserForAudit(newUser),
+      });
       res.json(newUser);
     } catch (error) {
       console.error("Create user error:", error);
@@ -1266,6 +1470,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const permissions = validatePermissions(req.body.permissions);
       const updated = await storage.updateUserPermissions(id, permissions);
+      await logActivity(req, {
+        action: 'update_user_permissions',
+        entityType: 'user',
+        entityId: id,
+        schoolId: targetUser.schoolId,
+        previousData: { permissions: targetUser.permissions },
+        newData: { permissions },
+      });
       const { password, passwordUpdatedAt, ...sanitized } = updated as any;
       res.json(sanitized);
     } catch (error: any) {
@@ -1300,6 +1512,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const newUser = await storage.createUser(userData);
+      await logActivity(req, {
+        action: 'create_sub_admin',
+        entityType: 'user',
+        entityId: newUser.id,
+        schoolId: newUser.schoolId,
+        newData: sanitizeUserForAudit(newUser),
+      });
       res.json(newUser);
     } catch (error) {
       console.error("Create sub-admin error:", error);
@@ -1333,6 +1552,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const newUser = await storage.createUser(userData);
+      await logActivity(req, {
+        action: 'create_main_admin',
+        entityType: 'user',
+        entityId: newUser.id,
+        schoolId: null,
+        newData: sanitizeUserForAudit(newUser),
+      });
       res.json(newUser);
     } catch (error) {
       console.error("Create main admin error:", error);
@@ -1363,6 +1589,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Log the password change for audit
       console.log(`Password changed for user ${user.email} by admin ${req.user?.email}`);
+      await logActivity(req, {
+        action: 'change_user_password',
+        entityType: 'user',
+        entityId: id,
+        schoolId: user.schoolId,
+        newData: { passwordChanged: true },
+      });
       
       res.json({ message: 'Password updated successfully' });
     } catch (error) {
@@ -1446,6 +1679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedSchool = await storage.updateSchoolLogo(schoolId, logoUrl);
+      await logActivity(req, { action: 'update_school_logo', entityType: 'school', entityId: schoolId, schoolId, newData: { logoUrl } });
       res.json(updatedSchool);
     } catch (error) {
       console.error("Logo upload error:", error);
@@ -1474,6 +1708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       const updatedSchool = await storage.updateSchoolPrincipalSignature(schoolId, objectPath);
+      await logActivity(req, { action: 'update_school_signature', entityType: 'school', entityId: schoolId, schoolId, newData: { signaturePath: objectPath } });
       res.json(updatedSchool);
     } catch (error) {
       console.error("Signature upload error:", error);
@@ -1628,6 +1863,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         newUser.email = finalEmail;
       }
       
+      await logActivity(req, {
+        action: 'create_student',
+        entityType: 'student',
+        entityId: student.id,
+        schoolId,
+        newData: { studentId: student.studentId, firstName, lastName, middleName, classId, gender },
+      });
+
       res.json({ 
         message: "Student created successfully",
         user: newUser, 
@@ -1646,7 +1889,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const updateData = req.body;
       const user = (req as any).user;
-      
+
+      // Snapshot for the activity log (before state)
+      const studentBefore = await storage.getStudent(id);
+
       // For sub-admins, verify the student belongs to their school
       if (user.role === 'sub-admin') {
         // Get student with class information to access schoolId
@@ -1721,6 +1967,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         updatedStudent = await storage.getStudent(id);
       }
+
+      // Distinguish status changes (activate/deactivate/withdraw) from plain edits
+      const newStatus = (updateData as any).status;
+      const statusChanged = newStatus && studentBefore && newStatus !== (studentBefore as any).status;
+      const studentClass = (studentBefore as any)?.classId ? await storage.getClassById((studentBefore as any).classId) : undefined;
+      await logActivity(req, {
+        action: statusChanged ? `student_status_${newStatus}` : 'update_student',
+        entityType: 'student',
+        entityId: id,
+        schoolId: studentClass?.schoolId ?? undefined,
+        previousData: studentBefore ?? null,
+        newData: { ...updateData, ...(updateData.password ? { password: '[redacted]' } : {}) },
+      });
+
       res.json(updatedStudent);
     } catch (error: any) {
       console.error('Error updating student:', error);
@@ -1978,6 +2238,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      await logActivity(req, {
+        action: 'batch_upload_students',
+        entityType: 'student',
+        schoolId,
+        newData: {
+          classId,
+          className: classInfo.name,
+          successful: results.successful.length,
+          failed: results.failed.length,
+        },
+      });
       res.json({
         message: `Batch upload complete. ${results.successful.length} successful, ${results.failed.length} failed.`,
         results
@@ -2074,6 +2345,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`Bulk score update completed successfully for ${results.length} students`);
+      const scoresClass = scores[0]?.classId ? await storage.getClassById(scores[0].classId) : undefined;
+      await logActivity(req, {
+        action: 'update_scores',
+        entityType: 'assessment',
+        schoolId: scoresClass?.schoolId ?? undefined,
+        newData: {
+          count: results.length,
+          classId: scores[0]?.classId,
+          subjectId: scores[0]?.subjectId,
+          term: scores[0]?.term,
+          session: scores[0]?.session,
+          studentIds: scores.map((s: any) => s.studentId),
+        },
+      });
       res.json({ message: "Scores updated successfully", results });
     } catch (error) {
       console.error("Bulk score update error:", error);
@@ -2472,7 +2757,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...ratingData,
         ratedBy: user.id
       });
-      
+      const ratingClass = ratingData?.classId ? await storage.getClassById(ratingData.classId) : undefined;
+      await logActivity(req, { action: 'save_non_academic_rating', entityType: 'assessment', entityId: (rating as any)?.id, schoolId: ratingClass?.schoolId ?? undefined, newData: rating as any });
       res.json(rating);
     } catch (error) {
       console.error("Create/update non-academic rating error:", error);
@@ -2484,7 +2770,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/assessments/:assessmentId', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { assessmentId } = req.params;
+      // Snapshot before deletion so the log keeps the score and can be filed
+      // under the right school even for main-admin actions.
+      const [assessmentBefore] = await db
+        .select()
+        .from(assessments)
+        .where(eq(assessments.id, assessmentId))
+        .limit(1);
       await storage.deleteAssessment(assessmentId);
+      const assessmentClass = assessmentBefore?.classId ? await storage.getClassById(assessmentBefore.classId) : undefined;
+      await logActivity(req, {
+        action: 'delete_score',
+        entityType: 'assessment',
+        entityId: assessmentId,
+        schoolId: assessmentClass?.schoolId ?? undefined,
+        previousData: assessmentBefore ?? null,
+      });
       res.json({ success: true });
     } catch (error) {
       console.error("Delete assessment error:", error);
@@ -2508,6 +2809,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstCA: assessmentData.firstCA,
         secondCA: assessmentData.secondCA,
         exam: assessmentData.exam
+      });
+
+      const scoreClass = await storage.getClassById(assessmentData.classId);
+      await logActivity(req, {
+        action: 'save_score',
+        entityType: 'assessment',
+        entityId: (assessment as any)?.id,
+        schoolId: scoreClass?.schoolId ?? undefined,
+        newData: assessment as any,
       });
 
       res.json(assessment);
@@ -2669,6 +2979,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const message = isMultiSubject 
         ? `Processed ${sheetsProcessed} subject(s), ${allResults.length} student scores uploaded`
         : `Processed ${allResults.length} students successfully`;
+
+      const uploadClass = await storage.getClassById(classId);
+      await logActivity(req, {
+        action: 'upload_scores',
+        entityType: 'assessment',
+        schoolId: uploadClass?.schoolId ?? undefined,
+        newData: {
+          classId,
+          subjectId: subjectId || null,
+          term,
+          session,
+          fileName: req.file.originalname,
+          sheetsProcessed,
+          successCount: allResults.length,
+          errorCount: allErrors.length,
+        },
+      });
 
       res.json({
         message,
@@ -2957,7 +3284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Store the global logo URL in settings table
       await storage.setSetting('academy_logo', logoUrl);
       console.log(`Global academy logo updated: ${logoUrl}`);
-      
+      await logActivity(req, { action: 'update_academy_logo', entityType: 'school', schoolId: null, newData: { logoUrl } });
       res.json({ message: "Logo updated successfully", logoUrl });
     } catch (error) {
       console.error("Logo upload error:", error);
@@ -3017,7 +3344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update password
       await storage.updateUserPassword(user.id, passwordData.newPassword);
-
+      await logActivity(req, { action: 'change_own_password', entityType: 'user', entityId: user.id, newData: { changed: true } });
       res.json({ message: "Password updated successfully" });
     } catch (error) {
       console.error("Change password error:", error);
@@ -3113,6 +3440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
 
+      await logActivity(req, { action: 'create_fee_type', entityType: 'fee_type', entityId: (feeType as any)?.id, schoolId: feeTypeData.schoolId ?? undefined, newData: feeType as any });
       res.json(feeType);
     } catch (error) {
       console.error("Create fee type error:", error);
@@ -3141,6 +3469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (description !== undefined) updateData.description = description;
 
       const updated = await storage.updateFeeType(id, updateData);
+      await logActivity(req, { action: 'update_fee_type', entityType: 'fee_type', entityId: id, schoolId: existingFeeType.schoolId ?? undefined, previousData: existingFeeType as any, newData: updateData });
       res.json(updated);
     } catch (error) {
       console.error("Update fee type error:", error);
@@ -3151,7 +3480,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/fee-types/:id', authenticate, requirePermission('finance_fee_types_management'), async (req, res) => {
     try {
       const { id } = req.params;
+      const feeTypeBefore = await storage.getFeeTypeById(id);
       await storage.deleteFeeType(id);
+      await logActivity(req, { action: 'delete_fee_type', entityType: 'fee_type', entityId: id, schoolId: feeTypeBefore?.schoolId ?? undefined, previousData: feeTypeBefore ?? { id } });
       res.json({ success: true });
     } catch (error) {
       console.error("Delete fee type error:", error);
@@ -3212,6 +3543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const scopedT = t && s ? t : undefined;
       const scopedS = t && s ? s : undefined;
       const result = await storage.upsertTuitionClassAmounts(feeTypeId, amounts, scopedT, scopedS);
+      await logActivity(req, { action: 'update_tuition_amounts', entityType: 'fee_type', entityId: feeTypeId, schoolId: feeType.schoolId ?? undefined, newData: { amounts, term: scopedT ?? null, session: scopedS ?? null } });
       res.json(result);
     } catch (error) {
       console.error("Upsert tuition amounts error:", error);
@@ -3225,6 +3557,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { studentId, feeTypeId, term, session, amount } = req.body;
       
       const studentFee = await storage.assignFeesToStudent(studentId, feeTypeId, term, session, amount);
+      const sfSchools = await storage.getStudentSchoolIds([studentId]);
+      await logActivity(req, { action: 'assign_student_fee', entityType: 'fee_type', entityId: feeTypeId, schoolId: sfSchools.find(s => !!s.schoolId)?.schoolId ?? undefined, newData: { studentId, feeTypeId, term, session, amount } });
       res.json(studentFee);
     } catch (error) {
       console.error("Assign student fee error:", error);
@@ -3297,7 +3631,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         recordedBy: user.id,
         notes: paymentData.notes
       });
-
+      const paySchools = await storage.getStudentSchoolIds([studentFee.studentId]);
+      await logActivity(req, { action: 'record_payment', entityType: 'payment', entityId: (payment as any)?.id, schoolId: paySchools.find(s => !!s.schoolId)?.schoolId ?? undefined, newData: { studentId: studentFee.studentId, studentFeeId: paymentData.studentFeeId, amount: paymentData.amount, paymentMethod: paymentData.paymentMethod || 'cash', reference: paymentData.reference } });
       res.json(payment);
     } catch (error) {
       console.error("Record payment error:", error);
@@ -3322,6 +3657,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assignmentData.notes
       );
 
+      const feeClass = await storage.getClassById(assignmentData.classId);
+      await logActivity(req, { action: 'assign_fee_to_class', entityType: 'fee_type', entityId: assignmentData.feeTypeId, schoolId: feeClass?.schoolId ?? undefined, newData: { classId: assignmentData.classId, feeTypeId: assignmentData.feeTypeId, term: assignmentData.term, session: assignmentData.session, studentCount: assignedFees.length } });
       res.json({ 
         message: `Successfully assigned fee to ${assignedFees.length} students`,
         assignedFees 
@@ -3711,6 +4048,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const reportCard = await storage.createGeneratedReportCard(reportCardData);
 
+      const reportClass = await storage.getClassById(classId);
+      await logActivity(req, {
+        action: alreadyGenerated ? 'regenerate_report_card' : 'generate_report_card',
+        entityType: 'report_card',
+        entityId: (reportCard as any)?.id,
+        schoolId: reportClass?.schoolId ?? undefined,
+        newData: { studentId, classId, term, session, studentName, className, totalScore, averageScore },
+      });
+
       // Notify the student their report card is ready (only on first generation
       // for this class/term/session). Notification failure must not fail generation.
       if (!alreadyGenerated) {
@@ -3743,6 +4089,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { schoolId, classId, term, session } = req.body;
       if (!schoolId) return res.status(400).json({ error: "schoolId is required" });
       const count = await storage.clearGeneratedReportCards({ schoolId, classId, term, session });
+      await logActivity(req, {
+        action: 'clear_report_cards',
+        entityType: 'report_card',
+        schoolId,
+        newData: { classId, term, session, count },
+      });
       res.json({ success: true, count, message: `${count} report card(s) deleted` });
     } catch (error) {
       console.error("Error clearing report cards:", error);
@@ -3759,7 +4111,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins and sub-admins can delete report cards" });
       }
 
+      const [reportBefore] = await db
+        .select()
+        .from(generatedReportCards)
+        .where(eq(generatedReportCards.id, reportId))
+        .limit(1);
       await storage.deleteGeneratedReportCard(reportId);
+      const reportCls = reportBefore?.classId ? await storage.getClassById(reportBefore.classId) : undefined;
+      await logActivity(req, {
+        action: 'delete_report_card',
+        entityType: 'report_card',
+        entityId: reportId,
+        schoolId: reportCls?.schoolId ?? undefined,
+        previousData: reportBefore ?? null,
+      });
       res.json({ success: true, message: "Report card deleted successfully" });
     } catch (error) {
       console.error("Error deleting report card:", error);
@@ -3990,6 +4355,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const nextTermDate = new Date(nextTermResumes);
       await storage.publishScores(classId, term, session, user.id, nextTermDate);
+      const cls = await storage.getClassById(classId);
+      await logActivity(req, { action: 'publish_scores', entityType: 'assessment', schoolId: cls?.schoolId ?? null, newData: { classId, term, session, nextTermResumes } });
       res.json({ success: true, message: "Scores published successfully" });
     } catch (error) {
       console.error("Error publishing scores:", error);
@@ -4014,6 +4381,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       await storage.unpublishScores(classId, term, session);
+      const cls = await storage.getClassById(classId);
+      await logActivity(req, { action: 'unpublish_scores', entityType: 'assessment', schoolId: cls?.schoolId ?? null, newData: { classId, term, session } });
       res.json({ success: true, message: "Scores unpublished successfully" });
     } catch (error) {
       console.error("Error unpublishing scores:", error);
@@ -4574,6 +4943,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (e) {
         console.warn("[POST /api/admin/bank-accounts] reroute failed (non-fatal):", e);
       }
+      await logActivity(req, { action: 'create_bank_account', entityType: 'bank_account', entityId: (account as any)?.id, schoolId: (account as any)?.schoolId ?? null, newData: account as any });
       res.status(201).json({ ...account, rerouted });
     } catch (error: any) {
       if (error.name === "ZodError") {
@@ -4595,6 +4965,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (e) {
         console.warn("[PUT /api/admin/bank-accounts/:id] reroute failed (non-fatal):", e);
       }
+      await logActivity(req, { action: 'update_bank_account', entityType: 'bank_account', entityId: id, schoolId: (account as any)?.schoolId ?? null, newData: data });
       res.json({ ...account, rerouted });
     } catch (error: any) {
       if (error.name === "ZodError") {
@@ -4609,6 +4980,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       await storage.deleteSchoolBankAccount(id);
+      await logActivity(req, { action: 'delete_bank_account', entityType: 'bank_account', entityId: id, schoolId: null, previousData: { id } });
       res.json({ success: true });
     } catch (error) {
       console.error("[DELETE /api/admin/bank-accounts/:id] Error:", error);

@@ -122,6 +122,31 @@ async function runMigrations() {
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      -- Task #215: generalise payment_audit_logs into the full Activity Log.
+      ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_role VARCHAR(30);
+      ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_name VARCHAR(200);
+      ALTER TABLE payment_audit_logs ALTER COLUMN entity_id DROP NOT NULL;
+      ALTER TABLE payment_audit_logs ALTER COLUMN user_id DROP NOT NULL;
+      -- Audit rows must survive actor deletion: replace the restrictive FK
+      -- with ON DELETE SET NULL (actor identity is preserved in actor_name/actor_role).
+      DO $$
+      DECLARE fk record;
+      BEGIN
+        FOR fk IN
+          SELECT conname FROM pg_constraint
+          WHERE conrelid = 'payment_audit_logs'::regclass
+            AND contype = 'f'
+            AND confrelid = 'users'::regclass
+            AND confdeltype <> 'n'
+        LOOP
+          EXECUTE format('ALTER TABLE payment_audit_logs DROP CONSTRAINT %I', fk.conname);
+          EXECUTE 'ALTER TABLE payment_audit_logs ADD CONSTRAINT payment_audit_logs_user_id_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL';
+        END LOOP;
+      END $$;
+      CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_created_at ON payment_audit_logs (created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_school_id ON payment_audit_logs (school_id);
+      CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_user_id ON payment_audit_logs (user_id);
+      CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_entity_type ON payment_audit_logs (entity_type);
     `);
 
     // Self-heal Task #123: any bank_transactions row whose status is not

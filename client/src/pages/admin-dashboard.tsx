@@ -128,6 +128,7 @@ import {
   CloudOff,
   Inbox,
   BarChart3,
+  History,
   ChevronUp,
   ChevronDown,
   ChevronRight
@@ -142,6 +143,7 @@ import { NotificationsManagement } from "@/components/notifications-management";
 import { PaymentRecording } from "@/components/payment-recording";
 import { PaymentReconciliation as BankStatementReconciliation } from "@/components/payment-reconciliation";
 import { PaymentLedger } from "@/components/payment-ledger";
+import { ActivityLog } from "@/components/activity-log";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
 // Logo is now loaded dynamically via useLogo hook
 import type { 
@@ -4000,7 +4002,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className={`grid w-full gap-0.5 h-auto p-1 bg-muted/60 ${user?.role === 'sub-admin' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-9'}`}>
+          <TabsList className={`grid w-full gap-0.5 h-auto p-1 bg-muted/60 ${user?.role === 'sub-admin' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-10'}`}>
             {perm('tab_overview') && (
               <TabsTrigger value="overview" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <LayoutDashboard className="h-4 w-4 shrink-0" />
@@ -4053,6 +4055,12 @@ export default function AdminDashboard() {
               <TabsTrigger value="inquiries" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Inbox className="h-4 w-4 shrink-0" />
                 <span>Inquiries</span>
+              </TabsTrigger>
+            )}
+            {perm('tab_activity') && (
+              <TabsTrigger value="activity" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-activity">
+                <History className="h-4 w-4 shrink-0" />
+                <span>Activity</span>
               </TabsTrigger>
             )}
           </TabsList>
@@ -6596,6 +6604,13 @@ export default function AdminDashboard() {
           {perm('tab_inquiries') && (
             <TabsContent value="inquiries" className="space-y-6">
               <InquiriesManagement />
+            </TabsContent>
+          )}
+
+          {/* Activity Log Tab (Task #215) */}
+          {perm('tab_activity') && (
+            <TabsContent value="activity" className="space-y-6">
+              <ActivityLog />
             </TabsContent>
           )}
 

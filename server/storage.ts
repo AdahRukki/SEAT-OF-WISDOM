@@ -94,7 +94,7 @@ import {
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, asc, desc, sql, inArray, ne, isNotNull } from "drizzle-orm";
+import { eq, and, or, asc, desc, sql, inArray, ne, isNotNull, gte, lte } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -389,6 +389,16 @@ export interface IStorage {
   
   // Audit logging
   createPaymentAuditLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog>;
+  createActivityLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog>;
+  getActivityLogs(filters: {
+    schoolId?: string;
+    actionType?: string; // scores | students | finance | system
+    userId?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    page: number;
+    pageSize: number;
+  }): Promise<{ logs: any[]; total: number }>;
 
   // Bank Statement Upload & Management
   uploadBankStatement(data: { fileName: string; fileType: string; bankFormat?: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement>;
@@ -5008,6 +5018,85 @@ export class DatabaseStorage implements IStorage {
 
     console.log('[createPaymentAuditLog] Audit log created:', log.id);
     return log;
+  }
+
+  // Task #215: unified activity log writer (same table as payment audit logs,
+  // so all legacy payment entries stay in the same searchable trail).
+  async createActivityLog(data: InsertPaymentAuditLog): Promise<PaymentAuditLog> {
+    const [log] = await db
+      .insert(paymentAuditLogs)
+      .values(data)
+      .returning();
+    return log;
+  }
+
+  // Category → entity types covered by that category.
+  private static ACTIVITY_CATEGORY_MAP: Record<string, string[]> = {
+    scores: ['assessment', 'score'],
+    students: ['student'],
+    finance: ['payment_record', 'bank_transaction', 'bank_statement', 'allocation', 'payment', 'bank_account', 'fee_type'],
+    system: ['user', 'term', 'report_card', 'school', 'session', 'class', 'subject'],
+  };
+
+  async getActivityLogs(filters: {
+    schoolId?: string;
+    actionType?: string;
+    userId?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    page: number;
+    pageSize: number;
+  }): Promise<{ logs: any[]; total: number }> {
+    const conditions: any[] = [];
+    if (filters.schoolId) conditions.push(eq(paymentAuditLogs.schoolId, filters.schoolId));
+    if (filters.userId) conditions.push(eq(paymentAuditLogs.userId, filters.userId));
+    if (filters.dateFrom) conditions.push(gte(paymentAuditLogs.createdAt, filters.dateFrom));
+    if (filters.dateTo) conditions.push(lte(paymentAuditLogs.createdAt, filters.dateTo));
+    if (filters.actionType) {
+      const types = DatabaseStorage.ACTIVITY_CATEGORY_MAP[filters.actionType];
+      if (types) conditions.push(inArray(paymentAuditLogs.entityType, types));
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [{ count: total }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(paymentAuditLogs)
+      .where(where);
+
+    const rows = await db
+      .select({
+        log: paymentAuditLogs,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+        userRole: users.role,
+        schoolName: schools.name,
+      })
+      .from(paymentAuditLogs)
+      .leftJoin(users, eq(paymentAuditLogs.userId, users.id))
+      .leftJoin(schools, eq(paymentAuditLogs.schoolId, schools.id))
+      .where(where)
+      .orderBy(desc(paymentAuditLogs.createdAt))
+      .limit(filters.pageSize)
+      .offset((filters.page - 1) * filters.pageSize);
+
+    const logs = rows.map((r) => ({
+      id: r.log.id,
+      action: r.log.action,
+      entityType: r.log.entityType,
+      entityId: r.log.entityId,
+      userId: r.log.userId,
+      // Prefer the immutable name snapshot (survives actor deletion), then the join.
+      userName: r.log.actorName || [r.userFirstName, r.userLastName].filter(Boolean).join(' ') || (r.log.userId ? 'Unknown user' : 'Deleted user'),
+      // Prefer the role held at the time of the action; fall back to current role.
+      userRole: r.log.actorRole || r.userRole || 'unknown',
+      schoolId: r.log.schoolId,
+      schoolName: r.schoolName,
+      previousData: r.log.previousData,
+      newData: r.log.newData,
+      createdAt: r.log.createdAt,
+    }));
+
+    return { logs, total };
   }
 
   async uploadBankStatement(data: { fileName: string; fileType: string; bankFormat?: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement> {
