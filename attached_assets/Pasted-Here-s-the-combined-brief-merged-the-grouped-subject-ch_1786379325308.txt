@@ -1,0 +1,76 @@
+Here's the combined brief — merged the grouped-subject checkboxes into the Replit prompt, updated Position Details accordingly:
+
+---
+
+**PROMPT FOR REPLIT:**
+
+Build a "Careers / Teaching Vacancies" page for a private school website called Seat of Wisdom Academy. The page should include:
+
+**1. Page Header**
+- Title: "Join Our Team – Teaching Vacancies at Seat of Wisdom Academy"
+- Short intro paragraph: "Seat of Wisdom Academy is a multi-branch, WAEC/NECO-accredited private school in Asaba, Delta State, offering quality education from Pre-Nursery through Secondary school. We are always looking for passionate, qualified, and dedicated teachers to join our growing team across our branches."
+
+**2. "Why Teach With Us" section**
+Bullet list:
+- A supportive and professional working environment
+- Opportunities for growth across multiple branches
+- A school culture rooted in discipline, excellence, and character formation
+- Modern facilities and a structured curriculum
+
+**3. "Current Openings" section**
+Editable list (I will update this myself later) — for now use placeholder: "We accept applications on a rolling basis for all subjects and levels — Nursery, Primary, and Secondary (JSS/SS)."
+
+**4. Application Form**
+Build a form with these fields:
+
+*Personal Information*
+- Full Name (text, required)
+- Phone Number (text, required)
+- Email Address (email, required)
+- Date of Birth (date)
+- Gender (dropdown: Male/Female)
+- Home Address (text)
+
+*Position Details*
+- Position Applied For (dropdown: Nursery, Primary, JSS, SS, Subject Specialist)
+- Preferred Branch (dropdown — I will provide branch names)
+- **Subjects You Can Teach (only applies to Secondary applicants — show/hide based on Position Applied For):**
+  - **Sciences** (checkboxes): Mathematics, Physics, Chemistry, Biology
+  - **Arts/Humanities** (checkboxes): English Language, Literature-in-English, Government, History, CRS, French
+  - **Business** (checkboxes): Economics, Financial Accounting, Commerce
+  - **Other Subject** (text, optional — for subjects not listed, e.g. Computer Studies, Agric Science, Fine Art)
+- Years of Teaching Experience (number)
+- Availability to Resume (date)
+
+*Qualifications*
+- Highest Educational Qualification (dropdown: NCE, B.Ed/B.A/B.Sc, PGDE, M.Ed, Other)
+- Institution Attended (text)
+- Teaching Certification, if any (text)
+- Upload CV/Resume (file upload, OPTIONAL — label clearly "Optional — if you don't have a CV, just fill the fields below")
+- Upload Credentials/Certificates (file upload, optional)
+
+*Additional Information*
+- Have you taught this subject/level before? (Yes/No radio)
+- Briefly describe your teaching philosophy or approach (textarea)
+- Why do you want to join Seat of Wisdom Academy? (textarea)
+- Reference Contact — Name, Phone, Relationship (text, at least 1 required)
+
+*Consent*
+- Checkbox (required): "I confirm that the information provided is accurate and true."
+- Submit button labeled "Submit Application"
+
+**5. Footer note below form**
+"Only shortlisted candidates will be contacted for an interview. For enquiries, contact us at [insert email/phone/WhatsApp]."
+
+**Technical requirements:**
+- Store all form submissions in a database table called `teacher_applications`, including uploaded file paths and selected subjects (store as array/JSON field, e.g. `subjects: ["Mathematics", "Physics"]`).
+- Uploaded files (CV, credentials) should be saved to a folder/storage bucket and the file path/URL stored in the database, not the raw file in the table.
+- Show/hide the Subjects section dynamically — only display it when "Position Applied For" is set to JSS, SS, or Subject Specialist.
+- After submission, show a thank-you confirmation message on the page (not just a blank reload).
+- Make the form mobile-responsive since most applicants will apply from their phones.
+- Match the visual style/branding of the rest of the school website (I'll share colors/logo separately, or use a clean, professional, education-appropriate design if none provided).
+- Add basic spam protection (e.g., honeypot field or simple captcha).
+
+---
+
+Want me to also add the **admin dashboard** section (login, view/filter/export applications by branch/subject/level) to this same brief?
