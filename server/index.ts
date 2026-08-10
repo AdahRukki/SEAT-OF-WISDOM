@@ -150,6 +150,9 @@ async function runMigrations() {
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      -- Task #222: teacher-application hiring workflow fields.
+      ALTER TABLE teacher_applications ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'New';
+      ALTER TABLE teacher_applications ADD COLUMN IF NOT EXISTS admin_notes TEXT;
       -- Task #215: generalise payment_audit_logs into the full Activity Log.
       ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_role VARCHAR(30);
       ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_name VARCHAR(200);

@@ -405,8 +405,13 @@ export const teacherApplications = pgTable("teacher_applications", {
   referencePhone: varchar("reference_phone", { length: 30 }).notNull(),
   referenceRelationship: varchar("reference_relationship", { length: 100 }).notNull(),
   isRead: boolean("is_read").default(false),
+  // Task #222: hiring workflow
+  status: varchar("status", { length: 30 }).notNull().default("New"), // New, Under Review, Shortlisted, Interviewed, Hired, Rejected
+  adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const TEACHER_APPLICATION_STATUSES = ["New", "Under Review", "Shortlisted", "Interviewed", "Hired", "Rejected"] as const;
 
 // ============================================
 // PAYMENT TRACKING & RECONCILIATION SYSTEM

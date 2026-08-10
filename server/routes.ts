@@ -31,6 +31,7 @@ import {
   insertAdmissionsApplicationSchema,
   insertTeacherApplicationSchema,
   teacherApplications,
+  TEACHER_APPLICATION_STATUSES,
   recordFeePaymentSchema,
   recordMultiStudentPaymentSchema,
   multiStudentAllocationSchema,
@@ -6048,6 +6049,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(row);
     } catch (error: any) {
       console.error("Mark teacher application read error:", error);
+      res.status(500).json({ error: "Failed to update teacher application" });
+    }
+  });
+
+  // Admin: update hiring status and/or internal notes on a teacher application (Task #222)
+  app.patch("/api/admin/teacher-applications/:id", authenticate, requirePermission('tab_inquiries'), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const schema = z.object({
+        status: z.enum(TEACHER_APPLICATION_STATUSES).optional(),
+        adminNotes: z.string().max(5000).nullable().optional(),
+      }).refine(d => d.status !== undefined || d.adminNotes !== undefined, { message: "Nothing to update" });
+      const data = schema.parse(req.body);
+      const update: Record<string, any> = {};
+      if (data.status !== undefined) update.status = data.status;
+      if (data.adminNotes !== undefined) update.adminNotes = data.adminNotes;
+      const [row] = await db.update(teacherApplications)
+        .set(update)
+        .where(eq(teacherApplications.id, id))
+        .returning();
+      if (!row) return res.status(404).json({ error: "Not found" });
+      if (data.status !== undefined) {
+        await logActivity(req, { action: 'update_teacher_application_status', entityType: 'teacher_application', entityId: id, newData: { status: data.status } });
+      }
+      res.json(row);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0]?.message || "Invalid request" });
+      }
+      console.error("Update teacher application error:", error);
       res.status(500).json({ error: "Failed to update teacher application" });
     }
   });
