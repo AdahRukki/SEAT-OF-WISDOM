@@ -2356,6 +2356,54 @@ export class DatabaseStorage implements IStorage {
     let totalGraduated = 0;
 
     await db.transaction(async (tx) => {
+      // Serialize bulk promotion per school+session: an advisory transaction lock
+      // makes a concurrent second run (even with DISJOINT student sets, which the
+      // per-student unique index would not catch) wait here, then fail the
+      // already-promoted recheck below and roll back.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`bulk-promotion:${schoolId}:${session}`}))`);
+      const [alreadyRun] = await tx
+        .select({ id: promotionRecords.id })
+        .from(promotionRecords)
+        .where(and(
+          eq(promotionRecords.schoolId, schoolId),
+          eq(promotionRecords.session, session),
+          eq(promotionRecords.isBulk, true)
+        ))
+        .limit(1);
+      if (alreadyRun) {
+        throw Object.assign(new Error("Students were already promoted for this session"), { alreadyPromoted: true });
+      }
+
+      // Validate ownership & membership INSIDE the transaction:
+      // - every from/to class must belong to this school ('graduated' allowed as target)
+      // - every student must currently be in the class they're promoted from
+      const classIds = Array.from(new Set(promotions.flatMap(p =>
+        p.nextClassId === 'graduated' ? [p.currentClassId] : [p.currentClassId, p.nextClassId]
+      )));
+      const ownedClasses = await tx
+        .select({ id: classes.id, schoolId: classes.schoolId })
+        .from(classes)
+        .where(inArray(classes.id, classIds));
+      const ownedIds = new Set(ownedClasses.filter(c => c.schoolId === schoolId).map(c => c.id));
+      for (const cid of classIds) {
+        if (!ownedIds.has(cid)) {
+          throw Object.assign(new Error(`Class ${cid} does not belong to this school`), { invalidPromotion: true });
+        }
+      }
+      const allStudentIds = promotions.flatMap(p => p.studentIds);
+      const studentRows = await tx
+        .select({ id: students.id, classId: students.classId })
+        .from(students)
+        .where(inArray(students.id, allStudentIds));
+      const studentClass = new Map(studentRows.map(s => [s.id, s.classId]));
+      for (const p of promotions) {
+        for (const sid of p.studentIds) {
+          if (studentClass.get(sid) !== p.currentClassId) {
+            throw Object.assign(new Error("One or more students are not currently in the class they are being promoted from"), { invalidPromotion: true });
+          }
+        }
+      }
+
       // Ledger rows FIRST: the unique partial index (school_id, session, student_id)
       // WHERE is_bulk makes a concurrent second bulk run fail here and roll back
       // before any student rows are touched.
@@ -3270,11 +3318,52 @@ export class DatabaseStorage implements IStorage {
 
     const assignedSubjects = classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
 
-    const classStudents = await db
-      .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
-      .from(students)
-      .leftJoin(users, eq(students.userId, users.id))
-      .where(and(eq(students.classId, classId), eq(users.isActive, true)));
+    // Task #198: if the one-time bulk promotion already ran for this class's session,
+    // students have MOVED to their next classes (or graduated and been deactivated).
+    // Validate against the HISTORICAL roster — promotion-ledger members plus students
+    // with assessments filed under this class+session — not the current classId roster.
+    const [promoRow] = await db
+      .select({ id: promotionRecords.id })
+      .from(promotionRecords)
+      .where(and(
+        eq(promotionRecords.session, session),
+        eq(promotionRecords.fromClassId, classId),
+        eq(promotionRecords.isBulk, true)
+      ))
+      .limit(1);
+
+    let classStudents: { id: string; firstName: string | null; lastName: string | null }[];
+    if (promoRow) {
+      const ledgerIds = await db
+        .selectDistinct({ studentId: promotionRecords.studentId })
+        .from(promotionRecords)
+        .where(and(
+          eq(promotionRecords.session, session),
+          eq(promotionRecords.fromClassId, classId)
+        ));
+      const assessedIds = await db
+        .selectDistinct({ studentId: assessments.studentId })
+        .from(assessments)
+        .where(and(
+          eq(assessments.classId, classId),
+          eq(assessments.term, term),
+          eq(assessments.session, session)
+        ));
+      const historicalIds = Array.from(new Set([...ledgerIds, ...assessedIds].map(r => r.studentId)));
+      classStudents = historicalIds.length
+        ? await db
+            .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+            .from(students)
+            .leftJoin(users, eq(students.userId, users.id))
+            .where(inArray(students.id, historicalIds))
+        : [];
+    } else {
+      classStudents = await db
+        .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+        .from(students)
+        .leftJoin(users, eq(students.userId, users.id))
+        .where(and(eq(students.classId, classId), eq(users.isActive, true)));
+    }
 
     if (classStudents.length === 0) {
       return { results: {}, summary: { total: 0, ready: 0, partial: 0, incomplete: 0 } };
@@ -3374,11 +3463,16 @@ export class DatabaseStorage implements IStorage {
       const bulkResult = await this.validateReportCardDataBulk(cls.id, term, session);
 
       const issues: string[] = [];
-      const classStudents = await db
-        .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
-        .from(students)
-        .leftJoin(users, eq(students.userId, users.id))
-        .where(and(eq(students.classId, cls.id), eq(users.isActive, true)));
+      // Name lookup for issue lines — keyed off the validated roster (which may be
+      // historical after a bulk promotion), not the class's current students.
+      const validatedIds = Object.keys(bulkResult.results);
+      const classStudents = validatedIds.length
+        ? await db
+            .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+            .from(students)
+            .leftJoin(users, eq(students.userId, users.id))
+            .where(inArray(students.id, validatedIds))
+        : [];
 
       const studentNameMap = new Map(classStudents.map(s => [s.id, `${s.firstName} ${s.lastName}`]));
 

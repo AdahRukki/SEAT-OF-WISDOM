@@ -163,10 +163,14 @@ export function ReportCardManagement({
     queryFn: () => apiRequest(activeSchoolId ? `/api/current-academic-info?schoolId=${activeSchoolId}` : "/api/current-academic-info"),
   });
 
-  // Task #198: has the one-time bulk promotion already run for this school's session?
+  // Task #198: has the one-time bulk promotion already run for the session being
+  // VIEWED/GENERATED (not just the school's current session)? After promotion the
+  // school advances to a new session, so the status must be tied to the selected
+  // session or regeneration of the old session would wrongly use current rosters.
+  const promotionStatusSession = selectedSession || academicInfo?.currentSession || "";
   const { data: promotionStatus } = useQuery<{ promoted: boolean; promotedAt: string | null; session: string | null }>({
-    queryKey: ["/api/admin/promotion-status", activeSchoolId],
-    queryFn: () => apiRequest(`/api/admin/promotion-status?schoolId=${activeSchoolId}`),
+    queryKey: ["/api/admin/promotion-status", activeSchoolId, promotionStatusSession],
+    queryFn: () => apiRequest(`/api/admin/promotion-status?schoolId=${activeSchoolId}${promotionStatusSession ? `&session=${encodeURIComponent(promotionStatusSession)}` : ""}`),
     enabled: !!activeSchoolId,
   });
 
@@ -521,10 +525,17 @@ export function ReportCardManagement({
       for (const classId in schoolValidationResults) {
         const classResult = schoolValidationResults[classId];
 
-        // Get students for this class
-        const classStudents = await apiRequest(
-          `/api/admin/students/class/${classId}`,
-        );
+        // Get students for this class. If the one-time bulk promotion already ran
+        // for the session being generated, students have MOVED to their next classes,
+        // so the current roster is wrong — use the historical roster (students who
+        // had assessments / promotion-ledger membership in this class+session) instead.
+        const promotedForThisSession =
+          promotionStatus?.promoted && promotionStatus.session === currentSession;
+        const classStudents = promotedForThisSession
+          ? await apiRequest(
+              `/api/admin/students/historical-by-class?classId=${encodeURIComponent(classId)}&term=${encodeURIComponent(currentTerm || "")}&session=${encodeURIComponent(currentSession || "")}`,
+            )
+          : await apiRequest(`/api/admin/students/class/${classId}`);
 
         // Collect skipped students for this class.
         // In Third Term, students in classes with zero validated students are excluded from

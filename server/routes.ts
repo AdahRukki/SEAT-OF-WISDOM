@@ -815,6 +815,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentInfo = await storage.getCurrentAcademicInfo(schoolId);
       const session = currentInfo?.currentSession;
       if (!session) return res.status(400).json({ error: "School has no current session set" });
+      if (currentInfo?.currentTerm !== "Third Term") {
+        return res.status(400).json({ error: "Bulk promotion is only allowed during Third Term" });
+      }
 
       const existing = await storage.hasBulkPromotionForSession(schoolId, session);
       if (existing.promoted) {
@@ -857,9 +860,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Bulk promotion complete", totalPromoted, totalGraduated, session });
     } catch (error: any) {
       console.error("Bulk promote students error:", error);
-      // Unique-index violation from a concurrent/duplicate bulk run
-      if (error?.code === '23505' || /duplicate key/i.test(error?.message || '')) {
+      // Concurrent/duplicate bulk run: in-transaction recheck or unique-index violation
+      if (error?.alreadyPromoted || error?.code === '23505' || /duplicate key/i.test(error?.message || '')) {
         return res.status(409).json({ error: "Students were already promoted for this session", alreadyPromoted: true });
+      }
+      if (error?.invalidPromotion) {
+        return res.status(400).json({ error: error.message });
       }
       res.status(400).json({ error: "Failed to promote students" });
     }
@@ -2703,7 +2709,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(403).json({ error: "Admin access required" });
     }
     if (!hasPermission(user.role, user.permissions, 'tab_scores') &&
-        !hasPermission(user.role, user.permissions, 'tab_finance')) {
+        !hasPermission(user.role, user.permissions, 'tab_finance') &&
+        !hasPermission(user.role, user.permissions, 'tab_reports')) {
       return res.status(403).json({ error: "You do not have permission to access this feature" });
     }
     next();
