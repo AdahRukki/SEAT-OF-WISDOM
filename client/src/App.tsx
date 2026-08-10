@@ -16,6 +16,7 @@ import SchoolAbout from "@/pages/school-about";
 import SchoolPrograms from "@/pages/school-programs";
 import SchoolAdmissions from "@/pages/school-admissions";
 import SchoolContact from "@/pages/school-contact";
+import SchoolCareers from "@/pages/school-careers";
 import NewsPage from "@/pages/news";
 import NewsDetailPage from "@/pages/news-detail";
 import { useEffect } from "react";
@@ -153,6 +154,7 @@ function AppRoutes() {
       <Route path="/programs" component={SchoolPrograms} />
       <Route path="/admissions" component={SchoolAdmissions} />
       <Route path="/contact" component={SchoolContact} />
+      <Route path="/careers" component={SchoolCareers} />
       <Route path="/news/:id" component={NewsDetailPage} />
       <Route path="/news" component={NewsPage} />
       

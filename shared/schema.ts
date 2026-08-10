@@ -374,6 +374,40 @@ export const admissionsApplications = pgTable("admissions_applications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Teacher Applications table (public careers page submissions)
+export const teacherApplications = pgTable("teacher_applications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Personal information
+  fullName: varchar("full_name", { length: 200 }).notNull(),
+  phone: varchar("phone", { length: 30 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  dateOfBirth: varchar("date_of_birth", { length: 20 }),
+  gender: varchar("gender", { length: 20 }),
+  homeAddress: text("home_address"),
+  // Position details
+  position: varchar("position", { length: 50 }).notNull(), // Nursery, Primary, JSS, SS, Subject Specialist
+  preferredBranch: varchar("preferred_branch", { length: 200 }).notNull(),
+  subjects: jsonb("subjects").$type<string[]>().default([]), // selected subject checkboxes
+  otherSubject: varchar("other_subject", { length: 200 }),
+  yearsOfExperience: integer("years_of_experience"),
+  availabilityDate: varchar("availability_date", { length: 20 }),
+  // Qualifications
+  highestQualification: varchar("highest_qualification", { length: 50 }).notNull(),
+  institution: varchar("institution", { length: 200 }),
+  teachingCertification: varchar("teaching_certification", { length: 200 }),
+  cvPath: text("cv_path"), // object storage path, not raw file
+  credentialsPath: text("credentials_path"),
+  // Additional information
+  taughtBefore: varchar("taught_before", { length: 10 }), // Yes / No
+  teachingPhilosophy: text("teaching_philosophy"),
+  motivation: text("motivation"),
+  referenceName: varchar("reference_name", { length: 200 }).notNull(),
+  referencePhone: varchar("reference_phone", { length: 30 }).notNull(),
+  referenceRelationship: varchar("reference_relationship", { length: 100 }).notNull(),
+  isRead: boolean("is_read").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // ============================================
 // PAYMENT TRACKING & RECONCILIATION SYSTEM
 // ============================================
@@ -1110,6 +1144,30 @@ export const insertAdmissionsApplicationSchema = createInsertSchema(admissionsAp
 
 export type AdmissionsApplication = typeof admissionsApplications.$inferSelect;
 export type InsertAdmissionsApplication = z.infer<typeof insertAdmissionsApplicationSchema>;
+
+// Teacher application schema and types (public careers form)
+export const insertTeacherApplicationSchema = createInsertSchema(teacherApplications, {
+  fullName: z.string().min(2, "Full name is required"),
+  phone: z.string().min(7, "Phone number is required"),
+  email: z.string().email("A valid email address is required"),
+  position: z.string().min(1, "Position applied for is required"),
+  preferredBranch: z.string().min(1, "Preferred branch is required"),
+  highestQualification: z.string().min(1, "Highest qualification is required"),
+  referenceName: z.string().min(2, "Reference name is required"),
+  referencePhone: z.string().min(7, "Reference phone is required"),
+  referenceRelationship: z.string().min(2, "Reference relationship is required"),
+  subjects: z.array(z.string()).default([]),
+  yearsOfExperience: z.coerce.number().int().min(0).optional().nullable(),
+}).omit({
+  id: true,
+  isRead: true,
+  createdAt: true,
+  cvPath: true,
+  credentialsPath: true,
+});
+
+export type TeacherApplication = typeof teacherApplications.$inferSelect;
+export type InsertTeacherApplication = z.infer<typeof insertTeacherApplicationSchema>;
 
 // ============================================
 // PAYMENT TRACKING SCHEMAS & TYPES

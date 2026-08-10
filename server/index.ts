@@ -122,6 +122,34 @@ async function runMigrations() {
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS teacher_applications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        full_name VARCHAR(200) NOT NULL,
+        phone VARCHAR(30) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        date_of_birth VARCHAR(20),
+        gender VARCHAR(20),
+        home_address TEXT,
+        position VARCHAR(50) NOT NULL,
+        preferred_branch VARCHAR(200) NOT NULL,
+        subjects JSONB DEFAULT '[]'::jsonb,
+        other_subject VARCHAR(200),
+        years_of_experience INTEGER,
+        availability_date VARCHAR(20),
+        highest_qualification VARCHAR(50) NOT NULL,
+        institution VARCHAR(200),
+        teaching_certification VARCHAR(200),
+        cv_path TEXT,
+        credentials_path TEXT,
+        taught_before VARCHAR(10),
+        teaching_philosophy TEXT,
+        motivation TEXT,
+        reference_name VARCHAR(200) NOT NULL,
+        reference_phone VARCHAR(30) NOT NULL,
+        reference_relationship VARCHAR(100) NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
       -- Task #215: generalise payment_audit_logs into the full Activity Log.
       ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_role VARCHAR(30);
       ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_name VARCHAR(200);

@@ -27,6 +27,7 @@ export default function SchoolPrograms() {
                 <Link href="/about" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">About</Link>
                 <Link href="/programs" className="text-blue-600 dark:text-blue-400 font-medium">Programs</Link>
                 <Link href="/admissions" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Admissions</Link>
+                <Link href="/careers" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Careers</Link>
                 <Link href="/contact" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Contact</Link>
                 <Link href="/portal">
                   <Button variant="default" className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-portal-login">
@@ -76,6 +77,11 @@ export default function SchoolPrograms() {
                       <Link href="/admissions" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-admissions">
                           Admissions
+                        </Button>
+                      </Link>
+                      <Link href="/careers" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-careers">
+                          Careers
                         </Button>
                       </Link>
                       <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
@@ -476,6 +482,7 @@ export default function SchoolPrograms() {
                 <li><Link href="/programs" className="hover:text-white transition-colors">Programs</Link></li>
                 <li><Link href="/admissions" className="hover:text-white transition-colors">Admissions</Link></li>
                 <li><Link href="/contact" className="hover:text-white transition-colors">Contact</Link></li>
+                <li><Link href="/careers" className="hover:text-white transition-colors">Careers</Link></li>
               </ul>
             </div>
             

@@ -29,6 +29,8 @@ import {
   insertNotificationSchema,
   insertContactSubmissionSchema,
   insertAdmissionsApplicationSchema,
+  insertTeacherApplicationSchema,
+  teacherApplications,
   recordFeePaymentSchema,
   recordMultiStudentPaymentSchema,
   multiStudentAllocationSchema,
@@ -5860,6 +5862,211 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid form data", details: error.errors });
       }
       res.status(500).json({ error: "Failed to submit application" });
+    }
+  });
+
+  // Public: list branch names (for careers preferred-branch dropdown)
+  app.get("/api/public/branches", async (_req: Request, res: Response) => {
+    try {
+      const allSchools = await storage.getAllSchools();
+      res.json(allSchools.map((s) => ({ id: s.id, name: s.name })));
+    } catch (error: any) {
+      console.error("List public branches error:", error);
+      res.status(500).json({ error: "Failed to fetch branches" });
+    }
+  });
+
+  // Multer instance for careers uploads (CV / credentials)
+  const careersUpload = multer({
+    storage: multer.memoryStorage(),
+    fileFilter: (_req, file, cb) => {
+      const allowed = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'image/jpeg',
+        'image/png',
+      ];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new Error('Only PDF, Word documents, and JPG/PNG images are allowed'));
+    },
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
+  });
+
+  // Public teacher job application submission (careers page)
+  const careersUploadMiddleware = (req: Request, res: Response, next: NextFunction) => {
+    careersUpload.fields([
+      { name: 'cv', maxCount: 1 },
+      { name: 'credentials', maxCount: 1 },
+    ])(req, res, (err: any) => {
+      if (err) {
+        const msg = err.code === 'LIMIT_FILE_SIZE'
+          ? 'Uploaded file is too large (max 5MB)'
+          : err.message || 'File upload failed';
+        return res.status(400).json({ error: msg });
+      }
+      next();
+    });
+  };
+
+  app.post(
+    "/api/public/careers",
+    careersUploadMiddleware,
+    async (req: Request, res: Response) => {
+      try {
+        // Honeypot: bots fill the hidden "website" field. Pretend success.
+        if (typeof req.body.website === 'string' && req.body.website.trim() !== '') {
+          return res.json({ success: true, message: "Your application has been received." });
+        }
+
+        // Rate limit by IP: max 5 submissions per hour
+        if (!checkRateLimit(`careers:${req.ip}`, 5, 60 * 60 * 1000)) {
+          return res.status(429).json({ error: "Too many submissions. Please try again later." });
+        }
+
+        // multipart/form-data sends everything as strings; parse subjects JSON
+        let subjects: string[] = [];
+        if (req.body.subjects) {
+          try {
+            const parsed = JSON.parse(req.body.subjects);
+            if (Array.isArray(parsed)) subjects = parsed.filter((s: any) => typeof s === 'string');
+          } catch {
+            // ignore malformed subjects; validated below as empty array
+          }
+        }
+
+        const validatedData = insertTeacherApplicationSchema.parse({
+          fullName: req.body.fullName,
+          phone: req.body.phone,
+          email: req.body.email,
+          dateOfBirth: req.body.dateOfBirth || null,
+          gender: req.body.gender || null,
+          homeAddress: req.body.homeAddress || null,
+          position: req.body.position,
+          preferredBranch: req.body.preferredBranch,
+          subjects,
+          otherSubject: req.body.otherSubject || null,
+          yearsOfExperience: req.body.yearsOfExperience !== undefined && req.body.yearsOfExperience !== ''
+            ? req.body.yearsOfExperience
+            : null,
+          availabilityDate: req.body.availabilityDate || null,
+          highestQualification: req.body.highestQualification,
+          institution: req.body.institution || null,
+          teachingCertification: req.body.teachingCertification || null,
+          taughtBefore: req.body.taughtBefore || null,
+          teachingPhilosophy: req.body.teachingPhilosophy || null,
+          motivation: req.body.motivation || null,
+          referenceName: req.body.referenceName,
+          referencePhone: req.body.referencePhone,
+          referenceRelationship: req.body.referenceRelationship,
+        });
+
+        // Required accuracy confirmation
+        if (req.body.confirmAccuracy !== 'true') {
+          return res.status(400).json({ error: "You must confirm that the information provided is accurate." });
+        }
+
+        // Verify file content matches its claimed type (magic bytes) —
+        // client-supplied MIME types alone are not trustworthy.
+        const contentMatchesType = (buf: Buffer): boolean => {
+          if (buf.length < 4) return false;
+          const b = buf.subarray(0, 8);
+          if (b.subarray(0, 4).toString('latin1') === '%PDF') return true; // pdf
+          if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return true; // jpeg
+          if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true; // png
+          if (b[0] === 0x50 && b[1] === 0x4b) return true; // zip container (.docx)
+          if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return true; // legacy .doc
+          return false;
+        };
+
+        // Upload optional files to object storage; store paths only
+        const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
+        for (const field of ['cv', 'credentials'] as const) {
+          const f = files?.[field]?.[0];
+          if (f && !contentMatchesType(f.buffer)) {
+            return res.status(400).json({ error: `The uploaded ${field === 'cv' ? 'CV' : 'credentials'} file is not a valid PDF, Word document, or image.` });
+          }
+        }
+        const objectStorageService = new ObjectStorageService();
+        let cvPath: string | null = null;
+        let credentialsPath: string | null = null;
+        if (files?.cv?.[0]) {
+          cvPath = await objectStorageService.uploadApplicationFile(files.cv[0].buffer, files.cv[0].mimetype);
+        }
+        if (files?.credentials?.[0]) {
+          credentialsPath = await objectStorageService.uploadApplicationFile(files.credentials[0].buffer, files.credentials[0].mimetype);
+        }
+
+        const [application] = await db.insert(teacherApplications).values({
+          ...validatedData,
+          cvPath,
+          credentialsPath,
+        }).returning();
+
+        res.json({ success: true, message: "Your application has been received. Only shortlisted candidates will be contacted.", id: application.id });
+      } catch (error: any) {
+        console.error("Teacher application submission error:", error);
+        if (error.name === "ZodError") {
+          return res.status(400).json({ error: "Invalid form data", details: error.errors });
+        }
+        if (error.message?.includes('allowed')) {
+          return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: "Failed to submit application" });
+      }
+    }
+  );
+
+  // Admin: list teacher applications (careers page submissions)
+  app.get("/api/admin/teacher-applications", authenticate, requirePermission('tab_inquiries'), async (_req: Request, res: Response) => {
+    try {
+      const rows = await db.select().from(teacherApplications).orderBy(desc(teacherApplications.createdAt));
+      res.json(rows);
+    } catch (error: any) {
+      console.error("List teacher applications error:", error);
+      res.status(500).json({ error: "Failed to fetch teacher applications" });
+    }
+  });
+
+  // Admin: mark teacher application as read/unread
+  app.patch("/api/admin/teacher-applications/:id/read", authenticate, requirePermission('tab_inquiries'), async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const isRead = req.body?.isRead === false ? false : true;
+      const [row] = await db.update(teacherApplications)
+        .set({ isRead })
+        .where(eq(teacherApplications.id, id))
+        .returning();
+      if (!row) return res.status(404).json({ error: "Not found" });
+      res.json(row);
+    } catch (error: any) {
+      console.error("Mark teacher application read error:", error);
+      res.status(500).json({ error: "Failed to update teacher application" });
+    }
+  });
+
+  // Admin: download an applicant's uploaded CV or credentials file.
+  // Streams the object server-side (admin-guarded) so applicant documents
+  // never need a public ACL.
+  app.get("/api/admin/teacher-applications/:id/file/:kind", authenticate, requirePermission('tab_inquiries'), async (req: Request, res: Response) => {
+    try {
+      const { id, kind } = req.params;
+      if (kind !== 'cv' && kind !== 'credentials') {
+        return res.status(400).json({ error: "Invalid file kind" });
+      }
+      const [row] = await db.select().from(teacherApplications).where(eq(teacherApplications.id, id));
+      if (!row) return res.status(404).json({ error: "Application not found" });
+      const objectPath = kind === 'cv' ? row.cvPath : row.credentialsPath;
+      if (!objectPath) return res.status(404).json({ error: "No file uploaded for this application" });
+      const objectStorageService = new ObjectStorageService();
+      const file = await objectStorageService.getObjectEntityFile(objectPath);
+      objectStorageService.downloadObject(file, res);
+    } catch (error: any) {
+      console.error("Download teacher application file error:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      res.status(500).json({ error: "Failed to download file" });
     }
   });
 

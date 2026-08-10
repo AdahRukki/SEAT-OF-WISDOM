@@ -238,6 +238,29 @@ export class ObjectStorageService {
     });
   }
 
+  // Uploads a buffer (e.g. an applicant's CV) into the private object dir and
+  // returns the normalized /objects/... path to store in the database.
+  async uploadApplicationFile(
+    buffer: Buffer,
+    contentType: string,
+    prefix: string = "teacher-applications",
+  ): Promise<string> {
+    let privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir.endsWith("/")) {
+      privateObjectDir = `${privateObjectDir}/`;
+    }
+    const entityId = `${prefix}/${randomUUID()}`;
+    const fullPath = `${privateObjectDir}${entityId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+    await file.save(buffer, {
+      contentType,
+      resumable: false,
+    });
+    return `/objects/${entityId}`;
+  }
+
   // Generate a signed URL for an object entity path
   async getSignedUrlForObjectEntity(objectPath: string, ttlSec: number = 3600): Promise<string> {
     const objectFile = await this.getObjectEntityFile(objectPath);

@@ -87,6 +87,7 @@ export default function SchoolContact() {
                 <Link href="/about" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">About</Link>
                 <Link href="/programs" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Programs</Link>
                 <Link href="/admissions" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Admissions</Link>
+                <Link href="/careers" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Careers</Link>
                 <Link href="/contact" className="text-blue-600 dark:text-blue-400 font-medium">Contact</Link>
                 <Link href="/portal">
                   <Button variant="default" className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-portal-login">
@@ -133,6 +134,11 @@ export default function SchoolContact() {
                       <Link href="/admissions" onClick={() => setMobileMenuOpen(false)}>
                         <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-admissions">
                           Admissions
+                        </Button>
+                      </Link>
+                      <Link href="/careers" onClick={() => setMobileMenuOpen(false)}>
+                        <Button variant="ghost" className="w-full justify-start text-lg h-12" data-testid="link-mobile-careers">
+                          Careers
                         </Button>
                       </Link>
                       <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>
