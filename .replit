@@ -41,6 +41,10 @@ args = "Start application"
 task = "workflow.run"
 args = "pdf-parsers"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "assessment-class-guard"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -57,6 +61,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx tsx scripts/test-pdf-parsers.ts"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "assessment-class-guard"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx scripts/test-assessment-class-guard.ts"
 
 [workflows.workflow.metadata]
 isValidation = true
