@@ -202,6 +202,29 @@ async function runMigrations() {
       -- can apply the 'new' rate for that term even after the flip has occurred.
       ALTER TABLE students ADD COLUMN IF NOT EXISTS student_type_flipped_term VARCHAR(50);
       ALTER TABLE students ADD COLUMN IF NOT EXISTS student_type_flipped_session VARCHAR(20);
+      -- Task #234: sub-admin name-change approval workflow.
+      -- Sub-admins cannot apply name edits directly; requests queue here for Main Admin review.
+      CREATE TABLE IF NOT EXISTS student_name_change_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        school_id UUID REFERENCES schools(id),
+        requested_by UUID NOT NULL REFERENCES users(id),
+        old_first_name VARCHAR(100) NOT NULL,
+        old_last_name VARCHAR(100) NOT NULL,
+        old_middle_name VARCHAR(100),
+        new_first_name VARCHAR(100) NOT NULL,
+        new_last_name VARCHAR(100) NOT NULL,
+        new_middle_name VARCHAR(100),
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        reviewed_by UUID REFERENCES users(id),
+        reviewer_notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        reviewed_at TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_student_name_change_requests_status
+        ON student_name_change_requests (status);
+      CREATE INDEX IF NOT EXISTS idx_student_name_change_requests_school_id
+        ON student_name_change_requests (school_id);
     `);
 
     // Self-heal Task #123: any bank_transactions row whose status is not

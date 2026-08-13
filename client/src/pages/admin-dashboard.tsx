@@ -938,6 +938,10 @@ export default function AdminDashboard() {
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [showEditConfirmPassword, setShowEditConfirmPassword] = useState(false);
 
+  // Name-change approval state (Task #234)
+  const [nameChangeReviewNotes, setNameChangeReviewNotes] = useState<Record<string, string>>({});
+  const [nameChangeReviewingId, setNameChangeReviewingId] = useState<string | null>(null);
+
   // Fee type management states
   const [isFeeTypeDialogOpen, setIsFeeTypeDialogOpen] = useState(false);
   const [isEditFeeTypeDialogOpen, setIsEditFeeTypeDialogOpen] = useState(false);
@@ -1392,6 +1396,19 @@ export default function AdminDashboard() {
     },
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
+
+  // Name-change approval queue (Task #234) — Main Admin only; drives the badge + review panel
+  const { data: nameChangeRequests = [], refetch: refetchNameChangeRequests } = useQuery<any[]>({
+    queryKey: ['/api/admin/name-change-requests', 'pending', selectedSchoolId],
+    queryFn: () => {
+      const params = new URLSearchParams({ status: 'pending' });
+      if (user?.role === 'admin' && selectedSchoolId) params.set('schoolId', selectedSchoolId);
+      return apiRequest(`/api/admin/name-change-requests?${params}`);
+    },
+    enabled: user?.role === 'admin' && perm('tab_students'),
+    refetchInterval: 30000, // poll every 30 s for new requests
+  });
+  const pendingNameChangeCount = nameChangeRequests.length;
 
   // User Management queries
   const { data: adminUsers = [] } = useQuery<User[]>({
@@ -2798,10 +2815,14 @@ export default function AdminDashboard() {
       
       return response;
     },
-    onSuccess: () => {
+    onSuccess: (response: any) => {
+      const isPending = response?.pending === true;
       toast({
-        title: "Success",
-        description: "Student details updated successfully"
+        title: isPending ? "Name Change Pending Approval" : "Success",
+        description: isPending
+          ? "Other details were saved. The name change has been submitted for Main Admin approval."
+          : "Student details updated successfully",
+        variant: isPending ? "default" : "default",
       });
       setIsEditStudentDialogOpen(false);
       setEditingStudent(null);
@@ -2836,6 +2857,36 @@ export default function AdminDashboard() {
         variant: "destructive"
       });
     }
+  });
+
+  // Review (approve / reject) a name-change request (Main Admin only)
+  const reviewNameChangeMutation = useMutation({
+    mutationFn: async ({ id, action, reviewerNotes }: { id: string; action: 'approved' | 'rejected'; reviewerNotes?: string }) => {
+      return apiRequest(`/api/admin/name-change-requests/${id}`, {
+        method: 'PATCH',
+        body: { action, reviewerNotes: reviewerNotes || undefined },
+      });
+    },
+    onSuccess: (_data, variables) => {
+      const wasApproved = variables.action === 'approved';
+      toast({
+        title: wasApproved ? "Name Change Approved" : "Name Change Rejected",
+        description: wasApproved
+          ? "The student's name has been updated."
+          : "The name change request has been rejected.",
+      });
+      setNameChangeReviewingId(null);
+      setNameChangeReviewNotes(prev => { const next = { ...prev }; delete next[variables.id]; return next; });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/name-change-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to process name change request",
+        variant: "destructive",
+      });
+    },
   });
 
   // Function to open edit dialog
@@ -4107,9 +4158,14 @@ export default function AdminDashboard() {
               </TabsTrigger>
             )}
             {perm('tab_students') && (
-              <TabsTrigger value="students" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
+              <TabsTrigger value="students" className="relative flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
                 <Users className="h-4 w-4 shrink-0" />
                 <span>Students</span>
+                {user?.role === 'admin' && pendingNameChangeCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white leading-none">
+                    {pendingNameChangeCount > 9 ? '9+' : pendingNameChangeCount}
+                  </span>
+                )}
               </TabsTrigger>
             )}
             {perm('tab_scores') && (
@@ -4387,6 +4443,109 @@ export default function AdminDashboard() {
 
           {/* Students Tab - Class-based viewing */}
           <TabsContent value="students" className="space-y-6 table-container">
+
+            {/* ── Pending Name-Change Requests (Main Admin only) ─────────────── */}
+            {user?.role === 'admin' && pendingNameChangeCount > 0 && (
+              <Card className="border-l-4 border-l-amber-500">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-[11px] font-bold text-white">
+                      {pendingNameChangeCount}
+                    </span>
+                    Pending Name-Change Requests
+                  </CardTitle>
+                  <CardDescription>
+                    Sub-admin name edits require your approval before they are applied to student records.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {nameChangeRequests.map((req: any) => (
+                      <div key={req.id} className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-4 space-y-3">
+                        {/* Header row */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <div className="font-medium text-gray-800 dark:text-gray-200">
+                            Student ID: <span className="font-mono">{req.sowaId ?? req.studentDbId?.slice(0, 8)}</span>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Requested by <strong>{req.requesterFirstName} {req.requesterLastName}</strong>
+                            {req.schoolName ? ` (${req.schoolName})` : ''}
+                            {' · '}
+                            {new Date(req.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        {/* Name diff */}
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div className="space-y-1">
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">First Name</div>
+                            <div className="text-red-600 line-through">{req.oldFirstName}</div>
+                            <div className="text-green-700 font-medium">{req.newFirstName}</div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Name</div>
+                            <div className="text-red-600 line-through">{req.oldLastName}</div>
+                            <div className="text-green-700 font-medium">{req.newLastName}</div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Middle Name</div>
+                            <div className="text-red-600 line-through">{req.oldMiddleName || '—'}</div>
+                            <div className="text-green-700 font-medium">{req.newMiddleName || '—'}</div>
+                          </div>
+                        </div>
+
+                        {/* Reviewer note */}
+                        <div>
+                          <textarea
+                            className="w-full rounded border border-gray-300 dark:border-gray-700 text-xs px-2 py-1 bg-white dark:bg-gray-900 resize-none"
+                            rows={2}
+                            placeholder="Optional note to sub-admin…"
+                            value={nameChangeReviewNotes[req.id] ?? ''}
+                            onChange={(e) => setNameChangeReviewNotes(prev => ({ ...prev, [req.id]: e.target.value }))}
+                          />
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            disabled={reviewNameChangeMutation.isPending && nameChangeReviewingId === req.id}
+                            onClick={() => {
+                              setNameChangeReviewingId(req.id);
+                              reviewNameChangeMutation.mutate({
+                                id: req.id,
+                                action: 'approved',
+                                reviewerNotes: nameChangeReviewNotes[req.id],
+                              });
+                            }}
+                          >
+                            {reviewNameChangeMutation.isPending && nameChangeReviewingId === req.id ? 'Approving…' : 'Approve'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-400 text-red-600 hover:bg-red-50"
+                            disabled={reviewNameChangeMutation.isPending && nameChangeReviewingId === req.id}
+                            onClick={() => {
+                              setNameChangeReviewingId(req.id);
+                              reviewNameChangeMutation.mutate({
+                                id: req.id,
+                                action: 'rejected',
+                                reviewerNotes: nameChangeReviewNotes[req.id],
+                              });
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>

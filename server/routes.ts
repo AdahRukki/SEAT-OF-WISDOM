@@ -1959,15 +1959,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
-      // Update user fields if provided
-      if (firstName !== undefined || lastName !== undefined || middleName !== undefined || email !== undefined || isActive !== undefined) {
+      // ── Sub-admin name-change interception ──────────────────────────────────
+      // Sub-admins cannot apply name edits directly — queue a pending request for
+      // the Main Admin to review. Non-name fields (email, class, etc.) are still
+      // applied immediately; the pending flag is returned in the response so the
+      // client can show the appropriate confirmation message.
+      let nameChangePending = false;
+      if (user.role === 'sub-admin' &&
+          (firstName !== undefined || lastName !== undefined || middleName !== undefined)) {
+        const studentForName = await storage.getStudent(id);
+        const currentUserRec = studentForName?.userId
+          ? await storage.getUserById(studentForName.userId)
+          : null;
+        const actuallyChanged = !!(currentUserRec && (
+          (firstName  !== undefined && firstName  !== currentUserRec.firstName) ||
+          (lastName   !== undefined && lastName   !== currentUserRec.lastName) ||
+          (middleName !== undefined && (middleName || null) !== (currentUserRec.middleName ?? null))
+        ));
+        if (actuallyChanged && currentUserRec && studentForName) {
+          const classForSchool = await storage.getClassById(studentForName.classId);
+          await storage.createNameChangeRequest({
+            studentId: id,
+            schoolId: classForSchool?.schoolId ?? null,
+            requestedBy: user.id,
+            oldFirstName:  currentUserRec.firstName,
+            oldLastName:   currentUserRec.lastName,
+            oldMiddleName: currentUserRec.middleName ?? null,
+            newFirstName:  firstName  ?? currentUserRec.firstName,
+            newLastName:   lastName   ?? currentUserRec.lastName,
+            newMiddleName: middleName !== undefined
+              ? (middleName || null)
+              : (currentUserRec.middleName ?? null),
+          });
+          await logActivity(req, {
+            action: 'name_change_request_submitted',
+            entityType: 'student',
+            entityId: id,
+            schoolId: classForSchool?.schoolId ?? undefined,
+            newData: {
+              requestedFirstName:  firstName,
+              requestedLastName:   lastName,
+              requestedMiddleName: middleName,
+            },
+          });
+          nameChangePending = true;
+        }
+      }
+
+      // Update user fields if provided (name fields skipped for sub-admins — handled above)
+      const applyFirst  = nameChangePending ? undefined : firstName;
+      const applyLast   = nameChangePending ? undefined : lastName;
+      const applyMiddle = nameChangePending ? undefined : middleName;
+      if (applyFirst !== undefined || applyLast !== undefined || applyMiddle !== undefined || email !== undefined || isActive !== undefined) {
         const student = await storage.getStudent(id);
         if (student && student.userId) {
           const userUpdateData: any = {};
-          if (firstName !== undefined) userUpdateData.firstName = firstName;
-          if (lastName !== undefined) userUpdateData.lastName = lastName;
-          if (middleName !== undefined) userUpdateData.middleName = middleName;
-          if (email !== undefined) userUpdateData.email = email;
+          if (applyFirst  !== undefined) userUpdateData.firstName  = applyFirst;
+          if (applyLast   !== undefined) userUpdateData.lastName   = applyLast;
+          if (applyMiddle !== undefined) userUpdateData.middleName = applyMiddle;
+          if (email    !== undefined) userUpdateData.email    = email;
           if (isActive !== undefined) userUpdateData.isActive = isActive;
           
           // Update the user record directly in database
@@ -1999,12 +2049,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
         newData: { ...updateData, ...(updateData.password ? { password: '[redacted]' } : {}) },
       });
 
+      if (nameChangePending) {
+        // 202 Accepted: other fields were applied but the name change is pending approval.
+        return res.status(202).json({
+          ...updatedStudent,
+          pending: true,
+          pendingMessage: "Name change submitted for approval by the Main Admin.",
+        });
+      }
       res.json(updatedStudent);
     } catch (error: any) {
       console.error('Error updating student:', error);
       res.status(500).json({ error: 'Failed to update student' });
     }
   });
+
+  // ── Name-change request endpoints (Task #234) ────────────────────────────
+
+  // List name-change requests. Main Admin sees all (optionally filtered by school);
+  // sub-admins see only their own school's requests.
+  app.get('/api/admin/name-change-requests', authenticate, requirePermission('tab_students'), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const status  = req.query.status  as string | undefined;
+      const schoolId = user.role === 'admin'
+        ? (req.query.schoolId as string | undefined)
+        : user.schoolId;
+      const requests = await storage.getNameChangeRequests({ schoolId, status });
+      res.json(requests);
+    } catch (error) {
+      console.error('Error fetching name change requests:', error);
+      res.status(500).json({ error: 'Failed to fetch name change requests' });
+    }
+  });
+
+  // Approve or reject a name-change request (Main Admin only).
+  app.patch('/api/admin/name-change-requests/:id', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { action, reviewerNotes } = req.body;
+      const user = (req as any).user;
+
+      if (action !== 'approved' && action !== 'rejected') {
+        return res.status(400).json({ error: 'action must be "approved" or "rejected"' });
+      }
+
+      // Fetch the specific request (with student userId) so we can apply the name on approval.
+      const reqResult = await db.execute(sql`
+        SELECT r.id, r.status, r.school_id, r.student_id,
+               r.new_first_name  AS "newFirstName",
+               r.new_last_name   AS "newLastName",
+               r.new_middle_name AS "newMiddleName",
+               s.user_id AS "studentUserId"
+        FROM student_name_change_requests r
+        JOIN students s ON r.student_id = s.id
+        WHERE r.id = ${id}
+          AND r.status = 'pending'
+      `);
+      const reqRows = ((reqResult as any).rows ?? reqResult) as any[];
+
+      if (reqRows.length === 0) {
+        return res.status(404).json({ error: 'Name change request not found or already reviewed' });
+      }
+
+      const row = reqRows[0];
+      const reviewed = await storage.reviewNameChangeRequest(id, {
+        action,
+        reviewedBy: user.id,
+        reviewerNotes,
+        newFirstName:  row.newFirstName,
+        newLastName:   row.newLastName,
+        newMiddleName: row.newMiddleName,
+        studentUserId: row.studentUserId,
+      });
+
+      await logActivity(req, {
+        action: `name_change_request_${action}`,
+        entityType: 'student',
+        entityId: row.student_id,
+        schoolId: row.school_id,
+        newData: {
+          action,
+          reviewerNotes,
+          ...(action === 'approved' ? {
+            appliedFirstName:  row.newFirstName,
+            appliedLastName:   row.newLastName,
+            appliedMiddleName: row.newMiddleName,
+          } : {}),
+        },
+      });
+
+      // Invalidate caches that include student names.
+      res.json(reviewed);
+    } catch (error) {
+      console.error('Error reviewing name change request:', error);
+      res.status(500).json({ error: 'Failed to review name change request' });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
 
   app.get('/api/admin/classes/:classId/students', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {

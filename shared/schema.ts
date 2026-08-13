@@ -307,6 +307,29 @@ export const tuitionClassAmounts = pgTable("tuition_class_amounts", {
 export const STUDENT_TYPES = ['new', 'returning'] as const;
 export type StudentType = typeof STUDENT_TYPES[number];
 
+// Student Name Change Requests table (sub-admin→Main Admin approval workflow)
+// When a sub-admin edits a student's first/last/middle name the change is NOT
+// applied immediately; instead a pending request is created here for review.
+// Main Admins who edit a name bypass this table entirely.
+export const studentNameChangeRequests = pgTable("student_name_change_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  schoolId: uuid("school_id").references(() => schools.id),
+  requestedBy: uuid("requested_by").notNull().references(() => users.id),
+  oldFirstName: varchar("old_first_name", { length: 100 }).notNull(),
+  oldLastName: varchar("old_last_name", { length: 100 }).notNull(),
+  oldMiddleName: varchar("old_middle_name", { length: 100 }),
+  newFirstName: varchar("new_first_name", { length: 100 }).notNull(),
+  newLastName: varchar("new_last_name", { length: 100 }).notNull(),
+  newMiddleName: varchar("new_middle_name", { length: 100 }),
+  // 'pending' = awaiting Main Admin review; 'approved' = applied; 'rejected' = discarded
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id),
+  reviewerNotes: text("reviewer_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
 // Student Fees table (records fees assigned to students)
 export const studentFees = pgTable("student_fees", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

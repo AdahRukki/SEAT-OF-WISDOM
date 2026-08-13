@@ -420,6 +420,24 @@ export interface IStorage {
   updateSchoolBankAccount(id: string, data: Partial<UpsertSchoolBankAccount>): Promise<SchoolBankAccount>;
   deleteSchoolBankAccount(id: string): Promise<void>;
   rerouteUnroutedSmsTransactions(): Promise<number>;
+
+  // Student Name Change Requests (sub-admin → Main Admin approval queue)
+  createNameChangeRequest(data: {
+    studentId: string;
+    schoolId: string | null;
+    requestedBy: string;
+    oldFirstName: string; oldLastName: string; oldMiddleName: string | null;
+    newFirstName: string; newLastName: string; newMiddleName: string | null;
+  }): Promise<any>;
+  getNameChangeRequests(opts?: { schoolId?: string; status?: string }): Promise<any[]>;
+  reviewNameChangeRequest(id: string, data: {
+    action: 'approved' | 'rejected';
+    reviewedBy: string;
+    reviewerNotes?: string;
+    // Applied name — only relevant when action = 'approved'
+    newFirstName?: string; newLastName?: string; newMiddleName?: string | null;
+    studentUserId?: string;
+  }): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5695,6 +5713,99 @@ export class DatabaseStorage implements IStorage {
          AND bt.sms_account = sba.masked_account_number
     `);
     return (result as any).rowCount ?? 0;
+  }
+
+  // ─── Student Name Change Requests ─────────────────────────────────────────
+
+  async createNameChangeRequest(data: {
+    studentId: string;
+    schoolId: string | null;
+    requestedBy: string;
+    oldFirstName: string; oldLastName: string; oldMiddleName: string | null;
+    newFirstName: string; newLastName: string; newMiddleName: string | null;
+  }): Promise<any> {
+    const result = await db.execute(sql`
+      INSERT INTO student_name_change_requests
+        (student_id, school_id, requested_by,
+         old_first_name, old_last_name, old_middle_name,
+         new_first_name, new_last_name, new_middle_name,
+         status)
+      VALUES
+        (${data.studentId}, ${data.schoolId ?? null}, ${data.requestedBy},
+         ${data.oldFirstName}, ${data.oldLastName}, ${data.oldMiddleName ?? null},
+         ${data.newFirstName}, ${data.newLastName}, ${data.newMiddleName ?? null},
+         'pending')
+      RETURNING *
+    `);
+    const rows = ((result as any).rows ?? result) as any[];
+    return rows[0];
+  }
+
+  async getNameChangeRequests(opts: { schoolId?: string; status?: string } = {}): Promise<any[]> {
+    const result = await db.execute(sql`
+      SELECT
+        r.id, r.status, r.created_at AS "createdAt", r.reviewed_at AS "reviewedAt",
+        r.old_first_name AS "oldFirstName", r.old_last_name AS "oldLastName",
+        r.old_middle_name AS "oldMiddleName",
+        r.new_first_name AS "newFirstName", r.new_last_name AS "newLastName",
+        r.new_middle_name AS "newMiddleName",
+        r.reviewer_notes AS "reviewerNotes",
+        -- Student info
+        s.id AS "studentDbId", s.student_id AS "sowaId",
+        -- Requester (sub-admin) info
+        ru.first_name AS "requesterFirstName", ru.last_name AS "requesterLastName",
+        ru.email AS "requesterEmail",
+        -- Reviewer (main admin) info
+        rv.first_name AS "reviewerFirstName", rv.last_name AS "reviewerLastName",
+        -- School info
+        sc.name AS "schoolName"
+      FROM student_name_change_requests r
+      JOIN students s ON r.student_id = s.id
+      JOIN users ru ON r.requested_by = ru.id
+      LEFT JOIN users rv ON r.reviewed_by = rv.id
+      LEFT JOIN schools sc ON r.school_id = sc.id
+      WHERE TRUE
+        ${opts.schoolId ? sql`AND r.school_id = ${opts.schoolId}` : sql``}
+        ${opts.status ? sql`AND r.status = ${opts.status}` : sql``}
+      ORDER BY r.created_at DESC
+    `);
+    return ((result as any).rows ?? result) as any[];
+  }
+
+  async reviewNameChangeRequest(id: string, data: {
+    action: 'approved' | 'rejected';
+    reviewedBy: string;
+    reviewerNotes?: string;
+    newFirstName?: string; newLastName?: string; newMiddleName?: string | null;
+    studentUserId?: string;
+  }): Promise<any> {
+    // Atomically claim the request only if it is still pending, preventing
+    // concurrent reviewers from double-applying or overwriting a decision.
+    const updateResult = await db.execute(sql`
+      UPDATE student_name_change_requests
+      SET status       = ${data.action},
+          reviewed_by  = ${data.reviewedBy},
+          reviewer_notes = ${data.reviewerNotes ?? null},
+          reviewed_at  = NOW()
+      WHERE id = ${id}
+        AND status = 'pending'
+      RETURNING *
+    `);
+    const updatedRows = ((updateResult as any).rows ?? updateResult) as any[];
+    if (updatedRows.length === 0) {
+      throw new Error('Name change request not found or already reviewed');
+    }
+    if (data.action === 'approved' && data.studentUserId) {
+      await db.execute(sql`
+        UPDATE users
+        SET first_name  = ${data.newFirstName ?? null},
+            last_name   = ${data.newLastName ?? null},
+            middle_name = ${data.newMiddleName ?? null},
+            updated_at  = NOW()
+        WHERE id = ${data.studentUserId}
+      `);
+    }
+    return updatedRows[0];
   }
 }
 
