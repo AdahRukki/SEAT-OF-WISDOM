@@ -5,15 +5,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { CheckCircle, Menu, Loader2, Users, TrendingUp, Award, Building2 } from "lucide-react";
+import { CheckCircle, Menu, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import academyLogo from "@assets/academy-logo.png";
 
@@ -23,30 +21,18 @@ const SUBJECT_GROUPS: { group: string; subjects: string[] }[] = [
   { group: "Business", subjects: ["Economics", "Financial Accounting", "Commerce"] },
 ];
 
-const SECONDARY_POSITIONS = ["JSS", "SS", "Subject Specialist"];
+// Subjects section only shown for JSS or SS
+const SECONDARY_POSITIONS = ["JSS", "SS"];
 
 const careersFormSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
   phone: z.string().min(7, "Phone number is required"),
-  email: z.string().email("Please enter a valid email address"),
-  dateOfBirth: z.string().optional(),
-  gender: z.string().optional(),
   homeAddress: z.string().optional(),
   position: z.string().min(1, "Please select a position"),
   preferredBranch: z.string().min(1, "Please select a preferred branch"),
   subjects: z.array(z.string()).default([]),
   otherSubject: z.string().optional(),
-  yearsOfExperience: z.string().optional(),
-  availabilityDate: z.string().optional(),
   highestQualification: z.string().min(1, "Please select your highest qualification"),
-  institution: z.string().optional(),
-  teachingCertification: z.string().optional(),
-  taughtBefore: z.string().optional(),
-  teachingPhilosophy: z.string().optional(),
-  motivation: z.string().optional(),
-  referenceName: z.string().min(2, "Reference name is required"),
-  referencePhone: z.string().min(7, "Reference phone number is required"),
-  referenceRelationship: z.string().min(2, "Reference relationship is required"),
   confirmAccuracy: z.boolean().refine((v) => v === true, {
     message: "You must confirm that the information provided is accurate",
   }),
@@ -59,7 +45,6 @@ export default function SchoolCareers() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [cvFile, setCvFile] = useState<File | null>(null);
-  const [credentialsFile, setCredentialsFile] = useState<File | null>(null);
   const { toast } = useToast();
 
   const { data: branches = [] } = useQuery<{ id: string; name: string }[]>({
@@ -71,25 +56,12 @@ export default function SchoolCareers() {
     defaultValues: {
       fullName: "",
       phone: "",
-      email: "",
-      dateOfBirth: "",
-      gender: "",
       homeAddress: "",
       position: "",
       preferredBranch: "",
       subjects: [],
       otherSubject: "",
-      yearsOfExperience: "",
-      availabilityDate: "",
       highestQualification: "",
-      institution: "",
-      teachingCertification: "",
-      taughtBefore: "",
-      teachingPhilosophy: "",
-      motivation: "",
-      referenceName: "",
-      referencePhone: "",
-      referenceRelationship: "",
       confirmAccuracy: false,
       website: "",
     },
@@ -103,29 +75,15 @@ export default function SchoolCareers() {
       const fd = new FormData();
       fd.append("fullName", data.fullName);
       fd.append("phone", data.phone);
-      fd.append("email", data.email);
-      if (data.dateOfBirth) fd.append("dateOfBirth", data.dateOfBirth);
-      if (data.gender) fd.append("gender", data.gender);
       if (data.homeAddress) fd.append("homeAddress", data.homeAddress);
       fd.append("position", data.position);
       fd.append("preferredBranch", data.preferredBranch);
       fd.append("subjects", JSON.stringify(showSubjects ? data.subjects : []));
       if (showSubjects && data.otherSubject) fd.append("otherSubject", data.otherSubject);
-      if (data.yearsOfExperience) fd.append("yearsOfExperience", data.yearsOfExperience);
-      if (data.availabilityDate) fd.append("availabilityDate", data.availabilityDate);
       fd.append("highestQualification", data.highestQualification);
-      if (data.institution) fd.append("institution", data.institution);
-      if (data.teachingCertification) fd.append("teachingCertification", data.teachingCertification);
-      if (data.taughtBefore) fd.append("taughtBefore", data.taughtBefore);
-      if (data.teachingPhilosophy) fd.append("teachingPhilosophy", data.teachingPhilosophy);
-      if (data.motivation) fd.append("motivation", data.motivation);
-      fd.append("referenceName", data.referenceName);
-      fd.append("referencePhone", data.referencePhone);
-      fd.append("referenceRelationship", data.referenceRelationship);
       fd.append("confirmAccuracy", data.confirmAccuracy ? "true" : "false");
       if (data.website) fd.append("website", data.website);
       if (cvFile) fd.append("cv", cvFile);
-      if (credentialsFile) fd.append("credentials", credentialsFile);
 
       const res = await fetch("/api/public/careers", { method: "POST", body: fd });
       if (!res.ok) {
@@ -143,7 +101,6 @@ export default function SchoolCareers() {
       });
       form.reset();
       setCvFile(null);
-      setCredentialsFile(null);
     },
     onError: (error: any) => {
       toast({
@@ -258,47 +215,14 @@ export default function SchoolCareers() {
       </section>
 
       {/* Why Teach With Us */}
-      <section className="py-20 bg-white dark:bg-gray-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-why-teach-title">
-              Why Teach With Us
-            </h2>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <Card className="text-center p-8 hover:shadow-lg transition-shadow" data-testid="card-why-environment">
-              <div className="mx-auto bg-blue-100 dark:bg-blue-900 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-6">
-                <Users className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-              </div>
-              <CardDescription className="text-lg text-gray-700 dark:text-gray-300">
-                A supportive and professional working environment
-              </CardDescription>
-            </Card>
-            <Card className="text-center p-8 hover:shadow-lg transition-shadow" data-testid="card-why-growth">
-              <div className="mx-auto bg-green-100 dark:bg-green-900 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-6">
-                <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
-              </div>
-              <CardDescription className="text-lg text-gray-700 dark:text-gray-300">
-                Opportunities for growth across multiple branches
-              </CardDescription>
-            </Card>
-            <Card className="text-center p-8 hover:shadow-lg transition-shadow" data-testid="card-why-culture">
-              <div className="mx-auto bg-purple-100 dark:bg-purple-900 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-6">
-                <Award className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-              </div>
-              <CardDescription className="text-lg text-gray-700 dark:text-gray-300">
-                A school culture rooted in discipline, excellence, and character formation
-              </CardDescription>
-            </Card>
-            <Card className="text-center p-8 hover:shadow-lg transition-shadow" data-testid="card-why-facilities">
-              <div className="mx-auto bg-orange-100 dark:bg-orange-900 rounded-full p-4 w-16 h-16 flex items-center justify-center mb-6">
-                <Building2 className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-              </div>
-              <CardDescription className="text-lg text-gray-700 dark:text-gray-300">
-                Modern facilities and a structured curriculum
-              </CardDescription>
-            </Card>
-          </div>
+      <section className="py-16 bg-white dark:bg-gray-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4" data-testid="text-why-teach-title">
+            Why Teach With Us
+          </h2>
+          <p className="text-lg text-gray-600 dark:text-gray-300" data-testid="text-why-teach-summary">
+            Supportive environment &bull; Growth across branches &bull; Strong values-based culture &bull; Modern facilities
+          </p>
         </div>
       </section>
 
@@ -391,59 +315,12 @@ export default function SchoolCareers() {
                       />
                       <FormField
                         control={form.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Email Address *</FormLabel>
-                            <FormControl>
-                              <Input type="email" placeholder="your.email@example.com" {...field} data-testid="input-email" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="dateOfBirth"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Date of Birth</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} data-testid="input-date-of-birth" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="gender"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Gender</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid="select-gender">
-                                  <SelectValue placeholder="Select gender" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="Male">Male</SelectItem>
-                                <SelectItem value="Female">Female</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
                         name="homeAddress"
                         render={({ field }) => (
-                          <FormItem>
+                          <FormItem className="md:col-span-2">
                             <FormLabel>Home Address</FormLabel>
                             <FormControl>
-                              <Input placeholder="Enter your home address" {...field} data-testid="input-home-address" />
+                              <Input placeholder="Enter your home address (optional)" {...field} data-testid="input-home-address" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -473,7 +350,6 @@ export default function SchoolCareers() {
                                 <SelectItem value="Primary">Primary</SelectItem>
                                 <SelectItem value="JSS">JSS</SelectItem>
                                 <SelectItem value="SS">SS</SelectItem>
-                                <SelectItem value="Subject Specialist">Subject Specialist</SelectItem>
                               </SelectContent>
                             </Select>
                             <FormMessage />
@@ -568,35 +444,6 @@ export default function SchoolCareers() {
                         </div>
                       </div>
                     )}
-
-                    <div className="grid md:grid-cols-2 gap-6 mt-6">
-                      <FormField
-                        control={form.control}
-                        name="yearsOfExperience"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Years of Teaching Experience</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" placeholder="e.g. 3" {...field} data-testid="input-years-experience" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="availabilityDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Availability to Resume</FormLabel>
-                            <FormControl>
-                              <Input type="date" {...field} data-testid="input-availability-date" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
                   </div>
 
                   {/* Qualifications */}
@@ -627,35 +474,6 @@ export default function SchoolCareers() {
                           </FormItem>
                         )}
                       />
-                      <FormField
-                        control={form.control}
-                        name="institution"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Institution Attended</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Name of institution" {...field} data-testid="input-institution" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="teachingCertification"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Teaching Certification (if any)</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g. TRCN registration" {...field} data-testid="input-teaching-certification" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-6 mt-6">
                       <div>
                         <label className="text-sm font-medium text-gray-900 dark:text-white block mb-1">
                           Upload CV/Resume
@@ -671,121 +489,6 @@ export default function SchoolCareers() {
                         />
                         {cvFile && <p className="text-sm text-green-600 mt-1">Selected: {cvFile.name}</p>}
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-900 dark:text-white block mb-1">
-                          Upload Credentials/Certificates (optional)
-                        </label>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                          PDF, Word, or image files up to 5MB.
-                        </p>
-                        <Input
-                          type="file"
-                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                          onChange={(e) => setCredentialsFile(e.target.files?.[0] || null)}
-                          data-testid="input-credentials-upload"
-                        />
-                        {credentialsFile && <p className="text-sm text-green-600 mt-1">Selected: {credentialsFile.name}</p>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Additional Information */}
-                  <div className="pt-6 border-t">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Additional Information</h3>
-                    <FormField
-                      control={form.control}
-                      name="taughtBefore"
-                      render={({ field }) => (
-                        <FormItem className="mb-6">
-                          <FormLabel>Have you taught this subject/level before?</FormLabel>
-                          <FormControl>
-                            <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-6 mt-2">
-                              <FormItem className="flex items-center space-x-2 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="Yes" data-testid="radio-taught-before-yes" />
-                                </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">Yes</FormLabel>
-                              </FormItem>
-                              <FormItem className="flex items-center space-x-2 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="No" data-testid="radio-taught-before-no" />
-                                </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">No</FormLabel>
-                              </FormItem>
-                            </RadioGroup>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="teachingPhilosophy"
-                      render={({ field }) => (
-                        <FormItem className="mb-6">
-                          <FormLabel>Briefly describe your teaching philosophy or approach</FormLabel>
-                          <FormControl>
-                            <Textarea rows={4} placeholder="Your teaching philosophy..." {...field} data-testid="textarea-teaching-philosophy" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="motivation"
-                      render={({ field }) => (
-                        <FormItem className="mb-6">
-                          <FormLabel>Why do you want to join Seat of Wisdom Academy?</FormLabel>
-                          <FormControl>
-                            <Textarea rows={4} placeholder="Tell us why you'd like to join our team..." {...field} data-testid="textarea-motivation" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Reference Contact *</h4>
-                    <div className="grid md:grid-cols-3 gap-6">
-                      <FormField
-                        control={form.control}
-                        name="referenceName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Name *</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Reference full name" {...field} data-testid="input-reference-name" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="referencePhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Phone *</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Reference phone number" {...field} data-testid="input-reference-phone" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="referenceRelationship"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Relationship *</FormLabel>
-                            <FormControl>
-                              <Input placeholder="e.g. Former principal" {...field} data-testid="input-reference-relationship" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
                     </div>
                   </div>
 

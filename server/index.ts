@@ -153,6 +153,21 @@ async function runMigrations() {
       -- Task #222: teacher-application hiring workflow fields.
       ALTER TABLE teacher_applications ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'New';
       ALTER TABLE teacher_applications ADD COLUMN IF NOT EXISTS admin_notes TEXT;
+      -- Simplified careers form: drop removed fields (safe — data already migrated or not collected).
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS email;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS date_of_birth;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS gender;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS years_of_experience;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS availability_date;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS institution;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS teaching_certification;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS credentials_path;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS taught_before;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS teaching_philosophy;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS motivation;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS reference_name;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS reference_phone;
+      ALTER TABLE teacher_applications DROP COLUMN IF EXISTS reference_relationship;
       -- Task #215: generalise payment_audit_logs into the full Activity Log.
       ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_role VARCHAR(30);
       ALTER TABLE payment_audit_logs ADD COLUMN IF NOT EXISTS actor_name VARCHAR(200);

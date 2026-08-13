@@ -201,7 +201,7 @@ export function InquiriesManagement() {
     }
     if (taSearch.trim()) {
       const q = taSearch.trim().toLowerCase();
-      const hay = [t.fullName, t.email, t.phone, t.preferredBranch, t.position, ...(t.subjects || [])].join(" ").toLowerCase();
+      const hay = [t.fullName, t.phone, t.preferredBranch, t.position, ...(t.subjects || [])].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -209,15 +209,13 @@ export function InquiriesManagement() {
 
   const exportTeacherApps = () => {
     const headers = [
-      "Applied", "Full Name", "Phone", "Email", "Position", "Preferred Branch", "Subjects",
-      "Years of Experience", "Highest Qualification", "Institution", "Teaching Certification",
-      "Availability", "Status", "Notes",
+      "Applied", "Full Name", "Phone", "Home Address", "Position", "Preferred Branch", "Subjects",
+      "Highest Qualification", "Status", "Notes",
     ];
     const rows = filteredTeacherApps.map((t) => [
-      formatDateTime(t.createdAt), t.fullName, t.phone, t.email, t.position, t.preferredBranch,
+      formatDateTime(t.createdAt), t.fullName, t.phone, t.homeAddress ?? "", t.position, t.preferredBranch,
       [...(t.subjects || []), ...(t.otherSubject ? [t.otherSubject] : [])].join("; "),
-      t.yearsOfExperience ?? "", t.highestQualification, t.institution ?? "", t.teachingCertification ?? "",
-      t.availabilityDate ?? "", t.status || "New", t.adminNotes ?? "",
+      t.highestQualification, t.status || "New", t.adminNotes ?? "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map(csvEscape).join(",")).join("\r\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
@@ -637,22 +635,15 @@ export function InquiriesManagement() {
               <div className="text-xs font-semibold text-muted-foreground uppercase">Personal Information</div>
               <DetailRow label="Full Name" value={selectedTeacherApp.fullName} />
               <DetailRow label="Phone" value={selectedTeacherApp.phone} />
-              <DetailRow label="Email" value={selectedTeacherApp.email} />
-              <DetailRow label="Date of Birth" value={selectedTeacherApp.dateOfBirth || "—"} />
-              <DetailRow label="Gender" value={selectedTeacherApp.gender || "—"} />
               <DetailRow label="Home Address" value={selectedTeacherApp.homeAddress || "—"} />
               <Separator />
               <div className="text-xs font-semibold text-muted-foreground uppercase">Position</div>
               <DetailRow label="Position" value={selectedTeacherApp.position} />
               <DetailRow label="Preferred Branch" value={selectedTeacherApp.preferredBranch} />
               <DetailRow label="Subjects" value={[...(selectedTeacherApp.subjects || []), ...(selectedTeacherApp.otherSubject ? [selectedTeacherApp.otherSubject] : [])].join(", ") || "—"} />
-              <DetailRow label="Years of Experience" value={selectedTeacherApp.yearsOfExperience != null ? String(selectedTeacherApp.yearsOfExperience) : "—"} />
-              <DetailRow label="Available From" value={selectedTeacherApp.availabilityDate || "—"} />
               <Separator />
               <div className="text-xs font-semibold text-muted-foreground uppercase">Qualifications</div>
               <DetailRow label="Highest Qualification" value={selectedTeacherApp.highestQualification} />
-              <DetailRow label="Institution" value={selectedTeacherApp.institution || "—"} />
-              <DetailRow label="Teaching Certification" value={selectedTeacherApp.teachingCertification || "—"} />
               <div className="flex gap-2 flex-wrap">
                 <Button
                   variant="outline"
@@ -664,37 +655,7 @@ export function InquiriesManagement() {
                   {downloadingFile === `${selectedTeacherApp.id}:cv` ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
                   {selectedTeacherApp.cvPath ? "Download CV" : "No CV uploaded"}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!selectedTeacherApp.credentialsPath || downloadingFile === `${selectedTeacherApp.id}:credentials`}
-                  onClick={() => downloadApplicationFile(selectedTeacherApp, "credentials")}
-                  data-testid="button-download-credentials"
-                >
-                  {downloadingFile === `${selectedTeacherApp.id}:credentials` ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-                  {selectedTeacherApp.credentialsPath ? "Download Credentials" : "No credentials uploaded"}
-                </Button>
               </div>
-              <Separator />
-              <div className="text-xs font-semibold text-muted-foreground uppercase">Additional Information</div>
-              <DetailRow label="Taught Before" value={selectedTeacherApp.taughtBefore || "—"} />
-              {selectedTeacherApp.teachingPhilosophy && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase mb-1">Teaching Philosophy</div>
-                  <div className="whitespace-pre-wrap bg-muted/40 rounded p-3">{selectedTeacherApp.teachingPhilosophy}</div>
-                </div>
-              )}
-              {selectedTeacherApp.motivation && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase mb-1">Motivation</div>
-                  <div className="whitespace-pre-wrap bg-muted/40 rounded p-3">{selectedTeacherApp.motivation}</div>
-                </div>
-              )}
-              <Separator />
-              <div className="text-xs font-semibold text-muted-foreground uppercase">Reference</div>
-              <DetailRow label="Name" value={selectedTeacherApp.referenceName} />
-              <DetailRow label="Phone" value={selectedTeacherApp.referencePhone} />
-              <DetailRow label="Relationship" value={selectedTeacherApp.referenceRelationship} />
               <Separator />
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Internal Notes</div>

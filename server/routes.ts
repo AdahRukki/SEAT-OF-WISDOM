@@ -5917,6 +5917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   };
 
+  // Only CV upload is accepted after the form simplification
   app.post(
     "/api/public/careers",
     careersUploadMiddleware,
@@ -5946,27 +5947,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const validatedData = insertTeacherApplicationSchema.parse({
           fullName: req.body.fullName,
           phone: req.body.phone,
-          email: req.body.email,
-          dateOfBirth: req.body.dateOfBirth || null,
-          gender: req.body.gender || null,
           homeAddress: req.body.homeAddress || null,
           position: req.body.position,
           preferredBranch: req.body.preferredBranch,
           subjects,
           otherSubject: req.body.otherSubject || null,
-          yearsOfExperience: req.body.yearsOfExperience !== undefined && req.body.yearsOfExperience !== ''
-            ? req.body.yearsOfExperience
-            : null,
-          availabilityDate: req.body.availabilityDate || null,
           highestQualification: req.body.highestQualification,
-          institution: req.body.institution || null,
-          teachingCertification: req.body.teachingCertification || null,
-          taughtBefore: req.body.taughtBefore || null,
-          teachingPhilosophy: req.body.teachingPhilosophy || null,
-          motivation: req.body.motivation || null,
-          referenceName: req.body.referenceName,
-          referencePhone: req.body.referencePhone,
-          referenceRelationship: req.body.referenceRelationship,
         });
 
         // Required accuracy confirmation

@@ -1,0 +1,78 @@
+Here's the full combined brief, ready to paste into Replit:
+
+---
+
+**PROMPT FOR REPLIT:**
+
+**PART 1: Update the existing Careers page (seatofwisdomacademy.com/careers)**
+
+**1a. "Why Teach With Us" section — simplify**
+Remove the 4 separate icon cards. Replace with a single short line of text under the "Why Teach With Us" heading:
+
+> Supportive environment • Growth across branches • Strong values-based culture • Modern facilities
+
+**1b. Application Form — reduce to these fields only**
+
+Final field list for the Careers form:
+1. **Full Name** — text, required
+2. **Phone Number** — text, required
+3. **Home Address** — text, optional
+4. **Position Applied For** — dropdown (Nursery, Primary, JSS, SS), required
+5. **Preferred Branch** — dropdown, required
+6. **Subjects You Can Teach** — only show this section when Position Applied For = JSS or SS. Grouped checkboxes:
+   - Sciences: Mathematics, Physics, Chemistry, Biology
+   - Arts/Humanities: English Language, Literature-in-English, Government, History, CRS, French
+   - Business: Economics, Financial Accounting, Commerce
+   - Other Subject (text field, optional)
+7. **Highest Educational Qualification** — dropdown (NCE, B.Ed/B.A/B.Sc, PGDE, M.Ed, Other), required
+8. **Upload CV/Resume** — file upload, optional (label: "Optional — if you don't have a CV, just fill the fields above")
+9. **Consent checkbox** — required — "I confirm that the information provided is accurate and true."
+10. Submit button — labeled "Submit Application"
+
+**Explicitly remove:** Email Address, Date of Birth, Gender, Institution Attended, Teaching Certification, Years of Teaching Experience, Availability to Resume, Upload Credentials/Certificates, "Have you taught this subject/level before" Yes/No, Teaching philosophy textarea, Why do you want to join textarea, Reference Contact fields.
+
+**1c. Keep unchanged:** Page header/intro text, "Current Openings" section, thank-you confirmation message on submit, mobile responsiveness, spam protection (honeypot/captcha).
+
+---
+
+**PART 2: Build a dynamic Form Builder feature for the admin portal**
+
+Purpose: let the admin create, edit, and manage multiple forms (Careers, future forms like Admissions, Event Registration, etc.) without needing code changes. Each new form automatically becomes its own live page at a chosen URL — no separate page-building step needed.
+
+**2a. Database schema**
+- `forms` table: `id`, `title`, `slug` (URL path, e.g. "careers"), `description`, `is_active`, `created_at`
+- `form_fields` table: `id`, `form_id` (FK), `label`, `field_type` (text, textarea, number, date, dropdown, checkbox_group, radio, file_upload), `options` (JSON array, for dropdown/checkbox/radio choices), `is_required`, `display_order`, `conditional_logic` (JSON, optional — e.g. "only show if field X = value Y")
+- `form_submissions` table: `id`, `form_id` (FK), `submitted_at`, `data` (JSON — stores all field responses keyed by field label/id), `file_paths` (JSON, for any uploaded files)
+
+**2b. Admin UI — Form Builder**
+- List view: all forms created, with Active/Inactive toggle, Edit, Delete, "View Submissions" buttons
+- "Create New Form" button — prompts for Title + URL slug (this slug becomes the live page URL automatically, e.g. `/admissions`)
+- Form editor page:
+  - Add Field button — choose field type, label, required toggle, options (for dropdown/checkbox/radio)
+  - Reorder fields via drag-and-drop
+  - Delete field button per field
+  - Conditional logic option: "Show this field only if [other field] = [value]"
+  - Save/Publish button
+
+**2c. Public-facing form renderer**
+- Dynamically renders whatever form matches the URL slug — creating a new form automatically creates its page, no manual page coding needed
+- Renders fields in `display_order`, respecting `is_required` and `conditional_logic`
+- On submit, saves response into `form_submissions`, with file uploads stored in file storage and paths saved in `file_paths`
+- Shows thank-you confirmation message after submit
+
+**2d. Admin — View Submissions**
+- Table view per form, sortable/filterable by any field
+- Export to CSV button
+- Mark submission as Reviewed / Shortlisted / Rejected (status field)
+
+**2e. Migrate the existing Careers form**
+Once the form builder is working, migrate the Careers form (from Part 1) into this new system as the first form entry, so it's managed the same way as future forms.
+
+**2f. Technical notes**
+- Keep consistent with existing stack: Node.js/Express, PostgreSQL, Drizzle ORM, React/TypeScript
+- Mobile-responsive on both admin builder and public-facing forms
+- Reuse existing file upload handling for the file_upload field type
+
+---
+
+Want this split into two separate Replit prompts (Part 1 first as a quick fix, Part 2 as a bigger follow-up project), or is one combined brief fine to hand over as-is?

@@ -380,32 +380,17 @@ export const teacherApplications = pgTable("teacher_applications", {
   // Personal information
   fullName: varchar("full_name", { length: 200 }).notNull(),
   phone: varchar("phone", { length: 30 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull(),
-  dateOfBirth: varchar("date_of_birth", { length: 20 }),
-  gender: varchar("gender", { length: 20 }),
   homeAddress: text("home_address"),
   // Position details
-  position: varchar("position", { length: 50 }).notNull(), // Nursery, Primary, JSS, SS, Subject Specialist
+  position: varchar("position", { length: 50 }).notNull(), // Nursery, Primary, JSS, SS
   preferredBranch: varchar("preferred_branch", { length: 200 }).notNull(),
-  subjects: jsonb("subjects").$type<string[]>().default([]), // selected subject checkboxes
+  subjects: jsonb("subjects").$type<string[]>().default([]), // selected subject checkboxes (JSS/SS only)
   otherSubject: varchar("other_subject", { length: 200 }),
-  yearsOfExperience: integer("years_of_experience"),
-  availabilityDate: varchar("availability_date", { length: 20 }),
   // Qualifications
   highestQualification: varchar("highest_qualification", { length: 50 }).notNull(),
-  institution: varchar("institution", { length: 200 }),
-  teachingCertification: varchar("teaching_certification", { length: 200 }),
   cvPath: text("cv_path"), // object storage path, not raw file
-  credentialsPath: text("credentials_path"),
-  // Additional information
-  taughtBefore: varchar("taught_before", { length: 10 }), // Yes / No
-  teachingPhilosophy: text("teaching_philosophy"),
-  motivation: text("motivation"),
-  referenceName: varchar("reference_name", { length: 200 }).notNull(),
-  referencePhone: varchar("reference_phone", { length: 30 }).notNull(),
-  referenceRelationship: varchar("reference_relationship", { length: 100 }).notNull(),
   isRead: boolean("is_read").default(false),
-  // Task #222: hiring workflow
+  // Hiring workflow
   status: varchar("status", { length: 30 }).notNull().default("New"), // New, Under Review, Shortlisted, Interviewed, Hired, Rejected
   adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1154,21 +1139,17 @@ export type InsertAdmissionsApplication = z.infer<typeof insertAdmissionsApplica
 export const insertTeacherApplicationSchema = createInsertSchema(teacherApplications, {
   fullName: z.string().min(2, "Full name is required"),
   phone: z.string().min(7, "Phone number is required"),
-  email: z.string().email("A valid email address is required"),
   position: z.string().min(1, "Position applied for is required"),
   preferredBranch: z.string().min(1, "Preferred branch is required"),
   highestQualification: z.string().min(1, "Highest qualification is required"),
-  referenceName: z.string().min(2, "Reference name is required"),
-  referencePhone: z.string().min(7, "Reference phone is required"),
-  referenceRelationship: z.string().min(2, "Reference relationship is required"),
   subjects: z.array(z.string()).default([]),
-  yearsOfExperience: z.coerce.number().int().min(0).optional().nullable(),
 }).omit({
   id: true,
   isRead: true,
+  status: true,
+  adminNotes: true,
   createdAt: true,
   cvPath: true,
-  credentialsPath: true,
 });
 
 export type TeacherApplication = typeof teacherApplications.$inferSelect;
