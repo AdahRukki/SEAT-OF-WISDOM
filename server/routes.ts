@@ -1816,6 +1816,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newUser = await storage.createUser(userData);
       
+      // Sub-admins may only register new students. Returning-student registration
+      // is a higher-stakes action reserved for the Main Admin.
+      if (req.body.studentType === 'returning' && user.role !== 'admin') {
+        // Clean up the orphan user we already created before rejecting.
+        await storage.deleteUser(newUser.id).catch(() => {});
+        return res.status(403).json({ error: "Sub-admins cannot register returning students. Only the Main Admin can register a student as Returning." });
+      }
+
       // Then create the student record - studentId will be auto-generated with gap-filling
       const studentData = insertStudentSchema.parse({
         userId: newUser.id,
@@ -1828,7 +1836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parentWhatsapp: parentWhatsApp,
         address: address || '',
         clientRequestId: clientRequestId || null,
-        studentType: (req.body.studentType === 'returning' ? 'returning' : 'new'), // default new
+        studentType: req.body.studentType === 'returning' ? 'returning' : 'new',
       });
 
       let student;

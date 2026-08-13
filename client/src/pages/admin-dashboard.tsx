@@ -7402,27 +7402,43 @@ export default function AdminDashboard() {
                   {/* Student Type selector */}
                   <div>
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Student Type</Label>
-                    <div className="mt-1 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleStudentFormChange('studentType', 'new')}
-                        className={`flex-1 py-2 rounded-md text-sm font-medium border transition-colors ${studentCreationForm.studentType === 'new' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-400'}`}
-                      >
-                        New Student
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleStudentFormChange('studentType', 'returning')}
-                        className={`flex-1 py-2 rounded-md text-sm font-medium border transition-colors ${studentCreationForm.studentType === 'returning' ? 'bg-green-600 text-white border-green-600' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-green-400'}`}
-                      >
-                        Returning Student
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {studentCreationForm.studentType === 'new'
-                        ? "New students may qualify for a different tuition rate. They are automatically reclassified as Returning after their first term's payment is confirmed."
-                        : "Returning students use the standard returning-student tuition rate."}
-                    </p>
+                    {user?.role === 'sub-admin' ? (
+                      // Sub-admins can only register new students — show a locked read-only badge.
+                      <div className="mt-1">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+                          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">New Student</span>
+                          <span className="ml-auto text-[10px] text-blue-500 dark:text-blue-400 uppercase tracking-wide">locked</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Only the Main Admin can register a student as Returning. Sub-admins may only register new students.
+                        </p>
+                      </div>
+                    ) : (
+                      // Main Admin: full New / Returning selector.
+                      <>
+                        <div className="mt-1 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleStudentFormChange('studentType', 'new')}
+                            className={`flex-1 py-2 rounded-md text-sm font-medium border transition-colors ${studentCreationForm.studentType === 'new' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-400'}`}
+                          >
+                            New Student
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudentFormChange('studentType', 'returning')}
+                            className={`flex-1 py-2 rounded-md text-sm font-medium border transition-colors ${studentCreationForm.studentType === 'returning' ? 'bg-green-600 text-white border-green-600' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-green-400'}`}
+                          >
+                            Returning Student
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {studentCreationForm.studentType === 'new'
+                            ? "New students may qualify for a different tuition rate. They are automatically reclassified as Returning after their first term's payment is confirmed."
+                            : "Returning students use the standard returning-student tuition rate."}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
