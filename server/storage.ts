@@ -196,7 +196,7 @@ export interface IStorage {
   updateFeeType(id: string, data: Partial<InsertFeeType>): Promise<FeeType>;
   deleteFeeType(id: string): Promise<void>;
   getTuitionClassAmounts(feeTypeId: string, term?: string, session?: string): Promise<TuitionClassAmount[]>;
-  upsertTuitionClassAmounts(feeTypeId: string, amounts: { classId: string; amount: string }[], term?: string, session?: string): Promise<TuitionClassAmount[]>;
+  upsertTuitionClassAmounts(feeTypeId: string, amounts: { classId: string; amount: string; studentType?: string | null }[], term?: string, session?: string): Promise<TuitionClassAmount[]>;
   
   assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee>;
   assignFeeToClass(classId: string, feeTypeId: string, term: string, session: string, dueDate: string, notes?: string): Promise<StudentFee[]>;
@@ -1338,12 +1338,12 @@ export class DatabaseStorage implements IStorage {
 
   async upsertTuitionClassAmounts(
     feeTypeId: string,
-    amounts: { classId: string; amount: string }[],
+    amounts: { classId: string; amount: string; studentType?: string | null }[],
     term?: string,
     session?: string
   ): Promise<TuitionClassAmount[]> {
-    // Delete only the rows matching this exact scope so global and
-    // term/session-scoped rows can coexist:
+    // Delete all rows matching this exact scope (term/session pair) so that the
+    // incoming payload always represents the full picture for that scope.
     //   - global save (no term, no session) -> delete only (term IS NULL AND session IS NULL)
     //   - scoped save (term & session present) -> delete only (term=? AND session=?)
     await db.delete(tuitionClassAmounts).where(
@@ -1360,8 +1360,47 @@ export class DatabaseStorage implements IStorage {
       amount: a.amount,
       term: term || null,
       session: session || null,
+      studentType: a.studentType ?? null,
     }));
-    return await db.insert(tuitionClassAmounts).values(rows).returning();
+    return await db.insert(tuitionClassAmounts).values(rows as any).returning();
+  }
+
+  /**
+   * Build a fast per-student tuition resolver from a flat list of
+   * tuition_class_amounts rows (fetched once per query).
+   * Priority: scoped+typed > scoped+universal > global+typed > global+universal
+   */
+  private buildTuitionResolver(
+    allRows: any[],
+    term?: string | null,
+    session?: string | null,
+  ): (classId: string, studentType: string | null) => number {
+    // Pre-index: key = `classId:studentType:term:session`
+    const idx = new Map<string, number>();
+    for (const r of allRows) {
+      const st = r.studentType ?? r.student_type ?? null; // handle both camel and snake case
+      const t  = r.term ?? null;
+      const s  = r.session ?? null;
+      const key = `${r.classId ?? r.class_id}:${st ?? ''}:${t ?? ''}:${s ?? ''}`;
+      idx.set(key, Number(r.amount));
+    }
+    return (classId: string, studentType: string | null): number => {
+      const t = term ?? null;
+      const s = session ?? null;
+      if (t && s) {
+        if (studentType) {
+          const v = idx.get(`${classId}:${studentType}:${t}:${s}`);
+          if (v !== undefined) return v;
+        }
+        const v = idx.get(`${classId}::${t}:${s}`);
+        if (v !== undefined) return v;
+      }
+      if (studentType) {
+        const v = idx.get(`${classId}:${studentType}::` );
+        if (v !== undefined) return v;
+      }
+      return idx.get(`${classId}:::`) ?? 0;
+    };
   }
 
   async assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee> {
@@ -1647,6 +1686,9 @@ export class DatabaseStorage implements IStorage {
         s.class_id AS "classId",
         s.parent_whatsapp AS "parentWhatsapp",
         s.discount AS "discount",
+        ${term && session
+          ? sql`CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term} AND s.student_type_flipped_session = ${session} THEN 'new' ELSE COALESCE(s.student_type, 'returning') END AS "studentType"`
+          : sql`COALESCE(s.student_type, 'returning') AS "studentType"`},
         (
           COALESCE((
             SELECT SUM(fpr.amount) FROM fee_payment_records fpr
@@ -1711,7 +1753,7 @@ export class DatabaseStorage implements IStorage {
       JOIN users u ON s.user_id = u.id
       LEFT JOIN classes c ON s.class_id = c.id
       WHERE ${studentWhereClause}
-      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id, s.parent_whatsapp, s.discount
+      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id, s.parent_whatsapp, s.discount, s.student_type
       ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
     `);
 
@@ -1722,35 +1764,24 @@ export class DatabaseStorage implements IStorage {
     `);
     const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
 
-    const tuitionMap = new Map<string, number>();
     let hasGlobalTuition = false;
     let hasScopedTuition = false;
+    let tuitionResolver: (classId: string, studentType: string | null) => number = () => 0;
     if (tuitionFee) {
       // Resolve per-class tuition: term/session-specific rows override
       // global (NULL term/session) rows. This avoids "—" in the ledger when
       // tuition was set up without a scope but the caller passes term/session.
       const allRows = await this.getTuitionClassAmounts(tuitionFee.id);
-      for (const ta of allRows) {
-        if (ta.term === null && ta.session === null) {
-          hasGlobalTuition = true;
-          tuitionMap.set(ta.classId, Number(ta.amount));
-        }
-      }
-      if (term && session) {
-        for (const ta of allRows) {
-          if (ta.term === term && ta.session === session) {
-            hasScopedTuition = true;
-            tuitionMap.set(ta.classId, Number(ta.amount));
-          }
-        }
-      }
+      hasGlobalTuition = allRows.some(ta => ta.term === null && ta.session === null);
+      hasScopedTuition = !!(term && session && allRows.some(ta => ta.term === term && ta.session === session));
+      tuitionResolver = this.buildTuitionResolver(allRows, term, session);
     }
 
     const entries = (rows.rows || rows).map((r: any) => {
       const totalPaid = Number(r.totalPaid) || 0;
       const sfAssigned = Number(r.sfAssigned) || 0;
       const discount = Number(r.discount) || 0;
-      const rawTuitionAssigned = tuitionMap.get(r.classId) || 0;
+      const rawTuitionAssigned = tuitionResolver(r.classId, r.studentType ?? null);
       const tuitionAssigned = Math.max(0, rawTuitionAssigned - discount);
       const totalAssigned = sfAssigned + tuitionAssigned;
       return {
@@ -1797,23 +1828,19 @@ export class DatabaseStorage implements IStorage {
 
     // Build per-class assigned amount map: scoped (term+session) overrides global.
     const allTuitionRows = await this.getTuitionClassAmounts(tuitionFee.id);
-    const perClass = new Map<string, number>();
-    for (const ta of allTuitionRows) {
-      if (ta.term === null && ta.session === null) {
-        perClass.set(ta.classId, Number(ta.amount));
-      }
-    }
-    for (const ta of allTuitionRows) {
-      if (ta.term === term && ta.session === session) {
-        perClass.set(ta.classId, Number(ta.amount));
-      }
-    }
+    const tuitionResolver = this.buildTuitionResolver(allTuitionRows, term, session);
 
     // Per-student tuition paid (confirmed only, scoped to term+session and
     // matched by purpose = tuition fee type name). Includes split allocations.
     const paidRows = await db.execute(sql`
       SELECT s.id AS "studentDbId",
              s.class_id AS "classId",
+             CASE WHEN s.student_type = 'returning'
+                   AND s.student_type_flipped_term = ${term}
+                   AND s.student_type_flipped_session = ${session}
+                  THEN 'new'
+                  ELSE COALESCE(s.student_type, 'returning')
+             END AS "studentType",
              s.discount AS "discount",
              (
                COALESCE((
@@ -1843,7 +1870,7 @@ export class DatabaseStorage implements IStorage {
     `);
 
     return ((paidRows as any).rows || paidRows).map((r: any) => {
-      const rawAssigned = r.classId ? (perClass.get(r.classId) || 0) : 0;
+      const rawAssigned = r.classId ? tuitionResolver(r.classId, r.studentType ?? null) : 0;
       const discount = Number(r.discount) || 0;
       return {
         studentDbId: r.studentDbId,
@@ -1919,7 +1946,13 @@ export class DatabaseStorage implements IStorage {
     const studentsRows = await db.execute(sql`
       SELECT s.id, s.student_id AS "sowaId", s.class_id AS "classId",
              u.first_name AS "firstName", u.last_name AS "lastName",
-             c.name AS "className", s.discount AS "discount"
+             c.name AS "className", s.discount AS "discount",
+             CASE WHEN s.student_type = 'returning'
+                   AND s.student_type_flipped_term = ${term}
+                   AND s.student_type_flipped_session = ${session}
+                  THEN 'new'
+                  ELSE COALESCE(s.student_type, 'returning')
+             END AS "studentType"
       FROM students s
       JOIN users u ON s.user_id = u.id
       LEFT JOIN classes c ON s.class_id = c.id
@@ -1948,24 +1981,10 @@ export class DatabaseStorage implements IStorage {
     `);
     const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
 
-    const tuitionMap = new Map<string, number>();
+    let broadsheetTuitionResolver: (classId: string, studentType: string | null) => number = () => 0;
     if (tuitionFee) {
-      // Resolve per-class tuition: term/session-specific rows override
-      // global (NULL term/session) rows. This avoids "—" in the ledger when
-      // tuition was set up without a scope but the caller passes term/session.
       const allRows = await this.getTuitionClassAmounts(tuitionFee.id);
-      for (const ta of allRows) {
-        if (ta.term === null && ta.session === null) {
-          tuitionMap.set(ta.classId, Number(ta.amount));
-        }
-      }
-      if (term && session) {
-        for (const ta of allRows) {
-          if (ta.term === term && ta.session === session) {
-            tuitionMap.set(ta.classId, Number(ta.amount));
-          }
-        }
-      }
+      broadsheetTuitionResolver = this.buildTuitionResolver(allRows, term, session);
     }
 
     const allStudents = ((studentsRows as any).rows || studentsRows) as any[];
@@ -1980,7 +1999,7 @@ export class DatabaseStorage implements IStorage {
       }
       const sfAssigned = feesMap.get(s.id) || 0;
       const discount = Number(s.discount) || 0;
-      const tuitionAssigned = Math.max(0, (tuitionMap.get(s.classId) || 0) - discount);
+      const tuitionAssigned = Math.max(0, broadsheetTuitionResolver(s.classId, s.studentType ?? null) - discount);
       const totalAssigned = sfAssigned + tuitionAssigned;
       const totalPaid = paymentsMap.get(s.id) || 0;
       const balance = totalAssigned - totalPaid;
@@ -2042,13 +2061,16 @@ export class DatabaseStorage implements IStorage {
     const totalRevenue = Number(revenueRow?.total || 0);
 
     const activeStudentsRows = await db.execute(sql`
-      SELECT s.id, s.class_id AS "classId", s.discount AS "discount"
+      SELECT s.id, s.class_id AS "classId", s.discount AS "discount",
+             ${term && session
+               ? sql`CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term} AND s.student_type_flipped_session = ${session} THEN 'new' ELSE COALESCE(s.student_type, 'returning') END`
+               : sql`COALESCE(s.student_type, 'returning')`} AS "studentType"
       FROM students s
       JOIN users u ON s.user_id = u.id
       WHERE u.is_active = true
         ${schoolId ? sql`AND u.school_id = ${schoolId}` : sql``}
     `);
-    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string; discount: string | number | null }[];
+    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string; discount: string | number | null; studentType: string | null }[];
 
     const tuitionFeeConditions: any[] = [eq(feeTypes.isTuition, true), eq(feeTypes.isActive, true)];
     if (schoolId) tuitionFeeConditions.push(eq(feeTypes.schoolId, schoolId));
@@ -2061,16 +2083,17 @@ export class DatabaseStorage implements IStorage {
     let actualTuitionCollected = 0;
 
     if (tuitionFeeType) {
-      let tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id, term, session);
-      if (tuitionAmounts.length === 0 && (term || session)) {
-        tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
-      }
-      const classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
+      // Always load ALL rows (global + every scoped set) so the resolver can
+      // apply the correct priority fallback: scoped+typed > scoped+universal >
+      // global+typed > global+universal. Fetching only scoped rows would prevent
+      // the global fallback from firing for classes/types not in that scope.
+      const tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
+      const summaryResolver = this.buildTuitionResolver(tuitionAmounts, term, session);
 
       const studentOwedMap = new Map<string, number>();
       for (const student of allActiveStudents) {
-        const classAmount = student.classId ? classAmountMap.get(student.classId) : undefined;
-        if (classAmount && classAmount > 0) {
+        const classAmount = student.classId ? summaryResolver(student.classId, student.studentType ?? null) : 0;
+        if (classAmount > 0) {
           const discount = Number(student.discount) || 0;
           const owed = Math.max(0, classAmount - discount);
           studentOwedMap.set(student.id, owed);
@@ -2155,15 +2178,24 @@ export class DatabaseStorage implements IStorage {
       .from(classes)
       .where(eq(classes.schoolId, schoolId));
 
-    // Active students in the school, with their classId.
+    // Active students in the school — include effective student_type and discount so we
+    // can resolve the correct per-type tuition rate for each student.
+    // Effective type: if the student was flipped to 'returning' during THIS term/session,
+    // treat them as 'new' for this term's calculations to avoid retroactive rate changes.
     const activeStudentsRows = await db.execute(sql`
-      SELECT s.id, s.class_id AS "classId"
+      SELECT s.id, s.class_id AS "classId",
+             ${term && session
+               ? sql`CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term} AND s.student_type_flipped_session = ${session} THEN 'new' ELSE COALESCE(s.student_type, 'returning') END`
+               : sql`COALESCE(s.student_type, 'returning')`} AS "studentType",
+             s.discount AS "discount"
       FROM students s
       JOIN users u ON s.user_id = u.id
       WHERE u.is_active = true
         AND u.school_id = ${schoolId}
     `);
-    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string }[];
+    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as {
+      id: string; classId: string; studentType: string | null; discount: string | number | null;
+    }[];
 
     // Active tuition fee type for this school.
     const tuitionFeeConditions: any[] = [
@@ -2173,14 +2205,13 @@ export class DatabaseStorage implements IStorage {
     ];
     const [tuitionFeeType] = await db.select().from(feeTypes).where(and(...tuitionFeeConditions)).limit(1);
 
-    // Per-class tuition amount map (fall back to global if scoped is empty).
-    let classAmountMap = new Map<string, number>();
+    // Build a typed resolver from ALL rows (global + scoped) so the priority
+    // fallback (scoped+typed > scoped+universal > global+typed > global+universal)
+    // works correctly for every student type / class combination.
+    let tuitionResolver: (classId: string, studentType: string | null) => number = () => 0;
     if (tuitionFeeType) {
-      let tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id, term, session);
-      if (tuitionAmounts.length === 0 && (term || session)) {
-        tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
-      }
-      classAmountMap = new Map(tuitionAmounts.map(ta => [ta.classId, Number(ta.amount)]));
+      const tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
+      tuitionResolver = this.buildTuitionResolver(tuitionAmounts, term, session);
     }
 
     // Per-student paid TUITION totals. Same UNION the Payment Broadsheet uses
@@ -2204,7 +2235,9 @@ export class DatabaseStorage implements IStorage {
       const bucket = perClass.get(student.classId);
       if (!bucket) continue;
       bucket.activeStudentCount += 1;
-      const owed = classAmountMap.get(student.classId) || 0;
+      const rawOwed = tuitionResolver(student.classId, student.studentType ?? null);
+      const discount = Number(student.discount) || 0;
+      const owed = Math.max(0, rawOwed - discount);
       const paid = studentPaidMap.get(student.id) || 0;
       bucket.expectedTuition += owed;
       bucket.tuitionCollected += Math.min(paid, owed);
@@ -4844,7 +4877,9 @@ export class DatabaseStorage implements IStorage {
   async confirmFeePayment(paymentId: string, bankTransactionId: string, confirmedBy: string): Promise<FeePaymentRecord> {
     console.log('[confirmFeePayment] Confirming payment:', paymentId);
 
-    return await db.transaction(async (tx) => {
+    // Save the confirmed record to a method-scoped variable so the auto-flip
+    // block below can reference it after the transaction commits.
+    const confirmedRecord = await db.transaction(async (tx) => {
       const [record] = await tx
         .update(feePaymentRecords)
         .set({
@@ -4888,6 +4923,39 @@ export class DatabaseStorage implements IStorage {
       console.log('[confirmFeePayment] Payment confirmed:', paymentId);
       return record;
     });
+
+    // Auto-flip: after the first payment is confirmed for a 'new' student,
+    // mark them as 'returning' so subsequent terms use the returning rate.
+    // Runs outside the transaction — a flip failure NEVER rolls back the
+    // already-committed payment confirmation.
+    try {
+      // Collect all student IDs involved (direct payment + split allocations)
+      const studentIds = new Set<string>();
+      if (confirmedRecord.studentId) studentIds.add(confirmedRecord.studentId);
+      const splits = await db
+        .select({ studentId: feePaymentStudentSplits.studentId })
+        .from(feePaymentStudentSplits)
+        .where(eq(feePaymentStudentSplits.paymentRecordId, confirmedRecord.id));
+      splits.forEach(s => studentIds.add(s.studentId));
+
+      if (studentIds.size > 0) {
+        // Also record which term/session the flip occurred in so ledger queries
+        // can still apply the 'new' rate for the term that triggered the flip.
+        await db.execute(sql`
+          UPDATE students
+          SET student_type = 'returning',
+              student_type_flipped_term    = ${confirmedRecord.term ?? null},
+              student_type_flipped_session = ${confirmedRecord.session ?? null},
+              updated_at = NOW()
+          WHERE id = ANY(${Array.from(studentIds)})
+            AND student_type = 'new'
+        `);
+      }
+    } catch (flipErr) {
+      console.error('[confirmFeePayment] Failed to auto-flip student_type:', flipErr);
+    }
+
+    return confirmedRecord;
   }
 
   async unconfirmFeePayment(paymentId: string): Promise<{ payment: FeePaymentRecord; bankTransactionIds: string[] }> {

@@ -193,6 +193,15 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_school_id ON payment_audit_logs (school_id);
       CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_user_id ON payment_audit_logs (user_id);
       CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_entity_type ON payment_audit_logs (entity_type);
+      -- Task #232: student_type column + per-type tuition rates.
+      -- Existing students get 'returning'; new registrations default to 'new' (set by the INSERT).
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS student_type VARCHAR(20) DEFAULT 'returning';
+      -- NULL student_type = universal rate (existing rows); 'new'/'returning' = type-specific override.
+      ALTER TABLE tuition_class_amounts ADD COLUMN IF NOT EXISTS student_type VARCHAR(20);
+      -- Track which term/session triggered the new→returning flip so ledger queries
+      -- can apply the 'new' rate for that term even after the flip has occurred.
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS student_type_flipped_term VARCHAR(50);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS student_type_flipped_session VARCHAR(20);
     `);
 
     // Self-heal Task #123: any bank_transactions row whose status is not

@@ -519,18 +519,34 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
 
   const classMap = new Map(classes.map(c => [c.id, c.name]));
 
-  // Group tuition rows by scope and dedupe per class within each scope.
+  // Group tuition rows by scope. Within each scope, track both universal (null studentType)
+  // and per-type (new/returning) amounts.
   // Group key "" = global (term IS NULL AND session IS NULL).
   // Other keys are `${term}|${session}`.
   const scopeGroups = (() => {
-    const map = new Map<string, { term: string | null; session: string | null; perClass: Map<string, string> }>();
+    const map = new Map<string, {
+      term: string | null;
+      session: string | null;
+      // Universal rows (null studentType): classId → amount
+      perClass: Map<string, string>;
+      // Typed rows: classId → { new?: string; returning?: string }
+      typed: Map<string, { new?: string; returning?: string }>;
+    }>();
     for (const row of tuitionAmounts as any[]) {
       const term = row.term || null;
       const session = row.session || null;
       const key = term && session ? `${term}|${session}` : '';
-      if (!map.has(key)) map.set(key, { term, session, perClass: new Map() });
-      // Last-write-wins per class within a scope (defensive against stray dupes).
-      map.get(key)!.perClass.set(row.classId, row.amount);
+      if (!map.has(key)) map.set(key, { term, session, perClass: new Map(), typed: new Map() });
+      const entry = map.get(key)!;
+      const st = row.studentType || null;
+      if (!st) {
+        // Universal row — last-write-wins
+        entry.perClass.set(row.classId, row.amount);
+      } else {
+        // Typed row
+        const existing = entry.typed.get(row.classId) || {};
+        entry.typed.set(row.classId, { ...existing, [st]: row.amount });
+      }
     }
     return map;
   })();
@@ -577,11 +593,27 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
   };
 
   const visibleGroup = scopeGroups.get(visibleScopeKey);
+  const visibleGroupHasTyped = visibleGroup && visibleGroup.typed.size > 0;
+  // Universal (null-type) entries
   const visibleEntries = visibleGroup
     ? Array.from(visibleGroup.perClass.entries()).map(([classId, amount]) => ({
         id: classId,
         name: classMap.get(classId) || classId,
         _amount: amount,
+      }))
+    : [];
+  // Typed entries: merge universal + typed rows into one list per class
+  const visibleTypedEntries = visibleGroup && visibleGroupHasTyped
+    ? Array.from(
+        new Set(
+          Array.from(visibleGroup.typed.keys()).concat(Array.from(visibleGroup.perClass.keys()))
+        )
+      ).map(classId => ({
+        id: classId,
+        name: classMap.get(classId) || classId,
+        newAmount: visibleGroup.typed.get(classId)?.new,
+        returningAmount: visibleGroup.typed.get(classId)?.returning,
+        universalAmount: visibleGroup.perClass.get(classId),
       }))
     : [];
 
@@ -641,7 +673,39 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
                       Used as the default for {currentTerm} · {currentSession} (no override saved).
                     </div>
                   )}
-                  {visibleEntries.length > 0 ? (
+                  {visibleGroupHasTyped ? (
+                    // Show New / Returning typed amounts
+                    visibleTypedEntries.length > 0 ? (
+                      <div className="space-y-0.5">
+                        <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                          <span></span>
+                          <span className="text-blue-600">New</span>
+                          <span className="text-green-600">Returning</span>
+                        </div>
+                        {sortClassesByOrder(visibleTypedEntries).map((item: any) => (
+                          <div key={item.id} className="grid grid-cols-[1fr_auto_auto] gap-x-3 text-sm items-center">
+                            <span className="text-muted-foreground truncate">{item.name}</span>
+                            <span className="font-medium text-blue-600 tabular-nums">
+                              {item.newAmount
+                                ? `₦${parseFloat(item.newAmount).toLocaleString()}`
+                                : item.universalAmount
+                                ? `₦${parseFloat(item.universalAmount).toLocaleString()}`
+                                : '—'}
+                            </span>
+                            <span className="font-medium text-green-600 tabular-nums">
+                              {item.returningAmount
+                                ? `₦${parseFloat(item.returningAmount).toLocaleString()}`
+                                : item.universalAmount
+                                ? `₦${parseFloat(item.universalAmount).toLocaleString()}`
+                                : '—'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No amounts saved for this scope.</p>
+                    )
+                  ) : visibleEntries.length > 0 ? (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                       {sortClassesByOrder(visibleEntries).map((item: any) => (
                         <div key={item.id} className="flex justify-between text-sm">
@@ -889,6 +953,10 @@ export default function AdminDashboard() {
   const [isTuitionMode, setIsTuitionMode] = useState(false);
   const [tuitionClassAmountsMap, setTuitionClassAmountsMap] = useState<Record<string, string>>({});
   const [editTuitionClassAmountsMap, setEditTuitionClassAmountsMap] = useState<Record<string, string>>({});
+  // Typed-rate state: when true, separate New / Returning columns are shown.
+  const [editTuitionUseTypedRates, setEditTuitionUseTypedRates] = useState<boolean>(false);
+  const [editTuitionNewAmountsMap, setEditTuitionNewAmountsMap] = useState<Record<string, string>>({});
+  const [editTuitionReturningAmountsMap, setEditTuitionReturningAmountsMap] = useState<Record<string, string>>({});
   // True when the scoped view is showing values inherited from globals
   // because no scoped rows exist yet (per-row "Inherited from global" hint).
   const [editScopeIsInherited, setEditScopeIsInherited] = useState<boolean>(false);
@@ -1019,9 +1087,30 @@ export default function AdminDashboard() {
           rows = scoped.length > 0 ? scoped : globals;
         }
         if (cancelled) return;
+        // Determine if this scope has typed (per student-type) rows
+        const hasTypedRows = rows.some((r: any) => r.studentType);
+        const universalRows = rows.filter((r: any) => !r.studentType);
+        const newRows = rows.filter((r: any) => r.studentType === 'new');
+        const returningRows = rows.filter((r: any) => r.studentType === 'returning');
+
         const map: Record<string, string> = {};
-        rows.forEach((ta: any) => { map[ta.classId] = ta.amount; });
+        universalRows.forEach((ta: any) => { map[ta.classId] = ta.amount; });
         setEditTuitionClassAmountsMap(map);
+
+        if (hasTypedRows) {
+          setEditTuitionUseTypedRates(true);
+          const newMap: Record<string, string> = {};
+          newRows.forEach((ta: any) => { newMap[ta.classId] = ta.amount; });
+          setEditTuitionNewAmountsMap(newMap);
+          const retMap: Record<string, string> = {};
+          returningRows.forEach((ta: any) => { retMap[ta.classId] = ta.amount; });
+          setEditTuitionReturningAmountsMap(retMap);
+        } else {
+          setEditTuitionUseTypedRates(false);
+          setEditTuitionNewAmountsMap({});
+          setEditTuitionReturningAmountsMap({});
+        }
+
         setEditScopeIsInherited(inherited);
         setEditInheritedClassIds(inherited ? new Set(Object.keys(map)) : new Set());
       } catch {
@@ -1097,7 +1186,8 @@ export default function AdminDashboard() {
     gender: "",
     profileImage: "",
     parentWhatsApp: "",
-    address: ""
+    address: "",
+    studentType: "new" as "new" | "returning",
   });
   const [studentFormErrors, setStudentFormErrors] = useState<{[key: string]: string}>({});
   
@@ -1188,7 +1278,8 @@ export default function AdminDashboard() {
       gender: "",
       profileImage: "",
       parentWhatsApp: "",
-      address: ""
+      address: "",
+      studentType: "new" as "new" | "returning",
     });
     setStudentFormErrors({});
   };
@@ -1705,7 +1796,7 @@ export default function AdminDashboard() {
         });
         setIsStudentDialogOpen(false);
         setCurrentStep(1);
-        setStudentCreationForm({ firstName: "", lastName: "", middleName: "", email: "", password: "", classId: "", dateOfBirth: "", parentWhatsApp: "", address: "" });
+        setStudentCreationForm({ firstName: "", lastName: "", middleName: "", email: "", password: "", studentId: "", classId: "", dateOfBirth: "", gender: "", profileImage: "", parentWhatsApp: "", address: "", studentType: "new" as "new" | "returning" });
         setStudentFormErrors({});
         return;
       }
@@ -1723,10 +1814,14 @@ export default function AdminDashboard() {
         middleName: "",
         email: "",
         password: "",
+        studentId: "",
         classId: "",
         dateOfBirth: "",
+        gender: "",
+        profileImage: "",
         parentWhatsApp: "",
-        address: ""
+        address: "",
+        studentType: "new" as "new" | "returning",
       });
       setStudentFormErrors({});
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
@@ -2002,7 +2097,8 @@ export default function AdminDashboard() {
       gender: studentCreationForm.gender || undefined,
       parentWhatsApp: studentCreationForm.parentWhatsApp,
       address: studentCreationForm.address || undefined,
-      profileImage: studentCreationForm.profileImage || undefined
+      profileImage: studentCreationForm.profileImage || undefined,
+      studentType: studentCreationForm.studentType || 'new',
     };
 
     createStudentMutation.mutate(studentData);
@@ -3075,7 +3171,8 @@ export default function AdminDashboard() {
       gender: "",
       profileImage: "",
       parentWhatsApp: "",
-      address: ""
+      address: "",
+      studentType: "new" as "new" | "returning",
     });
     setStudentFormErrors({});
     setStudentId("");
@@ -7301,6 +7398,32 @@ export default function AdminDashboard() {
                       <p className="text-red-600 text-xs mt-0.5 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{studentFormErrors.middleName}</p>
                     )}
                   </div>
+
+                  {/* Student Type selector */}
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Student Type</Label>
+                    <div className="mt-1 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleStudentFormChange('studentType', 'new')}
+                        className={`flex-1 py-2 rounded-md text-sm font-medium border transition-colors ${studentCreationForm.studentType === 'new' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-400'}`}
+                      >
+                        New Student
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudentFormChange('studentType', 'returning')}
+                        className={`flex-1 py-2 rounded-md text-sm font-medium border transition-colors ${studentCreationForm.studentType === 'returning' ? 'bg-green-600 text-white border-green-600' : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-green-400'}`}
+                      >
+                        Returning Student
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {studentCreationForm.studentType === 'new'
+                        ? "New students may qualify for a different tuition rate. They are automatically reclassified as Returning after their first term's payment is confirmed."
+                        : "Returning students use the standard returning-student tuition rate."}
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -8124,7 +8247,7 @@ export default function AdminDashboard() {
         </Dialog>
 
         {/* Edit Fee Type Dialog */}
-        <Dialog open={isEditFeeTypeDialogOpen} onOpenChange={(open) => { setIsEditFeeTypeDialogOpen(open); if (!open) setEditTuitionClassAmountsMap({}); }}>
+        <Dialog open={isEditFeeTypeDialogOpen} onOpenChange={(open) => { setIsEditFeeTypeDialogOpen(open); if (!open) { setEditTuitionClassAmountsMap({}); setEditTuitionUseTypedRates(false); setEditTuitionNewAmountsMap({}); setEditTuitionReturningAmountsMap({}); } }}>
           <DialogContent className="max-w-md dialog-content-scrollable form-container">
             <DialogHeader>
               <DialogTitle>Edit Fee Type</DialogTitle>
@@ -8140,7 +8263,7 @@ export default function AdminDashboard() {
                   value={editFeeTypeName}
                   onChange={(e) => setEditFeeTypeName(e.target.value)}
                   placeholder="e.g. Tuition Fee"
-                  disabled={editingFeeType?.isTuition}
+                  disabled={!!editingFeeType?.isTuition}
                 />
               </div>
               {!editingFeeType?.isTuition && (
@@ -8227,50 +8350,126 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label>Amount per Class</Label>
+                    {/* Typed-rates toggle */}
+                    <div className="flex items-center justify-between">
+                      <Label>Amount per Class</Label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editTuitionUseTypedRates) {
+                            // Switching ON: pre-fill both typed maps from the universal map
+                            // so existing universal amounts aren't lost when the admin opens typed mode.
+                            setEditTuitionNewAmountsMap(prev => {
+                              const seed = { ...editTuitionClassAmountsMap };
+                              return Object.keys(seed).length > 0 ? { ...seed, ...prev } : prev;
+                            });
+                            setEditTuitionReturningAmountsMap(prev => {
+                              const seed = { ...editTuitionClassAmountsMap };
+                              return Object.keys(seed).length > 0 ? { ...seed, ...prev } : prev;
+                            });
+                          } else {
+                            // Switching OFF (typed→universal): seed the universal map from the typed maps
+                            // so no rate data is silently erased when the admin saves.
+                            // Priority: returning amount → new amount → existing universal.
+                            setEditTuitionClassAmountsMap(prev => {
+                              const merged: Record<string, string> = { ...prev };
+                              const allClassIds = new Set(
+                                Object.keys(editTuitionNewAmountsMap).concat(
+                                  Object.keys(editTuitionReturningAmountsMap)
+                                )
+                              );
+                              allClassIds.forEach(classId => {
+                                const ret = editTuitionReturningAmountsMap[classId];
+                                const nw  = editTuitionNewAmountsMap[classId];
+                                const chosen = ret || nw;
+                                if (chosen && parseFloat(chosen) > 0) merged[classId] = chosen;
+                              });
+                              return merged;
+                            });
+                          }
+                          setEditTuitionUseTypedRates(v => !v);
+                        }}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${editTuitionUseTypedRates ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 dark:border-gray-600 text-muted-foreground hover:border-indigo-400'}`}
+                      >
+                        {editTuitionUseTypedRates ? '✓ Different rates (New / Returning)' : 'Same rate for all'}
+                      </button>
+                    </div>
                     {editScopeIsInherited && (
                       <p className="text-[11px] text-amber-700 dark:text-amber-300">
                         Pre-filled with the <strong>global default</strong> amounts. Edit any
                         value and save to create a term/session-specific override.
                       </p>
                     )}
-                    <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y">
-                      {sortClassesByOrder(classes).map((cls) => {
-                        const isInheritedRow = editScopeIsInherited && editInheritedClassIds.has(cls.id);
-                        return (
-                          <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm truncate">{cls.name}</div>
-                              {isInheritedRow && (
-                                <div className="text-[10px] text-muted-foreground italic">
-                                  Inherited from global
-                                </div>
-                              )}
+                    {!editTuitionUseTypedRates ? (
+                      /* ── Unified rate ── */
+                      <div className="border rounded-md max-h-[250px] overflow-y-auto divide-y">
+                        {sortClassesByOrder(classes).map((cls) => {
+                          const isInheritedRow = editScopeIsInherited && editInheritedClassIds.has(cls.id);
+                          return (
+                            <div key={cls.id} className="flex items-center gap-3 px-3 py-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm truncate">{cls.name}</div>
+                                {isInheritedRow && (
+                                  <div className="text-[10px] text-muted-foreground italic">Inherited from global</div>
+                                )}
+                              </div>
+                              <div className="relative w-32 shrink-0">
+                                <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  className={`pl-6 h-8 text-sm ${isInheritedRow ? 'border-dashed text-muted-foreground' : ''}`}
+                                  value={editTuitionClassAmountsMap[cls.id] || ""}
+                                  onChange={(e) => {
+                                    setEditTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }));
+                                    if (editInheritedClassIds.has(cls.id)) {
+                                      setEditInheritedClassIds(prev => { const next = new Set(prev); next.delete(cls.id); return next; });
+                                    }
+                                  }}
+                                  min={0}
+                                />
+                              </div>
                             </div>
-                            <div className="relative w-32 shrink-0">
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* ── Typed rates: New + Returning columns ── */
+                      <div className="border rounded-md max-h-[280px] overflow-y-auto divide-y">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/40 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          <span className="flex-1">Class</span>
+                          <span className="w-28 text-center text-blue-600">New (₦)</span>
+                          <span className="w-28 text-center text-green-600">Returning (₦)</span>
+                        </div>
+                        {sortClassesByOrder(classes).map((cls) => (
+                          <div key={cls.id} className="flex items-center gap-2 px-3 py-2">
+                            <div className="flex-1 text-sm truncate">{cls.name}</div>
+                            <div className="relative w-28 shrink-0">
                               <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
                               <Input
                                 type="number"
                                 placeholder="0"
-                                className={`pl-6 h-8 text-sm ${isInheritedRow ? 'border-dashed text-muted-foreground' : ''}`}
-                                value={editTuitionClassAmountsMap[cls.id] || ""}
-                                onChange={(e) => {
-                                  setEditTuitionClassAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }));
-                                  if (editInheritedClassIds.has(cls.id)) {
-                                    setEditInheritedClassIds(prev => {
-                                      const next = new Set(prev);
-                                      next.delete(cls.id);
-                                      return next;
-                                    });
-                                  }
-                                }}
+                                className="pl-6 h-8 text-sm border-blue-300 focus:border-blue-500"
+                                value={editTuitionNewAmountsMap[cls.id] || ""}
+                                onChange={(e) => setEditTuitionNewAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }))}
+                                min={0}
+                              />
+                            </div>
+                            <div className="relative w-28 shrink-0">
+                              <span className="absolute left-2 top-2 text-xs text-muted-foreground">₦</span>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                className="pl-6 h-8 text-sm border-green-300 focus:border-green-500"
+                                value={editTuitionReturningAmountsMap[cls.id] || ""}
+                                onChange={(e) => setEditTuitionReturningAmountsMap(prev => ({ ...prev, [cls.id]: e.target.value }))}
                                 min={0}
                               />
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -8278,7 +8477,7 @@ export default function AdminDashboard() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => { setIsEditFeeTypeDialogOpen(false); setEditTuitionClassAmountsMap({}); }}
+                  onClick={() => { setIsEditFeeTypeDialogOpen(false); setEditTuitionClassAmountsMap({}); setEditTuitionUseTypedRates(false); setEditTuitionNewAmountsMap({}); setEditTuitionReturningAmountsMap({}); }}
                 >
                   Cancel
                 </Button>
@@ -8296,9 +8495,21 @@ export default function AdminDashboard() {
                       }
                     });
                     if (editingFeeType.isTuition) {
-                      const classAmounts = Object.entries(editTuitionClassAmountsMap)
-                        .filter(([_, amt]) => amt && parseFloat(amt) > 0)
-                        .map(([classId, amount]) => ({ classId, amount }));
+                      let classAmounts: { classId: string; amount: string; studentType?: string | null }[];
+                      if (editTuitionUseTypedRates) {
+                        // Collect new-student and returning-student rows separately
+                        const newRows = Object.entries(editTuitionNewAmountsMap)
+                          .filter(([_, amt]) => amt && parseFloat(amt) > 0)
+                          .map(([classId, amount]) => ({ classId, amount, studentType: 'new' }));
+                        const returningRows = Object.entries(editTuitionReturningAmountsMap)
+                          .filter(([_, amt]) => amt && parseFloat(amt) > 0)
+                          .map(([classId, amount]) => ({ classId, amount, studentType: 'returning' }));
+                        classAmounts = [...newRows, ...returningRows];
+                      } else {
+                        classAmounts = Object.entries(editTuitionClassAmountsMap)
+                          .filter(([_, amt]) => amt && parseFloat(amt) > 0)
+                          .map(([classId, amount]) => ({ classId, amount, studentType: null }));
+                      }
                       await apiRequest(`/api/admin/tuition-amounts/${editingFeeType.id}`, {
                         method: 'PUT',
                         body: {

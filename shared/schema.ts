@@ -141,6 +141,13 @@ export const students = pgTable("students", {
   statusSession: varchar("status_session", { length: 20 }), // Session when graduated/withdrawn (e.g. "2025/2026")
   statusTerm: varchar("status_term", { length: 50 }), // Term when graduated/withdrawn (e.g. "Third Term")
   discount: decimal("discount", { precision: 10, scale: 2 }).default("0"), // Fixed tuition discount applied every term (Tuition only)
+  // 'new' = newly admitted (eligible for new-student tuition rate); auto-flipped to 'returning'
+  // after first payment is confirmed. Existing students default to 'returning'.
+  studentType: varchar("student_type", { length: 20 }).default("returning"), // 'new' | 'returning'
+  // Records which term/session triggered the new→returning flip so that the
+  // current term's tuition resolution can still use 'new' even after the flip.
+  studentTypeFlippedTerm: varchar("student_type_flipped_term", { length: 50 }),
+  studentTypeFlippedSession: varchar("student_type_flipped_session", { length: 20 }),
   clientRequestId: text("client_request_id"), // Idempotency key from client; partial unique index where not null
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -290,8 +297,15 @@ export const tuitionClassAmounts = pgTable("tuition_class_amounts", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   term: varchar("term", { length: 30 }),
   session: varchar("session", { length: 20 }),
+  // NULL = applies to all student types (legacy / universal rate).
+  // 'new' | 'returning' = type-specific rate that overrides the universal row.
+  studentType: varchar("student_type", { length: 20 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Allowed values for students.student_type
+export const STUDENT_TYPES = ['new', 'returning'] as const;
+export type StudentType = typeof STUDENT_TYPES[number];
 
 // Student Fees table (records fees assigned to students)
 export const studentFees = pgTable("student_fees", {

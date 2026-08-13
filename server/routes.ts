@@ -1828,6 +1828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parentWhatsapp: parentWhatsApp,
         address: address || '',
         clientRequestId: clientRequestId || null,
+        studentType: (req.body.studentType === 'returning' ? 'returning' : 'new'), // default new
       });
 
       let student;
@@ -2222,7 +2223,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             profileImage: null,
             gender: gender || null,
             parentWhatsapp: parentWhatsApp,
-            address: address
+            address: address,
+            studentType: 'new', // bulk-imported students are new by default
           });
 
           const student = await storage.createStudent(studentData);
@@ -3552,7 +3554,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const s = typeof session === 'string' && session ? session : undefined;
       const scopedT = t && s ? t : undefined;
       const scopedS = t && s ? s : undefined;
-      const result = await storage.upsertTuitionClassAmounts(feeTypeId, amounts, scopedT, scopedS);
+      // Each amount item may include an optional studentType ('new'|'returning'|null).
+      const typedAmounts = amounts.map((a: any) => ({
+        classId: a.classId,
+        amount: String(a.amount),
+        studentType: a.studentType ?? null,
+      }));
+      const result = await storage.upsertTuitionClassAmounts(feeTypeId, typedAmounts, scopedT, scopedS);
       await logActivity(req, { action: 'update_tuition_amounts', entityType: 'fee_type', entityId: feeTypeId, schoolId: feeType.schoolId ?? undefined, newData: { amounts, term: scopedT ?? null, session: scopedS ?? null } });
       res.json(result);
     } catch (error) {
