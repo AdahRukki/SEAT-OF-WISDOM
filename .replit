@@ -87,6 +87,17 @@ args = "npx tsx scripts/test-teacher-application-inbox.ts"
 [workflows.workflow.metadata]
 isValidation = true
 
+[[workflows.workflow]]
+name = "returning-student-guard"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx scripts/test-returning-student-guard.ts"
+
+[workflows.workflow.metadata]
+isValidation = true
+
 [agent]
 integrations = ["firebase_barebones_javascript:1.0.0", "resend:1.0.0"]
 
