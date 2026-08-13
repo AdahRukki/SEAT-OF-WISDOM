@@ -48,59 +48,69 @@ function check(name: string, cond: boolean, detail?: unknown) {
 }
 
 async function main() {
-  // ---------- setup ----------
-  const [school] = await db
-    .insert(schools)
-    .values({
-      name: TAG,
-      currentTerm: TERM,
-      currentSession: CURRENT_SESSION,
-    })
-    .returning();
-
-  const oldClassId = `${TAG}-OLD`;
-  const newClassId = `${TAG}-NEW`;
-  await db.insert(classes).values([
-    { id: oldClassId, name: "Old Class", schoolId: school.id },
-    { id: newClassId, name: "New Class", schoolId: school.id },
-  ]);
-
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `${TAG}@example.test`,
-      password: "x",
-      firstName: "Guard",
-      lastName: "Test",
-      role: "student",
-      schoolId: school.id,
-    })
-    .returning();
-
-  const [student] = await db
-    .insert(students)
-    .values({
-      userId: user.id,
-      classId: newClassId, // already promoted to the new class
-      studentId: TAG,
-      parentWhatsapp: "0000000000",
-    })
-    .returning();
-
-  const [subjA] = await db
-    .insert(subjects)
-    .values({ name: `${TAG} Subject A`, code: `G${Date.now() % 100000000}` })
-    .returning();
-  const [subjB] = await db
-    .insert(subjects)
-    .values({ name: `${TAG} Subject B`, code: `H${Date.now() % 100000000}` })
-    .returning();
-  const [subjC] = await db
-    .insert(subjects)
-    .values({ name: `${TAG} Subject C`, code: `I${Date.now() % 100000000}` })
-    .returning();
+  // Declare all setup variables before the try so finally can guard each delete.
+  let school: { id: number | string } | undefined;
+  let user: { id: number | string } | undefined;
+  let student: { id: number | string } | undefined;
+  let subjA: { id: number | string } | undefined;
+  let subjB: { id: number | string } | undefined;
+  let subjC: { id: number | string } | undefined;
+  let oldClassId: string | undefined;
+  let newClassId: string | undefined;
 
   try {
+    // ---------- setup ----------
+    [school] = await db
+      .insert(schools)
+      .values({
+        name: TAG,
+        currentTerm: TERM,
+        currentSession: CURRENT_SESSION,
+      })
+      .returning();
+
+    oldClassId = `${TAG}-OLD`;
+    newClassId = `${TAG}-NEW`;
+    await db.insert(classes).values([
+      { id: oldClassId, name: "Old Class", schoolId: school.id },
+      { id: newClassId, name: "New Class", schoolId: school.id },
+    ]);
+
+    [user] = await db
+      .insert(users)
+      .values({
+        email: `${TAG}@example.test`,
+        password: "x",
+        firstName: "Guard",
+        lastName: "Test",
+        role: "student",
+        schoolId: school.id,
+      })
+      .returning();
+
+    [student] = await db
+      .insert(students)
+      .values({
+        userId: user.id,
+        classId: newClassId, // already promoted to the new class
+        studentId: TAG,
+        parentWhatsapp: "0000000000",
+      })
+      .returning();
+
+    [subjA] = await db
+      .insert(subjects)
+      .values({ name: `${TAG} Subject A`, code: `G${Date.now() % 100000000}` })
+      .returning();
+    [subjB] = await db
+      .insert(subjects)
+      .values({ name: `${TAG} Subject B`, code: `H${Date.now() % 100000000}` })
+      .returning();
+    [subjC] = await db
+      .insert(subjects)
+      .values({ name: `${TAG} Subject C`, code: `I${Date.now() % 100000000}` })
+      .returning();
+
     // ---------- case 1: past-session save must keep original class ----------
     console.log("Case 1: past-session re-save keeps original class + merges scores");
     await storage.createOrUpdateAssessment({
@@ -193,14 +203,32 @@ async function main() {
       exam: updated3.exam,
     });
   } finally {
-    // ---------- cleanup (order-safe; school/user cascades cover the rest) ----------
-    await db.delete(assessments).where(eq(assessments.studentId, student.id));
-    await db.delete(promotionRecords).where(eq(promotionRecords.studentId, student.id));
-    await db.delete(students).where(eq(students.id, student.id));
-    await db.delete(subjects).where(inArray(subjects.id, [subjA.id, subjB.id, subjC.id]));
-    await db.delete(classes).where(inArray(classes.id, [oldClassId, newClassId]));
-    await db.delete(users).where(eq(users.id, user.id));
-    await db.delete(schools).where(eq(schools.id, school.id));
+    // ---------- cleanup (nullish-guarded so partial setup never orphans rows) ----------
+    if (student) {
+      await db.delete(assessments).where(eq(assessments.studentId, student.id));
+      await db.delete(promotionRecords).where(eq(promotionRecords.studentId, student.id));
+      await db.delete(students).where(eq(students.id, student.id));
+    }
+    if (subjA && subjB && subjC) {
+      await db.delete(subjects).where(inArray(subjects.id, [subjA.id, subjB.id, subjC.id]));
+    } else {
+      // Delete whichever subjects were created individually
+      for (const subj of [subjA, subjB, subjC]) {
+        if (subj) await db.delete(subjects).where(eq(subjects.id, subj.id));
+      }
+    }
+    if (oldClassId && newClassId) {
+      await db.delete(classes).where(inArray(classes.id, [oldClassId, newClassId]));
+    } else {
+      if (oldClassId) await db.delete(classes).where(eq(classes.id, oldClassId));
+      if (newClassId) await db.delete(classes).where(eq(classes.id, newClassId));
+    }
+    if (user) {
+      await db.delete(users).where(eq(users.id, user.id));
+    }
+    if (school) {
+      await db.delete(schools).where(eq(schools.id, school.id));
+    }
   }
 
   if (failures > 0) {
