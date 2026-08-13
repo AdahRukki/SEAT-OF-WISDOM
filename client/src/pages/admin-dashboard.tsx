@@ -5585,6 +5585,24 @@ export default function AdminDashboard() {
                     <p className="text-[10px] sm:text-xs text-muted-foreground mt-1" data-testid="text-actual-tuition">
                       Actual tuition: ₦{(financialSummary?.actualTuitionCollected ?? 0).toLocaleString()}
                     </p>
+                    {financialSummary?.typeBreakdown && (
+                      <div className="mt-2 pt-2 border-t border-muted space-y-0.5">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            New
+                          </span>
+                          <span>₦{(financialSummary.typeBreakdown.new.actualCollected).toLocaleString()} / ₦{(financialSummary.typeBreakdown.new.totalFees).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+                            Returning
+                          </span>
+                          <span>₦{(financialSummary.typeBreakdown.returning.actualCollected).toLocaleString()} / ₦{(financialSummary.typeBreakdown.returning.totalFees).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -5602,6 +5620,24 @@ export default function AdminDashboard() {
                     <p className="text-[10px] sm:text-xs text-muted-foreground">
                       {financialSummary?.totalFees ? "Assigned tuition minus actual collected" : "No fees assigned"}
                     </p>
+                    {financialSummary?.typeBreakdown && financialSummary.totalFees > 0 && (
+                      <div className="mt-2 pt-2 border-t border-muted space-y-0.5">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            New outstanding
+                          </span>
+                          <span>₦{Math.max(0, financialSummary.typeBreakdown.new.totalFees - financialSummary.typeBreakdown.new.actualCollected).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+                            Returning outstanding
+                          </span>
+                          <span>₦{Math.max(0, financialSummary.typeBreakdown.returning.totalFees - financialSummary.typeBreakdown.returning.actualCollected).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -5631,6 +5667,24 @@ export default function AdminDashboard() {
                     {financialSummary?.studentsOwing ?? "0"}
                   </div>
                   <p className="text-[10px] sm:text-xs text-muted-foreground">Tuition not fully paid this term</p>
+                  {financialSummary?.typeBreakdown && financialSummary.studentsOwing > 0 && (
+                    <div className="mt-2 pt-2 border-t border-muted space-y-0.5">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          New
+                        </span>
+                        <span>{financialSummary.typeBreakdown.new.studentsOwing}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400" />
+                          Returning
+                        </span>
+                        <span>{financialSummary.typeBreakdown.returning.studentsOwing}</span>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

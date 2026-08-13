@@ -36,6 +36,7 @@ const COLUMN_DEFS = [
   { key: "name", label: "Student Name", required: true },
   { key: "studentId", label: "SOWA ID" },
   { key: "className", label: "Class" },
+  { key: "studentType", label: "Student Type" },
   { key: "parentWhatsapp", label: "Parent WhatsApp" },
   { key: "tuition", label: "Tuition Fee (₦)" },
   { key: "discount", label: "Discount (₦)" },
@@ -106,6 +107,8 @@ interface LedgerEntry {
   className: string;
   classId: string;
   parentWhatsapp: string | null;
+  /** 'new' | 'returning' — effective type for the requested term/session */
+  studentType: string;
   totalPaid: number;
   totalAssigned: number;
   tuitionAssigned: number;
@@ -163,6 +166,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
   const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
   const [outstandingOnly, setOutstandingOnly] = useState<boolean>(false);
+  const [studentTypeFilter, setStudentTypeFilter] = useState<string>("all");
   const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns(userId));
 
   // Re-hydrate per-user preferences when the signed-in user changes.
@@ -281,11 +285,18 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     : (Array.isArray(ledger) ? ledger : []);
 
   // Outstanding-only narrows the search results to students who still owe
-  // (balance > 0). Flows through to the table, count, Excel export, Print
-  // view, and admin grand total because they all read from filteredLedger.
-  const filteredLedger = outstandingOnly
-    ? searchedLedger.filter((e) => Math.max(0, (e.tuitionAssigned || 0) - (e.totalPaid || 0)) > 0)
-    : searchedLedger;
+  // (balance > 0). Type filter narrows to new or returning students.
+  // Both flow through to the table, count, Excel export, Print view, and
+  // admin grand total because they all read from filteredLedger.
+  const filteredLedger = (() => {
+    let result = outstandingOnly
+      ? searchedLedger.filter((e) => Math.max(0, (e.tuitionAssigned || 0) - (e.totalPaid || 0)) > 0)
+      : searchedLedger;
+    if (studentTypeFilter !== "all") {
+      result = result.filter((e) => (e.studentType ?? "returning") === studentTypeFilter);
+    }
+    return result;
+  })();
 
   const handlePrint = () => {
     document.body.classList.add("printing-finance");
@@ -310,6 +321,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("name")) row["Student Name"] = `${e.lastName ?? ""} ${e.firstName ?? ""}`.trim();
       if (isCol("className")) row["Class"] = e.className || "";
       if (isCol("studentId")) row["SOWA ID"] = e.studentId || "";
+      if (isCol("studentType")) row["Student Type"] = e.studentType === "new" ? "New" : "Returning";
       if (isCol("parentWhatsapp")) row["Parent WhatsApp"] = e.parentWhatsapp || "";
       if (isCol("tuition")) row["Tuition Fee (NGN)"] = tuition;
       if (isCol("discount")) row["Discount (NGN)"] = e.discount || 0;
@@ -501,6 +513,19 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-1 w-full sm:w-auto">
+          <label className="text-xs text-muted-foreground font-medium">Student Type</label>
+          <Select value={studentTypeFilter} onValueChange={setStudentTypeFilter}>
+            <SelectTrigger className="h-8 text-sm w-full sm:w-[130px]">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="new">New</SelectItem>
+              <SelectItem value="returning">Returning</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-xs space-y-1">
           <label className="text-xs text-muted-foreground font-medium">Search</label>
           <div className="relative">
@@ -595,6 +620,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 {isCol("name") && <TableHead>Student Name</TableHead>}
                 {isCol("className") && <TableHead>Class</TableHead>}
                 {isCol("studentId") && <TableHead>SOWA ID</TableHead>}
+                {isCol("studentType") && <TableHead>Type</TableHead>}
                 {isCol("parentWhatsapp") && <TableHead>Parent WhatsApp</TableHead>}
                 {isCol("tuition") && <TableHead className="text-right">Tuition Fee (₦)</TableHead>}
                 {isCol("discount") && <TableHead className="text-right">Discount (₦)</TableHead>}
@@ -635,6 +661,19 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   )}
                   {isCol("className") && <TableCell className="text-sm">{entry.className}</TableCell>}
                   {isCol("studentId") && <TableCell className="text-sm font-mono">{entry.studentId}</TableCell>}
+                  {isCol("studentType") && (
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          (entry.studentType ?? "returning") === "new"
+                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                            : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                        }`}
+                      >
+                        {(entry.studentType ?? "returning") === "new" ? "New" : "Returning"}
+                      </span>
+                    </TableCell>
+                  )}
                   {isCol("parentWhatsapp") && (
                     <TableCell className="text-sm font-mono">{entry.parentWhatsapp || "—"}</TableCell>
                   )}
@@ -713,6 +752,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                     {isCol("name") && <TableCell>Grand Total</TableCell>}
                     {isCol("className") && <TableCell></TableCell>}
                     {isCol("studentId") && <TableCell></TableCell>}
+                    {isCol("studentType") && <TableCell></TableCell>}
                     {isCol("parentWhatsapp") && <TableCell></TableCell>}
                     {isCol("tuition") && (
                       <TableCell className="text-right" data-testid="cell-grand-total-tuition">

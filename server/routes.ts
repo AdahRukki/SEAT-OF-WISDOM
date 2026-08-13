@@ -3973,6 +3973,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         delete summary.totalRevenue;
         delete summary.totalPaid;
         delete summary.actualTuitionCollected;
+        // typeBreakdown.actualCollected mirrors actualTuitionCollected — strip together
+        delete summary.typeBreakdown;
       }
       if (!hasPermission(user.role, user.permissions, 'finance_outstanding_fees')) {
         delete summary.totalOutstanding;

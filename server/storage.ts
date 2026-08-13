@@ -234,6 +234,8 @@ export interface IStorage {
       className: string;
       classId: string;
       parentWhatsapp: string | null;
+      /** 'new' | 'returning' — effective type for the requested term/session */
+      studentType: string;
       totalPaid: number;
       totalAssigned: number;
       tuitionAssigned: number;
@@ -281,6 +283,11 @@ export interface IStorage {
     collectionRate: number;
     studentsOwing: number;
     totalPosFees: number;
+    /** Per-type tuition breakdown — new vs returning students */
+    typeBreakdown: {
+      new:       { totalFees: number; actualCollected: number; studentsOwing: number };
+      returning: { totalFees: number; actualCollected: number; studentsOwing: number };
+    };
   }>;
   getTuitionCollectionByClass(schoolId: string, term?: string, session?: string): Promise<Array<{
     classId: string;
@@ -1665,9 +1672,12 @@ export class DatabaseStorage implements IStorage {
       lastName: string;
       className: string;
       classId: string;
+      parentWhatsapp: string | null;
+      studentType: string;
       totalPaid: number;
       totalAssigned: number;
       tuitionAssigned: number;
+      discount: number;
       balance: number;
       paymentCount: number;
       lastPaymentDate: string | null;
@@ -1810,6 +1820,7 @@ export class DatabaseStorage implements IStorage {
         className: r.className || '',
         classId: r.classId,
         parentWhatsapp: r.parentWhatsapp ?? null,
+        studentType: (r.studentType as string) ?? 'returning',
         discount,
         totalPaid,
         totalAssigned,
@@ -2066,6 +2077,10 @@ export class DatabaseStorage implements IStorage {
     collectionRate: number;
     studentsOwing: number;
     totalPosFees: number;
+    typeBreakdown: {
+      new:       { totalFees: number; actualCollected: number; studentsOwing: number };
+      returning: { totalFees: number; actualCollected: number; studentsOwing: number };
+    };
   }> {
     const revenueConditions: any[] = [eq(feePaymentRecords.status, 'confirmed')];
     if (schoolId) revenueConditions.push(eq(feePaymentRecords.schoolId, schoolId));
@@ -2100,6 +2115,12 @@ export class DatabaseStorage implements IStorage {
 
     let actualTuitionCollected = 0;
 
+    // Per-type breakdown (new vs returning students)
+    const typeBreakdown = {
+      new:       { totalFees: 0, actualCollected: 0, studentsOwing: 0 },
+      returning: { totalFees: 0, actualCollected: 0, studentsOwing: 0 },
+    };
+
     if (tuitionFeeType) {
       // Always load ALL rows (global + every scoped set) so the resolver can
       // apply the correct priority fallback: scoped+typed > scoped+universal >
@@ -2108,7 +2129,9 @@ export class DatabaseStorage implements IStorage {
       const tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
       const summaryResolver = this.buildTuitionResolver(tuitionAmounts, term, session);
 
+      // Track both owed amount and student type so we can break down by type later.
       const studentOwedMap = new Map<string, number>();
+      const studentTypeMap = new Map<string, 'new' | 'returning'>();
       for (const student of allActiveStudents) {
         const classAmount = student.classId ? summaryResolver(student.classId, student.studentType ?? null) : 0;
         if (classAmount > 0) {
@@ -2116,6 +2139,9 @@ export class DatabaseStorage implements IStorage {
           const owed = Math.max(0, classAmount - discount);
           studentOwedMap.set(student.id, owed);
           totalTuitionOwed += owed;
+          const typeKey: 'new' | 'returning' = student.studentType === 'new' ? 'new' : 'returning';
+          studentTypeMap.set(student.id, typeKey);
+          typeBreakdown[typeKey].totalFees += owed;
         }
       }
 
@@ -2139,8 +2165,13 @@ export class DatabaseStorage implements IStorage {
       let owingCount = 0;
       for (const [studentId, owed] of studentOwedMap) {
         const paid = studentPaidMap.get(studentId) || 0;
-        actualTuitionCollected += Math.min(paid, owed);
+        const capped = Math.min(paid, owed);
+        actualTuitionCollected += capped;
         if (paid < owed) owingCount += 1;
+        // Per-type accumulation
+        const typeKey = studentTypeMap.get(studentId) ?? 'returning';
+        typeBreakdown[typeKey].actualCollected += capped;
+        if (paid < owed) typeBreakdown[typeKey].studentsOwing += 1;
       }
       studentsOwing = owingCount;
     } else {
@@ -2179,6 +2210,7 @@ export class DatabaseStorage implements IStorage {
       collectionRate,
       studentsOwing,
       totalPosFees,
+      typeBreakdown,
     };
   }
 
