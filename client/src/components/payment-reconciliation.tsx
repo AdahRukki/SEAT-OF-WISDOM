@@ -1738,7 +1738,17 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                       SMS
                                     </Badge>
                                   )}
-                                  {!tx.schoolId && tx.source === 'sms' && (
+                                  {tx.source === 'email' && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-violet-50 text-violet-700 border-violet-300"
+                                      title="Automatically captured from a bank credit-alert email"
+                                      data-testid={`badge-tx-email-${tx.id}`}
+                                    >
+                                      EMAIL
+                                    </Badge>
+                                  )}
+                                  {!tx.schoolId && (tx.source === 'sms' || tx.source === 'email') && (
                                     <Badge
                                       variant="outline"
                                       className="text-[10px] bg-orange-50 text-orange-700 border-orange-300"
@@ -2055,11 +2065,21 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 SMS
                               </Badge>
                             )}
-                            {!tx.schoolId && tx.source === 'sms' && (
+                            {tx.source === 'email' && (
+                              <Badge
+                                variant="outline"
+                                className="bg-violet-50 text-violet-700 border-violet-300 text-[10px]"
+                                title="Automatically captured from a bank credit-alert email"
+                                data-testid={`badge-tx-email-row-${tx.id}`}
+                              >
+                                EMAIL
+                              </Badge>
+                            )}
+                            {!tx.schoolId && (tx.source === 'sms' || tx.source === 'email') && (
                               <Badge
                                 variant="outline"
                                 className="bg-orange-50 text-orange-700 border-orange-300 text-[10px]"
-                                title="This SMS could not be routed to a school. Add its account number under Bank Accounts."
+                                title="This alert could not be routed to a school. Add its account number under Bank Accounts."
                                 data-testid={`badge-tx-unrouted-row-${tx.id}`}
                               >
                                 Unrouted

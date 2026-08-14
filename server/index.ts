@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { pool } from "./db";
+import { startEmailPoller } from "./email-ingest";
 
 async function runMigrations() {
   try {
@@ -63,6 +64,10 @@ async function runMigrations() {
       ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_sender VARCHAR(100);
       ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_account VARCHAR(50);
       ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_received_at TIMESTAMP;
+      -- Email bank-alert ingestion: additional columns for email-sourced transactions.
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS email_from VARCHAR(255);
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS email_subject VARCHAR(500);
+      ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS email_received_at TIMESTAMP;
       CREATE TABLE IF NOT EXISTS school_bank_accounts (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
@@ -321,6 +326,10 @@ app.use('/api', (_req, res, next) => {
 
 (async () => {
   await runMigrations();
+
+  // Start the IMAP email bank-alert poller (no-op if env vars are absent).
+  startEmailPoller();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

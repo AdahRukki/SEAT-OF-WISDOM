@@ -5731,15 +5731,16 @@ export class DatabaseStorage implements IStorage {
     await db.delete(schoolBankAccounts).where(eq(schoolBankAccounts.id, id));
   }
 
-  // Backfill schoolId on SMS transactions that arrived before their account was
-  // mapped. Matches on the masked account stored on each SMS transaction.
+  // Backfill schoolId on auto-ingested transactions (SMS or email) that arrived
+  // before their account was mapped.  Matches on the masked account stored on
+  // each transaction (sms_account holds the routing key for both sources).
   async rerouteUnroutedSmsTransactions(): Promise<number> {
     const result = await db.execute(sql`
       UPDATE bank_transactions bt
          SET school_id = sba.school_id,
              updated_at = NOW()
         FROM school_bank_accounts sba
-       WHERE bt.source = 'sms'
+       WHERE bt.source IN ('sms', 'email')
          AND bt.school_id IS NULL
          AND sba.is_active = TRUE
          AND bt.sms_account = sba.masked_account_number

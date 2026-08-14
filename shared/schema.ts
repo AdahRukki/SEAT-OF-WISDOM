@@ -487,6 +487,10 @@ export const bankTransactions = pgTable("bank_transactions", {
   smsSender: varchar("sms_sender", { length: 100 }), // SMS sender id (e.g. "Zenith")
   smsAccount: varchar("sms_account", { length: 50 }), // Masked account from the SMS (routing key; kept for re-routing)
   smsReceivedAt: timestamp("sms_received_at"), // When the phone received the SMS
+  // Email bank-alert ingestion ("email" source rows only).
+  emailFrom: varchar("email_from", { length: 255 }), // Sender email address
+  emailSubject: varchar("email_subject", { length: 500 }), // Email subject line
+  emailReceivedAt: timestamp("email_received_at"), // When the inbox received the email
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
