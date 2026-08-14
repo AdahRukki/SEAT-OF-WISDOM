@@ -29,10 +29,17 @@ import {
   subjects,
   assessments,
   promotionRecords,
+  paymentAuditLogs,
+  calendarEvents,
+  studentNameChangeRequests,
+  bankStatements,
+  bankTransactions,
+  feePaymentRecords,
 } from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 
 const TAG = `assess-guard-test-${Date.now()}`;
+const ORPHAN_PREFIX = "assess-guard-test-%";
 const CURRENT_SESSION = "2025/2026";
 const PAST_SESSION = "2024/2025";
 const TERM = "First Term";
@@ -47,14 +54,91 @@ function check(name: string, cond: boolean, detail?: unknown) {
   }
 }
 
+/**
+ * Delete every row that blocks a school delete, working from deepest dependents
+ * up to the school row itself.  Each step is individually try/caught so one
+ * failure never silently skips the rest.
+ */
+async function cleanupSchoolById(schoolId: string) {
+  const steps: Array<{ name: string; fn: () => Promise<unknown> }> = [
+    {
+      name: "paymentAuditLogs",
+      fn: () => db.delete(paymentAuditLogs).where(eq(paymentAuditLogs.schoolId, schoolId)),
+    },
+    {
+      name: "calendarEvents",
+      fn: () => db.delete(calendarEvents).where(eq(calendarEvents.schoolId, schoolId)),
+    },
+    {
+      name: "studentNameChangeRequests",
+      fn: () =>
+        db
+          .delete(studentNameChangeRequests)
+          .where(eq(studentNameChangeRequests.schoolId, schoolId)),
+    },
+    {
+      name: "feePaymentRecords",
+      fn: () => db.delete(feePaymentRecords).where(eq(feePaymentRecords.schoolId, schoolId)),
+    },
+    {
+      name: "bankTransactions",
+      fn: () => db.delete(bankTransactions).where(eq(bankTransactions.schoolId, schoolId)),
+    },
+    {
+      name: "bankStatements",
+      fn: () => db.delete(bankStatements).where(eq(bankStatements.schoolId, schoolId)),
+    },
+    {
+      name: "users",
+      fn: () => db.delete(users).where(eq(users.schoolId, schoolId)),
+    },
+    {
+      name: "school",
+      fn: () => db.delete(schools).where(eq(schools.id, schoolId)),
+    },
+  ];
+
+  for (const step of steps) {
+    try {
+      await step.fn();
+    } catch (err) {
+      console.error(`  Cleanup error (${step.name} for school ${schoolId}):`, err);
+    }
+  }
+}
+
+/**
+ * Find and fully remove any leftover test schools from previous broken runs.
+ * Called once at startup so stale rows never accumulate.
+ */
+async function sweepOrphansByPrefix(prefix: string) {
+  const orphans = await db
+    .select({ id: schools.id, name: schools.name })
+    .from(schools)
+    .where(like(schools.name, prefix));
+
+  if (orphans.length === 0) return;
+
+  console.log(`\nSweeping ${orphans.length} orphaned test school(s) from previous runs…`);
+  for (const orphan of orphans) {
+    console.log(`  Removing: ${orphan.name} (${orphan.id})`);
+    await cleanupSchoolById(orphan.id);
+  }
+  console.log("  Sweep complete.\n");
+}
+
 async function main() {
+  // Purge any schools left behind by previous failed/interrupted runs before
+  // creating new test data.
+  await sweepOrphansByPrefix(ORPHAN_PREFIX);
+
   // Declare all setup variables before the try so finally can guard each delete.
-  let school: { id: number | string } | undefined;
-  let user: { id: number | string } | undefined;
-  let student: { id: number | string } | undefined;
-  let subjA: { id: number | string } | undefined;
-  let subjB: { id: number | string } | undefined;
-  let subjC: { id: number | string } | undefined;
+  let school: { id: string } | undefined;
+  let user: { id: string } | undefined;
+  let student: { id: string } | undefined;
+  let subjA: { id: string } | undefined;
+  let subjB: { id: string } | undefined;
+  let subjC: { id: string } | undefined;
   let oldClassId: string | undefined;
   let newClassId: string | undefined;
 
@@ -203,32 +287,44 @@ async function main() {
       exam: updated3.exam,
     });
   } finally {
-    // ---------- cleanup (nullish-guarded so partial setup never orphans rows) ----------
+    // ---------- cleanup ----------
+    // Per-object deletes first (fastest path when everything went smoothly).
+    // Each step is individually try/caught so a failure is logged rather than
+    // silently aborting the remaining deletes.
+    console.log("\n── cleanup");
+
     if (student) {
-      await db.delete(assessments).where(eq(assessments.studentId, student.id));
-      await db.delete(promotionRecords).where(eq(promotionRecords.studentId, student.id));
-      await db.delete(students).where(eq(students.id, student.id));
+      try { await db.delete(assessments).where(eq(assessments.studentId, student.id)); }
+      catch (e) { console.error("  Cleanup error (assessments):", e); }
+
+      try { await db.delete(promotionRecords).where(eq(promotionRecords.studentId, student.id)); }
+      catch (e) { console.error("  Cleanup error (promotionRecords):", e); }
+
+      try { await db.delete(students).where(eq(students.id, student.id)); }
+      catch (e) { console.error("  Cleanup error (students):", e); }
     }
-    if (subjA && subjB && subjC) {
-      await db.delete(subjects).where(inArray(subjects.id, [subjA.id, subjB.id, subjC.id]));
-    } else {
-      // Delete whichever subjects were created individually
-      for (const subj of [subjA, subjB, subjC]) {
-        if (subj) await db.delete(subjects).where(eq(subjects.id, subj.id));
+
+    for (const [label, subj] of [["subjA", subjA], ["subjB", subjB], ["subjC", subjC]] as const) {
+      if (subj) {
+        try { await db.delete(subjects).where(eq(subjects.id, subj.id)); }
+        catch (e) { console.error(`  Cleanup error (${label}):`, e); }
       }
     }
-    if (oldClassId && newClassId) {
-      await db.delete(classes).where(inArray(classes.id, [oldClassId, newClassId]));
-    } else {
-      if (oldClassId) await db.delete(classes).where(eq(classes.id, oldClassId));
-      if (newClassId) await db.delete(classes).where(eq(classes.id, newClassId));
+
+    for (const [label, cid] of [["oldClass", oldClassId], ["newClass", newClassId]] as const) {
+      if (cid) {
+        try { await db.delete(classes).where(eq(classes.id, cid)); }
+        catch (e) { console.error(`  Cleanup error (${label}):`, e); }
+      }
     }
-    if (user) {
-      await db.delete(users).where(eq(users.id, user.id));
-    }
+
+    // Safety net: delete everything tied to the school by schoolId so no
+    // non-cascading FK row can block the final school delete.
     if (school) {
-      await db.delete(schools).where(eq(schools.id, school.id));
+      await cleanupSchoolById(school.id);
     }
+
+    console.log("  cleanup done");
   }
 
   if (failures > 0) {

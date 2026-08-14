@@ -23,8 +23,19 @@ import { fileURLToPath } from "node:url";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { db } from "../server/db";
-import { schools, classes, users, students, paymentAuditLogs } from "@shared/schema";
-import { eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  schools,
+  classes,
+  users,
+  students,
+  paymentAuditLogs,
+  calendarEvents,
+  studentNameChangeRequests,
+  bankStatements,
+  bankTransactions,
+  feePaymentRecords,
+} from "@shared/schema";
+import { eq, inArray, like } from "drizzle-orm";
 
 // ESM-compatible __dirname
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -37,6 +48,7 @@ const JWT_SECRET =
   process.env.JWT_SECRET ?? "development-jwt-secret-change-in-production";
 
 const TAG = `ret-guard-test-${Date.now()}`;
+const ORPHAN_PREFIX = "ret-guard-test-%";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -85,6 +97,79 @@ function studentPayload(classId: string, studentType: "new" | "returning", schoo
   };
 }
 
+/**
+ * Delete every row that blocks a school delete, working from deepest dependents
+ * up to the school row itself.  Each step is individually try/caught so one
+ * failure never silently skips the rest.
+ */
+async function cleanupSchoolById(schoolId: string) {
+  const steps: Array<{ name: string; fn: () => Promise<unknown> }> = [
+    {
+      name: "paymentAuditLogs",
+      fn: () => db.delete(paymentAuditLogs).where(eq(paymentAuditLogs.schoolId, schoolId)),
+    },
+    {
+      name: "calendarEvents",
+      fn: () => db.delete(calendarEvents).where(eq(calendarEvents.schoolId, schoolId)),
+    },
+    {
+      name: "studentNameChangeRequests",
+      fn: () =>
+        db
+          .delete(studentNameChangeRequests)
+          .where(eq(studentNameChangeRequests.schoolId, schoolId)),
+    },
+    {
+      name: "feePaymentRecords",
+      fn: () => db.delete(feePaymentRecords).where(eq(feePaymentRecords.schoolId, schoolId)),
+    },
+    {
+      name: "bankTransactions",
+      fn: () => db.delete(bankTransactions).where(eq(bankTransactions.schoolId, schoolId)),
+    },
+    {
+      name: "bankStatements",
+      fn: () => db.delete(bankStatements).where(eq(bankStatements.schoolId, schoolId)),
+    },
+    {
+      name: "users",
+      fn: () => db.delete(users).where(eq(users.schoolId, schoolId)),
+    },
+    {
+      name: "school",
+      fn: () => db.delete(schools).where(eq(schools.id, schoolId)),
+    },
+  ];
+
+  for (const step of steps) {
+    try {
+      await step.fn();
+    } catch (err) {
+      console.error(`  Cleanup error (${step.name} for school ${schoolId}):`, err);
+    }
+  }
+}
+
+/**
+ * Find and fully remove any leftover test schools from previous broken runs.
+ * Called once at startup so stale rows never accumulate.
+ */
+async function sweepOrphansByPrefix(prefix: string) {
+  const orphans = await db
+    .select({ id: schools.id, name: schools.name })
+    .from(schools)
+    .where(like(schools.name, prefix));
+
+  if (orphans.length === 0) return;
+
+  console.log(`\nSweeping ${orphans.length} orphaned test school(s) from previous runs…`);
+  for (const orphan of orphans) {
+    console.log(`  Removing: ${orphan.name} (${orphan.id})`);
+    await cleanupSchoolById(orphan.id);
+  }
+  console.log("  Sweep complete.\n");
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -100,6 +185,10 @@ async function main() {
     );
     process.exit(1);
   }
+
+  // Purge any schools left behind by previous failed/interrupted runs before
+  // creating new test data.
+  await sweepOrphansByPrefix(ORPHAN_PREFIX);
 
   // ── DB fixtures ───────────────────────────────────────────────────────────
   // We track every created row so cleanup is deterministic.
@@ -185,12 +274,6 @@ async function main() {
         r.body?.error,
       );
       // No student should have been persisted; the route cleans the orphan user.
-      const orphanUsers = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.email, `${TAG}-subadmin-returning-orphan@test.local`));
-      // We can't easily match the temp email, but we can verify no extra student
-      // rows were left behind by checking the students table for the class.
       const leftBehind = await db
         .select({ id: students.id })
         .from(students)
@@ -304,47 +387,60 @@ async function main() {
 
     // Delete any student rows created by successful registrations, then their users.
     if (createdStudentIds.length > 0) {
-      const studentRows = await db
-        .select({ userId: students.userId })
-        .from(students)
-        .where(inArray(students.id, createdStudentIds));
-      await db.delete(students).where(inArray(students.id, createdStudentIds));
-      const studentUserIds = studentRows.map((r) => r.userId).filter(Boolean) as string[];
-      if (studentUserIds.length > 0) {
-        await db.delete(users).where(inArray(users.id, studentUserIds));
+      try {
+        const studentRows = await db
+          .select({ userId: students.userId })
+          .from(students)
+          .where(inArray(students.id, createdStudentIds));
+        await db.delete(students).where(inArray(students.id, createdStudentIds));
+        const studentUserIds = studentRows.map((r) => r.userId).filter(Boolean) as string[];
+        if (studentUserIds.length > 0) {
+          await db.delete(users).where(inArray(users.id, studentUserIds));
+        }
+      } catch (e) {
+        console.error("  Cleanup error (createdStudents):", e);
       }
     }
 
     // Also sweep any orphaned temp student users that share this session's class
     // (in case a partial run left rows behind).
-    const orphans = await db
-      .select({ id: students.id, userId: students.userId })
-      .from(students)
-      .where(eq(students.classId, classId ?? ""));
-    if (orphans.length > 0) {
-      await db.delete(students).where(eq(students.classId, classId));
-      const orphanUserIds = orphans.map((r) => r.userId).filter(Boolean) as string[];
-      if (orphanUserIds.length > 0) {
-        await db.delete(users).where(inArray(users.id, orphanUserIds));
+    if (classId) {
+      try {
+        const orphans = await db
+          .select({ id: students.id, userId: students.userId })
+          .from(students)
+          .where(eq(students.classId, classId));
+        if (orphans.length > 0) {
+          await db.delete(students).where(eq(students.classId, classId));
+          const orphanUserIds = orphans.map((r) => r.userId).filter(Boolean) as string[];
+          if (orphanUserIds.length > 0) {
+            await db.delete(users).where(inArray(users.id, orphanUserIds));
+          }
+        }
+      } catch (e) {
+        console.error("  Cleanup error (orphanStudents):", e);
       }
     }
 
-    // The registration route writes activity-log entries referencing the school.
-    // Delete those before removing the school to satisfy the FK constraint.
-    if (schoolId) {
-      await db.delete(paymentAuditLogs).where(eq(paymentAuditLogs.schoolId, schoolId));
+    // Delete fixture (sub-admin + main admin) accounts.
+    if (createdUserIds.length > 0) {
+      try {
+        await db.delete(users).where(inArray(users.id, createdUserIds));
+      } catch (e) {
+        console.error("  Cleanup error (createdUsers):", e);
+      }
     }
 
-    // Delete fixture accounts, class, school.
-    if (createdUserIds.length > 0) {
-      await db.delete(users).where(inArray(users.id, createdUserIds));
-    }
+    // Safety net: delete class, then everything tied to the school by schoolId so
+    // no non-cascading FK row can block the final school delete.
     if (classId) {
-      await db.delete(classes).where(eq(classes.id, classId));
+      try { await db.delete(classes).where(eq(classes.id, classId)); }
+      catch (e) { console.error("  Cleanup error (class):", e); }
     }
     if (schoolId) {
-      await db.delete(schools).where(eq(schools.id, schoolId));
+      await cleanupSchoolById(schoolId);
     }
+
     console.log("  cleanup done");
   }
 
