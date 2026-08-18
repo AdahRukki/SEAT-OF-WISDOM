@@ -8,6 +8,7 @@ import path from "path";
 import express from "express";
 import { extractTextFromPDF, parseTransactions, parseExcelTransactions, generateFingerprint, detectBankFormat, ParsedTransaction } from "./pdf-parser";
 import { parseBankAlertSms } from "./sms-parser";
+import { getEmailIngestLog, getLastPollStatus } from "./email-ingest";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
@@ -5167,6 +5168,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("[POST /api/admin/bank-accounts/reroute] Error:", error);
       res.status(500).json({ error: "Failed to reroute transactions" });
+    }
+  });
+
+  // Email ingest log — in-memory, resets on server restart.
+  // pollerEnabled is true when both required env vars are present so the
+  // frontend can show a setup prompt instead of an empty table.
+  app.get("/api/admin/email-ingest-log", authenticate, requireMainAdmin, (_req: Request, res: Response) => {
+    try {
+      const log = getEmailIngestLog();
+      const { lastPollAt, lastPollOk } = getLastPollStatus();
+      const pollerEnabled = !!(
+        process.env.EMAIL_INGEST_ADDRESS?.trim() &&
+        process.env.EMAIL_INGEST_PASSWORD?.trim()
+      );
+      res.json({ log, lastPollAt, lastPollOk, pollerEnabled });
+    } catch (error) {
+      console.error("[GET /api/admin/email-ingest-log] Error:", error);
+      res.status(500).json({ error: "Failed to fetch email ingest log" });
     }
   });
 

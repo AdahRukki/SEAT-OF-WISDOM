@@ -115,6 +115,60 @@ function parseTransactionDate(dateStr: string): Date {
   return new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
 }
 
+// ── Helper: derive bank label from sender domain ──────────────────────────────
+
+function bankFromSender(from: string): string {
+  const atIdx = from.lastIndexOf("@");
+  if (atIdx === -1) return "Unknown";
+  const domain = from.slice(atIdx + 1).toLowerCase();
+  if (domain.includes("zenithbank")) return "Zenith";
+  if (domain.includes("fidelitybank")) return "Fidelity";
+  if (domain.includes("accessbank") || domain.includes("accessbankplc")) return "Access";
+  if (domain.includes("gtbank") || domain.includes("gtcoplc")) return "GTBank";
+  if (domain.includes("firstbanknigeria")) return "First Bank";
+  if (domain.includes("uba") || domain.includes("ubagroup")) return "UBA";
+  if (domain.includes("fcmb")) return "FCMB";
+  if (domain.includes("stanbicibtc")) return "Stanbic IBTC";
+  if (domain.includes("sterlingbank")) return "Sterling";
+  if (domain.includes("wemabank")) return "Wema";
+  return "Unknown";
+}
+
+// ── In-memory ingest log ──────────────────────────────────────────────────────
+//
+// Capped circular buffer of the last LOG_MAX email poll events.
+// Resets on server restart — no DB persistence needed.
+
+export interface EmailIngestEntry {
+  uid: number;
+  from: string;
+  subject: string;
+  detectedBank: string;
+  outcome: "ingested" | "skipped" | "retry";
+  reason: string;
+  processedAt: string; // ISO 8601
+}
+
+const LOG_MAX = 50;
+const ingestLog: EmailIngestEntry[] = [];
+let lastPollAt: string | null = null;
+let lastPollOk: boolean | null = null;
+
+function appendLog(entry: EmailIngestEntry): void {
+  ingestLog.unshift(entry);           // newest first
+  if (ingestLog.length > LOG_MAX) ingestLog.length = LOG_MAX;
+}
+
+/** Returns a copy of the current ingest log (newest first, max 50 entries). */
+export function getEmailIngestLog(): EmailIngestEntry[] {
+  return [...ingestLog];
+}
+
+/** Returns the timestamp and success flag of the most recent poll attempt. */
+export function getLastPollStatus(): { lastPollAt: string | null; lastPollOk: boolean | null } {
+  return { lastPollAt, lastPollOk };
+}
+
 // ── Per-message processing ────────────────────────────────────────────────────
 //
 // Returns:
@@ -134,19 +188,28 @@ async function processMessage(message: {
   const subject: string = message.envelope?.subject ?? "";
   const receivedAt: Date = message.envelope?.date ?? new Date();
 
+  // Detect bank from sender domain early so every log entry carries it.
+  let detectedBank = bankFromSender(from);
+
+  // Helper: append a log entry and return the outcome in one call.
+  const done = (outcome: ProcessResult, reason: string): ProcessResult => {
+    appendLog({ uid, from, subject, detectedBank, outcome, reason, processedAt: new Date().toISOString() });
+    return outcome;
+  };
+
   // ── Check 1: From-domain allowlist ──────────────────────────────────────
   if (!isTrustedBankSender(from)) {
     console.log(
       `[email-ingest] UID ${uid}: untrusted sender "${from}" — skipped (not in allowlist)`
     );
-    return "skipped";
+    return done("skipped", "untrusted sender — not in allowlist");
   }
 
   // ── Require raw source for both DKIM check and body extraction ──────────
   const sourceBuffer = message.source;
   if (!sourceBuffer || sourceBuffer.length === 0) {
     console.log(`[email-ingest] UID ${uid}: empty source buffer, skipping permanently`);
-    return "skipped";
+    return done("skipped", "empty source buffer");
   }
 
   // ── Check 2: DKIM authentication (via Gmail's Authentication-Results) ───
@@ -156,7 +219,7 @@ async function processMessage(message: {
       `[email-ingest] UID ${uid}: DKIM not verified for "${from}" — ` +
         `skipped (ensure bank sends alerts directly to the monitored inbox, not via forwarding)`
     );
-    return "skipped";
+    return done("skipped", "DKIM not verified");
   }
 
   // ── Body extraction ──────────────────────────────────────────────────────
@@ -165,15 +228,14 @@ async function processMessage(message: {
   try {
     ({ html, text } = extractBodyFromRfc2822(sourceBuffer));
   } catch (extractErr) {
-    // Pure-function failure → skip permanently.
     console.error(`[email-ingest] UID ${uid}: body extraction error:`, extractErr);
-    return "skipped";
+    return done("skipped", "body extraction error");
   }
 
   const body = html || text;
   if (!body.trim()) {
     console.log(`[email-ingest] UID ${uid}: empty body after extraction`);
-    return "skipped";
+    return done("skipped", "empty body after extraction");
   }
 
   // ── Parse credit alert ───────────────────────────────────────────────────
@@ -181,19 +243,20 @@ async function processMessage(message: {
   try {
     result = parseEmailAlert({ from, subject, html: body });
   } catch (parseErr) {
-    // Pure-function failure → skip permanently.
     console.error(`[email-ingest] UID ${uid}: parser threw unexpectedly:`, parseErr);
-    return "skipped";
+    return done("skipped", "parser error");
   }
 
   if (!result.ok) {
     console.log(
       `[email-ingest] UID ${uid}: skipped (${result.reason}): "${subject}" from ${from}`
     );
-    return "skipped"; // debit / OTP / non-credit — intentional
+    return done("skipped", result.reason);
   }
 
   const alert = result.data;
+  // Refine bank label from parse result now that we have it.
+  detectedBank = alert.bankName !== "Unknown" ? alert.bankName : detectedBank;
 
   // ── Duplicate check ──────────────────────────────────────────────────────
   let alreadyExists: boolean;
@@ -201,14 +264,14 @@ async function processMessage(message: {
     alreadyExists = await storage.checkTransactionFingerprint(alert.fingerprint);
   } catch (fpErr) {
     console.error(`[email-ingest] UID ${uid}: fingerprint check failed (transient):`, fpErr);
-    return "retry";
+    return done("retry", "fingerprint check failed — will retry");
   }
 
   if (alreadyExists) {
     console.log(
       `[email-ingest] UID ${uid}: duplicate fingerprint (${alert.fingerprint.slice(0, 8)}…)`
     );
-    return "skipped";
+    return done("skipped", "duplicate fingerprint");
   }
 
   // ── Route by masked account ──────────────────────────────────────────────
@@ -219,7 +282,7 @@ async function processMessage(message: {
       if (account?.isActive) schoolId = account.schoolId;
     } catch (routeErr) {
       console.error(`[email-ingest] UID ${uid}: routing lookup failed (transient):`, routeErr);
-      return "retry";
+      return done("retry", "routing lookup failed — will retry");
     }
   }
 
@@ -253,15 +316,18 @@ async function processMessage(message: {
       `[email-ingest] UID ${uid}: ✓ ${alert.bankName} ₦${alert.amount.toLocaleString()} — ` +
         `"${alert.rawDescription.slice(0, 60)}"${schoolId ? "" : " [unrouted]"}`
     );
-    return "ingested";
+    return done(
+      "ingested",
+      `₦${alert.amount.toLocaleString()} — ${alert.rawDescription.slice(0, 50)}`
+    );
   } catch (insertErr: any) {
     if (insertErr?.code === "23505" || /unique/i.test(insertErr?.message ?? "")) {
       // Lost fingerprint-uniqueness race — treat as dup.
-      return "skipped";
+      return done("skipped", "duplicate fingerprint (race)");
     }
     // Any other DB failure is transient — leave unseen for retry.
     console.error(`[email-ingest] UID ${uid}: insert failed (transient):`, insertErr);
-    return "retry";
+    return done("retry", "DB insert failed — will retry");
   }
 }
 
@@ -281,68 +347,79 @@ async function pollOnce(address: string, password: string): Promise<void> {
   // promise rejections of the awaited IMAP calls, which our try/finally catches.
   client.on("error", (_err) => { /* surfaced via promise rejection below */ });
 
-  await client.connect();
-
-  // Outer finally ensures the connection is always closed, regardless of
-  // early returns, thrown errors, or lock-release paths inside.
   try {
-    let ingested = 0;
-    let skipped = 0;
-    let retried = 0;
+    await client.connect();
 
-    const lock = await client.getMailboxLock("INBOX");
+    // Outer finally ensures the connection is always closed, regardless of
+    // early returns, thrown errors, or lock-release paths inside.
     try {
-      // search() may return false when the mailbox is empty or SEARCH is
-      // unsupported by the server; guard both cases.
-      const searchResult = await client.search({ seen: false }, { uid: true });
-      const unseenUids: number[] = Array.isArray(searchResult) ? searchResult : [];
+      let ingested = 0;
+      let skipped = 0;
+      let retried = 0;
 
-      // Iterating over an empty array is a no-op — no early return needed.
-      for await (const message of client.fetch(
-        unseenUids,
-        { uid: true, envelope: true, source: true },
-        { uid: true }
-      )) {
-        let result: ProcessResult;
-        try {
-          result = await processMessage(message as any);
-        } catch (unexpected) {
-          console.error(`[email-ingest] UID ${message.uid}: unexpected error:`, unexpected);
-          result = "retry";
-        }
+      const lock = await client.getMailboxLock("INBOX");
+      try {
+        // search() may return false when the mailbox is empty or SEARCH is
+        // unsupported by the server; guard both cases.
+        const searchResult = await client.search({ seen: false }, { uid: true });
+        const unseenUids: number[] = Array.isArray(searchResult) ? searchResult : [];
 
-        const shouldMarkSeen = result === "ingested" || result === "skipped";
-
-        if (shouldMarkSeen) {
+        // Iterating over an empty array is a no-op — no early return needed.
+        for await (const message of client.fetch(
+          unseenUids,
+          { uid: true, envelope: true, source: true },
+          { uid: true }
+        )) {
+          let result: ProcessResult;
           try {
-            await client.messageFlagsAdd(message.uid.toString(), ["\\Seen"], { uid: true });
-          } catch (flagErr) {
-            console.error(`[email-ingest] UID ${message.uid}: could not mark seen:`, flagErr);
+            result = await processMessage(message as any);
+          } catch (unexpected) {
+            console.error(`[email-ingest] UID ${message.uid}: unexpected error:`, unexpected);
+            result = "retry";
           }
+
+          const shouldMarkSeen = result === "ingested" || result === "skipped";
+
+          if (shouldMarkSeen) {
+            try {
+              await client.messageFlagsAdd(message.uid.toString(), ["\\Seen"], { uid: true });
+            } catch (flagErr) {
+              console.error(`[email-ingest] UID ${message.uid}: could not mark seen:`, flagErr);
+            }
+          }
+
+          if (result === "ingested") ingested++;
+          else if (result === "skipped") skipped++;
+          else retried++;
         }
-
-        if (result === "ingested") ingested++;
-        else if (result === "skipped") skipped++;
-        else retried++;
+      } finally {
+        lock.release();
       }
-    } finally {
-      lock.release();
-    }
 
-    if (ingested + skipped + retried > 0) {
-      console.log(
-        `[email-ingest] Poll done: ${ingested} ingested, ${skipped} skipped` +
-          (retried > 0 ? `, ${retried} left unseen for retry` : "")
-      );
+      if (ingested + skipped + retried > 0) {
+        console.log(
+          `[email-ingest] Poll done: ${ingested} ingested, ${skipped} skipped` +
+            (retried > 0 ? `, ${retried} left unseen for retry` : "")
+        );
+      }
+
+      // Record successful poll.
+      lastPollAt = new Date().toISOString();
+      lastPollOk = true;
+    } finally {
+      // Always close the IMAP connection — covers normal exit, early returns,
+      // and any exception thrown inside the try block above.
+      try {
+        await client.logout();
+      } catch {
+        /* ignore logout errors — socket may already be broken */
+      }
     }
-  } finally {
-    // Always close the IMAP connection — covers normal exit, early returns,
-    // and any exception thrown inside the try block above.
-    try {
-      await client.logout();
-    } catch {
-      /* ignore logout errors — socket may already be broken */
-    }
+  } catch (err) {
+    // Connection-level failure (auth, network, etc.) — record as failed poll.
+    lastPollAt = new Date().toISOString();
+    lastPollOk = false;
+    throw err; // re-throw so startEmailPoller's .catch() logs it
   }
 }
 

@@ -63,10 +63,29 @@ import {
   Search,
   Clock,
   WifiOff,
+  Mail,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails, SchoolBankAccount } from "@shared/schema";
 import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
 import { Checkbox } from "@/components/ui/checkbox";
+
+// ── Email ingest log helpers ──────────────────────────────────────────────────
+
+function formatPollAge(iso: string): string {
+  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+}
+
+function formatLogTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 // "12 Jan 2025" — timezone-safe for YYYY-MM-DD strings and Date objects.
 function formatRecoDate(value: string | Date | null | undefined): string {
@@ -231,6 +250,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const [activeTab, setActiveTab] = useState<string>("reconcile");
   // Filter transactions tab to only those from a specific statement (set via chip click)
   const [filterStatementId, setFilterStatementId] = useState<string | null>(null);
+  // Email Ingest panel (main admin only)
+  const [ingestLogOpen, setIngestLogOpen] = useState(false);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -589,6 +610,28 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   const { data: schoolsList = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["/api/admin/schools"],
     enabled: isMainAdmin,
+  });
+
+  // Email ingest log — auto-refreshes every 60 s while the panel is open.
+  const {
+    data: ingestLogData,
+    isFetching: ingestLogFetching,
+    refetch: refetchIngestLog,
+  } = useQuery<{
+    log: Array<{ uid: number; from: string; subject: string; detectedBank: string; outcome: "ingested" | "skipped" | "retry"; reason: string; processedAt: string }>;
+    lastPollAt: string | null;
+    lastPollOk: boolean | null;
+    pollerEnabled: boolean;
+  }>({
+    queryKey: ["/api/admin/email-ingest-log"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/email-ingest-log", { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch email ingest log");
+      return res.json();
+    },
+    enabled: isMainAdmin && ingestLogOpen,
+    refetchInterval: isMainAdmin && ingestLogOpen ? 60_000 : false,
+    staleTime: 0,
   });
 
   const emptyAccountForm = { id: "", schoolId: "", bankName: "Zenith", maskedAccountNumber: "", accountLabel: "" };
@@ -2258,6 +2301,144 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   <RefreshCw className={`h-4 w-4 mr-1 ${rerouteMutation.isPending ? 'animate-spin' : ''}`} />
                   Re-route unmatched SMS
                 </Button>
+              </div>
+
+              {/* ── Email Ingest Log ──────────────────────────────────────── */}
+              <div className="border rounded-lg overflow-hidden">
+                {/* Collapsible header */}
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium bg-muted/30 hover:bg-muted/60 transition-colors"
+                  onClick={() => setIngestLogOpen((v) => !v)}
+                >
+                  <span className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    Email Ingest
+                    {ingestLogData && !ingestLogData.pollerEnabled && (
+                      <span className="text-xs font-normal text-amber-600">(not configured)</span>
+                    )}
+                    {ingestLogData?.pollerEnabled && ingestLogData.lastPollAt && (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        · last polled {formatPollAge(ingestLogData.lastPollAt)}
+                        {ingestLogData.lastPollOk === false && (
+                          <span className="text-destructive"> · failed</span>
+                        )}
+                      </span>
+                    )}
+                    {ingestLogFetching && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    )}
+                  </span>
+                  {ingestLogOpen
+                    ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </button>
+
+                {/* Expanded body */}
+                {ingestLogOpen && (
+                  <div className="p-3 space-y-3 border-t">
+                    {/* Setup prompt when poller is not configured */}
+                    {ingestLogData && !ingestLogData.pollerEnabled && (
+                      <Alert>
+                        <Mail className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                          Email ingestion is not configured. Set{" "}
+                          <span className="font-mono text-xs">EMAIL_INGEST_ADDRESS</span> and{" "}
+                          <span className="font-mono text-xs">EMAIL_INGEST_PASSWORD</span> in
+                          Replit Secrets to enable it.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Refresh + status line */}
+                    {ingestLogData?.pollerEnabled && (
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          {ingestLogData.lastPollAt
+                            ? `Last polled ${formatPollAge(ingestLogData.lastPollAt)} · ${ingestLogData.lastPollOk ? "✓ connected" : "✗ connection failed"}`
+                            : "Not polled yet this session — poll runs every 60 s"}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => refetchIngestLog()}
+                          disabled={ingestLogFetching}
+                        >
+                          <RefreshCw className={`h-3 w-3 mr-1 ${ingestLogFetching ? "animate-spin" : ""}`} />
+                          Refresh
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Log table */}
+                    {ingestLogData?.log && ingestLogData.log.length > 0 ? (
+                      <div className="rounded border overflow-auto max-h-72">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="text-xs">
+                              <TableHead className="py-1.5 text-xs">Time</TableHead>
+                              <TableHead className="py-1.5 text-xs">Bank</TableHead>
+                              <TableHead className="py-1.5 text-xs">Subject</TableHead>
+                              <TableHead className="py-1.5 text-xs">Outcome</TableHead>
+                              <TableHead className="py-1.5 text-xs">Reason</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {ingestLogData.log.map((entry) => (
+                              <TableRow
+                                key={`${entry.uid}-${entry.processedAt}`}
+                                className={
+                                  entry.outcome === "ingested"
+                                    ? "bg-green-50/60 dark:bg-green-950/20"
+                                    : entry.outcome === "retry"
+                                    ? "bg-amber-50/60 dark:bg-amber-950/20"
+                                    : ""
+                                }
+                              >
+                                <TableCell className="py-1.5 text-xs font-mono whitespace-nowrap">
+                                  {formatLogTime(entry.processedAt)}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-xs">{entry.detectedBank}</TableCell>
+                                <TableCell
+                                  className="py-1.5 text-xs max-w-[180px] truncate"
+                                  title={entry.subject}
+                                >
+                                  {entry.subject || <span className="text-muted-foreground italic">—</span>}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-xs">
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      entry.outcome === "ingested"
+                                        ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                                        : entry.outcome === "retry"
+                                        ? "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                                        : "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
+                                    }
+                                  >
+                                    {entry.outcome === "ingested"
+                                      ? "Ingested"
+                                      : entry.outcome === "retry"
+                                      ? "Retry"
+                                      : "Skipped"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="py-1.5 text-xs text-muted-foreground max-w-[200px] truncate" title={entry.reason}>
+                                  {entry.reason}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : ingestLogData && ingestLogData.pollerEnabled ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">
+                        No emails processed this session — the inbox is checked every 60 seconds.
+                      </p>
+                    ) : null}
+                  </div>
+                )}
               </div>
 
               {bankAccountsLoading ? (
