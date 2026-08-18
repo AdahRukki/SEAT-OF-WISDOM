@@ -1,0 +1,52 @@
+Delivered-To: adahfaith61@gmail.com
+Received: by 2002:a05:6022:a157:10b0:10e:cbd:5290 with SMTP id j23-n1csp141095laq; Tue, 18 Aug 2026 16:14:05 -0700 (PDT)
+X-Received: by 2002:a05:690c:23c3:b0:820:10f1:b791 with SMTP id 00721157ae682-844e53b5365mr4100207b3.36.1787094844764; Tue, 18 Aug 2026 16:14:04 -0700 (PDT)
+ARC-Seal: i=2; a=rsa-sha256; t=1787094844; cv=pass; d=google.com; s=arc-20260327; b=PhZeNd7GcSPnzeTcY1IDPTTqPH9IEl5A6WuoAC5tAzs1A0h5sj2lUrOYfqDoY0tcfl YHYmsOsBZkgyViL1K1A8+T722aDM6X11Bz8a3cL/OvhMnWDpNSCmYPmMMkaAHUMWdCTy 0cpYNE96daCq12m1LwkpSxObvO1JCCIDS83e/TUM1MinttVXaBF3mnHQoZWKwPrhkBzH 9b4q0G7Y2bAt8PsnrsCdOXGA1oTWNqTXdXX35IxTMQAZZmVzPrhNrSJKjdXYh7gqc+XN wyt4r0e7PBrw0980U/hplOUs2gWlIuU5mGUiMq5v+gOU/8Q8hC/dRSfmX9jZoqPTe/P2 8+fw==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327; h=content-transfer-encoding:mime-version:to:priority:importance :message-id:subject:date:from:dkim-signature; bh=NqfWFXrZlTQPmO6Zpi1MfuvEwIGwiFsnY1lRWksf8Es=; fh=AJpb202Zuji48pwRuFGC3I6RtaK1eleguG/5G6MSe08=; b=GjxpmUWgNr7TC06Z2W+WWW/UW+qNZ0175iVXUkJ76pCxQ3gN8u1d7+Y5hCyN1l8/+D 9FJYcO6ZveaRUBImd/znLEWQGr+VXWJP+9mqfmv1C+8wPj4mlzmgn5PATkSj3NCOcMhm pcGoT1KaGkweg21KXHcPG+y0hW/M12wOlKLI6jJ5Rkhqkh8RVGQzWaloOhZ10M3GKxzI 2mfBXcmaM8o+ziVRuPJjpGwn/vYxnpOeOOTHB7snDEdg7n5p1wS2XirCugDL0hplzl3J zVWhsC1YwByflddqlQwqMEi0sGLUb0tgi5LqM5eaZ5HoB7Ex30A5Ogt4wTOUJc73iPqY 4zoA==; dara=google.com
+ARC-Authentication-Results: i=2; mx.google.com; dkim=pass header.i=@zenithbank.com header.s=selector1 header.b=eiOZXk6B; arc=pass (i=1 spf=pass spfdomain=zenithbank.com dmarc=pass fromdomain=zenithbank.com); spf=pass (google.com: domain of ebusinessgroup@zenithbank.com designates 2a01:111:f403:c201::3 as permitted sender) smtp.mailfrom=EbusinessGroup@zenithbank.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=zenithbank.com
+Return-Path: <EbusinessGroup@zenithbank.com>
+Received: from AS8PR04CU009.outbound.protection.outlook.com (mail-westeuropeazlp170110003.outbound.protection.outlook.com. [2a01:111:f403:c201::3]) by mx.google.com with ESMTPS id 00721157ae682-84519d1cb5asi549447b3.150.2026.08.18.16.14.04 for <adahfaith61@gmail.com> (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256); Tue, 18 Aug 2026 16:14:04 -0700 (PDT)
+Received-SPF: pass (google.com: domain of ebusinessgroup@zenithbank.com designates 2a01:111:f403:c201::3 as permitted sender) client-ip=2a01:111:f403:c201::3;
+Authentication-Results: mx.google.com; dkim=pass header.i=@zenithbank.com header.s=selector1 header.b=eiOZXk6B; arc=pass (i=1 spf=pass spfdomain=zenithbank.com dmarc=pass fromdomain=zenithbank.com); spf=pass (google.com: domain of ebusinessgroup@zenithbank.com designates 2a01:111:f403:c201::3 as permitted sender) smtp.mailfrom=EbusinessGroup@zenithbank.com; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=zenithbank.com
+ARC-Seal: i=1; a=rsa-sha256; s=arcselector10001; d=microsoft.com; cv=none; b=cvFWl/MbDg7ZF+mEJrbmMoY6sgf9dlX8RcqFmBnG/etZr/LNGcFOXCWm1feAADRbg/BHQ5KXIHeEQ+6Hu+uPR8grzJenxqqznWWLXFxWunxuj7bvplAwkRibH6EwhJq0eXFRTkmGgcJhKXCw9bGAVCp2BgJFwPiSjz9wPfaZzZNNJIJaKb2yQ6BZRth9ow/f5ApqZXfMQUhEgdv8KbglJQFBS0ZNFUoHH0HeNRip/Ct8+1OQR7lfCyCuxqIJzO1iesyvST+bvEHB6Ykzc42vwIPU/omd2uy/DRHUBbxVKja5j5r7cFTiyHjQ8ns7ipWgVCATyRnDZnBfnb2Dxs30MQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com; s=arcselector10001; h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-AntiSpam-MessageData-ChunkCount:X-MS-Exchange-AntiSpam-MessageData-0:X-MS-Exchange-AntiSpam-MessageData-1; bh=NqfWFXrZlTQPmO6Zpi1MfuvEwIGwiFsnY1lRWksf8Es=; b=HW0xGSPID660kmy9V0+GvovWCC1S+3PYeNicVh6q/xFvdTKYG9Zssn47i6IXdpsLRLTW58Hz0iDdjgumEya5DFr18pLRHWG9uTMScCBT1i7HGWc+5GoaPp9A11zVz5Bei9o2E7XI1WeMPP5BLgys+uMvQ8E4ZSzBNy7oKBHil10+rpKhJQ2QDumT5HKJc0ym0ZJwJYj0EU9wJ+4TzrR8GuO9OZBCQQ2b92Q9mpQl9SFGre0HJh2/3pYdgnLcMwRtFi6Jbwx93JiJOF7je4bnrp9LyfssMZdUEfPrvjAoxL2AJdwmnRvzCR0lIJ5hEJeXLqcsh7duDNYPf1J4Z2WmGA==
+ARC-Authentication-Results: i=1; mx.microsoft.com 1; spf=pass (sender ip is 41.203.113.112) smtp.rcpttodomain=gmail.com smtp.mailfrom=zenithbank.com; dmarc=pass (p=reject sp=reject pct=100) action=none header.from=zenithbank.com; dkim=none (message not signed); arc=none (0)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=zenithbank.com; s=selector1; h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-SenderADCheck; bh=NqfWFXrZlTQPmO6Zpi1MfuvEwIGwiFsnY1lRWksf8Es=; b=eiOZXk6BxxAreItrylcKVsNyiHF6tE0Feppxl36ef9vVrjSxdGWSonRByynXE2dr1mN55sodobI0L+tL0IVlEaZ0jCxBYJntK2feTvmIPfyaD4euz6AR5UeA4u4nGPyl4to5NvufuK3UWF4usNuhqjPtVQRn+B7pwI5Yk5BZUxZHv7V8P9iqX9VoVlij7GsDPxmqYSvf8nCeTemcMYDbpCDZfOj2lHuT4DZ2XENTPUBvq7kBwkG7xoOsA1thSYOfvoNnG9cCIQC1r8hF6FuhePZ06W3IPZtfLqmx8sKkBeaaza82K/uxEDVFhY+fEckI3Giz6vvdsgYkZf/vRV+oyQ==
+Received: from DU7P189CA0002.EURP189.PROD.OUTLOOK.COM (2603:10a6:10:552::7) by AM0PR04MB6772.eurprd04.prod.outlook.com (2603:10a6:208:188::8) with Microsoft SMTP Server (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.21.339.8; Tue, 18 Aug 2026 23:14:01 +0000
+Received: from DB1PEPF000509E2.eurprd03.prod.outlook.com (2603:10a6:10:552:cafe::24) by DU7P189CA0002.outlook.office365.com (2603:10a6:10:552::7) with Microsoft SMTP Server (version=TLS1_3, cipher=TLS_AES_256_GCM_SHA384) id 15.21.339.8 via Frontend Transport; Tue, 18 Aug 2026 23:14:01 +0000
+X-MS-Exchange-Authentication-Results: spf=pass (sender IP is 41.203.113.112) smtp.mailfrom=zenithbank.com; dkim=none (message not signed) header.d=none;dmarc=pass action=none header.from=zenithbank.com;
+Received-SPF: Pass (protection.outlook.com: domain of zenithbank.com designates 41.203.113.112 as permitted sender) receiver=protection.outlook.com; client-ip=41.203.113.112; helo=mail.zenithbank.com; pr=C
+Received: from mail.zenithbank.com (41.203.113.112) by DB1PEPF000509E2.mail.protection.outlook.com (10.167.242.52) with Microsoft SMTP Server (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.21.315.6 via Frontend Transport; Tue, 18 Aug 2026 23:14:01 +0000
+Received: from SV001NOT02 (172.29.8.4) by SV001EDGE013.africa.int.zenithbank.com (172.29.90.112) with Microsoft SMTP Server id 15.2.2562.17; Wed, 19 Aug 2026 00:14:00 +0100
+From: EbusinessGroup <ebusinessgroup@zenithbank.com>
+Date: Wed, 19 Aug 2026 00:14:00 +0100
+Subject: ZENITH BANK TRANSACTION ALERT[CREDIT:NGN100.00]
+Message-ID: <SX4L0F313UU4.ZSQ3ZDEYVG9K@sv001not02>
+Importance: high
+Priority: urgent
+To: <adahfaith61@gmail.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Return-Path: ebusinessgroup@zenithbank.com
+X-EOPAttributedMessage: 0
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: DB1PEPF000509E2:EE_|AM0PR04MB6772:EE_
+X-MS-Office365-Filtering-Correlation-Id: 6280daed-606f-49d5-604a-08defd7e63fb
+X-MS-Exchange-AtpMessageProperties: SA
+Content-Transfer-Encoding: quoted-printable
+X-MS-Exchange-SenderADCheck: 1
+X-MS-Exchange-AntiSpam-Relay: 0
+X-Microsoft-Antispam: BCL:0;ARA:13230040|36860700016|7149299003|1800799024|1032899013|376014|7049299003|82310400026|69100299015|23010399003|3109299003|10067099003|56012099006|55112099003|18002099003|11063799006|2066899003|8096899003|13003099007;
+X-Microsoft-Antispam-Message-Info: CJDypdt/557MkXtOuJV2TNt+6Ga66zPT/X2v1wWeHxJ1eBsrGJ0u9UUIdUYrERwH5kP0uXDDkDgjkjyCcW/4OgiPkpC8RquHJaldmOMzuUgktVEL99GdO6T7Zu9zQZBVgNYKlmz7ZmnmdzEGJ6wUqrEZU/Ih/YANnvGGv2rSuFGc0th2NEvF0iJ5VFDQ7G+qwFve1ZGx8G36ipl3bFhB/2f9q/DM60YsfUJIwxhe/HxJ9ml8J1SsYL0QPUVz9zOrgQlmLq+XaO7y/fXeudFPJwH6DAouW0Rgnzc6FS6Pxpd6tSRHhm4PpM+8QnJjz61qETbk/hmVYMR6/ayYNGo2q2IFlvYEYqnVFw6DUUwwVw/JJFN9FQU58AdMrA+LMS7PAVTMNR5hhxu2TtE/CAQ4rfozwG1P/fZFGyJZqLPO+R8PY1IOPotQHtsD9js5ElC7Y4Nl6HP9xAPkH1c5OCcxpaNj+FwWBCPr9ddaDZMQ3aZejMQwtDMRInH3PvhDGKIrUa4KzCyi0ckU0gLefp71rqLCCBXzzaSwwxHqT8fQs4AhWaLKcfhzUoPGABuIo+Akg/URWtZvitNDuQwpoy1Q9sWcJd0cqO5WfFO2macszSI2D6EWhSiS57Q+bgY6YezGa2h5Y+ugqZ0QZyXoNKRqnw==
+X-Forefront-Antispam-Report: CIP:41.203.113.112;CTRY:NG;LANG:en;SCL:1;SRV:;IPV:CAL;SFV:NSPM;H:mail.zenithbank.com;PTR:InfoDomainNonexistent;CAT:NONE;SFS:(13230040)(36860700016)(7149299003)(1800799024)(1032899013)(376014)(7049299003)(82310400026)(69100299015)(23010399003)(3109299003)(10067099003)(56012099006)(55112099003)(18002099003)(11063799006)(2066899003)(8096899003)(13003099007);DIR:OUT;SFP:1101;
+X-MS-Exchange-AntiSpam-MessageData-ChunkCount: 1
+X-MS-Exchange-AntiSpam-MessageData-0: HmPAPgZAK5tcmEdRIN9MVYHkXKS9UA3WLnv7eepl4NpKVDc3FkmNlcnRgqOgn1rNlsCD59TXIfVhJ/aIbEKphLWhYRu+MF5geFz9ODhBHUDfSzZC3NPdYA1V43wKSNBM+9wuwqBjF4kghe1o0kwvM5GwJ8vepZQlA/qks5NQmD/bIaLHZ29QknTCazF7zKLZ4zPRWtUeAE5INjcQuOMxHNK2drQR9ERHOFXQOBjpsmG0wbLvyLyUV3Qstr3uv/+LCkU9zB9MUY+N++oB+8xD181ZBM82exYEgEXd3h2Iao7AY8kYJiSizAzIIwpHlaEGdIyFNFWoezJP1ED5EVBxivbSMJUgERpHW59PDhnk+MIRlrV1VTEB344qPR2YuVHibCdoM5QSgKsHV82nVzcuShoq5sSxhqKEATUg+ZN3NQ0rmq/8GRZMkr8LZvJ+DLaQ
+X-OriginatorOrg: zenithbank.com
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 18 Aug 2026 23:14:01.5766 (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: 6280daed-606f-49d5-604a-08defd7e63fb
+X-MS-Exchange-CrossTenant-Id: 2ee92ccc-178a-40e7-adfd-01fbe0c65f02
+X-MS-Exchange-CrossTenant-OriginalAttributedTenantConnectingIp: TenantId=2ee92ccc-178a-40e7-adfd-01fbe0c65f02;Ip=[41.203.113.112];Helo=[mail.zenithbank.com]
+X-MS-Exchange-CrossTenant-AuthSource: DB1PEPF000509E2.eurprd03.prod.outlook.com
+X-MS-Exchange-CrossTenant-AuthAs: Anonymous
+X-MS-Exchange-CrossTenant-FromEntityHeader: HybridOnPrem
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: AM0PR04MB6772
