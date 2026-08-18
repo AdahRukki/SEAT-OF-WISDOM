@@ -1,0 +1,33 @@
+Delivered-To: adahfaith61@gmail.com
+Received: by 2002:a05:6022:a157:10b0:10e:cbd:5290 with SMTP id j23-n1csp140227laq; Tue, 18 Aug 2026 16:13:04 -0700 (PDT)
+X-Received: by 2002:ad4:5dcd:0:b0:8c4:edb4:a44a with SMTP id 6a1803df08f44-90c5eaabae3mr3780596d6.23.1787094783842; Tue, 18 Aug 2026 16:13:03 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1787094783; cv=none; d=google.com; s=arc-20260327; b=AWwScC9RWUD7xBR6tKksHq1uroRMwJXhHJddcXvwLKxA71uep2iR3gIUmysMdFPh6g ZZr80QYozU6gCV9K/hOUJvGKvNFrwdH92V91BHxduNvp9L1eoSnkpfVz6HuRGGxO5tkW EXWO/ZeaT5A2k4gsKMErCQIjtP458eVDycismnEirJouwAu3HTiypsV+GbiqG4Eredoc lP++G6T/GAaKyuIbGL52T+H7mSqMKdtkQgiUgkcSo4RpLBhCaSsIjqOTP+LFRdsmWvna Px/4ieX8JPC4dWyDIAz1BbOdS3WpR/57UMxSfHKAfNf/zAwpwh2i4IolQopAHU5/5zoH fQcw==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327; h=list-unsubscribe-post:feedback-id:list-unsubscribe :content-transfer-encoding:mime-version:message-id:subject:from:to :date:dkim-signature:dkim-signature; bh=0ctqYaCOy8vyeU2O6Ilm6jvjn7FWJ3agN/sLV1twrY8=; fh=AJpb202Zuji48pwRuFGC3I6RtaK1eleguG/5G6MSe08=; b=fkjIcTp4fiuR7Sb8kurTyQRIbW6SrjlJD+CVfy4WlMMOb6vvVZJ1z8F3Af9dJBi9dD HyW+m6obDAV9f+e4bW6TgbiWVH6bRSzL/Qm10ZRRGBfuah7bqB7RcYOS4CNm4HioXkPh tCnn7UqEN19fJdVrPfy1TYYMjoj933Z9ku7MKsocCNUJj0fWWZ0ElUEKjwBrwWDT9hSP dsXTq4WWCTulHpAZ5FZmM49Er7BnElIYi5uGfExue/F27J9tXUNKP+VJebO7Rnc4fNTV JUJHcOzlwQD0gQpXizrcw40tUo84/8ihf6kglCNmGSr74aVflhpGhiPkyOze5OzDi0Ne ka2w==; dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com; dkim=pass header.i=@fidelitybank.ng header.s=pepipost header.b=VIFMdFS2; dkim=pass header.i=@env.etransmail.com header.s=fnc header.b=pS+033mM; spf=pass (google.com: domain of 17870787626079528-98604-1-gmail.com@delivery.fidelitybank.ng designates 175.158.64.185 as permitted sender) smtp.mailfrom=17870787626079528-98604-1-gmail.com@delivery.fidelitybank.ng; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=fidelitybank.ng
+Return-Path: <17870787626079528-98604-1-gmail.com@delivery.fidelitybank.ng>
+Received: from mta15-64.185.etransmail.com (mta15-64.185.etransmail.com. [175.158.64.185]) by mx.google.com with ESMTPS id 6a1803df08f44-90c5f2c498bsi668696d6.580.2026.08.18.16.13.03 for <adahfaith61@gmail.com> (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256); Tue, 18 Aug 2026 16:13:03 -0700 (PDT)
+Received-SPF: pass (google.com: domain of 17870787626079528-98604-1-gmail.com@delivery.fidelitybank.ng designates 175.158.64.185 as permitted sender) client-ip=175.158.64.185;
+Authentication-Results: mx.google.com; dkim=pass header.i=@fidelitybank.ng header.s=pepipost header.b=VIFMdFS2; dkim=pass header.i=@env.etransmail.com header.s=fnc header.b=pS+033mM; spf=pass (google.com: domain of 17870787626079528-98604-1-gmail.com@delivery.fidelitybank.ng designates 175.158.64.185 as permitted sender) smtp.mailfrom=17870787626079528-98604-1-gmail.com@delivery.fidelitybank.ng; dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=fidelitybank.ng
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=fidelitybank.ng; s=pepipost; h=list-unsubscribe-post:feedback-id:list-unsubscribe:content-transfer-encoding: content-type:mime-version:message-id:subject:from:to:from:to:subject; bh=0ctqYaCOy8vyeU2O6Ilm6jvjn7FWJ3agN/sLV1twrY8=; b=VIFMdFS2VHZHlmNVhwGmh/mYCBXlc4A+X8iinLXDsIbMOUmjvazXYpb8a5HpWOoeiBtNUwjnBIWOD uKeilRdi8cYboSejeb5CmoOd10RApMEAN0wFS/uUOeRmL/6jvOCqwbkTmGprYEzhDaCHK/S+YjMRFw ndwKc4jykGVEAIOw=
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=env.etransmail.com; s=fnc; h=list-unsubscribe-post:feedback-id:list-unsubscribe:content-transfer-encoding: content-type:mime-version:message-id:subject:from:to:from:to:subject; bh=0ctqYaCOy8vyeU2O6Ilm6jvjn7FWJ3agN/sLV1twrY8=; b=pS+033mMJQqOeKCj1l02eNfKhQCEBtQqhWd3IxJajXOVrOWtmZyn+e7QpZIqQSyQ0JKOyUsxNmSja BYNWLFllBL0Pl43+cdRokNRA/omf+mcBxeEFp4s2hsL7r8wjMNhkB7klAFBOvaO/Y1WdLqnG35A7a+ HxgQYhQaupEv8+lg=
+Date: Wed, 19 Aug 2026 04:43:03 +0530
+To: <adahfaith61@gmail.com>
+From: =?UTF-8?B?RmlkZWxpdHkgQmFuaw==?= <ibanking@fidelitybank.ng>
+Subject: =?UTF-8?B?Q3JlZGl0IFRyYW5zYWN0aW9uIEFsZXJ0IG9uIHh4eHh4eDAwMjU=?=
+Message-Id: <ehynjr17870787626079528@fidelitybank.ng>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="_----------=_17870947822343216513"
+Content-Transfer-Encoding: binary
+List-Unsubscribe: <https://delivery.fidelitybank.ng/ZACYBQTFXHKN?id=98604=MBkCUg4BDwYCRBgVQRMZGBMXEBYRQRkQEkYRERhCEhFFRRJCFxkZFhYYGBVBExkYEwdMV1UAUVZTD0VZDlNyVggEWw4ZWlZbSgkPDVYDDgAEAQIAAVYABQBeTVlMFkJCX0odBlJVUEBTSkEbB1pdXV9eRE9TAFdbHAhWHmIjcWgnNGYkb3FyeAlRXEkXAA==>, <mailto:17870787626079528-98604-fncunsub@usub.ftrans03.com?subject=Unsubscribe>
+Feedback-Id: 98604:202608:1:falconide
+X-Fncid: 98604-17870787626079528-0
+X-Injtime: 1787094782
+X-Traffic-Type: 98604-2
+X-Mailer: NetcoreCloud Mailer
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+
+--_----------=_17870947822343216513
+Content-Disposition: inline
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="utf-8"
+
