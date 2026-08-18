@@ -153,6 +153,11 @@ const LOG_MAX = 50;
 const ingestLog: EmailIngestEntry[] = [];
 let lastPollAt: string | null = null;
 let lastPollOk: boolean | null = null;
+// Count consecutive poll failures so a single transient NoConnection error
+// (Gmail drops idle IMAP connections after each cycle) does not flip the
+// panel to "connection failed".  Only 2+ consecutive failures set lastPollOk
+// to false, giving one automatic reconnect attempt before the UI reacts.
+let consecutiveFailures = 0;
 
 function appendLog(entry: EmailIngestEntry): void {
   ingestLog.unshift(entry);           // newest first
@@ -403,7 +408,9 @@ async function pollOnce(address: string, password: string): Promise<void> {
         );
       }
 
-      // Record successful poll.
+      // Record successful poll — reset the consecutive-failure counter so a
+      // single transient error on the *previous* cycle doesn't linger.
+      consecutiveFailures = 0;
       lastPollAt = new Date().toISOString();
       lastPollOk = true;
     } finally {
@@ -416,9 +423,16 @@ async function pollOnce(address: string, password: string): Promise<void> {
       }
     }
   } catch (err) {
-    // Connection-level failure (auth, network, etc.) — record as failed poll.
+    // Connection-level failure (auth, network, etc.).
+    // Only flip lastPollOk to false after two or more consecutive failures so
+    // that a single transient NoConnection error (Gmail drops idle IMAP
+    // connections after each cycle) does not trigger the "connection failed"
+    // indicator.  One failed poll followed by a successful reconnect stays green.
+    consecutiveFailures++;
     lastPollAt = new Date().toISOString();
-    lastPollOk = false;
+    if (consecutiveFailures >= 2) {
+      lastPollOk = false;
+    }
     throw err; // re-throw so startEmailPoller's .catch() logs it
   }
 }

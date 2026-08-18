@@ -2355,7 +2355,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-muted-foreground">
                           {ingestLogData.lastPollAt
-                            ? `Last polled ${formatPollAge(ingestLogData.lastPollAt)} · ${ingestLogData.lastPollOk ? "✓ connected" : "✗ connection failed"}`
+                            ? `Last polled ${formatPollAge(ingestLogData.lastPollAt)}${ingestLogData.lastPollOk === true ? " · ✓ connected" : ingestLogData.lastPollOk === false ? " · ✗ connection failed" : ""}`
                             : "Not polled yet this session — poll runs every 60 s"}
                         </p>
                         <Button
