@@ -1,9 +1,10 @@
-// IMAP email bank-alert poller.
+// IMAP email bank-alert listener.
 //
-// Connects to a dedicated Gmail inbox via IMAP (TLS port 993) and polls for
-// unseen messages every 60 seconds.  Credit-alert emails that pass two
-// independent authentication checks are parsed and inserted into
-// bank_transactions with source = 'email'.
+// Connects to a dedicated Gmail inbox via IMAP (TLS port 993) and listens in
+// real time for new messages using IMAP IDLE — new mail is processed within
+// a few seconds of arrival instead of on a fixed polling interval. Credit-alert
+// emails that pass two independent authentication checks are parsed and
+// inserted into bank_transactions with source = 'email'.
 //
 // ── Authentication layers ──────────────────────────────────────────────────
 //
@@ -21,11 +22,25 @@
 //
 // ── Reliability ────────────────────────────────────────────────────────────
 //
-//  A message is marked \Seen only after a successful insert, a confirmed
-//  duplicate, or an intentional skip (debit, OTP, auth failure, etc.).
-//  Transient DB errors leave the message unseen so it is retried next cycle.
-//  The IMAP connection is always closed in a finally block regardless of the
-//  control-flow path taken inside the poll cycle.
+//  What's "new" is tracked with our own durable IMAP UID cursor (persisted via
+//  storage.getEmailIngestCursor/setEmailIngestCursor — see shared/schema.ts
+//  emailIngestState), NOT Gmail's shared \Seen flag. The old \Seen-based design
+//  had a silent, permanent data-loss bug: if a human ever opened/read an alert
+//  email in the monitored inbox before it was processed, it would become
+//  "seen" and be skipped forever with no error and no log entry. A UID cursor
+//  makes ingestion independent of what any other client does to the mailbox.
+//  \Seen is still set after processing, but only as a cosmetic visual aid —
+//  nothing reads it back.
+//
+//  The cursor only advances past a UID once it reaches a *terminal* outcome
+//  (ingested/skipped). A "retry" outcome holds the cursor there, so the next
+//  catch-up pass (range `cursor+1:*`) naturally retries it instead of skipping
+//  it. See computeNextCursor().
+//
+//  The IMAP connection is long-lived (IDLE), not reconnected per cycle. Gmail
+//  periodically drops long-held IDLE connections — the outer loop in
+//  startEmailPoller() reconnects with exponential backoff whenever the
+//  connection closes or errors.
 //
 // Required env vars (set via Replit Secrets — never commit to .replit):
 //   EMAIL_INGEST_ADDRESS  — Gmail address to monitor
@@ -36,7 +51,24 @@ import { authenticate } from "mailauth";
 import { storage } from "./storage";
 import { parseEmailAlert, extractBodyFromRfc2822 } from "./email-bank-parser";
 
-const POLL_INTERVAL_MS = 60_000;
+// Re-issue IDLE well within Gmail's ~29 minute IMAP IDLE timeout (imapflow
+// handles this renewal internally when maxIdleTime is set — see its
+// lib/imap-flow.d.ts: "If set, then breaks and restarts IDLE every
+// maxIdleTime ms").
+const MAX_IDLE_TIME_MS = 15 * 60 * 1000;
+
+// Heartbeat cadence for the admin-panel "last activity" timestamp during
+// quiet periods with no new mail — matches the old poller's 60s cadence so
+// the panel's staleness signal means the same thing it always did.
+const HEARTBEAT_MS = 60_000;
+
+// Reconnect backoff after a connection closes/errors.
+const INITIAL_BACKOFF_MS = 5_000;
+const MAX_BACKOFF_MS = 60_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // ── 1. Trusted bank sender domains ───────────────────────────────────────────
 //
@@ -235,8 +267,9 @@ function bankFromSender(from: string): string {
 
 // ── In-memory ingest log ──────────────────────────────────────────────────────
 //
-// Capped circular buffer of the last LOG_MAX email poll events.
-// Resets on server restart — no DB persistence needed.
+// Capped circular buffer of the last LOG_MAX email events.
+// Resets on server restart — no DB persistence needed (unlike the UID cursor,
+// which must survive restarts; this log is diagnostic only).
 
 export interface EmailIngestEntry {
   uid: number;
@@ -252,10 +285,11 @@ const LOG_MAX = 50;
 const ingestLog: EmailIngestEntry[] = [];
 let lastPollAt: string | null = null;
 let lastPollOk: boolean | null = null;
-// Count consecutive poll failures so a single transient NoConnection error
-// (Gmail drops idle IMAP connections after each cycle) does not flip the
-// panel to "connection failed".  Only 2+ consecutive failures set lastPollOk
-// to false, giving one automatic reconnect attempt before the UI reacts.
+// Count consecutive connection failures so a single transient drop (Gmail
+// closes long-held IDLE connections periodically — normal, not an outage)
+// does not flip the panel to "connection failed". Only 2+ consecutive
+// failures set lastPollOk to false, giving one automatic reconnect attempt
+// before the UI reacts.
 let consecutiveFailures = 0;
 
 function appendLog(entry: EmailIngestEntry): void {
@@ -268,7 +302,7 @@ export function getEmailIngestLog(): EmailIngestEntry[] {
   return [...ingestLog];
 }
 
-/** Returns the timestamp and success flag of the most recent poll attempt. */
+/** Returns the timestamp and success flag of the most recent connection activity. */
 export function getLastPollStatus(): { lastPollAt: string | null; lastPollOk: boolean | null } {
   return { lastPollAt, lastPollOk };
 }
@@ -276,9 +310,11 @@ export function getLastPollStatus(): { lastPollAt: string | null; lastPollOk: bo
 // ── Per-message processing ────────────────────────────────────────────────────
 //
 // Returns:
-//   'ingested' — successful DB insert; caller should mark \Seen
-//   'skipped'  — intentional skip (debit, OTP, auth failure, dup); mark \Seen
-//   'retry'    — transient error; leave unseen so next poll retries
+//   'ingested' — successful DB insert; cursor may advance past this UID
+//   'skipped'  — intentional skip (debit, OTP, auth failure, dup); cursor may
+//                advance past this UID
+//   'retry'    — transient error; cursor holds here so the next catch-up pass
+//                retries this UID instead of skipping it
 
 type ProcessResult = "ingested" | "skipped" | "retry";
 
@@ -429,114 +465,267 @@ async function processMessage(message: {
       // Lost fingerprint-uniqueness race — treat as dup.
       return done("skipped", "duplicate fingerprint (race)");
     }
-    // Any other DB failure is transient — leave unseen for retry.
+    // Any other DB failure is transient — leave for retry.
     console.error(`[email-ingest] UID ${uid}: insert failed (transient):`, insertErr);
     return done("retry", "DB insert failed — will retry");
   }
 }
 
-// ── One poll cycle ────────────────────────────────────────────────────────────
+// ── UID cursor advancement ────────────────────────────────────────────────────
+//
+// Pure function — exported for unit testing (scripts/test-email-ingest-cursor.ts).
+//
+// Given the cursor before this pass and the per-message outcomes from this
+// pass (ascending UID order), returns the new cursor. Advances past a
+// contiguous run of terminal outcomes (ingested/skipped) starting right after
+// the current cursor; stops at the first 'retry' so that UID is re-attempted
+// on the next pass rather than silently skipped forever.
 
-async function pollOnce(address: string, password: string): Promise<void> {
+export function computeNextCursor(
+  currentCursor: number,
+  results: Array<{ uid: number; outcome: ProcessResult }>
+): number {
+  let cursor = currentCursor;
+  const sorted = [...results].sort((a, b) => a.uid - b.uid);
+  for (const { uid, outcome } of sorted) {
+    if (uid <= cursor) continue; // already accounted for
+    if (outcome === "retry") break; // hold here; retried next pass
+    cursor = uid; // ingested/skipped are terminal — safe to advance past
+  }
+  return cursor;
+}
+
+// ── Catch-up pass: fetch and process everything after the cursor ─────────────
+
+async function catchUp(client: ImapFlow, mailbox: string, uidValidity: string, cursor: number): Promise<number> {
+  const results: Array<{ uid: number; outcome: ProcessResult }> = [];
+
+  const lock = await client.getMailboxLock("INBOX");
+  try {
+    for await (const message of client.fetch(
+      `${cursor + 1}:*`,
+      { uid: true, envelope: true, source: true },
+      { uid: true }
+    )) {
+      // A range fetch on an up-to-date mailbox with nothing new can still
+      // return the highest existing message (IMAP "*" placeholder behaviour)
+      // even when its UID is <= cursor — skip anything already accounted for.
+      if (message.uid <= cursor) continue;
+
+      let outcome: ProcessResult;
+      try {
+        outcome = await processMessage(message as any);
+      } catch (unexpected) {
+        console.error(`[email-ingest] UID ${message.uid}: unexpected error:`, unexpected);
+        outcome = "retry";
+      }
+
+      // Cosmetic only — nothing reads this back for correctness. Best-effort.
+      if (outcome === "ingested" || outcome === "skipped") {
+        try {
+          await client.messageFlagsAdd(message.uid.toString(), ["\\Seen"], { uid: true });
+        } catch (flagErr) {
+          console.error(`[email-ingest] UID ${message.uid}: could not mark seen:`, flagErr);
+        }
+      }
+
+      results.push({ uid: message.uid, outcome });
+    }
+  } finally {
+    lock.release();
+  }
+
+  const nextCursor = computeNextCursor(cursor, results);
+
+  if (results.length > 0) {
+    const ingested = results.filter((r) => r.outcome === "ingested").length;
+    const skipped = results.filter((r) => r.outcome === "skipped").length;
+    const retried = results.filter((r) => r.outcome === "retry").length;
+    console.log(
+      `[email-ingest] Catch-up done: ${ingested} ingested, ${skipped} skipped` +
+        (retried > 0 ? `, ${retried} held for retry` : "") +
+        ` (cursor ${cursor} → ${nextCursor})`
+    );
+  }
+
+  if (nextCursor !== cursor) {
+    await storage.setEmailIngestCursor(mailbox, uidValidity, nextCursor);
+  }
+
+  return nextCursor;
+}
+
+// ── One connection lifecycle: connect, establish cursor, listen via IDLE ─────
+//
+// Resolves when the connection ends (closed or errored) so the outer
+// reconnect loop in startEmailPoller() can retry. Never rejects — connection
+// failures are logged and surfaced via lastPollOk instead of thrown, so one
+// bad cycle can't crash the poller loop.
+
+async function connectAndListen(address: string, password: string): Promise<void> {
   const client = new ImapFlow({
     host: "imap.gmail.com",
     port: 993,
     secure: true,
     auth: { user: address, pass: password },
     logger: false,
+    maxIdleTime: MAX_IDLE_TIME_MS,
   });
 
-  // Prevent Node.js from crashing on an unhandled 'error' EventEmitter event
-  // (e.g. socket timeout while idle).  All errors also surface through the
-  // promise rejections of the awaited IMAP calls, which our try/finally catches.
-  client.on("error", (_err) => { /* surfaced via promise rejection below */ });
+  // Prevent Node.js from crashing on an unhandled 'error' EventEmitter event.
+  client.on("error", (_err) => { /* surfaced via the settle() path below */ });
 
-  try {
-    await client.connect();
+  let processing = false; // guards against overlapping catch-up passes
+  let pending = false;    // another 'exists' fired while one was already running
+  let cursor = 0;
+  let uidValidity = ""; // set once mailboxOpen resolves; constant for this connection's lifetime
+  let heartbeatTimer: NodeJS.Timeout | undefined;
 
-    // Outer finally ensures the connection is always closed, regardless of
-    // early returns, thrown errors, or lock-release paths inside.
+  const runCatchUpLoop = async () => {
+    if (processing) {
+      pending = true;
+      return;
+    }
+    processing = true;
     try {
-      let ingested = 0;
-      let skipped = 0;
-      let retried = 0;
-
-      const lock = await client.getMailboxLock("INBOX");
-      try {
-        // search() may return false when the mailbox is empty or SEARCH is
-        // unsupported by the server; guard both cases.
-        const searchResult = await client.search({ seen: false }, { uid: true });
-        const unseenUids: number[] = Array.isArray(searchResult) ? searchResult : [];
-
-        // Iterating over an empty array is a no-op — no early return needed.
-        for await (const message of client.fetch(
-          unseenUids,
-          { uid: true, envelope: true, source: true },
-          { uid: true }
-        )) {
-          let result: ProcessResult;
-          try {
-            result = await processMessage(message as any);
-          } catch (unexpected) {
-            console.error(`[email-ingest] UID ${message.uid}: unexpected error:`, unexpected);
-            result = "retry";
-          }
-
-          const shouldMarkSeen = result === "ingested" || result === "skipped";
-
-          if (shouldMarkSeen) {
-            try {
-              await client.messageFlagsAdd(message.uid.toString(), ["\\Seen"], { uid: true });
-            } catch (flagErr) {
-              console.error(`[email-ingest] UID ${message.uid}: could not mark seen:`, flagErr);
-            }
-          }
-
-          if (result === "ingested") ingested++;
-          else if (result === "skipped") skipped++;
-          else retried++;
-        }
-      } finally {
-        lock.release();
-      }
-
-      if (ingested + skipped + retried > 0) {
-        console.log(
-          `[email-ingest] Poll done: ${ingested} ingested, ${skipped} skipped` +
-            (retried > 0 ? `, ${retried} left unseen for retry` : "")
-        );
-      }
-
-      // Record successful poll — reset the consecutive-failure counter so a
-      // single transient error on the *previous* cycle doesn't linger.
-      consecutiveFailures = 0;
-      lastPollAt = new Date().toISOString();
-      lastPollOk = true;
+      do {
+        pending = false;
+        cursor = await catchUp(client, address, uidValidity, cursor);
+      } while (pending);
+    } catch (err) {
+      console.error("[email-ingest] catch-up pass failed:", err);
     } finally {
-      // Always close the IMAP connection — covers normal exit, early returns,
-      // and any exception thrown inside the try block above.
+      processing = false;
+    }
+  };
+
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const settle = (err?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      client.removeAllListeners();
+      if (err) console.error("[email-ingest] connection ended:", err);
+      resolve();
+    };
+
+    client.on("close", () => settle());
+    client.on("exists", () => {
+      runCatchUpLoop().catch((err) => console.error("[email-ingest] unexpected error in catch-up loop:", err));
+    });
+
+    (async () => {
       try {
-        await client.logout();
-      } catch {
-        /* ignore logout errors — socket may already be broken */
+        await client.connect();
+        const mailboxInfo = await client.mailboxOpen("INBOX");
+        uidValidity = mailboxInfo.uidValidity.toString();
+
+        const stored = await storage.getEmailIngestCursor(address);
+        if (stored && stored.uidValidity === uidValidity) {
+          cursor = stored.lastProcessedUid;
+        } else {
+          // First run for this mailbox, or the mailbox was recreated
+          // (UIDVALIDITY changed — any previously stored UID is meaningless).
+          //
+          // One-time cutover safety net: catch anything left unseen by the
+          // previous \Seen-based poller before switching to pure UID tracking,
+          // so nothing sitting unprocessed at deploy time is silently dropped.
+          console.log(
+            stored
+              ? `[email-ingest] UIDVALIDITY changed (${stored.uidValidity} → ${uidValidity}) — resetting cursor, running legacy unseen-scan once`
+              : "[email-ingest] No stored cursor — first run, running legacy unseen-scan once"
+          );
+          await legacyUnseenCatchUp(client);
+          cursor = mailboxInfo.uidNext - 1;
+        }
+        await storage.setEmailIngestCursor(address, uidValidity, cursor);
+
+        console.log(`[email-ingest] Connected — listening on ${address} (cursor: UID ${cursor}, uidValidity: ${uidValidity})`);
+        consecutiveFailures = 0;
+        lastPollAt = new Date().toISOString();
+        lastPollOk = true;
+
+        // Catch anything that arrived between the mailboxOpen snapshot and now.
+        await runCatchUpLoop();
+
+        // Heartbeat: keeps lastPollAt fresh during quiet periods (matches the
+        // old poller's 60s cadence) and detects a half-dead connection.
+        heartbeatTimer = setInterval(async () => {
+          if (!client.usable) {
+            settle(new Error("connection no longer usable"));
+            return;
+          }
+          try {
+            await client.noop();
+            lastPollAt = new Date().toISOString();
+            lastPollOk = true;
+            consecutiveFailures = 0;
+          } catch (err) {
+            settle(err);
+          }
+        }, HEARTBEAT_MS);
+
+        // Auto-IDLE (imapflow default — see ImapFlowOptions.disableAutoIdle,
+        // which we leave false) engages automatically once the connection has
+        // been otherwise inactive for autoIdleDelay (default 15s), and is
+        // renewed automatically per maxIdleTime. No manual idle() loop needed:
+        // the 'exists' listener above fires regardless of whether IDLE was
+        // entered manually or automatically.
+      } catch (err) {
+        consecutiveFailures++;
+        lastPollAt = new Date().toISOString();
+        if (consecutiveFailures >= 2) lastPollOk = false;
+        settle(err);
       }
+    })();
+  });
+}
+
+// ── Legacy one-time catch-up: search({seen:false}) ────────────────────────────
+//
+// Used only during the cutover from the old \Seen-based poller (see the
+// "first run" branch in connectAndListen). After this runs once per mailbox,
+// all tracking is UID-cursor based and this is never called again for that
+// mailbox (guarded by the persisted cursor row existing).
+
+async function legacyUnseenCatchUp(client: ImapFlow): Promise<void> {
+  const lock = await client.getMailboxLock("INBOX");
+  try {
+    const searchResult = await client.search({ seen: false }, { uid: true });
+    const unseenUids: number[] = Array.isArray(searchResult) ? searchResult : [];
+    if (unseenUids.length === 0) return;
+
+    console.log(`[email-ingest] Legacy scan: ${unseenUids.length} unseen message(s) to check`);
+    let ingested = 0, skipped = 0, retried = 0;
+    for await (const message of client.fetch(
+      unseenUids,
+      { uid: true, envelope: true, source: true },
+      { uid: true }
+    )) {
+      let outcome: ProcessResult;
+      try {
+        outcome = await processMessage(message as any);
+      } catch (unexpected) {
+        console.error(`[email-ingest] UID ${message.uid}: unexpected error (legacy scan):`, unexpected);
+        outcome = "retry";
+      }
+      if (outcome === "ingested" || outcome === "skipped") {
+        try {
+          await client.messageFlagsAdd(message.uid.toString(), ["\\Seen"], { uid: true });
+        } catch { /* cosmetic only */ }
+      }
+      if (outcome === "ingested") ingested++;
+      else if (outcome === "skipped") skipped++;
+      else retried++;
     }
-  } catch (err) {
-    // Connection-level failure (auth, network, etc.).
-    // Only flip lastPollOk to false after two or more consecutive failures so
-    // that a single transient NoConnection error (Gmail drops idle IMAP
-    // connections after each cycle) does not trigger the "connection failed"
-    // indicator.  One failed poll followed by a successful reconnect stays green.
-    consecutiveFailures++;
-    lastPollAt = new Date().toISOString();
-    if (consecutiveFailures >= 2) {
-      lastPollOk = false;
-    }
-    throw err; // re-throw so startEmailPoller's .catch() logs it
+    console.log(`[email-ingest] Legacy scan done: ${ingested} ingested, ${skipped} skipped, ${retried} left for the UID cursor to retry`);
+  } finally {
+    lock.release();
   }
 }
 
-// ── Public: start the background poller ──────────────────────────────────────
+// ── Public: start the background listener ─────────────────────────────────────
 
 export function startEmailPoller(): void {
   const address = process.env.EMAIL_INGEST_ADDRESS?.trim();
@@ -550,15 +739,22 @@ export function startEmailPoller(): void {
     return;
   }
 
-  const run = () =>
-    pollOnce(address, password).catch((err) =>
-      console.error("[email-ingest] Poll failed (will retry):", err)
-    );
+  console.log(`[email-ingest] Starting real-time IMAP listener for ${address}...`);
 
-  run();
-  setInterval(run, POLL_INTERVAL_MS);
-
-  console.log(
-    `[email-ingest] Poller started — monitoring ${address} every ${POLL_INTERVAL_MS / 1000}s`
-  );
+  (async function loop() {
+    let backoffMs = INITIAL_BACKOFF_MS;
+    for (;;) {
+      try {
+        await connectAndListen(address, password);
+      } catch (err) {
+        // connectAndListen is designed not to throw, but guard anyway so the
+        // outer loop can never die.
+        console.error("[email-ingest] unexpected error, reconnecting:", err);
+      }
+      const delay = Math.min(backoffMs, MAX_BACKOFF_MS);
+      console.log(`[email-ingest] connection ended — reconnecting in ${Math.round(delay / 1000)}s...`);
+      await sleep(delay);
+      backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+    }
+  })();
 }

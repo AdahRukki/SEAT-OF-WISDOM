@@ -1,6 +1,6 @@
 # Automatic Email Bank-Alert Ingestion
 
-This guide explains how to set up automatic ingestion of bank credit-alert emails into the reconciliation queue. Once configured, the server monitors a dedicated Gmail inbox every 60 seconds and imports credit alerts from Zenith, Access, and Fidelity automatically — no manual upload required.
+This guide explains how to set up automatic ingestion of bank credit-alert emails into the reconciliation queue. Once configured, the server listens to a dedicated Gmail inbox in real time (IMAP IDLE) and imports credit alerts from Zenith, Access, and Fidelity within a few seconds of arrival — no manual upload required.
 
 Credit-alert emails that arrive via this route are **deduplicated against SMS alerts** using the same fingerprint system, so a payment that triggers both an SMS and an email never creates a duplicate row.
 
@@ -67,22 +67,28 @@ In Replit, go to the **Secrets** panel and add:
 After saving, restart the server. You should see a log line like:
 
 ```
-[email-ingest] Poller started — monitoring sowabankealerts@gmail.com every 60s
+[email-ingest] Starting real-time IMAP listener for sowabankealerts@gmail.com...
+[email-ingest] Connected — listening on sowabankealerts@gmail.com (cursor: UID 118, uidValidity: 1699999999)
 ```
 
-If the variables are missing the server logs a warning and the poller is simply disabled — the rest of the app continues to work normally.
+If the variables are missing the server logs a warning and the listener is simply disabled — the rest of the app continues to work normally.
 
 ---
 
 ## How it works
 
-1. Every **60 seconds** the server connects to the Gmail inbox via IMAP (TLS, port 993).
-2. It searches for **unseen** (unread) messages.
+1. The server opens one long-lived IMAP connection (TLS, port 993) to the Gmail inbox and holds it open using **IMAP IDLE** — Gmail pushes a notification the instant a new message arrives, instead of the server checking on a timer.
+2. What's "new" is tracked with the server's own **persisted UID cursor** (not Gmail's read/unread flag — see the note below), so a message is processed exactly once and nothing is silently missed.
 3. Each email is parsed for: amount, masked account number, transaction date, and narration.
 4. **Credit alerts** are inserted into the reconciliation queue with `source = "email"` and an **EMAIL** badge visible in the Finance → Bank Transactions view.
-5. **Non-credit emails** (debits, OTPs, balance alerts, newsletters) are marked as seen and skipped — no row is created.
+5. **Non-credit emails** (debits, OTPs, balance alerts, newsletters) are skipped — no row is created.
 6. **Duplicates** — same fingerprint as an existing SMS or PDF row — are skipped silently.
-7. Processed emails are **marked as seen (read)** in Gmail so they are never re-processed on the next poll.
+7. Processed emails are still marked as seen (read) in Gmail as a visual convenience, but this is cosmetic only — nothing about correctness depends on it (see below).
+8. If the connection drops (Gmail periodically closes long-held IDLE connections — this is normal, not an outage), the server reconnects automatically with a short backoff and resumes exactly where its cursor left off.
+
+### Why not the Gmail "unread" flag?
+
+An earlier version of this feature tracked "what's new" using Gmail's shared `\Seen` flag (i.e., only unread messages were considered). That had a serious flaw: if anyone with access to the monitored inbox opened or read an alert email — checking it in a browser, a phone's mail app, anything — before the server processed it, that message would silently and *permanently* stop being considered, with no error and no log entry. The current design tracks its own UID cursor instead, which is independent of what any other client does to the mailbox. **You can safely ignore the old advice to never open this inbox** — but it's still good hygiene to leave it as a machine-only account.
 
 ---
 
@@ -101,6 +107,8 @@ To backfill:
 | Symptom | Likely cause |
 |---|---|
 | `[email-ingest] EMAIL_INGEST_ADDRESS or EMAIL_INGEST_PASSWORD not set` | Secrets not added or server not restarted |
-| `[email-ingest] Poll failed: Invalid credentials` | Wrong App Password or 2-Step Verification not enabled |
+| `connection ended: ... Invalid credentials` | Wrong App Password or 2-Step Verification not enabled |
+| Frequent `[email-ingest] connection ended — reconnecting in ...` | Normal in small numbers (Gmail periodically closes long-held IDLE connections) — only becomes a real problem if `pollerEnabled`/`lastPollOk` in the admin panel goes red, which needs 2+ *consecutive* failed reconnects |
 | Credit alert visible in Gmail but not in reconciliation | Check that the email body contains credit keywords (CR / Credit / credited). Debit alerts are intentionally skipped. |
 | Duplicate row for the same payment | Should not happen — if it does, check that both the SMS and email rows have the same balance figure (the fingerprint includes the running balance). |
+| Nothing ingesting after a fresh deploy to a new database | The UID cursor (`email_ingest_state` table) is per-database. On first run against a new database it runs a one-time legacy unseen-scan to catch anything pending, then starts tracking forward from there — check the server log for `"No stored cursor — first run"`. |

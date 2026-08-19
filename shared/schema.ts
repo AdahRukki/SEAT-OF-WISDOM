@@ -507,6 +507,26 @@ export const schoolBankAccounts = pgTable("school_bank_accounts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Email Ingest State table — durable IMAP UID cursor for the email
+// bank-alert poller (server/email-ingest.ts). One row per monitored mailbox.
+//
+// Replaces relying on Gmail's shared \Seen flag as the "what's new" signal:
+// if a human ever opens/reads an alert email in the monitored inbox before
+// the poller processes it, \Seen-based tracking would silently and
+// permanently lose that message. Tracking our own UID cursor instead makes
+// ingestion independent of what any other client does to the mailbox.
+//
+// uidValidity: IMAP's mailbox-identity token. If it changes (e.g. the
+// mailbox was recreated), lastProcessedUid from the old validity is
+// meaningless and must be reset rather than reused.
+export const emailIngestState = pgTable("email_ingest_state", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  mailbox: varchar("mailbox", { length: 255 }).notNull().unique(), // monitored email address
+  uidValidity: varchar("uid_validity", { length: 50 }).notNull(), // IMAP UIDVALIDITY, stored as string (can exceed int32)
+  lastProcessedUid: integer("last_processed_uid").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Fee Payment Records table (payments recorded by bursar/admin)
 export const feePaymentRecords = pgTable("fee_payment_records", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1323,6 +1343,10 @@ export type SchoolBankAccount = typeof schoolBankAccounts.$inferSelect;
 export type InsertSchoolBankAccount = z.infer<typeof insertSchoolBankAccountSchema>;
 export type UpsertSchoolBankAccount = z.infer<typeof upsertSchoolBankAccountSchema>;
 export type IngestSms = z.infer<typeof ingestSmsSchema>;
+
+// Email Ingest State types (internal server state only — no HTTP schema needed)
+export type EmailIngestState = typeof emailIngestState.$inferSelect;
+export type InsertEmailIngestState = typeof emailIngestState.$inferInsert;
 
 // Fee Payment Record types
 export type FeePaymentRecord = typeof feePaymentRecords.$inferSelect;

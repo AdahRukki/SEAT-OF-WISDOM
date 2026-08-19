@@ -30,6 +30,7 @@ import {
   bankStatements,
   bankTransactions,
   schoolBankAccounts,
+  emailIngestState,
   clearedDuplicatePairs,
   type School,
   type User,
@@ -91,6 +92,7 @@ import {
   type InsertBankTransaction,
   type SchoolBankAccount,
   type UpsertSchoolBankAccount,
+  type EmailIngestState,
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
@@ -419,6 +421,10 @@ export interface IStorage {
   getUnmatchedBankTransactions(schoolId?: string): Promise<BankTransaction[]>;
   updateBankTransactionStatus(id: string, status: string, matchConfidence?: number): Promise<BankTransaction>;
   checkTransactionFingerprint(fingerprint: string): Promise<boolean>;
+
+  // Email Ingest State (durable IMAP UID cursor — see shared/schema.ts emailIngestState)
+  getEmailIngestCursor(mailbox: string): Promise<EmailIngestState | undefined>;
+  setEmailIngestCursor(mailbox: string, uidValidity: string, lastProcessedUid: number): Promise<void>;
 
   // School Bank Accounts (masked account number -> school routing for SMS ingestion)
   getSchoolBankAccounts(): Promise<SchoolBankAccount[]>;
@@ -5676,6 +5682,27 @@ export class DatabaseStorage implements IStorage {
     const exists = !!existing;
     console.log('[checkTransactionFingerprint] Fingerprint exists:', exists);
     return exists;
+  }
+
+  // ---- Email Ingest State (durable IMAP UID cursor) ----
+
+  async getEmailIngestCursor(mailbox: string): Promise<EmailIngestState | undefined> {
+    const [row] = await db
+      .select()
+      .from(emailIngestState)
+      .where(eq(emailIngestState.mailbox, mailbox))
+      .limit(1);
+    return row;
+  }
+
+  async setEmailIngestCursor(mailbox: string, uidValidity: string, lastProcessedUid: number): Promise<void> {
+    await db
+      .insert(emailIngestState)
+      .values({ mailbox, uidValidity, lastProcessedUid })
+      .onConflictDoUpdate({
+        target: emailIngestState.mailbox,
+        set: { uidValidity, lastProcessedUid, updatedAt: new Date() },
+      });
   }
 
   // ---- School Bank Accounts (masked account -> school routing for SMS) ----
