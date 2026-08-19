@@ -2205,7 +2205,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         <TabsContent value="bank-accounts" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Bank Accounts</CardTitle>
+              <CardTitle className="text-base">Bank Account</CardTitle>
               <CardDescription>
                 Match each bank account number to a school. When a credit-alert SMS arrives, it is
                 automatically filed under the right school. The account number shown in the SMS is
@@ -2528,7 +2528,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </TabsContent>
         )}
       </Tabs>
-
       <Dialog open={isConfirmDialogOpen} onOpenChange={(open) => { setIsConfirmDialogOpen(open); if (!open) setMatchSearch(""); }}>
         <DialogContent
           className="max-w-2xl"
@@ -2660,7 +2659,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       <Dialog open={isReverseDialogOpen} onOpenChange={setIsReverseDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2718,7 +2716,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       <Dialog
         open={isMatchTxDialogOpen}
         onOpenChange={(open) => {
@@ -2890,7 +2887,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       <Dialog
         open={isBulkMatchDialogOpen}
         onOpenChange={(open) => { if (!bulkMatchProgress) setIsBulkMatchDialogOpen(open); }}
@@ -2979,7 +2975,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       <Dialog open={!!deleteStatementId} onOpenChange={(open) => { if (!open) setDeleteStatementId(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -3012,7 +3007,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Task #128 phase 2: re-scan confirmation */}
       <Dialog open={!!rescanStatementId} onOpenChange={(open) => { if (!open && !rescanStatementMutation.isPending) setRescanStatementId(null); }}>
         <DialogContent>
@@ -3042,7 +3036,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Task #128 phase 2: side-by-side duplicate review panel */}
       <DuplicateReviewSheet
         kind={reviewPair?.kind ?? 'transaction'}
