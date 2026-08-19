@@ -2269,13 +2269,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Excel file is required" });
       }
 
-      // Every batch-imported student shares this initial password until they
-      // change it. It must come from configuration, not a literal in source,
-      // so it isn't a fixed, publicly-known value across every deployment.
-      const defaultStudentPassword = process.env.DEFAULT_STUDENT_PASSWORD;
-      if (!defaultStudentPassword) {
-        return res.status(500).json({ error: "DEFAULT_STUDENT_PASSWORD is not configured on the server. Set it in the environment before batch-uploading students." });
-      }
+      // Every batch-imported student shares this initial password so
+      // students/parents can recall it easily. Configurable via
+      // DEFAULT_STUDENT_PASSWORD, falling back to the standing default.
+      const defaultStudentPassword = process.env.DEFAULT_STUDENT_PASSWORD || 'password@123';
 
       const user = (req as any).user;
       
