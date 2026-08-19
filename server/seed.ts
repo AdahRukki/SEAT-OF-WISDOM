@@ -17,6 +17,7 @@ import {
   type InsertReportCardTemplate,
 } from "@shared/schema";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 async function seedDatabase() {
   console.log("Starting comprehensive database seeding for Seat of Wisdom Academy...");
@@ -62,13 +63,18 @@ async function seedDatabase() {
     ]).returning();
     console.log("✓ Created 4 school branches for Seat of Wisdom Academy");
 
-    // Create users with proper hashed passwords
-    const hashedPassword = await bcrypt.hash("password123", 10);
+    // Create users with proper hashed passwords.
+    // SEED_PASSWORD lets a developer pin a known password for local testing;
+    // with nothing set, a random one is generated and printed once below so
+    // no real credential ever lives in source control.
+    const seedPassword = process.env.SEED_PASSWORD || crypto.randomBytes(9).toString("base64url");
+    const hashedPassword = await bcrypt.hash(seedPassword, 10);
+    const seedAdminEmail = process.env.SEED_ADMIN_EMAIL || "admin@seatofwisdom.edu";
 
     // Create 1 main admin (access to all schools) - Firebase authenticated
     const [mainAdmin] = await db.insert(users).values([
       {
-        email: "adahrukki@gmail.com",
+        email: seedAdminEmail,
         password: hashedPassword,
         firstName: "Ada",
         lastName: "Hrukki",
@@ -352,14 +358,19 @@ async function seedDatabase() {
     console.log("✓ Created default report card template");
 
     console.log("\n🎉 Database seeding completed successfully!");
-    console.log("\n📋 Demo Accounts Created:");
-    console.log("Main Admin: adahrukki@gmail.com / password123 (Firebase Auth)");
-    console.log("School 1 Admin: admin1@seatofwisdom.edu / password123");
-    console.log("School 2 Admin: admin2@seatofwisdom.edu / password123");
-    console.log("School 3 Admin: admin3@seatofwisdom.edu / password123");
-    console.log("School 4 Admin: admin4@seatofwisdom.edu / password123");
-    console.log("Student: john.doe@student.com / password123");
-    console.log("Student: alice.wilson@student.com / password123");
+    console.log("\n📋 Demo Accounts Created (all share the seed password below):");
+    console.log(`Main Admin: ${seedAdminEmail}`);
+    console.log("School 1 Admin: admin1@seatofwisdom.edu");
+    console.log("School 2 Admin: admin2@seatofwisdom.edu");
+    console.log("School 3 Admin: admin3@seatofwisdom.edu");
+    console.log("School 4 Admin: admin4@seatofwisdom.edu");
+    console.log("Student: john.doe@student.com");
+    console.log("Student: alice.wilson@student.com");
+    if (!process.env.SEED_PASSWORD) {
+      console.log(`\n🔑 Generated seed password (not stored anywhere else): ${seedPassword}`);
+    } else {
+      console.log("\n🔑 Seed password: set via SEED_PASSWORD env var");
+    }
     console.log("\n🏫 Schools: School 1, School 2, School 3, School 4");
     console.log("📚 Subjects: Mathematics, English, Science, Social Studies, Arts, French");
     console.log("🎯 Scoring System: 1st CA (20) + 2nd CA (20) + Exam (60) = Total (100)");
