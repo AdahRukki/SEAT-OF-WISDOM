@@ -199,22 +199,40 @@ function rawSpoofedNoAuth(): Buffer {
 }
 
 /**
- * Fixture 7: Header injection bypass attempt.
+ * Fixture 7a: Relay header before Gmail's — robustness test.
  *
- * Gmail's genuine result (dkim=fail) appears first, as it always does
- * because Gmail prepends its header at delivery.  An attacker has injected
- * a second Authentication-Results header lower in the message that claims
- * dkim=pass.  Only the first header must be trusted; the injected one must
- * be ignored.
+ * An intermediate relay (e.g. Zenith's own Exchange gateway) adds its own
+ * Authentication-Results header.  Gmail's header (with the real DKIM result)
+ * appears after it in the raw message.  The code must skip the relay header
+ * (wrong authserv-id) and find Gmail's.
+ */
+function rawRelayHeaderBeforeGmail(): Buffer {
+  return makeRaw([
+    // Relay's Authentication-Results (no google.com authserv-id → skip).
+    "Authentication-Results: mail.zenithbank.com; dkim=pass header.i=@zenithbank.com",
+    "From: ebusinessgroup@zenithbank.com",
+    "Subject: ZENITH BANK TRANSACTION ALERT[CREDIT:NGN100.00]",
+    // Gmail's genuine result — should be trusted.
+    "Authentication-Results: mx.google.com; dkim=pass header.i=@zenithbank.com header.s=selector1",
+  ]);
+}
+
+/**
+ * Fixture 7b: Header injection bypass attempt.
+ *
+ * An attacker injects a second "Authentication-Results: mx.google.com"
+ * header claiming dkim=pass AFTER Gmail's genuine dkim=fail result.
+ * Because Gmail's header always appears first (Gmail prepends), our code
+ * processes it (dkim=fail → reject) and breaks before reaching the forged one.
  */
 function rawInjectedDkimPass(): Buffer {
   return makeRaw([
-    // First header — Gmail's genuine delivery result.
+    // Gmail's genuine delivery result — dkim=fail.
     "Authentication-Results: mx.google.com; dkim=fail header.i=@fidelitybank.ng; spf=fail",
     "From: ibanking@fidelitybank.ng",
     "Subject: Fake Credit Alert",
-    // Second header — injected by the attacker in the email body/headers.
-    "Authentication-Results: mx.attacker.com; dkim=pass header.i=@fidelitybank.ng",
+    // Attacker-injected header lower in the message — must never be reached.
+    "Authentication-Results: mx.google.com; dkim=pass header.i=@fidelitybank.ng",
   ]);
 }
 
@@ -343,11 +361,26 @@ async function main() {
   }
   console.log();
 
-  // ── Test 7: Injected second Authentication-Results with dkim=pass → rejected ──
-  // Gmail's genuine result (dkim=fail) is first; an attacker-injected header
-  // claiming dkim=pass appears later.  Only the first header must be used.
+  // ── Test 7a: Relay header before Gmail's — robustness ────────────────────────
+  // A relay (e.g. Zenith's Exchange gateway) adds its own Authentication-Results
+  // first; Gmail's genuine mx.google.com result follows.  Code must skip the
+  // relay header and find Gmail's.
   console.log(
-    "Test 7: Gmail dkim=fail first, attacker-injected dkim=pass second → rejected"
+    "Test 7a: Relay Authentication-Results first, Gmail's dkim=pass second → accepted"
+  );
+  {
+    const r = await verifyDkim(rawRelayHeaderBeforeGmail());
+    check("ok:true", r.ok === true, r);
+    if (r.ok) check("domain=zenithbank.com", r.domain === "zenithbank.com", r.domain);
+  }
+  console.log();
+
+  // ── Test 7b: Injected mx.google.com header after Gmail's → rejected ───────────
+  // Gmail's genuine dkim=fail result appears first; an attacker injects a forged
+  // mx.google.com header claiming dkim=pass below it.  We must stop after Gmail's
+  // header and never reach the injected one.
+  console.log(
+    "Test 7b: Gmail dkim=fail first, attacker-injected mx.google.com dkim=pass second → rejected"
   );
   {
     const r = await verifyDkim(rawInjectedDkimPass());

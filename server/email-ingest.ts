@@ -116,15 +116,29 @@ export async function verifyDkim(
   const unfolded = headerSection.replace(/\r\n[ \t]+/g, " ");
   const lines = unfolded.split("\r\n");
 
-  // ── Fast path: FIRST Authentication-Results header only ──────────────────
-  // Gmail prepends its own Authentication-Results at delivery time; the first
-  // occurrence in the raw message is therefore always Gmail's server-side
-  // result and cannot be forged by the sender.  Scanning beyond the first
-  // header would allow an attacker to inject a second, trusted-looking entry
-  // after Gmail's genuine failing result.
+  // ── Fast path: Gmail's Authentication-Results (authserv-id = mx.google.com) ──
+  // Gmail prepends its own Authentication-Results header at delivery time with
+  // authserv-id "mx.google.com".  Since we read from Gmail's IMAP server
+  // (authenticated via App Password), we know Gmail's header always appears
+  // before any sender-supplied headers in the raw message.
+  //
+  // Security properties:
+  //  • We filter by authserv-id "mx.google.com" so relay headers from other
+  //    hops (e.g. Zenith's own Exchange relay) are ignored.
+  //  • A sender who injects "Authentication-Results: mx.google.com; dkim=pass …"
+  //    cannot win: Gmail prepends its own (genuine) mx.google.com header on top,
+  //    so the injected one is encountered later in the scan and we stop after
+  //    processing the first mx.google.com result.
   for (const line of lines) {
     if (!/^authentication-results:/i.test(line)) continue;
-    // Process this (first and only trusted) header, then stop regardless.
+    // The authserv-id is the token that immediately follows the field name.
+    const authservM = line.match(/^authentication-results:\s*([\w.-]+)/i);
+    if (!authservM) continue;
+    const authserv = authservM[1].toLowerCase();
+    // Only trust results from Google's mail servers.
+    if (authserv !== "mx.google.com" && !authserv.endsWith(".google.com")) continue;
+    // This is Google's genuine server-side result; stop after it regardless of
+    // outcome so a later injected header cannot be reached.
     const m = line.match(/dkim=pass\b[^;]*header\.i=@([\w.-]+)/i);
     if (m) {
       const domain = m[1].toLowerCase();
@@ -132,7 +146,7 @@ export async function verifyDkim(
         return { ok: true, domain };
       }
     }
-    break; // Do NOT check any subsequent Authentication-Results headers.
+    break; // Gmail's result processed — do not check any further headers.
   }
 
   // ── ARC fallback path: cryptographic chain verification via mailauth ───────
