@@ -2260,13 +2260,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/students/batch-upload', authenticate, requirePermission('tab_students'), upload.single('file'), async (req, res) => {
     try {
       const { classId } = req.body;
-      
+
       if (!classId) {
         return res.status(400).json({ error: "Class ID is required" });
       }
 
       if (!req.file) {
         return res.status(400).json({ error: "Excel file is required" });
+      }
+
+      // Every batch-imported student shares this initial password until they
+      // change it. It must come from configuration, not a literal in source,
+      // so it isn't a fixed, publicly-known value across every deployment.
+      const defaultStudentPassword = process.env.DEFAULT_STUDENT_PASSWORD;
+      if (!defaultStudentPassword) {
+        return res.status(500).json({ error: "DEFAULT_STUDENT_PASSWORD is not configured on the server. Set it in the environment before batch-uploading students." });
       }
 
       const user = (req as any).user;
@@ -2358,7 +2366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             firstName,
             lastName,
             email: tempEmail,
-            password: 'password@123', // Default password
+            password: defaultStudentPassword,
             role: 'student',
             schoolId: schoolId
           });

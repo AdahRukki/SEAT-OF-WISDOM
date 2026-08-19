@@ -8,10 +8,19 @@ async function createAdmin() {
   try {
     console.log('🔧 Creating admin user for production...');
 
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminEmail || !adminPassword) {
+      console.error('❌ ADMIN_EMAIL and ADMIN_PASSWORD must be set in the environment. Refusing to create an admin with a hardcoded credential.');
+      process.exit(1);
+      return;
+    }
+
     // Check if admin already exists
     const existingAdmin = await db.select()
       .from(users)
-      .where(eq(users.email, 'adahrukki@gmail.com'))
+      .where(eq(users.email, adminEmail))
       .limit(1);
 
     if (existingAdmin.length > 0) {
@@ -20,11 +29,11 @@ async function createAdmin() {
     }
 
     // Hash the password
-    const hashedPassword = await bcrypt.hash('password@123', 10);
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
     // Get first school (or create a default one)
     let school = await db.select().from(schools).limit(1);
-    
+
     if (school.length === 0) {
       console.log('📚 Creating default school...');
       const [newSchool] = await db.insert(schools).values({
@@ -38,7 +47,7 @@ async function createAdmin() {
 
     // Create admin user
     await db.insert(users).values({
-      email: 'adahrukki@gmail.com',
+      email: adminEmail,
       password: hashedPassword,
       firstName: 'Admin',
       lastName: 'User',
@@ -47,8 +56,7 @@ async function createAdmin() {
     });
 
     console.log('✅ Admin user created successfully!');
-    console.log('📧 Email: adahrukki@gmail.com');
-    console.log('🔑 Password: password@123');
+    console.log(`📧 Email: ${adminEmail}`);
     console.log('\n⚠️  Please change this password after first login!');
 
     process.exit(0);
