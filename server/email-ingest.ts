@@ -32,6 +32,7 @@
 //   EMAIL_INGEST_PASSWORD — Google App Password (16-char code)
 
 import { ImapFlow } from "imapflow";
+import { authenticate } from "mailauth";
 import { storage } from "./storage";
 import { parseEmailAlert, extractBodyFromRfc2822 } from "./email-bank-parser";
 
@@ -73,14 +74,37 @@ function isTrustedBankSender(fromAddress: string): boolean {
 // ── 2. DKIM authentication check ─────────────────────────────────────────────
 //
 // Gmail appends an Authentication-Results header server-side before delivery.
-// We read it from the raw RFC 2822 source fetched via IMAP.  Since we are
-// reading from Gmail's own servers (authenticated with App Password), this
-// header is trustworthy — the sender cannot forge it.
+// Since we fetch raw source from Gmail's IMAP servers (authenticated with App
+// Password), that header cannot be injected by the sender.
 //
-// We require dkim=pass with header.i=@<trusted-bank-domain>.  This means the
-// email was cryptographically signed by the bank's mail infrastructure.
+// Fast path — standard Authentication-Results:
+//   We require dkim=pass with header.i=@<trusted-bank-domain>.  This covers
+//   Zenith Bank, which delivers directly and whose DKIM survives intact.
+//
+// ARC fallback path — forwarded Fidelity emails:
+//   Fidelity routes through etransmail.com using Content-Transfer-Encoding:
+//   binary.  Gmail normalises this during forwarding from the primary inbox to
+//   the alert inbox, changing the body and breaking the live DKIM signature.
+//   The ARC i=1 entry records the original dkim=pass at the primary-inbox
+//   delivery, sealed by Google with an RSA signature.
+//
+//   We use mailauth to verify the ARC-Seal RSA signature cryptographically
+//   against Google's DNS-published public key.  Only when the full chain passes
+//   do we trust the i=1 ARC-Authentication-Results and extract the bank domain.
+//
+// Security guarantee: a forger must produce a valid RSA signature over the ARC
+// headers using Google's private key — this is computationally infeasible.
+//
+// Optional `resolver` parameter accepts a custom async DNS function; pass one
+// in unit tests to avoid live DNS lookups and use a generated key pair.
 
-function verifyDkim(rawSource: Buffer): { ok: boolean; domain?: string } {
+type DnsResolver = (domain: string, type: string) => Promise<string[]>;
+
+// Exported for unit testing.
+export async function verifyDkim(
+  rawSource: Buffer,
+  resolver?: DnsResolver
+): Promise<{ ok: boolean; domain?: string }> {
   // Work in binary latin1 to avoid encoding issues with the header bytes.
   const raw = rawSource.toString("binary");
 
@@ -90,19 +114,80 @@ function verifyDkim(rawSource: Buffer): { ok: boolean; domain?: string } {
 
   // Unfold RFC 2822 header folding (CRLF + WSP → single space).
   const unfolded = headerSection.replace(/\r\n[ \t]+/g, " ");
+  const lines = unfolded.split("\r\n");
 
-  // Split into individual header lines and inspect each Authentication-Results.
-  for (const line of unfolded.split("\r\n")) {
+  // ── Fast path: FIRST Authentication-Results header only ──────────────────
+  // Gmail prepends its own Authentication-Results at delivery time; the first
+  // occurrence in the raw message is therefore always Gmail's server-side
+  // result and cannot be forged by the sender.  Scanning beyond the first
+  // header would allow an attacker to inject a second, trusted-looking entry
+  // after Gmail's genuine failing result.
+  for (const line of lines) {
     if (!/^authentication-results:/i.test(line)) continue;
-
-    // Look for dkim=pass ... header.i=@<domain>
+    // Process this (first and only trusted) header, then stop regardless.
     const m = line.match(/dkim=pass\b[^;]*header\.i=@([\w.-]+)/i);
-    if (!m) continue;
-
-    const signingDomain = m[1].toLowerCase();
-    if (TRUSTED_BANK_DOMAINS.has(signingDomain)) {
-      return { ok: true, domain: signingDomain };
+    if (m) {
+      const domain = m[1].toLowerCase();
+      if (TRUSTED_BANK_DOMAINS.has(domain)) {
+        return { ok: true, domain };
+      }
     }
+    break; // Do NOT check any subsequent Authentication-Results headers.
+  }
+
+  // ── ARC fallback path: cryptographic chain verification via mailauth ───────
+  // Used when live DKIM is broken by forwarding (e.g. Fidelity via etransmail).
+  //
+  // Security model:
+  //   mailauth verifies each ARC-Seal RSA signature against the DNS-published
+  //   public key.  "Pass" proves only that the signer controls that domain's DNS
+  //   key — an attacker who owns attacker.example can sign a valid chain that
+  //   claims dkim=pass for fidelitybank.ng.  We therefore add a second gate:
+  //   the i=1 ARC-Seal must have d=google.com (or *.google.com).  Combined with
+  //   the RSA verification, this proves Google's mail infrastructure created the
+  //   seal — only Google controls the private key matching the DNS record at
+  //   <selector>._domainkey.google.com.
+  try {
+    const authOpts: Record<string, unknown> = { trustReceived: true };
+    if (resolver) authOpts.resolver = resolver;
+
+    const { arc: arcResult } = await authenticate(rawSource, authOpts);
+
+    // arcResult is false when there are no ARC headers to verify.
+    if (arcResult && arcResult.status?.result === "pass") {
+      // Step 1: confirm the i=1 ARC-Seal was signed by Google.
+      const i1SealLine = lines.find((l) => {
+        if (!/^arc-seal:/i.test(l)) return false;
+        const idx = l.match(/\bi=(\d+)\b/i);
+        return idx ? parseInt(idx[1], 10) === 1 : false;
+      });
+      if (i1SealLine) {
+        const sealDomM = i1SealLine.match(/\bd=([\w.-]+)/i);
+        const sealDomain = sealDomM?.[1]?.toLowerCase() ?? "";
+        const isGoogleSeal =
+          sealDomain === "google.com" || sealDomain.endsWith(".google.com");
+
+        if (isGoogleSeal) {
+          // Step 2: read the i=1 ARC-Authentication-Results.
+          // The RSA proof + Google-domain check means this header was genuinely
+          // added by Google and reflects what it observed at the primary inbox.
+          for (const line of lines) {
+            if (!/^arc-authentication-results:/i.test(line)) continue;
+            const idxM = line.match(/^arc-authentication-results:\s*i=(\d+)/i);
+            if (!idxM || parseInt(idxM[1], 10) !== 1) continue;
+            const m = line.match(/dkim=pass\b[^;]*header\.i=@([\w.-]+)/i);
+            if (!m) continue;
+            const domain = m[1].toLowerCase();
+            if (TRUSTED_BANK_DOMAINS.has(domain)) {
+              return { ok: true, domain };
+            }
+          }
+        }
+      }
+    }
+  } catch (arcErr) {
+    // DNS unavailable, parse error, or key error — treat as not verified.
+    console.debug("[email-ingest] ARC verification error:", arcErr);
   }
 
   return { ok: false };
@@ -218,7 +303,7 @@ async function processMessage(message: {
   }
 
   // ── Check 2: DKIM authentication (via Gmail's Authentication-Results) ───
-  const dkimResult = verifyDkim(sourceBuffer);
+  const dkimResult = await verifyDkim(sourceBuffer);
   if (!dkimResult.ok) {
     console.log(
       `[email-ingest] UID ${uid}: DKIM not verified for "${from}" — ` +
