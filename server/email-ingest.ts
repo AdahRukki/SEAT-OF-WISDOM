@@ -496,8 +496,18 @@ export function computeNextCursor(
 }
 
 // ── Catch-up pass: fetch and process everything after the cursor ─────────────
+//
+// Persists cursor progress after EVERY message, not just once at the end of
+// the whole batch. If the connection dies mid-batch (Gmail periodically
+// closes long-held connections — see MAX_IDLE_TIME_MS above), the `for
+// await` loop throws and everything after it — including the one-shot
+// cursor save that used to live after this loop — never runs, silently
+// losing all progress made in this pass even though messages in it were
+// already successfully processed and logged. Saving incrementally means a
+// mid-batch disconnect only loses the *unsent* remainder, not everything.
 
 async function catchUp(client: ImapFlow, mailbox: string, uidValidity: string, cursor: number): Promise<number> {
+  const startingCursor = cursor; // for the summary log below — `cursor` itself advances as we go
   const results: Array<{ uid: number; outcome: ProcessResult }> = [];
 
   const lock = await client.getMailboxLock("INBOX");
@@ -530,11 +540,21 @@ async function catchUp(client: ImapFlow, mailbox: string, uidValidity: string, c
       }
 
       results.push({ uid: message.uid, outcome });
+
+      // Persist progress after every message — see function comment above.
+      const cursorSoFar = computeNextCursor(cursor, results);
+      if (cursorSoFar !== cursor) {
+        cursor = cursorSoFar;
+        await storage.setEmailIngestCursor(mailbox, uidValidity, cursor);
+      }
     }
   } finally {
     lock.release();
   }
 
+  // cursor already reflects every incremental save made above; this final
+  // computation is a no-op in the common case and only matters if the loop
+  // completed without cursor ever changing (e.g. everything held for retry).
   const nextCursor = computeNextCursor(cursor, results);
 
   if (results.length > 0) {
@@ -544,7 +564,7 @@ async function catchUp(client: ImapFlow, mailbox: string, uidValidity: string, c
     console.log(
       `[email-ingest] Catch-up done: ${ingested} ingested, ${skipped} skipped` +
         (retried > 0 ? `, ${retried} held for retry` : "") +
-        ` (cursor ${cursor} → ${nextCursor})`
+        ` (cursor ${startingCursor} → ${nextCursor})`
     );
   }
 
