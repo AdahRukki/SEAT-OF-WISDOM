@@ -51,7 +51,8 @@
 import { ImapFlow } from "imapflow";
 import { authenticate } from "mailauth";
 import { storage } from "./storage";
-import { parseEmailAlert, extractBodyFromRfc2822 } from "./email-bank-parser";
+import { parseEmailAlert, extractBodyFromRfc2822, htmlToTabText } from "./email-bank-parser";
+import type { InsertEmailReviewItem } from "@shared/schema";
 
 // Re-issue IDLE well within Gmail's ~29 minute IMAP IDLE timeout (imapflow
 // handles this renewal internally when maxIdleTime is set — see its
@@ -272,35 +273,16 @@ function bankFromSender(from: string): string {
   return "Unknown";
 }
 
-// ── In-memory ingest log ──────────────────────────────────────────────────────
+// ── Ingest visibility ─────────────────────────────────────────────────────────
 //
-// Capped circular buffer of the last LOG_MAX email events.
-// Resets on server restart — no DB persistence needed (unlike the UID cursor,
-// which must survive restarts; this log is diagnostic only).
+// Every message this listener reads is persisted to email_review_queue (see
+// shared/schema.ts) — never just logged in memory. That table, not this
+// module, is now the source of truth for "what has the listener seen" and
+// is what the admin panel and /api/admin/email-review-queue read from
+// (server/storage.ts getEmailReviewQueue / approveEmailReviewItem /
+// dismissEmailReviewItem). Nothing here decides a message "doesn't matter"
+// and makes it disappear — that decision belongs to a human, from that table.
 
-export interface EmailIngestEntry {
-  uid: number;
-  from: string;
-  subject: string;
-  detectedBank: string;
-  outcome: "ingested" | "skipped" | "retry";
-  reason: string;
-  processedAt: string; // ISO 8601
-  // Full parsed transaction detail — only present once parsing actually
-  // succeeded (i.e. reached parseEmailAlert() and got ok:true). Absent for
-  // anything rejected earlier (sender allowlist, DKIM, unparseable body) —
-  // that absence is itself diagnostic: it shows exactly how far a message
-  // got before being rejected.
-  amount?: number;
-  maskedAccount?: string;
-  transactionDate?: string; // DD/MM/YYYY, as parsed from the alert
-  rawDescription?: string;
-  reference?: string;
-  balanceKey?: string;
-}
-
-const LOG_MAX = 50;
-const ingestLog: EmailIngestEntry[] = [];
 let lastPollAt: string | null = null;
 let lastPollOk: boolean | null = null;
 // Count consecutive connection failures so a single transient drop (Gmail
@@ -310,19 +292,18 @@ let lastPollOk: boolean | null = null;
 // before the UI reacts.
 let consecutiveFailures = 0;
 
-function appendLog(entry: EmailIngestEntry): void {
-  ingestLog.unshift(entry);           // newest first
-  if (ingestLog.length > LOG_MAX) ingestLog.length = LOG_MAX;
-}
-
-/** Returns a copy of the current ingest log (newest first, max 50 entries). */
-export function getEmailIngestLog(): EmailIngestEntry[] {
-  return [...ingestLog];
-}
-
 /** Returns the timestamp and success flag of the most recent connection activity. */
 export function getLastPollStatus(): { lastPollAt: string | null; lastPollOk: boolean | null } {
   return { lastPollAt, lastPollOk };
+}
+
+// A soft, informational label only — never a gate. Case-insensitive match
+// against subject + body for the word "credit"/"credited"/etc. Rows that hit
+// this still go through DKIM/ARC + the parser exactly like any other row;
+// this only affects how the admin panel sorts/highlights them, so a
+// differently-worded genuine alert never becomes invisible because of it.
+function looksLikeCredit(text: string): boolean {
+  return /credit/i.test(text);
 }
 
 // ── Per-message processing ────────────────────────────────────────────────────
@@ -335,8 +316,18 @@ export function getLastPollStatus(): { lastPollAt: string | null; lastPollOk: bo
 //                retries this UID instead of skipping it
 
 type ProcessResult = "ingested" | "skipped" | "retry";
+type ReviewOutcome = "auto_ingested" | "duplicate" | "unverified" | "unparsed" | "error";
 
-async function processMessage(message: {
+// Maps a review-queue outcome to the UID-cursor result. auto_ingested/
+// duplicate/unverified/unparsed are all terminal for cursor purposes — the
+// cursor's only job is "has the listener read this UID yet", which is
+// independent of whether a human still needs to act on it in the review
+// queue. Only 'error' (transient failure) holds the cursor for a retry.
+function cursorResultFor(outcome: ReviewOutcome): ProcessResult {
+  return outcome === "error" ? "retry" : outcome === "auto_ingested" ? "ingested" : "skipped";
+}
+
+async function processMessage(mailbox: string, message: {
   uid: number;
   envelope?: any;
   source?: Buffer;
@@ -346,40 +337,64 @@ async function processMessage(message: {
   const subject: string = message.envelope?.subject ?? "";
   const receivedAt: Date = message.envelope?.date ?? new Date();
 
-  // Detect bank from sender domain early so every log entry carries it.
+  // Detect bank from sender domain early so every review-queue row carries it.
   let detectedBank = bankFromSender(from);
 
-  // Helper: append a log entry and return the outcome in one call. `extra`
-  // carries the full parsed transaction detail when available (only once
-  // parsing has actually succeeded — see EmailIngestEntry's comment).
-  const done = (
-    outcome: ProcessResult,
+  // Every exit from this function goes through here: writes one row to
+  // email_review_queue (upserted on mailbox+uid, so a retried UID updates
+  // its row instead of duplicating it) and returns the mapped cursor result.
+  // `extra` carries full parsed transaction detail whenever parsing
+  // succeeded, verified or not — that's the whole point of removing the old
+  // pre-parse gates: a human reviewing this row gets to see it either way.
+  const record = async (
+    outcome: ReviewOutcome,
     reason: string,
-    extra?: Pick<EmailIngestEntry, "amount" | "maskedAccount" | "transactionDate" | "rawDescription" | "reference" | "balanceKey">
-  ): ProcessResult => {
-    appendLog({ uid, from, subject, detectedBank, outcome, reason, processedAt: new Date().toISOString(), ...extra });
-    return outcome;
+    opts: {
+      verified: boolean;
+      bodySnippet?: string;
+      linkedTransactionId?: string;
+      extra?: Pick<
+        InsertEmailReviewItem,
+        "amount" | "maskedAccount" | "transactionDate" | "rawDescription" | "reference" | "balanceKey" | "fingerprint"
+      >;
+    }
+  ): Promise<ProcessResult> => {
+    const likelyTransaction = looksLikeCredit(`${subject} ${opts.bodySnippet ?? ""}`);
+    await storage.upsertEmailReviewItem({
+      mailbox,
+      uid,
+      fromAddress: from || null,
+      subject: subject || null,
+      detectedBank,
+      receivedAt,
+      verified: opts.verified,
+      likelyTransaction,
+      parseOk: !!opts.extra,
+      bodySnippet: opts.bodySnippet?.slice(0, 4000) ?? null,
+      outcome,
+      reason,
+      linkedTransactionId: opts.linkedTransactionId ?? null,
+      ...opts.extra,
+    } as InsertEmailReviewItem);
+    return cursorResultFor(outcome);
   };
 
   // ── Require raw source for both DKIM check and body extraction ──────────
   // (No From:-header domain pre-filter here — see the comment above
   // TRUSTED_BANK_DOMAINS. The DKIM/ARC check immediately below is what
-  // actually decides trust, against the cryptographically verified domain.)
+  // actually decides trust, against the cryptographically verified domain —
+  // and even a DKIM failure no longer hides the message; see 'unverified'.)
   const sourceBuffer = message.source;
   if (!sourceBuffer || sourceBuffer.length === 0) {
-    console.log(`[email-ingest] UID ${uid}: empty source buffer, skipping permanently`);
-    return done("skipped", "empty source buffer");
+    console.log(`[email-ingest] UID ${uid}: empty source buffer`);
+    return record("unparsed", "empty source buffer", { verified: false });
   }
 
   // ── Check: DKIM authentication (via Gmail's Authentication-Results) ─────
+  // This is now a label ("verified" vs "unverified"), not a gate — an
+  // unverified message still gets parsed and shown in full below.
   const dkimResult = await verifyDkim(sourceBuffer);
-  if (!dkimResult.ok) {
-    console.log(
-      `[email-ingest] UID ${uid}: DKIM not verified for "${from}" — ` +
-        `skipped (ensure bank sends alerts directly to the monitored inbox, not via forwarding)`
-    );
-    return done("skipped", "DKIM not verified");
-  }
+  const verified = dkimResult.ok;
 
   // ── Body extraction ──────────────────────────────────────────────────────
   let html = "";
@@ -388,13 +403,14 @@ async function processMessage(message: {
     ({ html, text } = extractBodyFromRfc2822(sourceBuffer));
   } catch (extractErr) {
     console.error(`[email-ingest] UID ${uid}: body extraction error:`, extractErr);
-    return done("skipped", "body extraction error");
+    return record("unparsed", "body extraction error", { verified });
   }
 
   const body = html || text;
+  const plainSnippet = text || (html ? htmlToTabText(html) : "");
   if (!body.trim()) {
     console.log(`[email-ingest] UID ${uid}: empty body after extraction`);
-    return done("skipped", "empty body after extraction");
+    return record("unparsed", "empty body after extraction", { verified, bodySnippet: plainSnippet });
   }
 
   // ── Parse credit alert ───────────────────────────────────────────────────
@@ -403,19 +419,29 @@ async function processMessage(message: {
     result = parseEmailAlert({ from, subject, html: body });
   } catch (parseErr) {
     console.error(`[email-ingest] UID ${uid}: parser threw unexpectedly:`, parseErr);
-    return done("skipped", "parser error");
+    return record("unparsed", "parser error", { verified, bodySnippet: plainSnippet });
   }
 
   if (!result.ok) {
     console.log(
-      `[email-ingest] UID ${uid}: skipped (${result.reason}): "${subject}" from ${from}`
+      `[email-ingest] UID ${uid}: not a recognized transaction (${result.reason}): "${subject}" from ${from}` +
+        (verified ? "" : " [unverified]")
     );
-    return done("skipped", result.reason);
+    return record("unparsed", result.reason, { verified, bodySnippet: plainSnippet });
   }
 
   const alert = result.data;
   // Refine bank label from parse result now that we have it.
   detectedBank = alert.bankName !== "Unknown" ? alert.bankName : detectedBank;
+  const parsedExtra = {
+    amount: alert.amount.toString(),
+    maskedAccount: alert.maskedAccount,
+    transactionDate: alert.transactionDate,
+    rawDescription: alert.rawDescription,
+    reference: alert.reference,
+    balanceKey: alert.balanceKey,
+    fingerprint: alert.fingerprint,
+  };
 
   // ── Duplicate check ──────────────────────────────────────────────────────
   let alreadyExists: boolean;
@@ -423,20 +449,29 @@ async function processMessage(message: {
     alreadyExists = await storage.checkTransactionFingerprint(alert.fingerprint);
   } catch (fpErr) {
     console.error(`[email-ingest] UID ${uid}: fingerprint check failed (transient):`, fpErr);
-    return done("retry", "fingerprint check failed — will retry");
+    return record("error", "fingerprint check failed — will retry", {
+      verified, bodySnippet: plainSnippet, extra: parsedExtra,
+    });
   }
 
   if (alreadyExists) {
     console.log(
       `[email-ingest] UID ${uid}: duplicate fingerprint (${alert.fingerprint.slice(0, 8)}…)`
     );
-    return done("skipped", "duplicate fingerprint", {
-      amount: alert.amount,
-      maskedAccount: alert.maskedAccount,
-      transactionDate: alert.transactionDate,
-      rawDescription: alert.rawDescription,
-      reference: alert.reference,
-      balanceKey: alert.balanceKey,
+    return record("duplicate", "duplicate fingerprint", {
+      verified, bodySnippet: plainSnippet, extra: parsedExtra,
+    });
+  }
+
+  // Unverified but parsed fine — surface with full detail, let a human
+  // decide via the Approve action instead of auto-creating the transaction.
+  if (!verified) {
+    console.log(
+      `[email-ingest] UID ${uid}: parsed but unverified (DKIM/ARC did not pass) — held for manual review: ` +
+        `${alert.bankName} ₦${alert.amount.toLocaleString()}`
+    );
+    return record("unverified", "DKIM/ARC not verified — needs manual approval", {
+      verified, bodySnippet: plainSnippet, extra: parsedExtra,
     });
   }
 
@@ -448,15 +483,17 @@ async function processMessage(message: {
       if (account?.isActive) schoolId = account.schoolId;
     } catch (routeErr) {
       console.error(`[email-ingest] UID ${uid}: routing lookup failed (transient):`, routeErr);
-      return done("retry", "routing lookup failed — will retry");
+      return record("error", "routing lookup failed — will retry", {
+        verified, bodySnippet: plainSnippet, extra: parsedExtra,
+      });
     }
   }
 
   const transactionDate = parseTransactionDate(alert.transactionDate);
 
-  // ── Insert ───────────────────────────────────────────────────────────────
+  // ── Insert (verified + parsed + not a duplicate → auto-ingest) ───────────
   try {
-    await storage.createBankTransaction({
+    const transaction = await storage.createBankTransaction({
       statementId: null,
       schoolId: schoolId ?? null,
       transactionDate,
@@ -482,33 +519,23 @@ async function processMessage(message: {
       `[email-ingest] UID ${uid}: ✓ ${alert.bankName} ₦${alert.amount.toLocaleString()} — ` +
         `"${alert.rawDescription.slice(0, 60)}"${schoolId ? "" : " [unrouted]"}`
     );
-    return done(
-      "ingested",
+    return record(
+      "auto_ingested",
       `₦${alert.amount.toLocaleString()} — ${alert.rawDescription.slice(0, 50)}`,
-      {
-        amount: alert.amount,
-        maskedAccount: alert.maskedAccount,
-        transactionDate: alert.transactionDate,
-        rawDescription: alert.rawDescription,
-        reference: alert.reference,
-        balanceKey: alert.balanceKey,
-      }
+      { verified, bodySnippet: plainSnippet, linkedTransactionId: transaction.id, extra: parsedExtra }
     );
   } catch (insertErr: any) {
     if (insertErr?.code === "23505" || /unique/i.test(insertErr?.message ?? "")) {
       // Lost fingerprint-uniqueness race — treat as dup.
-      return done("skipped", "duplicate fingerprint (race)", {
-        amount: alert.amount,
-        maskedAccount: alert.maskedAccount,
-        transactionDate: alert.transactionDate,
-        rawDescription: alert.rawDescription,
-        reference: alert.reference,
-        balanceKey: alert.balanceKey,
+      return record("duplicate", "duplicate fingerprint (race)", {
+        verified, bodySnippet: plainSnippet, extra: parsedExtra,
       });
     }
     // Any other DB failure is transient — leave for retry.
     console.error(`[email-ingest] UID ${uid}: insert failed (transient):`, insertErr);
-    return done("retry", "DB insert failed — will retry");
+    return record("error", "DB insert failed — will retry", {
+      verified, bodySnippet: plainSnippet, extra: parsedExtra,
+    });
   }
 }
 
@@ -565,7 +592,7 @@ async function catchUp(client: ImapFlow, mailbox: string, uidValidity: string, c
 
       let outcome: ProcessResult;
       try {
-        outcome = await processMessage(message as any);
+        outcome = await processMessage(mailbox, message as any);
       } catch (unexpected) {
         console.error(`[email-ingest] UID ${message.uid}: unexpected error:`, unexpected);
         outcome = "retry";
@@ -792,7 +819,7 @@ async function legacyUnseenCatchUp(
     )) {
       let outcome: ProcessResult;
       try {
-        outcome = await processMessage(message as any);
+        outcome = await processMessage(mailbox, message as any);
       } catch (unexpected) {
         console.error(`[email-ingest] UID ${message.uid}: unexpected error (legacy scan):`, unexpected);
         outcome = "retry";

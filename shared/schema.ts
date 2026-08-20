@@ -8,7 +8,8 @@ import {
   decimal,
   boolean,
   uuid,
-  jsonb
+  jsonb,
+  unique
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -526,6 +527,63 @@ export const emailIngestState = pgTable("email_ingest_state", {
   lastProcessedUid: integer("last_processed_uid").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Email Review Queue table — one row per email the ingest listener has ever
+// seen in the monitored mailbox, persisted regardless of outcome.
+//
+// Design intent: the code no longer gets to silently decide a message "isn't
+// a transaction" and make it disappear. Every message the listener reads
+// lands here; a human decides what happens next. `verified` (DKIM/ARC) and
+// `likelyTransaction` (a soft "credit" keyword hit) are informational labels
+// for sorting/highlighting only — neither one hides a row or blocks it from
+// being reviewed.
+//
+// outcome:
+//   'auto_ingested' — verified + parsed + not a duplicate; a bank_transactions
+//                      row was created automatically (reviewStatus 'approved').
+//   'duplicate'      — parsed fine but this transaction is already recorded
+//                      (reviewStatus 'dismissed' automatically — nothing to do).
+//   'unverified'     — parsed fine, full detail available, but DKIM/ARC didn't
+//                      pass — needs a human Approve/Dismiss decision.
+//   'unparsed'       — didn't match a known bank-alert format (or DKIM failed
+//                      and the body couldn't be read) — needs a human look;
+//                      no pre-filled detail, so Approve isn't offered.
+//   'error'          — transient failure (DB/lookup); the ingest listener
+//                      will retry this UID automatically on the next pass.
+//
+// reviewStatus: 'open' (needs attention) | 'approved' | 'dismissed'.
+//
+// Upserted on (mailbox, uid): a retried message updates its existing row in
+// place rather than creating duplicates as the same UID is reprocessed.
+export const emailReviewQueue = pgTable("email_review_queue", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  mailbox: varchar("mailbox", { length: 255 }).notNull(),
+  uid: integer("uid").notNull(),
+  fromAddress: varchar("from_address", { length: 255 }),
+  subject: varchar("subject", { length: 500 }),
+  detectedBank: varchar("detected_bank", { length: 100 }),
+  receivedAt: timestamp("received_at"),
+  verified: boolean("verified").notNull().default(false), // DKIM/ARC passed
+  likelyTransaction: boolean("likely_transaction").notNull().default(false), // "credit" keyword hit — label only
+  parseOk: boolean("parse_ok").notNull().default(false), // full detail below is trustworthy / Approve is offered
+  amount: decimal("amount", { precision: 12, scale: 2 }),
+  maskedAccount: varchar("masked_account", { length: 50 }),
+  transactionDate: varchar("transaction_date", { length: 20 }), // DD/MM/YYYY, as parsed from the alert
+  rawDescription: text("raw_description"),
+  reference: varchar("reference", { length: 255 }),
+  balanceKey: varchar("balance_key", { length: 100 }),
+  fingerprint: varchar("fingerprint", { length: 64 }), // only when parseOk — reused if the item is later approved
+  bodySnippet: text("body_snippet"), // extracted plain-text body, for the detail popup
+  outcome: varchar("outcome", { length: 20 }).notNull(),
+  reason: text("reason").notNull(),
+  linkedTransactionId: uuid("linked_transaction_id").references(() => bankTransactions.id, { onDelete: "set null" }),
+  reviewStatus: varchar("review_status", { length: 20 }).notNull().default("open"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: uuid("reviewed_by").references(() => users.id),
+  processedAt: timestamp("processed_at").defaultNow(),
+}, (table) => ({
+  mailboxUidUnique: unique("email_review_queue_mailbox_uid_unique").on(table.mailbox, table.uid),
+}));
 
 // Fee Payment Records table (payments recorded by bursar/admin)
 export const feePaymentRecords = pgTable("fee_payment_records", {
@@ -1347,6 +1405,10 @@ export type IngestSms = z.infer<typeof ingestSmsSchema>;
 // Email Ingest State types (internal server state only — no HTTP schema needed)
 export type EmailIngestState = typeof emailIngestState.$inferSelect;
 export type InsertEmailIngestState = typeof emailIngestState.$inferInsert;
+
+// Email Review Queue types (internal server state + admin review API)
+export type EmailReviewItem = typeof emailReviewQueue.$inferSelect;
+export type InsertEmailReviewItem = typeof emailReviewQueue.$inferInsert;
 
 // Fee Payment Record types
 export type FeePaymentRecord = typeof feePaymentRecords.$inferSelect;

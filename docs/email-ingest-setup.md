@@ -79,12 +79,14 @@ If the variables are missing the server logs a warning and the listener is simpl
 
 1. The server opens one long-lived IMAP connection (TLS, port 993) to the Gmail inbox and holds it open using **IMAP IDLE** — Gmail pushes a notification the instant a new message arrives, instead of the server checking on a timer.
 2. What's "new" is tracked with the server's own **persisted UID cursor** (not Gmail's read/unread flag — see the note below), so a message is processed exactly once and nothing is silently missed.
-3. Each email is parsed for: amount, masked account number, transaction date, and narration.
-4. **Credit alerts** are inserted into the reconciliation queue with `source = "email"` and an **EMAIL** badge visible in the Finance → Bank Transactions view.
-5. **Non-credit emails** (debits, OTPs, balance alerts, newsletters) are skipped — no row is created.
-6. **Duplicates** — same fingerprint as an existing SMS or PDF row — are skipped silently.
-7. Processed emails are still marked as seen (read) in Gmail as a visual convenience, but this is cosmetic only — nothing about correctness depends on it (see below).
-8. If the connection drops (Gmail periodically closes long-held IDLE connections — this is normal, not an outage), the server reconnects automatically with a short backoff and resumes exactly where its cursor left off.
+3. Each email is checked for DKIM/ARC authenticity and parsed for: amount, masked account number, transaction date, and narration.
+4. **Every message — verified or not, parsed or not — gets a row in the Email Ingest panel's review queue.** Nothing the listener reads is ever silently dropped:
+   - **Verified + parsed + not a duplicate** → auto-ingested straight into the reconciliation queue, exactly as before.
+   - **Parsed but DKIM/ARC didn't pass** (e.g. some forwarding paths break live DKIM) → shown with full detail, needs a one-click **Approve** from an admin before it becomes a transaction.
+   - **Not recognized as a bank-alert format** (debits, OTPs, balance alerts, newsletters, or an unrecognized format) → still shown, with **Dismiss** available. A soft "contains 'credit'" label sorts likely-transaction rows to the top — it never filters anything out, since a genuine alert's exact wording isn't something to gate on.
+   - **Duplicate** (same fingerprint as an existing row) → shown and auto-dismissed, so it's clear nothing was missed.
+5. Processed emails are still marked as seen (read) in Gmail as a visual convenience, but this is cosmetic only — nothing about correctness depends on it (see below).
+6. If the connection drops (Gmail periodically closes long-held IDLE connections — this is normal, not an outage), the server reconnects automatically with a short backoff and resumes exactly where its cursor left off.
 
 ### Why not the Gmail "unread" flag?
 
@@ -109,6 +111,6 @@ To backfill:
 | `[email-ingest] EMAIL_INGEST_ADDRESS or EMAIL_INGEST_PASSWORD not set` | Secrets not added or server not restarted |
 | `connection ended: ... Invalid credentials` | Wrong App Password or 2-Step Verification not enabled |
 | Frequent `[email-ingest] connection ended — reconnecting in ...` | Normal in small numbers (Gmail periodically closes long-held IDLE connections) — only becomes a real problem if `pollerEnabled`/`lastPollOk` in the admin panel goes red, which needs 2+ *consecutive* failed reconnects |
-| Credit alert visible in Gmail but not in reconciliation | Check that the email body contains credit keywords (CR / Credit / credited). Debit alerts are intentionally skipped. |
+| Credit alert visible in Gmail but not auto-ingested | Open the Email Ingest panel — it's there. Check the Verified badge: "Unverified" means DKIM/ARC didn't pass (common for some forwarding paths) and it's waiting on a manual Approve, not lost. |
 | Duplicate row for the same payment | Should not happen — if it does, check that both the SMS and email rows have the same balance figure (the fingerprint includes the running balance). |
 | Nothing ingesting after a fresh deploy to a new database | The UID cursor (`email_ingest_state` table) is per-database. On first run against a new database it runs a one-time legacy unseen-scan to catch anything pending, then starts tracking forward from there — check the server log for `"No stored cursor — first run"`. |

@@ -8,7 +8,7 @@ import path from "path";
 import express from "express";
 import { extractTextFromPDF, parseTransactions, parseExcelTransactions, generateFingerprint, detectBankFormat, ParsedTransaction } from "./pdf-parser";
 import { parseBankAlertSms } from "./sms-parser";
-import { getEmailIngestLog, getLastPollStatus } from "./email-ingest";
+import { getLastPollStatus } from "./email-ingest";
 import {
   ObjectStorageService,
   ObjectNotFoundError,
@@ -5176,12 +5176,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Email ingest log — in-memory, resets on server restart.
+  // Email review queue — every email the ingest listener has read, persisted
+  // in email_review_queue (server/storage.ts), regardless of outcome. Nothing
+  // is filtered out here: the admin decides what happens to each row.
   // pollerEnabled is true when both required env vars are present so the
   // frontend can show a setup prompt instead of an empty table.
-  app.get("/api/admin/email-ingest-log", authenticate, requireMainAdmin, (_req: Request, res: Response) => {
+  app.get("/api/admin/email-review-queue", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
     try {
-      const log = getEmailIngestLog();
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const log = await storage.getEmailReviewQueue({ status, limit: 200 });
       const { lastPollAt, lastPollOk } = getLastPollStatus();
       const pollerEnabled = !!(
         process.env.EMAIL_INGEST_ADDRESS?.trim() &&
@@ -5189,8 +5192,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       res.json({ log, lastPollAt, lastPollOk, pollerEnabled });
     } catch (error) {
-      console.error("[GET /api/admin/email-ingest-log] Error:", error);
-      res.status(500).json({ error: "Failed to fetch email ingest log" });
+      console.error("[GET /api/admin/email-review-queue] Error:", error);
+      res.status(500).json({ error: "Failed to fetch email review queue" });
+    }
+  });
+
+  // Approve a review-queue item: creates the bank_transactions row from the
+  // parsed detail already on the row (only available when parseOk is true).
+  app.post("/api/admin/email-review-queue/:id/approve", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const reviewerId = (req as any).user.id;
+      const item = await storage.approveEmailReviewItem(req.params.id, reviewerId);
+      res.json({ item });
+    } catch (error: any) {
+      console.error("[POST /api/admin/email-review-queue/:id/approve] Error:", error);
+      res.status(400).json({ error: error?.message || "Failed to approve item" });
+    }
+  });
+
+  // Dismiss a review-queue item: no transaction is created; marks it handled.
+  app.post("/api/admin/email-review-queue/:id/dismiss", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
+    try {
+      const reviewerId = (req as any).user.id;
+      const item = await storage.dismissEmailReviewItem(req.params.id, reviewerId);
+      res.json({ item });
+    } catch (error: any) {
+      console.error("[POST /api/admin/email-review-queue/:id/dismiss] Error:", error);
+      res.status(400).json({ error: error?.message || "Failed to dismiss item" });
     }
   });
 

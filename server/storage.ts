@@ -31,6 +31,7 @@ import {
   bankTransactions,
   schoolBankAccounts,
   emailIngestState,
+  emailReviewQueue,
   clearedDuplicatePairs,
   type School,
   type User,
@@ -93,6 +94,8 @@ import {
   type SchoolBankAccount,
   type UpsertSchoolBankAccount,
   type EmailIngestState,
+  type EmailReviewItem,
+  type InsertEmailReviewItem,
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
@@ -425,6 +428,14 @@ export interface IStorage {
   // Email Ingest State (durable IMAP UID cursor — see shared/schema.ts emailIngestState)
   getEmailIngestCursor(mailbox: string): Promise<EmailIngestState | undefined>;
   setEmailIngestCursor(mailbox: string, uidValidity: string, lastProcessedUid: number): Promise<void>;
+
+  // Email Review Queue (see shared/schema.ts emailReviewQueue) — every email the
+  // ingest listener has seen, regardless of outcome; admins decide from here.
+  upsertEmailReviewItem(data: InsertEmailReviewItem): Promise<EmailReviewItem>;
+  getEmailReviewQueue(filters?: { status?: string; limit?: number }): Promise<EmailReviewItem[]>;
+  getEmailReviewItem(id: string): Promise<EmailReviewItem | undefined>;
+  approveEmailReviewItem(id: string, reviewerId: string): Promise<EmailReviewItem>;
+  dismissEmailReviewItem(id: string, reviewerId: string): Promise<EmailReviewItem>;
 
   // School Bank Accounts (masked account number -> school routing for SMS ingestion)
   getSchoolBankAccounts(): Promise<SchoolBankAccount[]>;
@@ -5703,6 +5714,158 @@ export class DatabaseStorage implements IStorage {
         target: emailIngestState.mailbox,
         set: { uidValidity, lastProcessedUid, updatedAt: new Date() },
       });
+  }
+
+  // ---- Email Review Queue (every ingested email, admin decides what's next) ----
+
+  async upsertEmailReviewItem(data: InsertEmailReviewItem): Promise<EmailReviewItem> {
+    const [row] = await db
+      .insert(emailReviewQueue)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [emailReviewQueue.mailbox, emailReviewQueue.uid],
+        // Never clobber a decision a human already made by reprocessing the
+        // same UID (e.g. a later retry pass) — only overwrite the parsed
+        // detail/outcome fields, keep whatever reviewStatus/linkedTransactionId
+        // is already there if the row was already approved or dismissed.
+        set: {
+          fromAddress: data.fromAddress,
+          subject: data.subject,
+          detectedBank: data.detectedBank,
+          receivedAt: data.receivedAt,
+          verified: data.verified,
+          likelyTransaction: data.likelyTransaction,
+          parseOk: data.parseOk,
+          amount: data.amount,
+          maskedAccount: data.maskedAccount,
+          transactionDate: data.transactionDate,
+          rawDescription: data.rawDescription,
+          reference: data.reference,
+          balanceKey: data.balanceKey,
+          fingerprint: data.fingerprint,
+          bodySnippet: data.bodySnippet,
+          outcome: data.outcome,
+          reason: data.reason,
+          processedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async getEmailReviewQueue(filters?: { status?: string; limit?: number }): Promise<EmailReviewItem[]> {
+    const conditions = [];
+    if (filters?.status) conditions.push(eq(emailReviewQueue.reviewStatus, filters.status));
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    let query = db
+      .select()
+      .from(emailReviewQueue)
+      .where(whereClause)
+      .orderBy(desc(emailReviewQueue.processedAt)) as any;
+    if (filters?.limit) query = query.limit(filters.limit);
+    return await query;
+  }
+
+  async getEmailReviewItem(id: string): Promise<EmailReviewItem | undefined> {
+    const [row] = await db.select().from(emailReviewQueue).where(eq(emailReviewQueue.id, id)).limit(1);
+    return row;
+  }
+
+  async approveEmailReviewItem(id: string, reviewerId: string): Promise<EmailReviewItem> {
+    return await db.transaction(async (tx) => {
+      const [item] = await tx.select().from(emailReviewQueue).where(eq(emailReviewQueue.id, id)).limit(1);
+      if (!item) throw new Error("Review item not found");
+      if (item.reviewStatus !== "open") throw new Error(`Item is already ${item.reviewStatus}`);
+      if (!item.parseOk || !item.amount || !item.transactionDate || !item.fingerprint) {
+        throw new Error("This item has no parsed transaction detail to approve — dismiss it instead");
+      }
+
+      // Defensive re-check: guard against a race with the auto-ingest path or
+      // a duplicate email that slipped through since this row was written.
+      const [dup] = await tx
+        .select({ id: bankTransactions.id })
+        .from(bankTransactions)
+        .where(eq(bankTransactions.fingerprint, item.fingerprint))
+        .limit(1);
+      if (dup) {
+        const [updated] = await tx
+          .update(emailReviewQueue)
+          .set({
+            outcome: "duplicate",
+            reviewStatus: "dismissed",
+            reason: "duplicate fingerprint (found at approval time)",
+            linkedTransactionId: dup.id,
+            reviewedAt: new Date(),
+            reviewedBy: reviewerId,
+          })
+          .where(eq(emailReviewQueue.id, id))
+          .returning();
+        return updated;
+      }
+
+      let schoolId: string | undefined;
+      if (item.maskedAccount) {
+        const [account] = await tx
+          .select()
+          .from(schoolBankAccounts)
+          .where(eq(schoolBankAccounts.maskedAccountNumber, item.maskedAccount.trim()))
+          .limit(1);
+        if (account?.isActive) schoolId = account.schoolId;
+      }
+
+      const [dd = "01", mm = "01", yyyy = "2000"] = item.transactionDate.split("/");
+      const transactionDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
+
+      const [transaction] = await tx
+        .insert(bankTransactions)
+        .values({
+          statementId: null,
+          schoolId: schoolId ?? null,
+          transactionDate,
+          amount: item.amount,
+          transactionType: "credit",
+          rawDescription: item.rawDescription ?? "",
+          normalizedDescription: (item.rawDescription ?? "").toLowerCase().trim(),
+          reference: item.reference ?? null,
+          fingerprint: item.fingerprint,
+          status: "unmatched",
+          classification: (item.rawDescription?.length ?? 0) < 20 ? "code_only" : "named",
+          source: "email",
+          smsAccount: item.maskedAccount ?? null,
+          emailFrom: item.fromAddress ?? null,
+          emailSubject: item.subject ?? null,
+          emailReceivedAt: item.receivedAt ?? null,
+        })
+        .returning();
+
+      const [updated] = await tx
+        .update(emailReviewQueue)
+        .set({
+          outcome: "auto_ingested",
+          reviewStatus: "approved",
+          reason: `Approved by admin — ₦${Number(item.amount).toLocaleString()}`,
+          linkedTransactionId: transaction.id,
+          reviewedAt: new Date(),
+          reviewedBy: reviewerId,
+        })
+        .where(eq(emailReviewQueue.id, id))
+        .returning();
+      return updated;
+    });
+  }
+
+  async dismissEmailReviewItem(id: string, reviewerId: string): Promise<EmailReviewItem> {
+    const [existing] = await db.select().from(emailReviewQueue).where(eq(emailReviewQueue.id, id)).limit(1);
+    if (!existing) throw new Error("Review item not found");
+    if (existing.reviewStatus !== "open") throw new Error(`Item is already ${existing.reviewStatus}`);
+
+    const [updated] = await db
+      .update(emailReviewQueue)
+      .set({ reviewStatus: "dismissed", reviewedAt: new Date(), reviewedBy: reviewerId })
+      .where(eq(emailReviewQueue.id, id))
+      .returning();
+    return updated;
   }
 
   // ---- School Bank Accounts (masked account -> school routing for SMS) ----

@@ -66,6 +66,9 @@ import {
   Mail,
   ChevronDown,
   ChevronUp,
+  Eye,
+  Check,
+  X,
 } from "lucide-react";
 import type { FeePaymentRecordWithDetails, SchoolBankAccount } from "@shared/schema";
 import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
@@ -612,32 +615,84 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     enabled: isMainAdmin,
   });
 
-  // Email ingest log — auto-refreshes every 60 s while the panel is open.
+  // Email review queue — every email the listener has read, regardless of
+  // outcome; nothing is filtered out server-side. Auto-refreshes every 60s
+  // while the panel is open.
+  type EmailReviewItem = {
+    id: string;
+    uid: number; fromAddress: string | null; subject: string | null; detectedBank: string | null;
+    receivedAt: string | null;
+    verified: boolean; likelyTransaction: boolean; parseOk: boolean;
+    amount: string | null; maskedAccount: string | null; transactionDate: string | null;
+    rawDescription: string | null; reference: string | null; balanceKey: string | null;
+    bodySnippet: string | null;
+    outcome: "auto_ingested" | "duplicate" | "unverified" | "unparsed" | "error";
+    reason: string;
+    reviewStatus: "open" | "approved" | "dismissed";
+    processedAt: string;
+  };
+
   const {
     data: ingestLogData,
     isFetching: ingestLogFetching,
     refetch: refetchIngestLog,
   } = useQuery<{
-    log: Array<{
-      uid: number; from: string; subject: string; detectedBank: string;
-      outcome: "ingested" | "skipped" | "retry"; reason: string; processedAt: string;
-      amount?: number; maskedAccount?: string; transactionDate?: string;
-      rawDescription?: string; reference?: string; balanceKey?: string;
-    }>;
+    log: EmailReviewItem[];
     lastPollAt: string | null;
     lastPollOk: boolean | null;
     pollerEnabled: boolean;
   }>({
-    queryKey: ["/api/admin/email-ingest-log"],
+    queryKey: ["/api/admin/email-review-queue"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/email-ingest-log", { credentials: "include", headers: getAuthHeaders() });
-      if (!res.ok) throw new Error("Failed to fetch email ingest log");
+      const res = await fetch("/api/admin/email-review-queue", { credentials: "include", headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("Failed to fetch email review queue");
       return res.json();
     },
     enabled: isMainAdmin && ingestLogOpen,
     refetchInterval: isMainAdmin && ingestLogOpen ? 60_000 : false,
     staleTime: 0,
   });
+
+  const [selectedReviewItem, setSelectedReviewItem] = useState<EmailReviewItem | null>(null);
+
+  const approveReviewItemMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest(`/api/admin/email-review-queue/${id}/approve`, { method: "POST" }),
+    onSuccess: () => {
+      toast({ title: "Approved", description: "Transaction created and added to the unmatched queue." });
+      refetchIngestLog();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
+      setSelectedReviewItem(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Approve Failed", description: error.message || "Failed to approve item", variant: "destructive" });
+    },
+  });
+
+  const dismissReviewItemMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest(`/api/admin/email-review-queue/${id}/dismiss`, { method: "POST" }),
+    onSuccess: () => {
+      refetchIngestLog();
+      setSelectedReviewItem(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Dismiss Failed", description: error.message || "Failed to dismiss item", variant: "destructive" });
+    },
+  });
+
+  // Sort, never filter: rows needing attention (open) float to the top, and
+  // among those the "credit" keyword hit (likelyTransaction) floats higher
+  // still — but every row stays in the list either way. See email-ingest.ts:
+  // looksLikeCredit is a label for this ordering only, not a gate.
+  const sortedReviewLog = useMemo(() => {
+    const log = ingestLogData?.log ?? [];
+    return [...log].sort((a, b) => {
+      if (a.reviewStatus === "open" && b.reviewStatus !== "open") return -1;
+      if (a.reviewStatus !== "open" && b.reviewStatus === "open") return 1;
+      if (a.likelyTransaction !== b.likelyTransaction) return a.likelyTransaction ? -1 : 1;
+      return new Date(b.processedAt).getTime() - new Date(a.processedAt).getTime();
+    });
+  }, [ingestLogData?.log]);
 
   const emptyAccountForm = { id: "", schoolId: "", bankName: "Zenith", maskedAccountNumber: "", accountLabel: "" };
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
@@ -2376,9 +2431,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       </div>
                     )}
 
-                    {/* Log table */}
-                    {ingestLogData?.log && ingestLogData.log.length > 0 ? (
-                      <div className="rounded border overflow-auto max-h-72">
+                    {/* Review queue table — every email the listener has read, no
+                        exceptions. "Open" rows need a decision; "Likely" is a soft
+                        label (subject/body contains "credit") that only affects
+                        sort order, never visibility. */}
+                    {sortedReviewLog.length > 0 ? (
+                      <div className="rounded border overflow-auto max-h-96">
                         <Table>
                           <TableHeader>
                             <TableRow className="text-xs">
@@ -2386,34 +2444,19 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                               <TableHead className="py-1.5 text-xs">Bank</TableHead>
                               <TableHead className="py-1.5 text-xs">Amount</TableHead>
                               <TableHead className="py-1.5 text-xs">Subject</TableHead>
-                              <TableHead className="py-1.5 text-xs">Outcome</TableHead>
-                              <TableHead className="py-1.5 text-xs">Reason</TableHead>
+                              <TableHead className="py-1.5 text-xs">Verified</TableHead>
+                              <TableHead className="py-1.5 text-xs">Status</TableHead>
+                              <TableHead className="py-1.5 text-xs text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {ingestLogData.log.map((entry) => {
-                              // Full parsed detail — only present once parsing actually
-                              // succeeded. Shown as a hover tooltip on the Reason cell so
-                              // the table itself stays compact; absence of these fields
-                              // is itself diagnostic (shows how far a message got before
-                              // being rejected — sender allowlist, DKIM, or parsing).
-                              const detailLines = [
-                                entry.maskedAccount ? `Account: ${entry.maskedAccount}` : null,
-                                entry.transactionDate ? `Date: ${entry.transactionDate}` : null,
-                                entry.rawDescription ? `Narration: ${entry.rawDescription}` : null,
-                                entry.reference ? `Reference: ${entry.reference}` : null,
-                                entry.balanceKey ? `Balance: ₦${entry.balanceKey}` : null,
-                              ].filter(Boolean);
-                              const detailTitle = detailLines.length > 0
-                                ? `${entry.reason}\n\n${detailLines.join("\n")}`
-                                : entry.reason;
-                              return (
+                            {sortedReviewLog.map((entry) => (
                               <TableRow
-                                key={`${entry.uid}-${entry.processedAt}`}
+                                key={entry.id}
                                 className={
-                                  entry.outcome === "ingested"
+                                  entry.outcome === "auto_ingested"
                                     ? "bg-green-50/60 dark:bg-green-950/20"
-                                    : entry.outcome === "retry"
+                                    : entry.reviewStatus === "open"
                                     ? "bg-amber-50/60 dark:bg-amber-950/20"
                                     : ""
                                 }
@@ -2421,45 +2464,77 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 <TableCell className="py-1.5 text-xs font-mono whitespace-nowrap">
                                   {formatLogTime(entry.processedAt)}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs">{entry.detectedBank}</TableCell>
+                                <TableCell className="py-1.5 text-xs">
+                                  {entry.detectedBank}
+                                  {entry.likelyTransaction && (
+                                    <span className="ml-1 text-[10px] text-muted-foreground" title='Subject/body contains "credit" — sorted first, not filtered'>
+                                      ● likely
+                                    </span>
+                                  )}
+                                </TableCell>
                                 <TableCell className="py-1.5 text-xs whitespace-nowrap">
-                                  {typeof entry.amount === "number"
-                                    ? `₦${entry.amount.toLocaleString()}`
+                                  {entry.amount
+                                    ? `₦${Number(entry.amount).toLocaleString()}`
                                     : <span className="text-muted-foreground">—</span>}
                                 </TableCell>
                                 <TableCell
-                                  className="py-1.5 text-xs max-w-[180px] truncate"
-                                  title={entry.subject}
+                                  className="py-1.5 text-xs max-w-[160px] truncate"
+                                  title={entry.subject ?? undefined}
                                 >
                                   {entry.subject || <span className="text-muted-foreground italic">—</span>}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-xs">
+                                  {entry.verified ? (
+                                    <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800">Verified</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">Unverified</Badge>
+                                  )}
                                 </TableCell>
                                 <TableCell className="py-1.5 text-xs">
                                   <Badge
                                     variant="outline"
                                     className={
-                                      entry.outcome === "ingested"
-                                        ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
-                                        : entry.outcome === "retry"
+                                      entry.reviewStatus === "open"
                                         ? "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                                        : entry.reviewStatus === "approved"
+                                        ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
                                         : "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
                                     }
                                   >
-                                    {entry.outcome === "ingested"
-                                      ? "Ingested"
-                                      : entry.outcome === "retry"
-                                      ? "Retry"
-                                      : "Skipped"}
+                                    {entry.reviewStatus === "open" ? "Needs review" : entry.reviewStatus === "approved" ? "Approved" : "Dismissed"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs text-muted-foreground max-w-[200px] truncate" title={detailTitle}>
-                                  {entry.reason}
-                                  {detailLines.length > 0 && (
-                                    <span className="ml-1 text-muted-foreground/60">(hover for details)</span>
+                                <TableCell className="py-1.5 text-xs text-right whitespace-nowrap">
+                                  <Button
+                                    variant="ghost" size="sm" className="h-6 w-6 p-0"
+                                    onClick={() => setSelectedReviewItem(entry)}
+                                    title="View full details"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                  </Button>
+                                  {entry.reviewStatus === "open" && entry.parseOk && (
+                                    <Button
+                                      variant="ghost" size="sm" className="h-6 w-6 p-0 text-green-600"
+                                      onClick={() => approveReviewItemMutation.mutate(entry.id)}
+                                      disabled={approveReviewItemMutation.isPending}
+                                      title="Approve — creates the transaction"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                  {entry.reviewStatus === "open" && (
+                                    <Button
+                                      variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive"
+                                      onClick={() => dismissReviewItemMutation.mutate(entry.id)}
+                                      disabled={dismissReviewItemMutation.isPending}
+                                      title="Dismiss — not a transaction"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
                                   )}
                                 </TableCell>
                               </TableRow>
-                              );
-                            })}
+                            ))}
                           </TableBody>
                         </Table>
                       </div>
@@ -3074,6 +3149,100 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         open={!!reviewPair}
         onOpenChange={(o) => { if (!o) setReviewPair(null); }}
       />
+      {/* Email review queue — full-detail popup for one row */}
+      <Dialog open={!!selectedReviewItem} onOpenChange={(open) => { if (!open) setSelectedReviewItem(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Email Details</DialogTitle>
+            <DialogDescription>
+              Everything captured from this message — nothing is hidden or auto-decided.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReviewItem && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedReviewItem.verified ? (
+                  <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800">Verified (DKIM/ARC)</Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">Unverified</Badge>
+                )}
+                {selectedReviewItem.likelyTransaction && (
+                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+                    Contains "credit"
+                  </Badge>
+                )}
+                <Badge
+                  variant="outline"
+                  className={
+                    selectedReviewItem.reviewStatus === "open"
+                      ? "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800"
+                      : selectedReviewItem.reviewStatus === "approved"
+                      ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800"
+                      : "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
+                  }
+                >
+                  {selectedReviewItem.reviewStatus === "open" ? "Needs review" : selectedReviewItem.reviewStatus === "approved" ? "Approved" : "Dismissed"}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div><span className="text-muted-foreground">From:</span> {selectedReviewItem.fromAddress || "—"}</div>
+                <div><span className="text-muted-foreground">Bank:</span> {selectedReviewItem.detectedBank || "—"}</div>
+                <div className="col-span-2"><span className="text-muted-foreground">Subject:</span> {selectedReviewItem.subject || "—"}</div>
+                <div><span className="text-muted-foreground">Received:</span> {selectedReviewItem.receivedAt ? formatLogTime(selectedReviewItem.receivedAt) : "—"}</div>
+                <div><span className="text-muted-foreground">Processed:</span> {formatLogTime(selectedReviewItem.processedAt)}</div>
+              </div>
+
+              <div className="border-t pt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div>
+                  <span className="text-muted-foreground">Amount:</span>{" "}
+                  {selectedReviewItem.amount ? `₦${Number(selectedReviewItem.amount).toLocaleString()}` : "—"}
+                </div>
+                <div><span className="text-muted-foreground">Date:</span> {selectedReviewItem.transactionDate || "—"}</div>
+                <div><span className="text-muted-foreground">Account:</span> {selectedReviewItem.maskedAccount || "—"}</div>
+                <div><span className="text-muted-foreground">Reference:</span> {selectedReviewItem.reference || "—"}</div>
+                <div><span className="text-muted-foreground">Balance:</span> {selectedReviewItem.balanceKey ? `₦${selectedReviewItem.balanceKey}` : "—"}</div>
+                <div className="col-span-2"><span className="text-muted-foreground">Narration:</span> {selectedReviewItem.rawDescription || "—"}</div>
+              </div>
+
+              <div className="border-t pt-3">
+                <p className="text-muted-foreground mb-1">Outcome: {selectedReviewItem.reason}</p>
+                {selectedReviewItem.bodySnippet && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">Raw email body</summary>
+                    <pre className="mt-1 p-2 rounded bg-muted/50 whitespace-pre-wrap break-words max-h-48 overflow-auto">
+                      {selectedReviewItem.bodySnippet}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            {selectedReviewItem?.reviewStatus === "open" && (
+              <>
+                <Button
+                  variant="outline"
+                  className="text-destructive"
+                  onClick={() => selectedReviewItem && dismissReviewItemMutation.mutate(selectedReviewItem.id)}
+                  disabled={dismissReviewItemMutation.isPending}
+                >
+                  <X className="h-4 w-4 mr-1" /> Dismiss
+                </Button>
+                {selectedReviewItem.parseOk && (
+                  <Button
+                    onClick={() => selectedReviewItem && approveReviewItemMutation.mutate(selectedReviewItem.id)}
+                    disabled={approveReviewItemMutation.isPending}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Check className="h-4 w-4 mr-1" /> Approve
+                  </Button>
+                )}
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
