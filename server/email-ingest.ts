@@ -3,22 +3,24 @@
 // Connects to a dedicated Gmail inbox via IMAP (TLS port 993) and listens in
 // real time for new messages using IMAP IDLE — new mail is processed within
 // a few seconds of arrival instead of on a fixed polling interval. Credit-alert
-// emails that pass two independent authentication checks are parsed and
-// inserted into bank_transactions with source = 'email'.
+// emails that pass DKIM/ARC authentication are parsed and inserted into
+// bank_transactions with source = 'email'.
 //
-// ── Authentication layers ──────────────────────────────────────────────────
+// ── Authentication ────────────────────────────────────────────────────────
 //
-//  1. From-domain allowlist (TRUSTED_BANK_DOMAINS): only emails whose
-//     RFC 5322 From address belongs to a known bank domain are considered.
-//
-//  2. DKIM verification: we read the Authentication-Results header that Gmail
-//     adds server-side when the message is delivered to our inbox.  Because we
-//     fetch this header from Gmail's own IMAP server (authenticated via App
-//     Password), it cannot be injected by the sending party.  We require
-//     dkim=pass with header.i pointing at a trusted bank domain.
-//     NOTE: this check covers emails delivered *directly* from bank servers.
-//     Bursars should configure their bank accounts to send alert emails
-//     directly to the monitored inbox; see docs/email-ingest-setup.md.
+//  DKIM verification: we read the Authentication-Results header that Gmail
+//  adds server-side when the message is delivered to our inbox.  Because we
+//  fetch this header from Gmail's own IMAP server (authenticated via App
+//  Password), it cannot be injected by the sending party.  We require
+//  dkim=pass with header.i pointing at a trusted bank domain (see
+//  TRUSTED_BANK_DOMAINS) — or, for forwarded mail, a cryptographically
+//  verified ARC chain proving the same (see verifyDkim's ARC fallback path,
+//  used for Fidelity's forwarded alerts). There is deliberately no separate
+//  From:-header domain pre-filter ahead of this: forwarding commonly
+//  rewrites From: to the forwarder's own address, so a header-based
+//  pre-filter would reject genuine forwarded bank alerts before this real
+//  check ever ran. Trust is decided by the cryptographically verified
+//  domain only, never by a header either side of the connection controls.
 //
 // ── Reliability ────────────────────────────────────────────────────────────
 //
@@ -72,8 +74,21 @@ function sleep(ms: number): Promise<void> {
 
 // ── 1. Trusted bank sender domains ───────────────────────────────────────────
 //
-// Both the From-domain check AND the DKIM check require the signing domain to
-// be present here.  Add entries as the school's banking relationships expand.
+// This is consulted ONLY by the DKIM/ARC check below — the domain it accepts
+// is read from the cryptographically-authenticated signature, never from the
+// message's own From: header. Add entries as the school's banking
+// relationships expand.
+//
+// (Previously there was also a pre-filter here that rejected a message
+// outright if its From: header domain wasn't in this list, before DKIM ever
+// ran. That was removed: forwarding — including the legitimate Gmail
+// auto-forward path this system depends on for Fidelity — commonly rewrites
+// From: to the forwarder's own address, so that pre-filter was rejecting
+// genuine bank alerts before they ever reached the check that actually
+// verifies authenticity. Removing it doesn't weaken security: anything that
+// isn't cryptographically verified as coming from a domain in this set still
+// gets rejected below, exactly as before — only the domain that decides is
+// now always the DKIM/ARC-verified one, never the spoofable header.)
 
 const TRUSTED_BANK_DOMAINS = new Set<string>([
   "zenithbank.com",       // Zenith Bank
@@ -94,14 +109,6 @@ const TRUSTED_BANK_DOMAINS = new Set<string>([
   "fcmb.com",             // First City Monument Bank
   "ecobank.com",          // Eco Bank
 ]);
-
-function isTrustedBankSender(fromAddress: string): boolean {
-  if (!fromAddress) return false;
-  const atIdx = fromAddress.lastIndexOf("@");
-  if (atIdx === -1) return false;
-  const domain = fromAddress.slice(atIdx + 1).toLowerCase();
-  return TRUSTED_BANK_DOMAINS.has(domain);
-}
 
 // ── 2. DKIM authentication check ─────────────────────────────────────────────
 //
@@ -354,22 +361,17 @@ async function processMessage(message: {
     return outcome;
   };
 
-  // ── Check 1: From-domain allowlist ──────────────────────────────────────
-  if (!isTrustedBankSender(from)) {
-    console.log(
-      `[email-ingest] UID ${uid}: untrusted sender "${from}" — skipped (not in allowlist)`
-    );
-    return done("skipped", "untrusted sender — not in allowlist");
-  }
-
   // ── Require raw source for both DKIM check and body extraction ──────────
+  // (No From:-header domain pre-filter here — see the comment above
+  // TRUSTED_BANK_DOMAINS. The DKIM/ARC check immediately below is what
+  // actually decides trust, against the cryptographically verified domain.)
   const sourceBuffer = message.source;
   if (!sourceBuffer || sourceBuffer.length === 0) {
     console.log(`[email-ingest] UID ${uid}: empty source buffer, skipping permanently`);
     return done("skipped", "empty source buffer");
   }
 
-  // ── Check 2: DKIM authentication (via Gmail's Authentication-Results) ───
+  // ── Check: DKIM authentication (via Gmail's Authentication-Results) ─────
   const dkimResult = await verifyDkim(sourceBuffer);
   if (!dkimResult.ok) {
     console.log(
