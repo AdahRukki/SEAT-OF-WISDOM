@@ -607,6 +607,10 @@ async function connectAndListen(address: string, password: string): Promise<void
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       client.removeAllListeners();
       if (err) console.error("[email-ingest] connection ended:", err);
+      // Best-effort cleanup — fire and forget so a hung/half-dead socket can't
+      // delay reconnection. The original poller always called logout() in a
+      // finally block; this path didn't, leaving sockets to linger on error.
+      client.logout().catch(() => {});
       resolve();
     };
 
@@ -636,8 +640,12 @@ async function connectAndListen(address: string, password: string): Promise<void
               ? `[email-ingest] UIDVALIDITY changed (${stored.uidValidity} → ${uidValidity}) — resetting cursor, running legacy unseen-scan once`
               : "[email-ingest] No stored cursor — first run, running legacy unseen-scan once"
           );
-          await legacyUnseenCatchUp(client);
-          cursor = mailboxInfo.uidNext - 1;
+          cursor = await legacyUnseenCatchUp(client, address, uidValidity);
+          // Floor to uidNext-1 so a mailbox with no unseen backlog (or a scan
+          // that finished with nothing left to advance past) doesn't leave the
+          // cursor at 0 — which would make the next catchUp() re-fetch the
+          // entire mailbox history via a "1:*" range instead of just new mail.
+          cursor = Math.max(cursor, mailboxInfo.uidNext - 1);
         }
         await storage.setEmailIngestCursor(address, uidValidity, cursor);
 
@@ -688,13 +696,31 @@ async function connectAndListen(address: string, password: string): Promise<void
 // "first run" branch in connectAndListen). After this runs once per mailbox,
 // all tracking is UID-cursor based and this is never called again for that
 // mailbox (guarded by the persisted cursor row existing).
+//
+// Persists cursor progress after EVERY message, not just once at the very
+// end. The backlog scanned here can be large enough — each message needs a
+// DKIM/ARC check, and the ARC fallback path does live DNS lookups — that the
+// IMAP socket can time out partway through. Without incremental saves, a
+// mid-scan timeout meant the cursor was never written at all: the next
+// reconnect saw "no cursor" and restarted this entire scan from message #1,
+// forever re-processing the same early messages while never reaching later
+// ones in the backlog. Saving after each message means a timeout just means
+// "resume via the normal cursor-based catchUp() from here" instead of
+// "start over from zero."
 
-async function legacyUnseenCatchUp(client: ImapFlow): Promise<void> {
+async function legacyUnseenCatchUp(
+  client: ImapFlow,
+  mailbox: string,
+  uidValidity: string
+): Promise<number> {
+  let cursor = 0;
+  const results: Array<{ uid: number; outcome: ProcessResult }> = [];
+
   const lock = await client.getMailboxLock("INBOX");
   try {
     const searchResult = await client.search({ seen: false }, { uid: true });
     const unseenUids: number[] = Array.isArray(searchResult) ? searchResult : [];
-    if (unseenUids.length === 0) return;
+    if (unseenUids.length === 0) return cursor;
 
     console.log(`[email-ingest] Legacy scan: ${unseenUids.length} unseen message(s) to check`);
     let ingested = 0, skipped = 0, retried = 0;
@@ -718,11 +744,20 @@ async function legacyUnseenCatchUp(client: ImapFlow): Promise<void> {
       if (outcome === "ingested") ingested++;
       else if (outcome === "skipped") skipped++;
       else retried++;
+
+      // Persist progress after every message — see function comment above.
+      results.push({ uid: message.uid, outcome });
+      const nextCursor = computeNextCursor(cursor, results);
+      if (nextCursor !== cursor) {
+        cursor = nextCursor;
+        await storage.setEmailIngestCursor(mailbox, uidValidity, cursor);
+      }
     }
     console.log(`[email-ingest] Legacy scan done: ${ingested} ingested, ${skipped} skipped, ${retried} left for the UID cursor to retry`);
   } finally {
     lock.release();
   }
+  return cursor;
 }
 
 // ── Public: start the background listener ─────────────────────────────────────
