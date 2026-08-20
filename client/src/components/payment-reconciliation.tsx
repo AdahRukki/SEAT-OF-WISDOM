@@ -292,6 +292,11 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
+    // Email ingestion runs in real time on the backend (IMAP IDLE), but this
+    // query only fired once on mount — a newly auto-ingested transaction sat
+    // in the DB immediately yet never appeared here until a manual page
+    // reload. Auto-refresh so "arrived" and "visible" stay close together.
+    refetchInterval: 20_000,
   });
 
   const [reconcileStatus, setReconcileStatus] = useState<"recorded" | "confirmed" | "reversed" | "all">("recorded");
@@ -616,7 +621,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   });
 
   // Email review queue — every email the listener has read, regardless of
-  // outcome; nothing is filtered out server-side. Auto-refreshes every 60s
+  // outcome; nothing is filtered out server-side. Auto-refreshes every 20s
   // while the panel is open.
   type EmailReviewItem = {
     id: string;
@@ -649,7 +654,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       return res.json();
     },
     enabled: isMainAdmin && ingestLogOpen,
-    refetchInterval: isMainAdmin && ingestLogOpen ? 60_000 : false,
+    refetchInterval: isMainAdmin && ingestLogOpen ? 20_000 : false,
     staleTime: 0,
   });
 
@@ -2415,8 +2420,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-muted-foreground">
                           {ingestLogData.lastPollAt
-                            ? `Last polled ${formatPollAge(ingestLogData.lastPollAt)}${ingestLogData.lastPollOk === true ? " · ✓ connected" : ingestLogData.lastPollOk === false ? " · ✗ connection failed" : ""}`
-                            : "Not polled yet this session — poll runs every 60 s"}
+                            ? `Last activity ${formatPollAge(ingestLogData.lastPollAt)}${ingestLogData.lastPollOk === true ? " · ✓ connected (real-time)" : ingestLogData.lastPollOk === false ? " · ✗ connection failed" : ""}`
+                            : "No connection activity yet this session"}
                         </p>
                         <Button
                           variant="ghost"
