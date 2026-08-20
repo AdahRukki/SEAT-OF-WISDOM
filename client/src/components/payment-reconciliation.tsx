@@ -618,7 +618,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     isFetching: ingestLogFetching,
     refetch: refetchIngestLog,
   } = useQuery<{
-    log: Array<{ uid: number; from: string; subject: string; detectedBank: string; outcome: "ingested" | "skipped" | "retry"; reason: string; processedAt: string }>;
+    log: Array<{
+      uid: number; from: string; subject: string; detectedBank: string;
+      outcome: "ingested" | "skipped" | "retry"; reason: string; processedAt: string;
+      amount?: number; maskedAccount?: string; transactionDate?: string;
+      rawDescription?: string; reference?: string; balanceKey?: string;
+    }>;
     lastPollAt: string | null;
     lastPollOk: boolean | null;
     pollerEnabled: boolean;
@@ -2379,13 +2384,30 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             <TableRow className="text-xs">
                               <TableHead className="py-1.5 text-xs">Time</TableHead>
                               <TableHead className="py-1.5 text-xs">Bank</TableHead>
+                              <TableHead className="py-1.5 text-xs">Amount</TableHead>
                               <TableHead className="py-1.5 text-xs">Subject</TableHead>
                               <TableHead className="py-1.5 text-xs">Outcome</TableHead>
                               <TableHead className="py-1.5 text-xs">Reason</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {ingestLogData.log.map((entry) => (
+                            {ingestLogData.log.map((entry) => {
+                              // Full parsed detail — only present once parsing actually
+                              // succeeded. Shown as a hover tooltip on the Reason cell so
+                              // the table itself stays compact; absence of these fields
+                              // is itself diagnostic (shows how far a message got before
+                              // being rejected — sender allowlist, DKIM, or parsing).
+                              const detailLines = [
+                                entry.maskedAccount ? `Account: ${entry.maskedAccount}` : null,
+                                entry.transactionDate ? `Date: ${entry.transactionDate}` : null,
+                                entry.rawDescription ? `Narration: ${entry.rawDescription}` : null,
+                                entry.reference ? `Reference: ${entry.reference}` : null,
+                                entry.balanceKey ? `Balance: ₦${entry.balanceKey}` : null,
+                              ].filter(Boolean);
+                              const detailTitle = detailLines.length > 0
+                                ? `${entry.reason}\n\n${detailLines.join("\n")}`
+                                : entry.reason;
+                              return (
                               <TableRow
                                 key={`${entry.uid}-${entry.processedAt}`}
                                 className={
@@ -2400,6 +2422,11 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   {formatLogTime(entry.processedAt)}
                                 </TableCell>
                                 <TableCell className="py-1.5 text-xs">{entry.detectedBank}</TableCell>
+                                <TableCell className="py-1.5 text-xs whitespace-nowrap">
+                                  {typeof entry.amount === "number"
+                                    ? `₦${entry.amount.toLocaleString()}`
+                                    : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
                                 <TableCell
                                   className="py-1.5 text-xs max-w-[180px] truncate"
                                   title={entry.subject}
@@ -2424,17 +2451,21 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                       : "Skipped"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs text-muted-foreground max-w-[200px] truncate" title={entry.reason}>
+                                <TableCell className="py-1.5 text-xs text-muted-foreground max-w-[200px] truncate" title={detailTitle}>
                                   {entry.reason}
+                                  {detailLines.length > 0 && (
+                                    <span className="ml-1 text-muted-foreground/60">(hover for details)</span>
+                                  )}
                                 </TableCell>
                               </TableRow>
-                            ))}
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>
                     ) : ingestLogData && ingestLogData.pollerEnabled ? (
                       <p className="text-xs text-muted-foreground text-center py-4">
-                        No emails processed this session — the inbox is checked every 60 seconds.
+                        No emails processed this session yet — new mail is picked up within seconds of arrival.
                       </p>
                     ) : null}
                   </div>

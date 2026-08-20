@@ -279,6 +279,17 @@ export interface EmailIngestEntry {
   outcome: "ingested" | "skipped" | "retry";
   reason: string;
   processedAt: string; // ISO 8601
+  // Full parsed transaction detail — only present once parsing actually
+  // succeeded (i.e. reached parseEmailAlert() and got ok:true). Absent for
+  // anything rejected earlier (sender allowlist, DKIM, unparseable body) —
+  // that absence is itself diagnostic: it shows exactly how far a message
+  // got before being rejected.
+  amount?: number;
+  maskedAccount?: string;
+  transactionDate?: string; // DD/MM/YYYY, as parsed from the alert
+  rawDescription?: string;
+  reference?: string;
+  balanceKey?: string;
 }
 
 const LOG_MAX = 50;
@@ -331,9 +342,15 @@ async function processMessage(message: {
   // Detect bank from sender domain early so every log entry carries it.
   let detectedBank = bankFromSender(from);
 
-  // Helper: append a log entry and return the outcome in one call.
-  const done = (outcome: ProcessResult, reason: string): ProcessResult => {
-    appendLog({ uid, from, subject, detectedBank, outcome, reason, processedAt: new Date().toISOString() });
+  // Helper: append a log entry and return the outcome in one call. `extra`
+  // carries the full parsed transaction detail when available (only once
+  // parsing has actually succeeded — see EmailIngestEntry's comment).
+  const done = (
+    outcome: ProcessResult,
+    reason: string,
+    extra?: Pick<EmailIngestEntry, "amount" | "maskedAccount" | "transactionDate" | "rawDescription" | "reference" | "balanceKey">
+  ): ProcessResult => {
+    appendLog({ uid, from, subject, detectedBank, outcome, reason, processedAt: new Date().toISOString(), ...extra });
     return outcome;
   };
 
@@ -411,7 +428,14 @@ async function processMessage(message: {
     console.log(
       `[email-ingest] UID ${uid}: duplicate fingerprint (${alert.fingerprint.slice(0, 8)}…)`
     );
-    return done("skipped", "duplicate fingerprint");
+    return done("skipped", "duplicate fingerprint", {
+      amount: alert.amount,
+      maskedAccount: alert.maskedAccount,
+      transactionDate: alert.transactionDate,
+      rawDescription: alert.rawDescription,
+      reference: alert.reference,
+      balanceKey: alert.balanceKey,
+    });
   }
 
   // ── Route by masked account ──────────────────────────────────────────────
@@ -458,12 +482,27 @@ async function processMessage(message: {
     );
     return done(
       "ingested",
-      `₦${alert.amount.toLocaleString()} — ${alert.rawDescription.slice(0, 50)}`
+      `₦${alert.amount.toLocaleString()} — ${alert.rawDescription.slice(0, 50)}`,
+      {
+        amount: alert.amount,
+        maskedAccount: alert.maskedAccount,
+        transactionDate: alert.transactionDate,
+        rawDescription: alert.rawDescription,
+        reference: alert.reference,
+        balanceKey: alert.balanceKey,
+      }
     );
   } catch (insertErr: any) {
     if (insertErr?.code === "23505" || /unique/i.test(insertErr?.message ?? "")) {
       // Lost fingerprint-uniqueness race — treat as dup.
-      return done("skipped", "duplicate fingerprint (race)");
+      return done("skipped", "duplicate fingerprint (race)", {
+        amount: alert.amount,
+        maskedAccount: alert.maskedAccount,
+        transactionDate: alert.transactionDate,
+        rawDescription: alert.rawDescription,
+        reference: alert.reference,
+        balanceKey: alert.balanceKey,
+      });
     }
     // Any other DB failure is transient — leave for retry.
     console.error(`[email-ingest] UID ${uid}: insert failed (transient):`, insertErr);
