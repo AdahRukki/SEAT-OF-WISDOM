@@ -700,24 +700,6 @@ async function connectAndListen(address: string, password: string): Promise<void
   let uidValidity = ""; // set once mailboxOpen resolves; constant for this connection's lifetime
   let heartbeatTimer: NodeJS.Timeout | undefined;
 
-  const runCatchUpLoop = async () => {
-    if (processing) {
-      pending = true;
-      return;
-    }
-    processing = true;
-    try {
-      do {
-        pending = false;
-        cursor = await catchUp(client, address, uidValidity, cursor);
-      } while (pending);
-    } catch (err) {
-      console.error("[email-ingest] catch-up pass failed:", err);
-    } finally {
-      processing = false;
-    }
-  };
-
   return new Promise<void>((resolve) => {
     let settled = false;
     const settle = (err?: unknown) => {
@@ -731,6 +713,38 @@ async function connectAndListen(address: string, password: string): Promise<void
       // finally block; this path didn't, leaving sockets to linger on error.
       client.logout().catch(() => {});
       resolve();
+    };
+
+    // Defined here (not in the outer function scope) specifically so it can
+    // call settle() directly. Previously this only logged a failed catch-up
+    // pass and quietly returned, leaving the outer reconnect loop with no
+    // way to know the connection had actually died until something else
+    // eventually noticed — the heartbeat below, on its own up-to-60s
+    // interval, or the 'close' event, which isn't guaranteed to fire
+    // promptly (or at all) for a half-dead socket. Confirmed live: this
+    // produced a run of a dozen-plus identical "Connection not available"
+    // failures in a row before anything reconnected — real transactions
+    // sitting unprocessed for minutes, not the few seconds this listener is
+    // supposed to guarantee. Now the very first such failure forces the
+    // reconnect immediately instead of waiting for a slower, indirect
+    // signal to eventually catch up to reality.
+    const runCatchUpLoop = async () => {
+      if (processing) {
+        pending = true;
+        return;
+      }
+      processing = true;
+      try {
+        do {
+          pending = false;
+          cursor = await catchUp(client, address, uidValidity, cursor);
+        } while (pending);
+      } catch (err) {
+        console.error("[email-ingest] catch-up pass failed:", err);
+        settle(err);
+      } finally {
+        processing = false;
+      }
     };
 
     client.on("close", () => settle());
