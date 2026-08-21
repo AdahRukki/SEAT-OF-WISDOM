@@ -99,7 +99,7 @@ import {
   calculateGrade
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, asc, desc, sql, inArray, ne, isNotNull, gte, lte } from "drizzle-orm";
+import { eq, and, or, asc, desc, sql, inArray, ne, isNotNull, isNull, gte, lte } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -5775,11 +5775,21 @@ export class DatabaseStorage implements IStorage {
   async getEmailReviewQueue(filters?: { status?: string; schoolId?: string; limit?: number }): Promise<EmailReviewItem[]> {
     const conditions = [];
     if (filters?.status) conditions.push(eq(emailReviewQueue.reviewStatus, filters.status));
-    // Mirrors getUnmatchedBankTransactions's schoolId filter: when a specific
-    // school is selected, rows with no resolved school yet (unparsed, or an
-    // unmapped masked account) are excluded too, same as an unrouted
-    // bank_transactions row would be — not a new rule, just consistency.
-    if (filters?.schoolId) conditions.push(eq(emailReviewQueue.schoolId, filters.schoolId));
+    // Unlike getUnmatchedBankTransactions, this can't simply exclude
+    // unrouted rows when a school is selected: the admin dashboard's school
+    // switcher has no "All Schools" option (verified against
+    // admin-dashboard.tsx) — an admin is always locked to exactly one
+    // school. An unrouted row (no masked-account mapping yet, or nothing
+    // parsed to route by) filtered out here would be invisible to every
+    // admin, permanently, with no view anyone could pick to see it — which
+    // defeats the entire point of this table (nothing the listener reads
+    // should ever become unreachable). So: a routed row is filtered by
+    // school as expected, but an unrouted row always shows, regardless of
+    // which school is selected, since it doesn't belong to one yet and
+    // someone has to be able to notice it to fix the routing.
+    if (filters?.schoolId) {
+      conditions.push(or(eq(emailReviewQueue.schoolId, filters.schoolId), isNull(emailReviewQueue.schoolId)));
+    }
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     let query = db
