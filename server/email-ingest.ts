@@ -354,11 +354,13 @@ async function processMessage(mailbox: string, message: {
       bodySnippet?: string;
       linkedTransactionId?: string;
       schoolId?: string | null;
-      // Only the auto_ingested path sets this — a freshly auto-created
-      // transaction needs no human action, so it shouldn't sit marked
+      // Only outcomes the system has already fully resolved set this —
+      // "approved" for a freshly auto-created transaction (auto_ingested),
+      // "dismissed" for a fingerprint that's already recorded (duplicate).
+      // Neither needs human action, so they shouldn't sit marked
       // "open"/needs-review forever. Every other outcome leaves this
       // undefined and gets the DB column default ("open") on first insert.
-      reviewStatus?: "approved";
+      reviewStatus?: "approved" | "dismissed";
       extra?: Pick<
         InsertEmailReviewItem,
         "amount" | "maskedAccount" | "transactionDate" | "rawDescription" | "reference" | "balanceKey" | "fingerprint"
@@ -487,7 +489,7 @@ async function processMessage(mailbox: string, message: {
       `[email-ingest] UID ${uid}: duplicate fingerprint (${alert.fingerprint.slice(0, 8)}…)`
     );
     return record("duplicate", "duplicate fingerprint", {
-      verified, bodySnippet: plainSnippet, schoolId: previewSchoolId, extra: parsedExtra,
+      verified, bodySnippet: plainSnippet, schoolId: previewSchoolId, reviewStatus: "dismissed", extra: parsedExtra,
     });
   }
 
@@ -559,7 +561,7 @@ async function processMessage(mailbox: string, message: {
     if (insertErr?.code === "23505" || /unique/i.test(insertErr?.message ?? "")) {
       // Lost fingerprint-uniqueness race — treat as dup.
       return record("duplicate", "duplicate fingerprint (race)", {
-        verified, bodySnippet: plainSnippet, schoolId: schoolId ?? null, extra: parsedExtra,
+        verified, bodySnippet: plainSnippet, schoolId: schoolId ?? null, reviewStatus: "dismissed", extra: parsedExtra,
       });
     }
     // Any other DB failure is transient — leave for retry.
