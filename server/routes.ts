@@ -5184,7 +5184,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/email-review-queue", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
     try {
       const status = typeof req.query.status === "string" ? req.query.status : undefined;
-      const log = await storage.getEmailReviewQueue({ status, limit: 200 });
+      const schoolId = typeof req.query.schoolId === "string" ? req.query.schoolId : undefined;
+      const log = await storage.getEmailReviewQueue({ status, schoolId, limit: 200 });
       const { lastPollAt, lastPollOk } = getLastPollStatus();
       const pollerEnabled = !!(
         process.env.EMAIL_INGEST_ADDRESS?.trim() &&

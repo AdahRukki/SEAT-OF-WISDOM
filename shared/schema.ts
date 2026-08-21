@@ -568,6 +568,13 @@ export const emailReviewQueue = pgTable("email_review_queue", {
   parseOk: boolean("parse_ok").notNull().default(false), // full detail below is trustworthy / Approve is offered
   amount: decimal("amount", { precision: 12, scale: 2 }),
   maskedAccount: varchar("masked_account", { length: 50 }),
+  // Resolved via the same school_bank_accounts masked-account lookup used at
+  // auto-ingest/approval time — a best-effort *preview* of routing, computed
+  // as soon as a masked account is parsed (regardless of verified/outcome),
+  // so a pending row shows its destination school before it's ever approved.
+  // Null when unparsed (no masked account to look up) or unmapped (shown as
+  // "Unrouted" in the UI, same as an unrouted bank_transactions row).
+  schoolId: uuid("school_id").references(() => schools.id),
   transactionDate: varchar("transaction_date", { length: 20 }), // DD/MM/YYYY, as parsed from the alert
   rawDescription: text("raw_description"),
   reference: varchar("reference", { length: 255 }),

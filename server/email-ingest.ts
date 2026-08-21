@@ -353,6 +353,7 @@ async function processMessage(mailbox: string, message: {
       verified: boolean;
       bodySnippet?: string;
       linkedTransactionId?: string;
+      schoolId?: string | null;
       extra?: Pick<
         InsertEmailReviewItem,
         "amount" | "maskedAccount" | "transactionDate" | "rawDescription" | "reference" | "balanceKey" | "fingerprint"
@@ -374,6 +375,7 @@ async function processMessage(mailbox: string, message: {
       outcome,
       reason,
       linkedTransactionId: opts.linkedTransactionId ?? null,
+      schoolId: opts.schoolId ?? null,
       ...opts.extra,
     } as InsertEmailReviewItem);
     return cursorResultFor(outcome);
@@ -443,6 +445,26 @@ async function processMessage(mailbox: string, message: {
     fingerprint: alert.fingerprint,
   };
 
+  // ── Preview school routing (best-effort, not a gate) ─────────────────────
+  // Same masked-account -> school_bank_accounts lookup used below for the
+  // real routing decision, run here so a *pending* row (unverified,
+  // duplicate, or held for retry) still shows its likely destination school
+  // before anyone approves it — otherwise the review queue can't tell you
+  // which school an item belongs to until it's already been acted on. A
+  // failure here must never block or retry the message; it only means the
+  // preview is unavailable this pass. The lookup that actually gates
+  // auto-ingest (a few lines down) and approval (approveEmailReviewItem)
+  // each still run their own authoritative version of this same check.
+  let previewSchoolId: string | null = null;
+  if (alert.maskedAccount) {
+    try {
+      const previewAccount = await storage.getSchoolBankAccountByMasked(alert.maskedAccount);
+      if (previewAccount?.isActive) previewSchoolId = previewAccount.schoolId;
+    } catch (previewErr) {
+      console.debug(`[email-ingest] UID ${uid}: school-preview lookup failed (non-blocking):`, previewErr);
+    }
+  }
+
   // ── Duplicate check ──────────────────────────────────────────────────────
   let alreadyExists: boolean;
   try {
@@ -450,7 +472,7 @@ async function processMessage(mailbox: string, message: {
   } catch (fpErr) {
     console.error(`[email-ingest] UID ${uid}: fingerprint check failed (transient):`, fpErr);
     return record("error", "fingerprint check failed — will retry", {
-      verified, bodySnippet: plainSnippet, extra: parsedExtra,
+      verified, bodySnippet: plainSnippet, schoolId: previewSchoolId, extra: parsedExtra,
     });
   }
 
@@ -459,7 +481,7 @@ async function processMessage(mailbox: string, message: {
       `[email-ingest] UID ${uid}: duplicate fingerprint (${alert.fingerprint.slice(0, 8)}…)`
     );
     return record("duplicate", "duplicate fingerprint", {
-      verified, bodySnippet: plainSnippet, extra: parsedExtra,
+      verified, bodySnippet: plainSnippet, schoolId: previewSchoolId, extra: parsedExtra,
     });
   }
 
@@ -471,11 +493,11 @@ async function processMessage(mailbox: string, message: {
         `${alert.bankName} ₦${alert.amount.toLocaleString()}`
     );
     return record("unverified", "DKIM/ARC not verified — needs manual approval", {
-      verified, bodySnippet: plainSnippet, extra: parsedExtra,
+      verified, bodySnippet: plainSnippet, schoolId: previewSchoolId, extra: parsedExtra,
     });
   }
 
-  // ── Route by masked account ──────────────────────────────────────────────
+  // ── Route by masked account (authoritative — gates the real insert) ──────
   let schoolId: string | undefined;
   if (alert.maskedAccount) {
     try {
@@ -484,7 +506,7 @@ async function processMessage(mailbox: string, message: {
     } catch (routeErr) {
       console.error(`[email-ingest] UID ${uid}: routing lookup failed (transient):`, routeErr);
       return record("error", "routing lookup failed — will retry", {
-        verified, bodySnippet: plainSnippet, extra: parsedExtra,
+        verified, bodySnippet: plainSnippet, schoolId: previewSchoolId, extra: parsedExtra,
       });
     }
   }
@@ -522,19 +544,19 @@ async function processMessage(mailbox: string, message: {
     return record(
       "auto_ingested",
       `₦${alert.amount.toLocaleString()} — ${alert.rawDescription.slice(0, 50)}`,
-      { verified, bodySnippet: plainSnippet, linkedTransactionId: transaction.id, extra: parsedExtra }
+      { verified, bodySnippet: plainSnippet, linkedTransactionId: transaction.id, schoolId: schoolId ?? null, extra: parsedExtra }
     );
   } catch (insertErr: any) {
     if (insertErr?.code === "23505" || /unique/i.test(insertErr?.message ?? "")) {
       // Lost fingerprint-uniqueness race — treat as dup.
       return record("duplicate", "duplicate fingerprint (race)", {
-        verified, bodySnippet: plainSnippet, extra: parsedExtra,
+        verified, bodySnippet: plainSnippet, schoolId: schoolId ?? null, extra: parsedExtra,
       });
     }
     // Any other DB failure is transient — leave for retry.
     console.error(`[email-ingest] UID ${uid}: insert failed (transient):`, insertErr);
     return record("error", "DB insert failed — will retry", {
-      verified, bodySnippet: plainSnippet, extra: parsedExtra,
+      verified, bodySnippet: plainSnippet, schoolId: schoolId ?? null, extra: parsedExtra,
     });
   }
 }

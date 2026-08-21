@@ -628,7 +628,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     uid: number; fromAddress: string | null; subject: string | null; detectedBank: string | null;
     receivedAt: string | null;
     verified: boolean; likelyTransaction: boolean; parseOk: boolean;
-    amount: string | null; maskedAccount: string | null; transactionDate: string | null;
+    amount: string | null; maskedAccount: string | null; schoolId: string | null; transactionDate: string | null;
     rawDescription: string | null; reference: string | null; balanceKey: string | null;
     bodySnippet: string | null;
     outcome: "auto_ingested" | "duplicate" | "unverified" | "unparsed" | "error";
@@ -647,9 +647,15 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     lastPollOk: boolean | null;
     pollerEnabled: boolean;
   }>({
-    queryKey: ["/api/admin/email-review-queue"],
+    // Filtered server-side by the currently selected school (same as every
+    // other list on this page — unmatchedTransactions, etc.) so approving an
+    // item routed to a different school doesn't look like it vanished; it's
+    // just not this school's mail.
+    queryKey: ["/api/admin/email-review-queue", schoolId],
     queryFn: async () => {
-      const res = await fetch("/api/admin/email-review-queue", { credentials: "include", headers: getAuthHeaders() });
+      let url = "/api/admin/email-review-queue";
+      if (schoolId) url += `?schoolId=${schoolId}`;
+      const res = await fetch(url, { credentials: "include", headers: getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch email review queue");
       return res.json();
     },
@@ -2447,6 +2453,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             <TableRow className="text-xs">
                               <TableHead className="py-1.5 text-xs">Time</TableHead>
                               <TableHead className="py-1.5 text-xs">Bank</TableHead>
+                              <TableHead className="py-1.5 text-xs">School</TableHead>
                               <TableHead className="py-1.5 text-xs">Amount</TableHead>
                               <TableHead className="py-1.5 text-xs">Subject</TableHead>
                               <TableHead className="py-1.5 text-xs">Verified</TableHead>
@@ -2475,6 +2482,21 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <span className="ml-1 text-[10px] text-muted-foreground" title='Subject/body contains "credit" — sorted first, not filtered'>
                                       ● likely
                                     </span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="py-1.5 text-xs">
+                                  {entry.schoolId ? (
+                                    schoolNameById.get(entry.schoolId) || "—"
+                                  ) : entry.maskedAccount ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] bg-orange-50 text-orange-700 border-orange-300"
+                                      title="This account isn't mapped to a school yet. Add it under Bank Accounts."
+                                    >
+                                      Unrouted
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-muted-foreground">—</span>
                                   )}
                                 </TableCell>
                                 <TableCell className="py-1.5 text-xs whitespace-nowrap">
@@ -3205,6 +3227,14 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 </div>
                 <div><span className="text-muted-foreground">Date:</span> {selectedReviewItem.transactionDate || "—"}</div>
                 <div><span className="text-muted-foreground">Account:</span> {selectedReviewItem.maskedAccount || "—"}</div>
+                <div>
+                  <span className="text-muted-foreground">School:</span>{" "}
+                  {selectedReviewItem.schoolId
+                    ? (schoolNameById.get(selectedReviewItem.schoolId) || "—")
+                    : selectedReviewItem.maskedAccount
+                    ? <span className="text-orange-700">Unrouted — add this account under Bank Accounts</span>
+                    : "—"}
+                </div>
                 <div><span className="text-muted-foreground">Reference:</span> {selectedReviewItem.reference || "—"}</div>
                 <div><span className="text-muted-foreground">Balance:</span> {selectedReviewItem.balanceKey ? `₦${selectedReviewItem.balanceKey}` : "—"}</div>
                 <div className="col-span-2"><span className="text-muted-foreground">Narration:</span> {selectedReviewItem.rawDescription || "—"}</div>

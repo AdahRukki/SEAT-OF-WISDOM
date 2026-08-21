@@ -432,7 +432,7 @@ export interface IStorage {
   // Email Review Queue (see shared/schema.ts emailReviewQueue) — every email the
   // ingest listener has seen, regardless of outcome; admins decide from here.
   upsertEmailReviewItem(data: InsertEmailReviewItem): Promise<EmailReviewItem>;
-  getEmailReviewQueue(filters?: { status?: string; limit?: number }): Promise<EmailReviewItem[]>;
+  getEmailReviewQueue(filters?: { status?: string; schoolId?: string; limit?: number }): Promise<EmailReviewItem[]>;
   getEmailReviewItem(id: string): Promise<EmailReviewItem | undefined>;
   approveEmailReviewItem(id: string, reviewerId: string): Promise<EmailReviewItem>;
   dismissEmailReviewItem(id: string, reviewerId: string): Promise<EmailReviewItem>;
@@ -5738,6 +5738,7 @@ export class DatabaseStorage implements IStorage {
           parseOk: data.parseOk,
           amount: data.amount,
           maskedAccount: data.maskedAccount,
+          schoolId: data.schoolId,
           transactionDate: data.transactionDate,
           rawDescription: data.rawDescription,
           reference: data.reference,
@@ -5753,9 +5754,14 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getEmailReviewQueue(filters?: { status?: string; limit?: number }): Promise<EmailReviewItem[]> {
+  async getEmailReviewQueue(filters?: { status?: string; schoolId?: string; limit?: number }): Promise<EmailReviewItem[]> {
     const conditions = [];
     if (filters?.status) conditions.push(eq(emailReviewQueue.reviewStatus, filters.status));
+    // Mirrors getUnmatchedBankTransactions's schoolId filter: when a specific
+    // school is selected, rows with no resolved school yet (unparsed, or an
+    // unmapped masked account) are excluded too, same as an unrouted
+    // bank_transactions row would be — not a new rule, just consistency.
+    if (filters?.schoolId) conditions.push(eq(emailReviewQueue.schoolId, filters.schoolId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     let query = db
