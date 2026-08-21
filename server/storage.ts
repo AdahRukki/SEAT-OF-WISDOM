@@ -5934,14 +5934,25 @@ export class DatabaseStorage implements IStorage {
     const matches = candidates.filter((c) => trailingDigits(c.maskedAccountNumber) === inputDigits);
 
     if (matches.length > 1) {
-      // Ambiguous — two different stored accounts coincidentally share the
-      // same trailing digits. Never guess which one is right; leave it
-      // unrouted (same as no match) and log so it can be fixed by hand.
-      console.warn(
-        `[getSchoolBankAccountByMasked] "${maskedAccountNumber}" matches ${matches.length} stored accounts ` +
-          `by trailing digits (${matches.map((m) => m.maskedAccountNumber).join(", ")}) — ambiguous, leaving unrouted`
-      );
-      return undefined;
+      // More than one stored row shares these trailing digits — only truly
+      // ambiguous if they disagree on *which school* that resolves to. Two
+      // rows for the same account under different masking text (e.g. an old
+      // "**0025" entry left alongside a newer "xxxxxx0025" one, both really
+      // meaning the same Fidelity account) still agree on the destination
+      // school, so there's nothing to guess at — route it. Only refuse and
+      // leave unrouted when the matches genuinely point at different
+      // schools, where picking one really would be a guess.
+      const distinctSchools = new Set(matches.map((m) => m.schoolId));
+      if (distinctSchools.size > 1) {
+        console.warn(
+          `[getSchoolBankAccountByMasked] "${maskedAccountNumber}" matches ${matches.length} stored accounts ` +
+            `by trailing digits (${matches.map((m) => m.maskedAccountNumber).join(", ")}) pointing at ${distinctSchools.size} ` +
+            `different schools — genuinely ambiguous, leaving unrouted`
+        );
+        return undefined;
+      }
+      // All matches agree on the school — any of them is an equally valid
+      // representative to return.
     }
 
     return matches[0];
