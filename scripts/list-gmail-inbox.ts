@@ -12,6 +12,7 @@
 //
 // Read-only — does not mark anything as read, does not modify the mailbox.
 
+import "dotenv/config"; // same .env the app itself loads — this script is run standalone, not via pm2
 import { ImapFlow } from "imapflow";
 
 async function main() {
