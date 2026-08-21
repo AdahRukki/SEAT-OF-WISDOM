@@ -273,6 +273,38 @@ function bankFromSender(from: string): string {
   return "Unknown";
 }
 
+// ── Helpers: clamp extracted values to their DB column's max length ─────────
+//
+// email-bank-parser.ts's field extraction (extractFields/normalizeAccount/
+// extractBalance) is deliberately unbounded — a malformed or merged field can
+// produce a value longer than the varchar column it's ultimately written to
+// (email_review_queue.masked_account/balance_key/reference, and the same
+// columns on bank_transactions via smsAccount/reference). An insert that
+// throws on a length-constraint violation is worse than a truncated value:
+// left unguarded, it propagates out of record()/createBankTransaction with
+// no row ever written for that UID — see emergencyRecord() below for the
+// remaining backstop once these clamps are exhausted.
+//
+// clampHead keeps the *start* of a value — for narrative/reference-ish text
+// where the meaningful content reads left-to-right (same convention already
+// used for bodySnippet's .slice(0, 4000) below).
+// clampTail keeps the *end* — specifically for maskedAccount, since
+// getSchoolBankAccountByMasked() routes by trailing digits
+// (server/storage.ts's trailingDigits()); truncating from the head would cut
+// off exactly the part that routing depends on.
+
+// Exported for unit testing.
+export function clampHead(value: string | null | undefined, max: number): string | null | undefined {
+  if (value == null) return value;
+  return value.length > max ? value.slice(0, max) : value;
+}
+
+// Exported for unit testing.
+export function clampTail(value: string | null | undefined, max: number): string | null | undefined {
+  if (value == null) return value;
+  return value.length > max ? value.slice(-max) : value;
+}
+
 // ── Ingest visibility ─────────────────────────────────────────────────────────
 //
 // Every message this listener reads is persisted to email_review_queue (see
@@ -368,11 +400,21 @@ async function processMessage(mailbox: string, message: {
     }
   ): Promise<ProcessResult> => {
     const likelyTransaction = looksLikeCredit(`${subject} ${opts.bodySnippet ?? ""}`);
+    // Clamp anything sourced from unbounded parser extraction before it can
+    // reach the DB write — see the clampHead/clampTail comment above.
+    const clampedExtra = opts.extra
+      ? {
+          ...opts.extra,
+          maskedAccount: clampTail(opts.extra.maskedAccount, 50),
+          balanceKey: clampHead(opts.extra.balanceKey, 100),
+          reference: clampHead(opts.extra.reference, 255),
+        }
+      : opts.extra;
     await storage.upsertEmailReviewItem({
       mailbox,
       uid,
-      fromAddress: from || null,
-      subject: subject || null,
+      fromAddress: clampHead(from || null, 255),
+      subject: clampHead(subject || null, 500),
       detectedBank,
       receivedAt,
       verified: opts.verified,
@@ -384,7 +426,7 @@ async function processMessage(mailbox: string, message: {
       linkedTransactionId: opts.linkedTransactionId ?? null,
       schoolId: opts.schoolId ?? null,
       ...(opts.reviewStatus ? { reviewStatus: opts.reviewStatus } : {}),
-      ...opts.extra,
+      ...clampedExtra,
     } as InsertEmailReviewItem);
     return cursorResultFor(outcome);
   };
@@ -403,8 +445,17 @@ async function processMessage(mailbox: string, message: {
   // ── Check: DKIM authentication (via Gmail's Authentication-Results) ─────
   // This is now a label ("verified" vs "unverified"), not a gate — an
   // unverified message still gets parsed and shown in full below.
-  const dkimResult = await verifyDkim(sourceBuffer);
-  const verified = dkimResult.ok;
+  // Wrapped: verifyDkim's own try/catch only covers its later ARC/
+  // authenticate() call, not the earlier synchronous header-parsing work.
+  // An uncaught throw there, before any record() call is reachable, would
+  // otherwise make this UID invisible with zero row — treat it the same as
+  // a genuine dkim=fail instead: parsed and shown, held for manual approval.
+  let verified = false;
+  try {
+    verified = (await verifyDkim(sourceBuffer)).ok;
+  } catch (dkimErr) {
+    console.error(`[email-ingest] UID ${uid}: DKIM check threw unexpectedly — treating as unverified:`, dkimErr);
+  }
 
   // ── Body extraction ──────────────────────────────────────────────────────
   let html = "";
@@ -441,6 +492,17 @@ async function processMessage(mailbox: string, message: {
   }
 
   const alert = result.data;
+
+  // Guard against a malformed extraction producing an amount outside what
+  // numeric(12,2) can store (both here and on bank_transactions.amount) —
+  // rather than let either insert throw later and lose this row's
+  // visibility entirely, treat it the same as any other "doesn't look like
+  // a real transaction" case: still gets a visible row, just as unparsed.
+  if (!Number.isFinite(alert.amount) || alert.amount <= 0 || alert.amount >= 1e10) {
+    console.log(`[email-ingest] UID ${uid}: parsed amount out of realistic range (${alert.amount})`);
+    return record("unparsed", "parsed amount out of realistic range", { verified, bodySnippet: plainSnippet });
+  }
+
   // Refine bank label from parse result now that we have it.
   detectedBank = alert.bankName !== "Unknown" ? alert.bankName : detectedBank;
   const parsedExtra = {
@@ -531,17 +593,18 @@ async function processMessage(mailbox: string, message: {
       transactionType: "credit",
       rawDescription: alert.rawDescription,
       normalizedDescription: alert.rawDescription.toLowerCase().trim(),
-      reference: alert.reference ?? null,
+      reference: alert.reference ? clampHead(alert.reference, 255) : null,
       fingerprint: alert.fingerprint,
       status: "unmatched",
       classification: alert.rawDescription.length < 20 ? "code_only" : "named",
       source: "email",
       // Store masked account in smsAccount so the shared re-route action
       // (rerouteUnroutedSmsTransactions) can backfill schoolId when the
-      // account mapping is added later.
-      smsAccount: alert.maskedAccount ?? null,
-      emailFrom: from || null,
-      emailSubject: subject || null,
+      // account mapping is added later. Tail-clamped (not head) so the
+      // trailing digits routing depends on survive an oversized extraction.
+      smsAccount: alert.maskedAccount ? clampTail(alert.maskedAccount, 50) : null,
+      emailFrom: clampHead(from || null, 255),
+      emailSubject: clampHead(subject || null, 500),
       emailReceivedAt: receivedAt,
     });
 
@@ -596,6 +659,48 @@ export function computeNextCursor(
   return cursor;
 }
 
+// ── Last-resort fallback: guarantee a row even for a genuinely unexpected
+// processMessage() failure ────────────────────────────────────────────────
+//
+// The clamps in record() and the amount/DKIM guards above prevent every
+// known cause of processMessage() throwing before it can write a row — but
+// "known" isn't "all". If it still throws for some other reason, this is
+// the backstop: a minimal write using only mailbox/uid/envelope-derived
+// fields — nothing parsed or extracted, nothing that could hit the same
+// failure — so the UID gets at least one visible row instead of none.
+// outcome "error" mirrors the existing pattern (fingerprint-check failure,
+// routing-lookup failure, DB-insert failure all already use it): the
+// cursor holds here and the next catch-up pass retries it.
+
+// Exported for unit testing.
+export async function emergencyRecord(
+  mailbox: string,
+  message: { uid: number; envelope?: any },
+  err: unknown
+): Promise<void> {
+  try {
+    const from: string = message.envelope?.from?.[0]?.address ?? "";
+    await storage.upsertEmailReviewItem({
+      mailbox,
+      uid: message.uid,
+      fromAddress: from || null,
+      subject: clampHead(message.envelope?.subject ?? null, 500),
+      detectedBank: bankFromSender(from),
+      receivedAt: message.envelope?.date ?? new Date(),
+      verified: false,
+      likelyTransaction: false,
+      parseOk: false,
+      outcome: "error",
+      reason: `unexpected processing failure: ${String((err as any)?.message ?? err).slice(0, 500)}`,
+    } as InsertEmailReviewItem);
+  } catch (fallbackErr) {
+    // Truly nothing more we can do here (e.g. the DB itself is unreachable)
+    // — the cursor still holds this UID for retry once it recovers, same as
+    // before this fallback existed.
+    console.error(`[email-ingest] UID ${message.uid}: emergency fallback write also failed:`, fallbackErr);
+  }
+}
+
 // ── Catch-up pass: fetch and process everything after the cursor ─────────────
 //
 // Persists cursor progress after EVERY message, not just once at the end of
@@ -628,6 +733,7 @@ async function catchUp(client: ImapFlow, mailbox: string, uidValidity: string, c
         outcome = await processMessage(mailbox, message as any);
       } catch (unexpected) {
         console.error(`[email-ingest] UID ${message.uid}: unexpected error:`, unexpected);
+        await emergencyRecord(mailbox, message, unexpected);
         outcome = "retry";
       }
 
@@ -869,6 +975,7 @@ async function legacyUnseenCatchUp(
         outcome = await processMessage(mailbox, message as any);
       } catch (unexpected) {
         console.error(`[email-ingest] UID ${message.uid}: unexpected error (legacy scan):`, unexpected);
+        await emergencyRecord(mailbox, message, unexpected);
         outcome = "retry";
       }
       if (outcome === "ingested" || outcome === "skipped") {
