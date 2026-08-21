@@ -68,7 +68,19 @@ export function extractBodyFromRfc2822(source: Buffer): { html: string; text: st
     if (!m) return "";
 
     const blockStart = m.index ?? 0;
-    const headerBlock = raw.substring(blockStart, blockStart + m[0].length - m[1].length);
+    // Content-Transfer-Encoding can appear either before or after
+    // Content-Type within a MIME part's header block — RFC 2822 doesn't
+    // mandate an order, and it's a real-world case: Fidelity's sender
+    // (NetcoreCloud/pepipost) writes Content-Disposition, then
+    // Content-Transfer-Encoding, then Content-Type. The old headerBlock only
+    // looked at lines *after* Content-Type, so on Fidelity mail the encoding
+    // was never found, quoted-printable was never decoded, and stray "="
+    // soft-line-break markers survived into the parsed text — silently
+    // breaking every amount extraction. Widen the search back to the
+    // preceding MIME boundary line so header order can't hide it.
+    const precedingBoundary = raw.lastIndexOf("\r\n--", blockStart);
+    const headerSearchStart = precedingBoundary === -1 ? 0 : precedingBoundary;
+    const headerBlock = raw.substring(headerSearchStart, blockStart + m[0].length - m[1].length);
     const encMatch = headerBlock.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
     const enc = encMatch?.[1]?.toLowerCase().trim() ?? "7bit";
 
@@ -109,7 +121,14 @@ export function extractBodyFromRfc2822(source: Buffer): { html: string; text: st
 export function htmlToTabText(html: string): string {
   if (!html) return "";
 
-  let s = html;
+  // Normalize line endings up front. Source HTML frequently has raw \r\n
+  // (or bare \r) embedded *inside* tags — e.g. formatting whitespace between
+  // a <td>'s opening tag and its own content — which nothing below converts
+  // to a real line break; left as \r, it survives later per-line trimming
+  // (which only strips spaces, not \r) and silently defeats the tab-merge
+  // pass further down. Collapsing to a single \n convention here means every
+  // later step only has one line-ending character to reason about.
+  let s = html.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
   // Join adjacent table cells with a tab (before any other tag stripping).
   s = s.replace(/<\/td\s*>\s*<td[^>]*>/gi, "\t");
@@ -139,17 +158,43 @@ export function htmlToTabText(html: string): string {
     .replace(/&#x([0-9A-Fa-f]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 
   // Clean up each line: collapse runs of spaces but keep tabs.
-  return s
+  const lines = s
     .split("\n")
     .map((line) =>
       line
         .replace(/ {2,}/g, " ")    // collapse repeated spaces
         .replace(/\t +/g, "\t")    // remove space after tab
         .replace(/ +\t/g, "\t")    // remove space before tab
-        .trim()
+        .replace(/^ +| +$/g, "")   // trim only spaces — NOT tabs: String.trim()
+                                    // would also eat a trailing tab, which the
+                                    // merge pass below needs intact to detect
+                                    // a "Label\t" line with no value yet.
     )
-    .filter(Boolean)
-    .join("\n");
+    .filter(Boolean);
+
+  // A <td>'s value sometimes starts on its own source line, purely for HTML
+  // readability (e.g. Fidelity's "Available Balance" cell wraps its <span>
+  // content onto the next line). The </td><td> joiner above still fires
+  // between the label and value cells, but the value itself then lands on
+  // the following line instead of staying put — splitting one "Label\tValue"
+  // line into "Label\t" (empty value) and a separate, label-less value line.
+  // Re-merge: a line ending in a bare trailing tab has no value yet, so pull
+  // the next line onto it. Guard against merging into a *purely blank*
+  // spacer row (a "&nbsp;"-only <td><td> pair collapses to just "\t", with
+  // no label text before it) — otherwise that blank tab chains into the
+  // next real label, prefixing it with a stray leading tab that then makes
+  // extractFields() reject the whole line (tabIdx must be > 0, not 0).
+  const merged: string[] = [];
+  for (const line of lines) {
+    const prev = merged[merged.length - 1];
+    if (prev !== undefined && prev.endsWith("\t") && prev.replace(/\t+$/, "").length > 0) {
+      merged[merged.length - 1] = prev + line;
+    } else {
+      merged.push(line);
+    }
+  }
+
+  return merged.join("\n");
 }
 
 // ── Field extraction ──────────────────────────────────────────────────────────

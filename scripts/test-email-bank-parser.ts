@@ -12,7 +12,7 @@
  * Run with:  npx tsx scripts/test-email-bank-parser.ts
  */
 
-import { parseEmailAlert } from "../server/email-bank-parser";
+import { parseEmailAlert, extractBodyFromRfc2822 } from "../server/email-bank-parser";
 
 let failures = 0;
 let total = 0;
@@ -138,10 +138,48 @@ const OTP_HTML = `
 </body></html>
 `;
 
+// Real raw MIME source, condensed from an actual Fidelity credit alert —
+// exercises two quirks in Fidelity's actual sender (NetcoreCloud/pepipost)
+// that the other fixtures above never hit, since they hand parseEmailAlert
+// pre-decoded HTML directly instead of going through extractBodyFromRfc2822:
+//   1. Content-Transfer-Encoding is written *before* Content-Type in each
+//      MIME part's headers — non-standard order that used to make quoted-
+//      printable decoding silently never happen at all for this part.
+//   2. The amount/CR line and the "Available Balance" value are wrapped
+//      onto their own source line via a QP soft-linebreak / raw newline
+//      immediately after the enclosing <span>/<td> opens, which used to
+//      split what should be one line into two, defeating both the amount
+//      regex and the Label\tValue field lookup.
+const FIDELITY_RAW_MIME = [
+  "Content-Type: multipart/alternative; boundary=\"BOUNDARY123\"",
+  "",
+  "--BOUNDARY123",
+  "Content-Disposition: inline",
+  "Content-Transfer-Encoding: quoted-printable",
+  "Content-Type: text/html; charset=\"utf-8\"",
+  "",
+  "<body>",
+  "<table><tr><td colspan=3D\"2\">",
+  "<span style=3D\"font-size:15px;=",
+  "\">&#8358;</span>102.00<span style=3D\"font-size:15px;\">=",
+  " CR </span>",
+  "</td></tr>",
+  "<tr><td>Account</td><td>xxxxxx0025</td></tr>",
+  "<tr><td>Narration</td><td>TRF OGHENERUKEVWE To FAITH</td></tr>",
+  "<tr><td>Transaction Reference</td><td>S7735996</td></tr>",
+  "<tr><td>Date/Time</td><td>Aug 21, 2026 12:34:38 AM</td></tr>",
+  "<tr><td>&nbsp;</td><td>&nbsp;</td></tr>",
+  "<tr><td>Available Balance</td><td>",
+  "<span style=3D\"font-size:10px;\">&#8358;</span>1,967,978.00<span>CR</span>",
+  "</td></tr>",
+  "</table></body>",
+  "--BOUNDARY123--",
+].join("\r\n");
+
 // ── Test runner ───────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`Running ${6} email parser fixtures...\n`);
+  console.log(`Running ${7} email parser fixtures...\n`);
 
   // ── Fixture 1: Fidelity credit alert ────────────────────────────────────────
   console.log("Fixture 1: Fidelity credit alert (₦39,500 · xxxxxx0025 · 18/08/2026)");
@@ -258,6 +296,24 @@ async function main() {
   check("ok:false", r6.ok === false, r6.ok ? "was unexpectedly ok" : "");
   if (!r6.ok) {
     console.log(`  reason: ${r6.reason}\n`);
+  }
+
+  // ── Fixture 7: Fidelity raw MIME — CTE-before-Content-Type + wrapped values ──
+  console.log("Fixture 7: Fidelity raw MIME (₦102 · header order + wrapped-value quirks)");
+  const { html: rawHtml } = extractBodyFromRfc2822(Buffer.from(FIDELITY_RAW_MIME, "binary"));
+  const r7 = parseEmailAlert({
+    from: "ibanking@fidelitybank.ng",
+    subject: "Credit Transaction Alert on xxxxxx0025",
+    html: rawHtml,
+  });
+  check("ok:true", r7.ok === true, !r7.ok ? r7.reason : "");
+  if (r7.ok) {
+    const d = r7.data;
+    check("amount = 102", d.amount === 102, d.amount);
+    check("maskedAccount = xxxxxx0025", d.maskedAccount === "xxxxxx0025", d.maskedAccount);
+    check("reference = S7735996", d.reference === "S7735996", d.reference);
+    check("balanceKey = 1967978.00", d.balanceKey === "1967978.00", d.balanceKey);
+    console.log(`  amount=${d.amount} balance=${d.balanceKey}\n`);
   }
 
   // ── Summary ──────────────────────────────────────────────────────────────────
