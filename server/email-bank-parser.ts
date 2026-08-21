@@ -91,6 +91,22 @@ export function extractBodyFromRfc2822(source: Buffer): { html: string; text: st
       } catch { /* leave as-is */ }
     } else if (enc === "quoted-printable") {
       content = decodeQP(content);
+    } else {
+      // Fall back to content-shape detection when the header-based encoding
+      // wasn't identified as quoted-printable (wrong/missing header, a
+      // header variant this parser doesn't recognize, a folded header,
+      // etc. — chasing each sender's exact header quirk one at a time as
+      // it's found live isn't sustainable; this is the second bank found
+      // with this class of bug in one session). A soft-wrap ("=" as the
+      // last character of a line, immediately followed by a line break) is
+      // an almost unmistakable quoted-printable signature that essentially
+      // never occurs in genuine unencoded text — seeing it more than once
+      // or twice is a reliable enough signal to decode regardless of what
+      // the header claimed (or didn't claim).
+      const softWrapCount = (content.match(/=\r?\n/g) || []).length;
+      if (softWrapCount >= 2) {
+        content = decodeQP(content);
+      }
     }
     return content;
   };

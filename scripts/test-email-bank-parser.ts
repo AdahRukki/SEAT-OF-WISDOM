@@ -176,10 +176,39 @@ const FIDELITY_RAW_MIME = [
   "--BOUNDARY123--",
 ].join("\r\n");
 
+// Real raw MIME source, condensed from an actual Zenith credit alert — this
+// one has NO Content-Transfer-Encoding header stating quoted-printable at
+// all (unlike the Fidelity case, where the header was present but in an
+// unexpected position), yet the body still contains unmistakable QP
+// soft-wrap markers splitting "Account Number" itself ("Acc=" / "ount
+// Number"), the narration, and the trailing digit of the balance. This
+// exercises the content-shape fallback (extractBodyFromRfc2822 decodes
+// when it *sees* the soft-wrap pattern, not only when a header says to)
+// rather than the header-order fix Fixture 7 covers.
+const ZENITH_RAW_MIME = [
+  "Content-Type: multipart/alternative; boundary=\"ZBOUNDARY\"",
+  "",
+  "--ZBOUNDARY",
+  "Content-Type: text/plain; charset=\"utf-8\"",
+  "",
+  "CREDIT TRANSACTION NOTIFICATION",
+  "Acc=",
+  "ount Number\t238****209",
+  "Date of Transaction\t21/08/2026",
+  "Amount\t101.10",
+  "Currency\tNGN",
+  "Description\tCIP CR/ O=",
+  "GHENERUKEVWE PRECIOUS ADAH/Transfer from OGHENERUKEVWE PRECIOUS ADAH",
+  "Transaction Type\tCREDIT",
+  "Available Balance\t156,183.2=",
+  "7",
+  "--ZBOUNDARY--",
+].join("\r\n");
+
 // ── Test runner ───────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`Running ${7} email parser fixtures...\n`);
+  console.log(`Running ${8} email parser fixtures...\n`);
 
   // ── Fixture 1: Fidelity credit alert ────────────────────────────────────────
   console.log("Fixture 1: Fidelity credit alert (₦39,500 · xxxxxx0025 · 18/08/2026)");
@@ -314,6 +343,28 @@ async function main() {
     check("reference = S7735996", d.reference === "S7735996", d.reference);
     check("balanceKey = 1967978.00", d.balanceKey === "1967978.00", d.balanceKey);
     console.log(`  amount=${d.amount} balance=${d.balanceKey}\n`);
+  }
+
+  // ── Fixture 8: Zenith raw MIME — no QP header, but content-shape detected ────
+  console.log("Fixture 8: Zenith raw MIME (₦101.10 · 238****209 · no CTE header, soft-wraps only)");
+  const { text: rawText } = extractBodyFromRfc2822(Buffer.from(ZENITH_RAW_MIME, "binary"));
+  const r8 = parseEmailAlert({
+    from: "ebusinessgroup@zenithbank.com",
+    subject: "Credit Transaction Notification",
+    html: rawText,
+  });
+  check("ok:true", r8.ok === true, !r8.ok ? r8.reason : "");
+  if (r8.ok) {
+    const d = r8.data;
+    check("amount = 101.1", d.amount === 101.1, d.amount);
+    check("maskedAccount = 238****209", d.maskedAccount === "238****209", d.maskedAccount);
+    check("balanceKey = 156183.27", d.balanceKey === "156183.27", d.balanceKey);
+    check(
+      "rawDescription not truncated at the soft-wrap",
+      d.rawDescription.includes("GHENERUKEVWE PRECIOUS ADAH/Transfer from"),
+      d.rawDescription
+    );
+    console.log(`  amount=${d.amount} account=${d.maskedAccount} balance=${d.balanceKey}\n`);
   }
 
   // ── Summary ──────────────────────────────────────────────────────────────────
