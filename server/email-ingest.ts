@@ -354,6 +354,11 @@ async function processMessage(mailbox: string, message: {
       bodySnippet?: string;
       linkedTransactionId?: string;
       schoolId?: string | null;
+      // Only the auto_ingested path sets this — a freshly auto-created
+      // transaction needs no human action, so it shouldn't sit marked
+      // "open"/needs-review forever. Every other outcome leaves this
+      // undefined and gets the DB column default ("open") on first insert.
+      reviewStatus?: "approved";
       extra?: Pick<
         InsertEmailReviewItem,
         "amount" | "maskedAccount" | "transactionDate" | "rawDescription" | "reference" | "balanceKey" | "fingerprint"
@@ -376,6 +381,7 @@ async function processMessage(mailbox: string, message: {
       reason,
       linkedTransactionId: opts.linkedTransactionId ?? null,
       schoolId: opts.schoolId ?? null,
+      ...(opts.reviewStatus ? { reviewStatus: opts.reviewStatus } : {}),
       ...opts.extra,
     } as InsertEmailReviewItem);
     return cursorResultFor(outcome);
@@ -544,7 +550,10 @@ async function processMessage(mailbox: string, message: {
     return record(
       "auto_ingested",
       `₦${alert.amount.toLocaleString()} — ${alert.rawDescription.slice(0, 50)}`,
-      { verified, bodySnippet: plainSnippet, linkedTransactionId: transaction.id, schoolId: schoolId ?? null, extra: parsedExtra }
+      {
+        verified, bodySnippet: plainSnippet, linkedTransactionId: transaction.id,
+        schoolId: schoolId ?? null, reviewStatus: "approved", extra: parsedExtra,
+      }
     );
   } catch (insertErr: any) {
     if (insertErr?.code === "23505" || /unique/i.test(insertErr?.message ?? "")) {

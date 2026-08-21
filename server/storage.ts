@@ -464,6 +464,17 @@ export interface IStorage {
   }): Promise<any>;
 }
 
+// Trailing contiguous digit run of a masked account string, e.g.
+// "xxxxxx0025" -> "0025", "238****209" -> "209", "**0025" -> "0025".
+// Used by getSchoolBankAccountByMasked to match across banks' differing
+// masking conventions. Requires at least 3 digits so a near-empty tail
+// (or no digits at all) never counts as a match.
+function trailingDigits(masked: string): string {
+  const m = masked.trim().match(/(\d+)$/);
+  const digits = m?.[1] ?? "";
+  return digits.length >= 3 ? digits : "";
+}
+
 export class DatabaseStorage implements IStorage {
   async authenticateUser(email: string, password: string): Promise<User | null> {
     // Case-insensitive email lookup using SQL lower() function
@@ -5747,6 +5758,13 @@ export class DatabaseStorage implements IStorage {
           bodySnippet: data.bodySnippet,
           outcome: data.outcome,
           reason: data.reason,
+          // Only override reviewStatus on conflict when the caller
+          // explicitly passed one (currently: the auto-ingest path, marking
+          // a freshly auto-created transaction "approved" so it doesn't sit
+          // as a false "needs review"). Every other caller omits this, so a
+          // retried UID never clobbers a decision a human already made via
+          // Approve/Dismiss — matches this block's own comment above.
+          ...(data.reviewStatus !== undefined ? { reviewStatus: data.reviewStatus } : {}),
           processedAt: new Date(),
         },
       })
@@ -5883,13 +5901,40 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(schoolBankAccounts.bankName), asc(schoolBankAccounts.maskedAccountNumber));
   }
 
+  // Matches by trailing digits, not exact string. Different banks mask their
+  // account numbers differently in the text of their own alert emails —
+  // Fidelity uses "xxxxxx0025" (x's), Zenith uses "238****209" (asterisks) —
+  // and an admin entering a mapping has no reliable way to know which
+  // convention a given bank's email will actually use. An exact-string match
+  // silently fails the moment the stored mapping and the parsed value differ
+  // by masking character alone, even though they identify the same account
+  // (confirmed live: a Fidelity mapping stored as "**0025" never matched the
+  // parser's "xxxxxx0025", despite both meaning the same account). Comparing
+  // just the trailing digit run is robust to that without caring how either
+  // side chose to mask the rest.
   async getSchoolBankAccountByMasked(maskedAccountNumber: string): Promise<SchoolBankAccount | undefined> {
-    const [row] = await db
+    const inputDigits = trailingDigits(maskedAccountNumber);
+    if (!inputDigits) return undefined; // nothing digit-bearing to match on
+
+    const candidates = await db
       .select()
       .from(schoolBankAccounts)
-      .where(eq(schoolBankAccounts.maskedAccountNumber, maskedAccountNumber.trim()))
-      .limit(1);
-    return row;
+      .where(eq(schoolBankAccounts.isActive, true));
+
+    const matches = candidates.filter((c) => trailingDigits(c.maskedAccountNumber) === inputDigits);
+
+    if (matches.length > 1) {
+      // Ambiguous — two different stored accounts coincidentally share the
+      // same trailing digits. Never guess which one is right; leave it
+      // unrouted (same as no match) and log so it can be fixed by hand.
+      console.warn(
+        `[getSchoolBankAccountByMasked] "${maskedAccountNumber}" matches ${matches.length} stored accounts ` +
+          `by trailing digits (${matches.map((m) => m.maskedAccountNumber).join(", ")}) — ambiguous, leaving unrouted`
+      );
+      return undefined;
+    }
+
+    return matches[0];
   }
 
   async createSchoolBankAccount(data: UpsertSchoolBankAccount): Promise<SchoolBankAccount> {
