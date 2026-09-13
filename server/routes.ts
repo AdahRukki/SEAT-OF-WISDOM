@@ -1727,6 +1727,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes - Student management
+  // Manual class movement is available throughout the session. It is distinct from
+  // the third-term promotion workflow and does not rewrite past assessments,
+  // attendance, report cards, or payment records.
+  app.post('/api/admin/students/move-class', authenticate, requirePermission('tab_students'), async (req, res) => {
+    try {
+      const parsed = z.object({
+        currentClassId: z.string().min(1),
+        nextClassId: z.string().min(1),
+        studentIds: z.array(z.string().uuid()).min(1).max(1000),
+      }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Choose a source class, destination class and at least one student' });
+      }
+
+      const { currentClassId, nextClassId, studentIds } = parsed.data;
+      if (currentClassId === nextClassId) {
+        return res.status(400).json({ error: 'Choose a different destination class' });
+      }
+
+      const user = (req as any).user;
+      const sourceClass = await storage.getClassById(currentClassId);
+      const targetClass = await storage.getClassById(nextClassId);
+      if (!sourceClass || !targetClass) {
+        return res.status(404).json({ error: 'The source or destination class was not found' });
+      }
+      if (!sourceClass.schoolId || sourceClass.schoolId !== targetClass.schoolId) {
+        return res.status(400).json({ error: 'Students can only be moved within the same school branch' });
+      }
+      if (user.role === 'sub-admin' && sourceClass.schoolId !== user.schoolId) {
+        return res.status(403).json({ error: 'You can only move students within your school branch' });
+      }
+
+      const result = await storage.moveStudentsToClass(currentClassId, nextClassId, studentIds);
+
+      await logActivity(req, {
+        action: 'move_students_class',
+        entityType: 'student',
+        entityId: result.movedStudentIds[0] ?? null,
+        schoolId: result.schoolId,
+        previousData: { classId: currentClassId, studentIds: result.movedStudentIds },
+        newData: { classId: nextClassId, studentIds: result.movedStudentIds, movedCount: result.movedStudentIds.length },
+      });
+
+      res.json({ message: 'Students moved successfully', movedCount: result.movedStudentIds.length });
+    } catch (error) {
+      console.error('Move students class error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to move students' });
+    }
+  });
+
   app.post('/api/admin/students', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {
       const { 
