@@ -1172,6 +1172,7 @@ export default function AdminDashboard() {
   
   // Class-based student viewing
   const [selectedClassForStudents, setSelectedClassForStudents] = useState("");
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
   
   // Batch upload class selection (separate from students tab filter)
   const [selectedBatchUploadClassId, setSelectedBatchUploadClassId] = useState("");
@@ -1565,6 +1566,33 @@ export default function AdminDashboard() {
   const studentsForClassTab: StudentWithDetails[] = showInactiveStudents
     ? Array.from(new Map([...allStudents, ...inactiveStudents].map(s => [s.id, s])).values())
     : allStudents;
+
+  const matchesStudentSearch = (student: StudentWithDetails) => {
+    const search = studentSearchQuery.trim().toLowerCase();
+    if (!search) return true;
+    const fullName = [student.user?.firstName, student.user?.middleName, student.user?.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return fullName.includes(search) || student.studentId.toLowerCase().includes(search);
+  };
+
+  const matchesPendingStudentSearch = (student: { firstName: string; middleName?: string | null; lastName: string }) => {
+    const search = studentSearchQuery.trim().toLowerCase();
+    if (!search) return true;
+    return [student.firstName, student.middleName, student.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(search);
+  };
+
+  const selectedClassStudents = selectedClassForStudents
+    ? studentsForClassTab
+      .filter(student => student.classId === selectedClassForStudents)
+      .sort((a, b) => a.studentId.localeCompare(b.studentId))
+    : [];
+  const displayedClassStudents = selectedClassStudents.filter(matchesStudentSearch);
 
   // Avoid silently dropping unsaved score edits on hidden inactive rows:
   // reset the scores "show inactive" toggle whenever the roster context changes.
@@ -3067,17 +3095,24 @@ export default function AdminDashboard() {
 
   const changeStudentClassMutation = useMutation({
     mutationFn: async ({ studentIds, nextClassId }: { studentIds: string[]; nextClassId: string }) => {
-      return await apiRequest('/api/admin/promote-students', {
+      return await apiRequest('/api/admin/students/move-class', {
         method: 'POST',
         body: { currentClassId: selectedClassForStudents, nextClassId, studentIds }
       });
     },
-    onSuccess: () => {
-      toast({ title: "Success", description: "Student class updated successfully" });
+    onSuccess: (_data, variables) => {
+      const targetClass = (classes as Class[]).find((classItem) => classItem.id === variables.nextClassId);
+      toast({
+        title: "Students moved",
+        description: `${variables.studentIds.length} student${variables.studentIds.length === 1 ? '' : 's'} moved to ${targetClass?.name ?? 'the selected class'}.`
+      });
       setIsChangeClassDialogOpen(false);
       setSelectedStudentsForClassChange(new Set());
       setTargetClassForChange("");
+      setStudentSearchQuery("");
+      setSelectedClassForStudents(variables.nextClassId);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/classes'] });
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to change student class", variant: "destructive" });
@@ -4588,7 +4623,14 @@ export default function AdminDashboard() {
                 {/* Class Selection */}
                 <div className="mb-6">
                   <Label htmlFor="class-select">Select Class to View Students</Label>
-                  <Select value={selectedClassForStudents} onValueChange={setSelectedClassForStudents}>
+                  <Select
+                    value={selectedClassForStudents}
+                    onValueChange={(classId) => {
+                      setSelectedClassForStudents(classId);
+                      setSelectedStudentsForClassChange(new Set());
+                      setStudentSearchQuery("");
+                    }}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Choose a class to view students..." />
                     </SelectTrigger>
@@ -4602,13 +4644,30 @@ export default function AdminDashboard() {
                   </Select>
                 </div>
 
+                {selectedClassForStudents && (
+                  <div className="mb-4">
+                    <Label htmlFor="student-search">Search students</Label>
+                    <div className="relative mt-1">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="student-search"
+                        value={studentSearchQuery}
+                        onChange={(event) => setStudentSearchQuery(event.target.value)}
+                        placeholder="Search by student name or Student ID"
+                        className="pl-9"
+                        data-testid="input-search-students"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Students List - Compact mobile-friendly */}
                 {selectedClassForStudents ? (
                   <>
                   {/* Select-all bar + Change Class action */}
                   {(() => {
-                    const classStudentsList = studentsForClassTab.filter(s => s.classId === selectedClassForStudents);
-                    const allSelected = classStudentsList.length > 0 && classStudentsList.every(s => selectedStudentsForClassChange.has(s.id));
+                    const allSelected = displayedClassStudents.length > 0 && displayedClassStudents.every(s => selectedStudentsForClassChange.has(s.id));
+                    const isSearching = studentSearchQuery.trim().length > 0;
                     return (
                       <div className="flex items-center gap-3 mb-2">
                         <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground">
@@ -4617,14 +4676,16 @@ export default function AdminDashboard() {
                             className="w-4 h-4 rounded"
                             checked={allSelected}
                             onChange={() => {
+                              const next = new Set(selectedStudentsForClassChange);
                               if (allSelected) {
-                                setSelectedStudentsForClassChange(new Set());
+                                displayedClassStudents.forEach(student => next.delete(student.id));
                               } else {
-                                setSelectedStudentsForClassChange(new Set(classStudentsList.map(s => s.id)));
+                                displayedClassStudents.forEach(student => next.add(student.id));
                               }
+                              setSelectedStudentsForClassChange(next);
                             }}
                           />
-                          Select all
+                          {isSearching ? `Select all search results (${displayedClassStudents.length})` : `Select all in class (${displayedClassStudents.length})`}
                         </label>
                         {perm('students_view_withdrawn') && (
                           <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground" data-testid="toggle-show-inactive-students">
@@ -4632,7 +4693,10 @@ export default function AdminDashboard() {
                               type="checkbox"
                               className="w-4 h-4 rounded"
                               checked={showInactiveStudents}
-                              onChange={(e) => setShowInactiveStudents(e.target.checked)}
+                              onChange={(e) => {
+                                setShowInactiveStudents(e.target.checked);
+                                setSelectedStudentsForClassChange(new Set());
+                              }}
                             />
                             Show inactive
                           </label>
@@ -4643,7 +4707,7 @@ export default function AdminDashboard() {
                             className="h-7 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white"
                             onClick={() => { setTargetClassForChange(""); setIsChangeClassDialogOpen(true); }}
                           >
-                            Change Class ({selectedStudentsForClassChange.size})
+                            Move Students ({selectedStudentsForClassChange.size})
                           </Button>
                         )}
                         {selectedStudentsForClassChange.size > 0 && (
@@ -4655,10 +4719,7 @@ export default function AdminDashboard() {
                     );
                   })()}
                   <div className="border rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
-                    {studentsForClassTab
-                      .filter(student => student.classId === selectedClassForStudents)
-                      .sort((a, b) => a.studentId.localeCompare(b.studentId))
-                      .map((student) => {
+                    {displayedClassStudents.map((student) => {
                         const isActive = student.user?.isActive ?? true;
                         const isChecked = selectedStudentsForClassChange.has(student.id);
                         return (
@@ -4724,7 +4785,7 @@ export default function AdminDashboard() {
                         );
                       })}
                     {offlineStudents
-                      .filter(s => s.classId === selectedClassForStudents)
+                      .filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s))
                       .map((student) => (
                         <div key={student.offlineId} className="flex items-center justify-between px-3 py-2 gap-2 bg-amber-50 dark:bg-amber-900/20 border-l-2 border-l-amber-400" data-testid={`row-pending-student-${student.offlineId}`}>
                           <div className="min-w-0 flex-1">
@@ -4739,7 +4800,7 @@ export default function AdminDashboard() {
                         </div>
                       ))}
                     {extraPendingStudents
-                      .filter(s => s.classId === selectedClassForStudents)
+                      .filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s))
                       .map((student) => {
                         const isFailed = student.__status === 'failed';
                         return (
@@ -4766,11 +4827,11 @@ export default function AdminDashboard() {
                           </div>
                         );
                       })}
-                    {studentsForClassTab.filter(s => s.classId === selectedClassForStudents).length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && extraPendingStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
+                    {displayedClassStudents.length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s)).length === 0 && extraPendingStudents.filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s)).length === 0 && (
                       <div className="text-center py-8">
                         <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No students in this class</h3>
-                        <p className="text-gray-500">Click "Add Student" to create the first student</p>
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{studentSearchQuery.trim() ? 'No matching students' : 'No students in this class'}</h3>
+                        <p className="text-gray-500">{studentSearchQuery.trim() ? 'Try another name or Student ID.' : 'Click "Add Student" to create the first student'}</p>
                       </div>
                     )}
                   </div>
@@ -9743,16 +9804,28 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Change Student Class Dialog */}
+      {/* Move Students Dialog */}
       <Dialog open={isChangeClassDialogOpen} onOpenChange={(open) => { setIsChangeClassDialogOpen(open); if (!open) { setTargetClassForChange(""); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Change Class</DialogTitle>
+            <DialogTitle>Move Students</DialogTitle>
             <DialogDescription>
-              Move {selectedStudentsForClassChange.size} student{selectedStudentsForClassChange.size !== 1 ? 's' : ''} to a different class.
+              Move {selectedStudentsForClassChange.size} selected student{selectedStudentsForClassChange.size !== 1 ? 's' : ''} to a different class. Their past scores, attendance, reports and payments will stay in their original records.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="rounded-md border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Students to move</p>
+              <div className="max-h-28 overflow-y-auto space-y-1">
+                {selectedClassStudents
+                  .filter(student => selectedStudentsForClassChange.has(student.id))
+                  .map(student => (
+                    <p key={student.id} className="text-sm">
+                      {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')} <span className="text-muted-foreground">({student.studentId})</span>
+                    </p>
+                  ))}
+              </div>
+            </div>
             <div>
               <Label className="text-sm font-medium">Move to class</Label>
               <Select value={targetClassForChange} onValueChange={setTargetClassForChange}>
@@ -9775,7 +9848,7 @@ export default function AdminDashboard() {
                 onClick={() => changeStudentClassMutation.mutate({ studentIds: Array.from(selectedStudentsForClassChange), nextClassId: targetClassForChange })}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                {changeStudentClassMutation.isPending ? "Moving..." : "Move Students"}
+                {changeStudentClassMutation.isPending ? "Moving..." : `Confirm Move (${selectedStudentsForClassChange.size})`}
               </Button>
             </div>
           </div>
