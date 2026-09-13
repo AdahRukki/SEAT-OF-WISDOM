@@ -326,6 +326,7 @@ export interface IStorage {
   
   // Student promotion system
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
+  moveStudentsToClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<{ schoolId: string; movedStudentIds: string[] }>;
   hasBulkPromotionForSession(schoolId: string, session: string): Promise<{ promoted: boolean; promotedAt: Date | null; count: number }>;
   recordPromotions(rows: { schoolId: string; session: string; studentId: string; fromClassId: string; toClassId: string; isBulk: boolean; promotedBy?: string }[]): Promise<void>;
   executeBulkPromotion(args: { schoolId: string; session: string; term?: string; promotedBy?: string; promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] }): Promise<{ totalPromoted: number; totalGraduated: number }>;
@@ -2410,6 +2411,56 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date()
       })
       .where(inArray(students.id, studentIds));
+  }
+
+  // Manual class movement is deliberately separate from end-of-session promotion.
+  // It verifies the complete selection before changing anything, so a stale tab or
+  // manipulated request cannot move students from another class or school.
+  async moveStudentsToClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<{ schoolId: string; movedStudentIds: string[] }> {
+    const uniqueStudentIds = [...new Set(studentIds.filter((id): id is string => typeof id === 'string' && id.length > 0))];
+    if (uniqueStudentIds.length === 0) {
+      throw new Error('Select at least one student to move');
+    }
+    if (!currentClassId || !nextClassId || currentClassId === nextClassId) {
+      throw new Error('Choose a different destination class');
+    }
+
+    return db.transaction(async (tx) => {
+      const [sourceClass] = await tx
+        .select({ id: classes.id, schoolId: classes.schoolId })
+        .from(classes)
+        .where(eq(classes.id, currentClassId));
+      const [targetClass] = await tx
+        .select({ id: classes.id, schoolId: classes.schoolId })
+        .from(classes)
+        .where(eq(classes.id, nextClassId));
+
+      if (!sourceClass || !targetClass) {
+        throw new Error('The source or destination class no longer exists');
+      }
+      if (!sourceClass.schoolId || sourceClass.schoolId !== targetClass.schoolId) {
+        throw new Error('Students can only be moved within the same school branch');
+      }
+
+      const selectedStudents = await tx
+        .select({ id: students.id })
+        .from(students)
+        .where(and(
+          inArray(students.id, uniqueStudentIds),
+          eq(students.classId, currentClassId)
+        ));
+
+      if (selectedStudents.length !== uniqueStudentIds.length) {
+        throw new Error('Some selected students are no longer in the source class. Refresh the list and try again.');
+      }
+
+      await tx
+        .update(students)
+        .set({ classId: nextClassId, updatedAt: new Date() })
+        .where(inArray(students.id, uniqueStudentIds));
+
+      return { schoolId: sourceClass.schoolId, movedStudentIds: uniqueStudentIds };
+    });
   }
 
   async hasBulkPromotionForSession(schoolId: string, session: string): Promise<{ promoted: boolean; promotedAt: Date | null; count: number }> {
