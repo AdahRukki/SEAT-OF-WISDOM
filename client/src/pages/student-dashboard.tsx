@@ -79,6 +79,11 @@ export default function StudentDashboard() {
     queryKey: ['/api/current-academic-info'],
   });
 
+  const { data: academicSessions = [], isFetched: academicSessionsFetched, isError: academicSessionsError } = useQuery<string[]>({
+    queryKey: ['/api/student/academic-sessions'],
+    enabled: !!profile,
+  });
+
   // Fetch all classes student has been enrolled in (current + historical)
   const { data: enrolledClasses = [] } = useQuery<Class[]>({
     queryKey: ['/api/student/classes'],
@@ -193,12 +198,12 @@ export default function StudentDashboard() {
   // Used by the defaulting logic so we never auto-select a synthetic period
   // when the student already has real data under a different period.
   const recordSessions = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(academicSessions);
     allStudentFees.forEach((f: any) => f?.session && set.add(f.session));
     allConfirmedPaymentRecords.forEach((r: any) => r?.session && set.add(r.session));
     allPaymentHistory.forEach((p: any) => p?.session && set.add(p.session));
     return Array.from(set).sort().reverse();
-  }, [allStudentFees, allConfirmedPaymentRecords, allPaymentHistory]);
+  }, [academicSessions, allStudentFees, allConfirmedPaymentRecords, allPaymentHistory]);
 
   const recordTerms = useMemo(() => {
     const set = new Set<string>();
@@ -536,7 +541,7 @@ export default function StudentDashboard() {
   // We wait for finance data to resolve before deciding.
   useEffect(() => {
     if (selectedSession) return;
-    if (!financeDataReady) return;
+    if (!financeDataReady || !academicSessionsFetched) return;
     const academicSession = academicInfo?.currentSession;
     if (academicSession && recordSessions.includes(academicSession)) {
       setSelectedSession(academicSession);
@@ -548,7 +553,7 @@ export default function StudentDashboard() {
       // naturally instead of "My Fees - , ".
       setSelectedSession(academicSession);
     }
-  }, [academicInfo, recordSessions, selectedSession, financeDataReady]);
+  }, [academicInfo, recordSessions, selectedSession, financeDataReady, academicSessionsFetched]);
 
   // Default Term: same logic — prefer school's current term if the student
   // has records under it (within the chosen session), otherwise the latest
@@ -1248,6 +1253,24 @@ export default function StudentDashboard() {
             </div>
             <Card className="p-3 sm:p-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                <div>
+                  <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Session</label>
+                  <Select value={selectedSession} onValueChange={setSelectedSession} disabled={!academicSessionsFetched}>
+                    <SelectTrigger data-testid="select-report-session" className="h-8 sm:h-9 text-xs sm:text-sm">
+                      <SelectValue placeholder="Select session" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSessions.map(session => (
+                        <SelectItem key={session} value={session}>{session}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {academicSessionsError && (
+                    <p role="alert" className="mt-1 text-xs text-destructive">
+                      Could not load previous academic sessions. Refresh to try again.
+                    </p>
+                  )}
+                </div>
                 <div>
                   <label className="text-[10px] sm:text-xs font-medium mb-1 block text-muted-foreground">Class</label>
                   <Select value={selectedClass} onValueChange={setSelectedClass} disabled={enrolledClasses.length === 0}>
