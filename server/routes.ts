@@ -2627,6 +2627,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Academic sessions come from this student's results, independently of fees.
+  app.get('/api/student/academic-sessions', authenticate, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== 'student') {
+        return res.status(403).json({ error: "Student access required" });
+      }
+      const student = await storage.getStudentByUserId(user.id);
+      if (!student) {
+        return res.status(404).json({ error: "Student profile not found" });
+      }
+      const [assessmentSessions, reportSessions] = await Promise.all([
+        db.selectDistinct({ session: assessments.session })
+          .from(assessments).where(eq(assessments.studentId, student.id)),
+        db.selectDistinct({ session: generatedReportCards.session })
+          .from(generatedReportCards).where(eq(generatedReportCards.studentId, student.id)),
+      ]);
+      const sessions = Array.from(new Set(
+        [...assessmentSessions, ...reportSessions].map(row => row.session).filter(Boolean)
+      )).sort().reverse();
+      res.json(sessions);
+    } catch (error) {
+      console.error("Get student academic sessions error:", error);
+      res.status(500).json({ error: "Failed to fetch academic sessions" });
+    }
+  });
+
   // Check whether a generated report card exists for the logged-in student
   app.get('/api/student/report-status', authenticate, async (req, res) => {
     try {
