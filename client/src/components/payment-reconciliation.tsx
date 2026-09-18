@@ -1102,11 +1102,11 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== "transactions") setFilterStatementId(null); }} className="w-full">
-        <TabsList className={`grid w-full ${isMainAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
-          <TabsTrigger value="upload">Upload Statements</TabsTrigger>
-          <TabsTrigger value="reconcile">
+        <TabsList className={`grid w-full h-auto gap-1 ${isMainAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'}`}>
+          <TabsTrigger value="upload" className="h-auto min-h-10 px-2 py-2 text-xs sm:text-sm whitespace-normal leading-tight">Upload Statements</TabsTrigger>
+          <TabsTrigger value="reconcile" className="h-auto min-h-10 px-2 py-2 text-xs sm:text-sm whitespace-normal leading-tight">
             Reconcile Payments
             {pendingPayments.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -1114,7 +1114,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="transactions">
+          <TabsTrigger value="transactions" className="h-auto min-h-10 px-2 py-2 text-xs sm:text-sm whitespace-normal leading-tight">
             Unmatched
             {unmatchedTransactions.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -1123,7 +1123,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             )}
           </TabsTrigger>
           {isMainAdmin && (
-            <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
+            <TabsTrigger value="bank-accounts" className="h-auto min-h-10 px-2 py-2 text-xs sm:text-sm whitespace-normal leading-tight">Bank Accounts</TabsTrigger>
           )}
         </TabsList>
 
@@ -1223,8 +1223,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <CardTitle>Upload History</CardTitle>
                 <CardDescription>Previously uploaded bank statements</CardDescription>
               </div>
@@ -1233,7 +1233,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 Refresh
               </Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="min-w-0">
               {statementsLoading ? (
                 <div className="text-center py-4">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
@@ -1243,7 +1243,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   No statements uploaded yet
                 </p>
               ) : (
-                <Table>
+                <Table className="min-w-[700px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>File Name</TableHead>
@@ -1333,14 +1333,14 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </TabsContent>
 
         <TabsContent value="reconcile" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div className="min-w-0">
               <h4 className="text-lg font-medium">Payment Reconciliation</h4>
               <p className="text-sm text-muted-foreground">
                 Match recorded payments with bank transactions side by side
               </p>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap w-full sm:w-auto">
               {highConfidenceCandidates.length > 0 && (
                 <Button
                   size="sm"
@@ -1487,7 +1487,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           }`}
                         >
                           <CardContent className="p-3">
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1 flex-wrap mb-1">
                                   <span className="font-medium text-sm truncate">
@@ -1519,7 +1519,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   </div>
                                 )}
                               </div>
-                              <div className="flex flex-col gap-1 items-end">
+                              <div className="flex flex-row sm:flex-col flex-wrap gap-1 items-start sm:items-end w-full sm:w-auto">
                                 {payment.status === "recorded" && (
                                   <Button
                                     size="sm"
@@ -1833,7 +1833,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           data-testid={`bank-tx-card-${tx.id}`}
                         >
                           <CardContent className="p-3">
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <div className="text-xl font-bold text-green-600">
@@ -1897,7 +1897,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 )}
                               </div>
                               {isUnmatched && (
-                                <div className="flex flex-col gap-1 items-end">
+                                <div className="flex flex-row sm:flex-col flex-wrap gap-1 items-start sm:items-end w-full sm:w-auto">
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -2082,7 +2082,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 Bank transactions not yet linked to any payment
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-1 min-w-0 max-w-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:flex-1 sm:max-w-sm">
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -2125,8 +2125,8 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             </Card>
           ) : (
             <Card>
-              <CardContent className="p-0">
-                <Table>
+              <CardContent className="p-0 min-w-0">
+                <Table className="min-w-[760px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
@@ -2448,7 +2448,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                         sort order, never visibility. */}
                     {sortedReviewLog.length > 0 ? (
                       <div className="rounded border overflow-auto max-h-96">
-                        <Table>
+                        <Table className="min-w-[700px]">
                           <TableHeader>
                             <TableRow className="text-xs">
                               <TableHead className="py-1.5 text-xs">Time</TableHead>
@@ -2583,7 +2583,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   No bank accounts mapped yet. Add one above so incoming SMS can be filed automatically.
                 </div>
               ) : (
-                <Table>
+                <Table className="min-w-[700px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Bank</TableHead>
@@ -2936,7 +2936,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           }`}
                           data-testid={`match-candidate-${p.id}`}
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1 flex-wrap">
                                 <span className="font-medium text-sm">
@@ -3024,7 +3024,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         open={isBulkMatchDialogOpen}
         onOpenChange={(open) => { if (!bulkMatchProgress) setIsBulkMatchDialogOpen(open); }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[calc(100%_-_1rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Auto-match High Confidence Payments</DialogTitle>
             <DialogDescription>
