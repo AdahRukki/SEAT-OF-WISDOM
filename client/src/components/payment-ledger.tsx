@@ -427,7 +427,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       </div>
 
       {/* Action bar (screen only) */}
-      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
+      <div className="flex flex-wrap items-center justify-start sm:justify-end gap-2 print:hidden">
         <div role="group" aria-label="Payment status" className="flex flex-wrap gap-2">
           {([
             ["all", "All Students"],
@@ -561,7 +561,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             />
           </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground w-full sm:w-auto sm:ml-auto">
           <Users className="h-4 w-4" />
           <span>{filteredLedger.length} student{filteredLedger.length !== 1 ? "s" : ""}</span>
         </div>
@@ -636,7 +636,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             </div>
           )}
           <div className="rounded-md border overflow-x-auto">
-          <Table>
+          <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead className="w-[50px] text-center">#</TableHead>
@@ -811,7 +811,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       )}
 
       <Dialog open={!!selectedStudent} onOpenChange={(open) => { if (!open) setSelectedStudent(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="w-[calc(100%_-_1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>
               {selectedStudent ? `${selectedStudent.lastName} ${selectedStudent.firstName}` : ""} — Payment Details
@@ -881,7 +881,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 </p>
               ) : (
                 <div className="rounded-md border overflow-x-auto">
-                  <Table>
+                  <Table className="min-w-[720px]">
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         <TableHead>Date</TableHead>
