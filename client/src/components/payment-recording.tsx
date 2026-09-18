@@ -1,3 +1,14 @@
+
+function formatRecordedAt(value: string | Date | null | undefined): string {
+  if (!value) return "Not available";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos", day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(date) + " WAT";
+}
+
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -1532,6 +1543,7 @@ export function PaymentRecording({
                       {/* Fix #6: date parsed with local-time anchor to avoid off-by-one */}
                       <TableCell className="text-sm">
                         {formatPaymentDate(record.paymentDate)}
+                        <div className="text-xs text-muted-foreground whitespace-nowrap">Recorded: {formatRecordedAt(record.createdAt)}</div>
                       </TableCell>
                       <TableCell>
                         {record.student ? (
@@ -1778,7 +1790,8 @@ function PaymentDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-3 text-sm">
-          <DetailRow label="Date" value={dateStr} />
+          <DetailRow label="Payment Date" value={dateStr} />
+          <DetailRow label="Recorded At (Nigerian time)" value={formatRecordedAt(record.createdAt)} />
           <DetailRow label="Amount" value={`₦${parseFloat(record.amount).toLocaleString()}`} bold />
           <DetailRow label="Purpose" value={record.purpose || "—"} />
           <DetailRow label="Method" value={METHOD_LABELS[record.paymentMethod] ?? record.paymentMethod} />
