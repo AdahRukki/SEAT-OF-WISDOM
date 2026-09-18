@@ -912,8 +912,8 @@ export function PaymentRecording({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto">
           <Button
             type="button"
             variant="outline"
@@ -956,7 +956,7 @@ export function PaymentRecording({
                 Record Payment
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[calc(100%-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 {/* UX #1: description matches actual form order */}
@@ -971,10 +971,10 @@ export function PaymentRecording({
                   {/* Student Search */}
                   <div className="space-y-2">
                     <Label>Add Students</Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       {/* UX #4: clear search when switching class filter */}
                       <Select value={classFilter} onValueChange={(v) => { setClassFilter(v); setSearchQuery(""); }}>
-                        <SelectTrigger className="w-[160px] flex-shrink-0" aria-label="Filter by class">
+                        <SelectTrigger className="w-full sm:w-[160px] sm:flex-shrink-0" aria-label="Filter by class">
                           <SelectValue placeholder="All Classes" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1191,7 +1191,7 @@ export function PaymentRecording({
                   {/* Term & Session are auto-filled from currently active academic info */}
 
                   {/* Payment Details */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="paymentMethod"
@@ -1272,7 +1272,7 @@ export function PaymentRecording({
                     )}
                   />
 
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -1312,11 +1312,11 @@ export function PaymentRecording({
       <Separator />
 
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm">Term:</Label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <Label className="text-sm">Term</Label>
             <Select value={filterTerm || "__all__"} onValueChange={(v) => { setFilterTerm(v === "__all__" ? "" : v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Terms" />
               </SelectTrigger>
               <SelectContent>
@@ -1327,10 +1327,10 @@ export function PaymentRecording({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm">Session:</Label>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <Label className="text-sm">Session</Label>
             <Select value={filterSession || "__all__"} onValueChange={(v) => { setFilterSession(v === "__all__" ? "" : v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All Sessions" />
               </SelectTrigger>
               <SelectContent>
@@ -1341,10 +1341,10 @@ export function PaymentRecording({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm">Status:</Label>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <Label className="text-sm">Status</Label>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
@@ -1355,22 +1355,22 @@ export function PaymentRecording({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm">From:</Label>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <Label className="text-sm">From</Label>
             <Input
               type="date"
               value={dateFrom}
               onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
-              className="w-[150px]"
+              className="w-full"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Label className="whitespace-nowrap text-sm">To:</Label>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <Label className="text-sm">To</Label>
             <Input
               type="date"
               value={dateTo}
               onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
-              className="w-[150px]"
+              className="w-full"
             />
           </div>
           {(dateFrom || dateTo) && (
@@ -1378,17 +1378,17 @@ export function PaymentRecording({
               Clear dates
             </Button>
           )}
-          <div className="relative">
+          <div className="relative min-w-0 sm:col-span-2 lg:col-span-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search student name or ID..."
               value={nameSearch}
               onChange={(e) => { setNameSearch(e.target.value); setCurrentPage(1); }}
-              className="pl-8 w-[200px]"
+              className="pl-8 w-full"
             />
           </div>
-          <div className="ml-auto">
-            <Button variant="outline" size="sm" onClick={() => refetchRecords()}>
+          <div className="flex sm:col-span-2 lg:col-span-1 lg:justify-end">
+            <Button variant="outline" size="sm" onClick={() => refetchRecords()} className="w-full lg:w-auto">
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
@@ -1432,9 +1432,9 @@ export function PaymentRecording({
           );
         })()}
 
-        <Card>
-          <CardContent className="p-0">
-            <Table>
+        <Card className="overflow-hidden">
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[1100px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
@@ -1684,12 +1684,12 @@ export function PaymentRecording({
         </Card>
 
         {totalRecords > 0 && (
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
             <p className="text-sm text-muted-foreground">
               Showing {showingFrom}–{showingTo} of {totalRecords}
             </p>
             {totalRecords > PAGE_SIZE && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1783,7 +1783,7 @@ function PaymentDetailsDialog({
 
   return (
     <Dialog open={!!record} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Payment Details</DialogTitle>
           <DialogDescription>Full information for this payment record.</DialogDescription>
