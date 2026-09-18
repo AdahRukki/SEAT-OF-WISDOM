@@ -956,7 +956,7 @@ export function PaymentRecording({
                 Record Payment
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[calc(100%-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogContent className="w-[calc(100%_-_1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 {/* UX #1: description matches actual form order */}
