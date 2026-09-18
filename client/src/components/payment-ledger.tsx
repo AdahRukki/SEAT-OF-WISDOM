@@ -1,3 +1,14 @@
+
+function formatRecordedAt(value: string | Date | null | undefined): string {
+  if (!value) return "Not available";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not available";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos", day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(date) + " WAT";
+}
+
 import { useState, useEffect, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -131,6 +142,7 @@ interface PaymentRecord {
   reference: string | null;
   status: string;
   paymentDate: string | null;
+  createdAt?: string | null;
   isSplit?: boolean;
   possibleDuplicate?: boolean;
 }
@@ -165,7 +177,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
   const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
   const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
-  const [outstandingOnly, setOutstandingOnly] = useState<boolean>(false);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "outstanding" | "paid" | "fully-paid">("all");
   const [studentTypeFilter, setStudentTypeFilter] = useState<string>("all");
   const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns(userId));
 
@@ -284,14 +296,20 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       })
     : (Array.isArray(ledger) ? ledger : []);
 
-  // Outstanding-only narrows the search results to students who still owe
+  // Payment status narrows the search results using confirmed payments and tuition
   // (balance > 0). Type filter narrows to new or returning students.
   // Both flow through to the table, count, Excel export, Print view, and
   // admin grand total because they all read from filteredLedger.
   const filteredLedger = (() => {
-    let result = outstandingOnly
-      ? searchedLedger.filter((e) => Math.max(0, (e.tuitionAssigned || 0) - (e.totalPaid || 0)) > 0)
-      : searchedLedger;
+    let result = searchedLedger.filter((e) => {
+      const hasPaid = e.paymentCount > 0 && e.totalPaid > 0;
+      const assigned = Math.round((e.tuitionAssigned || 0) * 100);
+      const paid = Math.round((e.totalPaid || 0) * 100);
+      if (paymentStatusFilter === "outstanding") return assigned > paid;
+      if (paymentStatusFilter === "paid") return hasPaid;
+      if (paymentStatusFilter === "fully-paid") return hasPaid && assigned > 0 && paid >= assigned;
+      return true;
+    });
     if (studentTypeFilter !== "all") {
       result = result.filter((e) => (e.studentType ?? "returning") === studentTypeFilter);
     }
@@ -410,17 +428,22 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
 
       {/* Action bar (screen only) */}
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
-        <Button
-          variant={outstandingOnly ? "default" : "outline"}
-          size="sm"
-          onClick={() => setOutstandingOnly((v) => !v)}
-          aria-pressed={outstandingOnly}
-          title="Show only students with an outstanding balance"
-          data-testid="button-finance-outstanding-only"
-        >
-          <Wallet className="h-4 w-4 mr-1" />
-          Outstanding only
-        </Button>
+        <div role="group" aria-label="Payment status" className="flex flex-wrap gap-2">
+          {([
+            ["all", "All Students"],
+            ["outstanding", "Outstanding only"],
+            ["paid", "Has Paid"],
+            ["fully-paid", "Tuition Fully Paid"],
+          ] as const).map(([value, label]) => (
+            <Button key={value} size="sm"
+              variant={paymentStatusFilter === value ? "default" : "outline"}
+              onClick={() => setPaymentStatusFilter(value)}
+              aria-pressed={paymentStatusFilter === value}
+              data-testid={value === "outstanding" ? "button-finance-outstanding-only" : `button-finance-${value}`}>
+              {label}
+            </Button>
+          ))}
+        </div>
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" data-testid="button-finance-columns">
@@ -874,6 +897,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                         <TableRow key={rec.id}>
                           <TableCell className="text-sm">
                             {formatLedgerDate(rec.paymentDate)}
+                            <div className="text-xs text-muted-foreground whitespace-nowrap">Recorded: {formatRecordedAt(rec.createdAt)}</div>
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
                             <div className="flex items-center justify-end gap-1.5">
