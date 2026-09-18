@@ -1783,7 +1783,7 @@ function PaymentDetailsDialog({
 
   return (
     <Dialog open={!!record} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="w-[calc(100%-1rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+      <DialogContent className="w-[calc(100%_-_1rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Payment Details</DialogTitle>
           <DialogDescription>Full information for this payment record.</DialogDescription>
