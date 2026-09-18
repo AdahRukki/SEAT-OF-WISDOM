@@ -706,7 +706,7 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
                       <p className="text-sm text-muted-foreground">No amounts saved for this scope.</p>
                     )
                   ) : visibleEntries.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
                       {sortClassesByOrder(visibleEntries).map((item: any) => (
                         <div key={item.id} className="flex justify-between text-sm">
                           <span className="text-muted-foreground truncate">{item.name}</span>
@@ -5529,12 +5529,12 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Finance Tab */}
-          <TabsContent value="finance" className="space-y-6 table-container">
-            <div className="flex flex-wrap items-center gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium whitespace-nowrap">Term:</Label>
+          <TabsContent value="finance" className="space-y-4 sm:space-y-6 table-container min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 max-w-2xl">
+              <div className="flex flex-col gap-1.5 min-w-0">
+                <Label className="text-sm font-medium">Term</Label>
                 <Select value={selectedFinanceTerm} onValueChange={setSelectedFinanceTerm}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select term" />
                   </SelectTrigger>
                   <SelectContent>
@@ -5547,10 +5547,10 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium whitespace-nowrap">Session:</Label>
+              <div className="flex flex-col gap-1.5 min-w-0">
+                <Label className="text-sm font-medium">Session</Label>
                 <Select value={selectedFinanceSession} onValueChange={setSelectedFinanceSession}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select session" />
                   </SelectTrigger>
                   <SelectContent>
@@ -5570,7 +5570,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-2 xl:grid-cols-5' : 'grid-cols-2'}`}>
+            <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-5' : 'grid-cols-1 sm:grid-cols-2'}`}>
               {perm('finance_total_revenue') && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
@@ -5712,6 +5712,7 @@ export default function AdminDashboard() {
                   variant="outline"
                   size="sm"
                   onClick={() => setIsClassTuitionDialogOpen(true)}
+                  className="w-full sm:w-auto"
                   data-testid="button-class-tuition-breakdown"
                 >
                   <BarChart3 className="h-4 w-4 mr-2" />
@@ -5731,8 +5732,8 @@ export default function AdminDashboard() {
 
             {/* Fee Types Management */}
             {perm('finance_fee_types_management') && (<Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle>Fee Types Management</CardTitle>
                   <CardDescription>
                     Create and manage different types of fees for the school
@@ -5740,7 +5741,7 @@ export default function AdminDashboard() {
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button onClick={() => setIsFeeTypeDialogOpen(true)}>
+                    <Button onClick={() => setIsFeeTypeDialogOpen(true)} className="w-full sm:w-auto">
                       <Plus className="h-4 w-4 mr-2" />
                       Create Fee Type
                     </Button>
@@ -5809,7 +5810,7 @@ export default function AdminDashboard() {
                   Record student fee payments for verification
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-3 sm:px-6">
                 <PaymentRecording
                   schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
                   currentTerm={selectedFinanceTerm}
@@ -5820,26 +5821,26 @@ export default function AdminDashboard() {
             </Card>
 
             <Card>
-              <CardHeader className="flex flex-row items-start justify-between gap-3">
-                <div>
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle>Payment Ledger & Broadsheet</CardTitle>
                   <CardDescription>
                     Complete financial roll-call and class broadsheet for the selected term and session
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowFinanceDetails((v) => !v)}
-                    className="print:hidden"
+                    className="print:hidden w-full sm:w-auto"
                   >
                     {showFinanceDetails ? "Hide" : "Show"} Details
                   </Button>
                 </div>
               </CardHeader>
               {showFinanceDetails && (
-                <CardContent className="space-y-4 finance-print-content">
+                <CardContent className="space-y-4 finance-print-content px-3 sm:px-6 min-w-0">
                   <PaymentLedger
                     schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
                     schoolName={getSchoolName(user?.role === 'admin' ? selectedSchoolId : (user?.schoolId || ''))}
@@ -5876,7 +5877,7 @@ export default function AdminDashboard() {
                     Upload bank statements and verify payments (Owner/Admin only)
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-3 sm:px-6 min-w-0">
                   <BankStatementReconciliation
                     schoolId={selectedSchoolId}
                   />
