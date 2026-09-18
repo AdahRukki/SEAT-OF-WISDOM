@@ -227,6 +227,7 @@ export interface IStorage {
     reference: string | null;
     status: string;
     paymentDate: string | null;
+    createdAt: string | null;
     isSplit: boolean;
   }>>;
   
@@ -4599,6 +4600,7 @@ export class DatabaseStorage implements IStorage {
     reference: string | null;
     status: string;
     paymentDate: string | null;
+    createdAt: string | null;
     isSplit: boolean;
     possibleDuplicate?: boolean;
   }>> {
@@ -4612,6 +4614,7 @@ export class DatabaseStorage implements IStorage {
         fpr.reference AS "reference",
         fpr.status AS "status",
         fpr.payment_date AS "paymentDate",
+        fpr.created_at AS "createdAt",
         fpr.possible_duplicate AS "possibleDuplicate",
         false AS "isSplit"
       FROM fee_payment_records fpr
@@ -4630,6 +4633,7 @@ export class DatabaseStorage implements IStorage {
         fpr2.reference AS "reference",
         fpr2.status AS "status",
         fpr2.payment_date AS "paymentDate",
+        fpr2.created_at AS "createdAt",
         fpr2.possible_duplicate AS "possibleDuplicate",
         true AS "isSplit"
       FROM fee_payment_student_splits fpss
@@ -4651,6 +4655,7 @@ export class DatabaseStorage implements IStorage {
       reference: r.reference ?? null,
       status: r.status,
       paymentDate: r.paymentDate ? new Date(r.paymentDate).toISOString() : null,
+      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
       isSplit: r.isSplit === true || r.isSplit === 't' || r.isSplit === 'true',
       possibleDuplicate: r.possibleDuplicate === true || r.possibleDuplicate === 't' || r.possibleDuplicate === 'true',
     }));
