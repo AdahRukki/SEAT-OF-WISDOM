@@ -273,8 +273,8 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
         <h2 className="text-lg font-bold">{schoolName}</h2>
         <p className="text-sm">Payment Broadsheet — {term}, {session}</p>
       </div>
-      <div className="flex items-center gap-2 mb-3 print:hidden">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3 print:hidden">
+        <div className="relative w-full sm:flex-1 sm:max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search student name or SOWA ID..."
@@ -290,7 +290,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
         )}
       </div>
       <div className="rounded-md border overflow-x-auto">
-        <Table>
+        <Table className="min-w-[760px]">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-[40px] text-center">S/N</TableHead>
@@ -437,7 +437,7 @@ function ClassTuitionBreakdownDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100%_-_1rem)] sm:max-w-3xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>
             Tuition Collection by Class
@@ -453,8 +453,8 @@ function ClassTuitionBreakdownDialog({
             No classes found for this school.
           </div>
         ) : (
-          <div className="border rounded-md">
-            <Table>
+          <div className="border rounded-md overflow-hidden">
+            <Table className="min-w-[720px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Class</TableHead>
