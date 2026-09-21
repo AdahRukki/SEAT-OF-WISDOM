@@ -1,3 +1,4 @@
+import "@/components/finance-mobile.css";
 import { useState, useMemo, useEffect } from "react";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1102,19 +1103,19 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="finance-mobile space-y-6">
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); if (v !== "transactions") setFilterStatementId(null); }} className="w-full">
-        <TabsList className={`grid w-full ${isMainAdmin ? 'grid-cols-4' : 'grid-cols-3'}`}>
-          <TabsTrigger value="upload">Upload Statements</TabsTrigger>
-          <TabsTrigger value="reconcile">
-            Reconcile Payments
+        <TabsList className={`flex w-full justify-start overflow-x-auto h-auto sm:grid ${isMainAdmin ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+          <TabsTrigger value="upload" className="shrink-0 min-h-11">Statements</TabsTrigger>
+          <TabsTrigger value="reconcile" className="shrink-0 min-h-11">
+            Reconcile
             {pendingPayments.length > 0 && (
               <Badge variant="secondary" className="ml-2">
                 {pendingPayments.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="transactions">
+          <TabsTrigger value="transactions" className="shrink-0 min-h-11">
             Unmatched
             {unmatchedTransactions.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -1123,7 +1124,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             )}
           </TabsTrigger>
           {isMainAdmin && (
-            <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
+            <TabsTrigger value="bank-accounts" className="shrink-0 min-h-11">Bank Accounts</TabsTrigger>
           )}
         </TabsList>
 
@@ -1333,7 +1334,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </TabsContent>
 
         <TabsContent value="reconcile" className="space-y-4 mt-4">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h4 className="text-lg font-medium">Payment Reconciliation</h4>
               <p className="text-sm text-muted-foreground">
@@ -2663,7 +2664,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       </Tabs>
       <Dialog open={isConfirmDialogOpen} onOpenChange={(open) => { setIsConfirmDialogOpen(open); if (!open) setMatchSearch(""); }}>
         <DialogContent
-          className="max-w-2xl"
+          className="finance-dialog max-w-2xl"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -2793,7 +2794,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </DialogContent>
       </Dialog>
       <Dialog open={isReverseDialogOpen} onOpenChange={setIsReverseDialogOpen}>
-        <DialogContent>
+        <DialogContent className="finance-dialog">
           <DialogHeader>
             <DialogTitle>Reverse Payment</DialogTitle>
             <DialogDescription>
@@ -2860,7 +2861,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         }}
       >
         <DialogContent
-          className="max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="finance-dialog max-w-2xl max-h-[90vh] overflow-y-auto"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -3024,7 +3025,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         open={isBulkMatchDialogOpen}
         onOpenChange={(open) => { if (!bulkMatchProgress) setIsBulkMatchDialogOpen(open); }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="finance-dialog max-w-lg">
           <DialogHeader>
             <DialogTitle>Auto-match High Confidence Payments</DialogTitle>
             <DialogDescription>
@@ -3109,7 +3110,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         </DialogContent>
       </Dialog>
       <Dialog open={!!deleteStatementId} onOpenChange={(open) => { if (!open) setDeleteStatementId(null); }}>
-        <DialogContent>
+        <DialogContent className="finance-dialog">
           <DialogHeader>
             <DialogTitle>Delete Bank Statement</DialogTitle>
             <DialogDescription>
@@ -3142,7 +3143,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       </Dialog>
       {/* Task #128 phase 2: re-scan confirmation */}
       <Dialog open={!!rescanStatementId} onOpenChange={(open) => { if (!open && !rescanStatementMutation.isPending) setRescanStatementId(null); }}>
-        <DialogContent>
+        <DialogContent className="finance-dialog">
           <DialogHeader>
             <DialogTitle>Re-scan statement for similar duplicates</DialogTitle>
             <DialogDescription>
@@ -3178,7 +3179,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       />
       {/* Email review queue — full-detail popup for one row */}
       <Dialog open={!!selectedReviewItem} onOpenChange={(open) => { if (!open) setSelectedReviewItem(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="finance-dialog max-w-lg">
           <DialogHeader>
             <DialogTitle>Email Details</DialogTitle>
             <DialogDescription>
