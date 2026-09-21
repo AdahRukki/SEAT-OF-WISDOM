@@ -1544,6 +1544,7 @@ export function PaymentRecording({
                       <TableCell className="text-sm">
                         {formatPaymentDate(record.paymentDate)}
                         <div className="text-xs text-muted-foreground whitespace-nowrap">Recorded: {formatRecordedAt(record.createdAt)}</div>
+                        <div className="text-xs text-muted-foreground">Confirmed: {formatRecordedAt(record.confirmedAt)}</div>
                       </TableCell>
                       <TableCell>
                         {record.student ? (
@@ -1792,6 +1793,7 @@ function PaymentDetailsDialog({
         <div className="space-y-3 text-sm">
           <DetailRow label="Payment Date" value={dateStr} />
           <DetailRow label="Recorded At (Nigerian time)" value={formatRecordedAt(record.createdAt)} />
+          <DetailRow label="Confirmed At (Nigerian time)" value={formatRecordedAt(record.confirmedAt)} />
           <DetailRow label="Amount" value={`₦${parseFloat(record.amount).toLocaleString()}`} bold />
           <DetailRow label="Purpose" value={record.purpose || "—"} />
           <DetailRow label="Method" value={METHOD_LABELS[record.paymentMethod] ?? record.paymentMethod} />
