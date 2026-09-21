@@ -228,10 +228,11 @@ export interface IStorage {
     status: string;
     paymentDate: string | null;
     createdAt: string | null;
+    confirmedAt: string | null;
     isSplit: boolean;
   }>>;
   
-  getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
+  getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string, confirmedFrom?: string, confirmedTo?: string): Promise<{
     entries: {
       studentDbId: string;
       studentId: string;
@@ -248,6 +249,7 @@ export interface IStorage {
       balance: number;
       paymentCount: number;
       lastPaymentDate: string | null;
+      lastConfirmedAt: string | null;
     }[];
     meta: {
       hasTuitionFeeType: boolean;
@@ -255,7 +257,7 @@ export interface IStorage {
       hasScopedTuition: boolean;
     };
   }>;
-  getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{
+  getPaymentBroadsheet(schoolId: string, term: string, session: string, confirmedFrom?: string, confirmedTo?: string): Promise<{
     classes: Array<{
       classId: string;
       className: string;
@@ -1693,7 +1695,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string): Promise<{
+  async getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string, confirmedFrom?: string, confirmedTo?: string): Promise<{
     entries: {
       studentDbId: string;
       studentId: string;
@@ -1710,6 +1712,7 @@ export class DatabaseStorage implements IStorage {
       balance: number;
       paymentCount: number;
       lastPaymentDate: string | null;
+      lastConfirmedAt: string | null;
     }[];
     meta: {
       hasTuitionFeeType: boolean;
@@ -1749,7 +1752,7 @@ export class DatabaseStorage implements IStorage {
         (
           COALESCE((
             SELECT SUM(fpr.amount) FROM fee_payment_records fpr
-            WHERE fpr.student_id = s.id AND ${paymentJoinClause}
+            WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
           ), 0)
           +
           COALESCE((
@@ -1758,6 +1761,7 @@ export class DatabaseStorage implements IStorage {
             WHERE fpss.student_id = s.id
               AND fpr2.school_id = ${schoolId}
               AND fpr2.status = 'confirmed'
+              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
               ${term ? sql`AND fpr2.term = ${term}` : sql``}
               ${session ? sql`AND fpr2.session = ${session}` : sql``}
           ), 0)
@@ -1765,7 +1769,7 @@ export class DatabaseStorage implements IStorage {
         (
           COALESCE((
             SELECT COUNT(fpr.id) FROM fee_payment_records fpr
-            WHERE fpr.student_id = s.id AND ${paymentJoinClause}
+            WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
           ), 0)
           +
           COALESCE((
@@ -1774,6 +1778,7 @@ export class DatabaseStorage implements IStorage {
             WHERE fpss.student_id = s.id
               AND fpr2.school_id = ${schoolId}
               AND fpr2.status = 'confirmed'
+              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
               ${term ? sql`AND fpr2.term = ${term}` : sql``}
               ${session ? sql`AND fpr2.session = ${session}` : sql``}
           ), 0)
@@ -1781,25 +1786,51 @@ export class DatabaseStorage implements IStorage {
         COALESCE(
           GREATEST(
             (SELECT MAX(fpr.payment_date) FROM fee_payment_records fpr
-             WHERE fpr.student_id = s.id AND ${paymentJoinClause}),
+             WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
             (SELECT MAX(fpr2.payment_date) FROM fee_payment_student_splits fpss
              JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
              WHERE fpss.student_id = s.id
                AND fpr2.school_id = ${schoolId}
                AND fpr2.status = 'confirmed'
+              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
                ${term ? sql`AND fpr2.term = ${term}` : sql``}
                ${session ? sql`AND fpr2.session = ${session}` : sql``})
           ),
           (SELECT MAX(fpr.payment_date) FROM fee_payment_records fpr
-           WHERE fpr.student_id = s.id AND ${paymentJoinClause}),
+           WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
           (SELECT MAX(fpr2.payment_date) FROM fee_payment_student_splits fpss
            JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
            WHERE fpss.student_id = s.id
              AND fpr2.school_id = ${schoolId}
              AND fpr2.status = 'confirmed'
+              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
              ${term ? sql`AND fpr2.term = ${term}` : sql``}
              ${session ? sql`AND fpr2.session = ${session}` : sql``})
         ) AS "lastPaymentDate",
+        COALESCE(
+          GREATEST(
+            (SELECT MAX(fpr.confirmed_at) FROM fee_payment_records fpr
+             WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
+            (SELECT MAX(fpr2.confirmed_at) FROM fee_payment_student_splits fpss
+             JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+             WHERE fpss.student_id = s.id
+               AND fpr2.school_id = ${schoolId}
+               AND fpr2.status = 'confirmed'
+              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
+               ${term ? sql`AND fpr2.term = ${term}` : sql``}
+               ${session ? sql`AND fpr2.session = ${session}` : sql``})
+          ),
+          (SELECT MAX(fpr.confirmed_at) FROM fee_payment_records fpr
+           WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
+          (SELECT MAX(fpr2.confirmed_at) FROM fee_payment_student_splits fpss
+           JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+           WHERE fpss.student_id = s.id
+             AND fpr2.school_id = ${schoolId}
+             AND fpr2.status = 'confirmed'
+              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
+             ${term ? sql`AND fpr2.term = ${term}` : sql``}
+             ${session ? sql`AND fpr2.session = ${session}` : sql``})
+        ) AS "lastConfirmedAt",
         COALESCE((
           SELECT SUM(sf.amount) FROM student_fees sf
           WHERE sf.student_id = s.id
@@ -1857,11 +1888,12 @@ export class DatabaseStorage implements IStorage {
         balance: Math.max(0, totalAssigned - totalPaid),
         paymentCount: Number(r.paymentCount) || 0,
         lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
+        lastConfirmedAt: r.lastConfirmedAt ? new Date(r.lastConfirmedAt).toISOString() : null,
       };
     });
 
     return {
-      entries,
+      entries: confirmedFrom || confirmedTo ? entries.filter((entry: any) => entry.paymentCount > 0) : entries,
       meta: {
         hasTuitionFeeType: !!tuitionFee,
         hasGlobalTuition,
@@ -1948,6 +1980,8 @@ export class DatabaseStorage implements IStorage {
     term?: string,
     session?: string,
     purpose?: string,
+    confirmedFrom?: string,
+    confirmedTo?: string,
   ): Promise<Map<string, number>> {
     const schoolFpr = schoolId ? sql`AND fpr.school_id = ${schoolId}` : sql``;
     const termFpr = term ? sql`AND fpr.term = ${term}` : sql``;
@@ -1966,13 +2000,13 @@ export class DatabaseStorage implements IStorage {
         FROM fee_payment_records fpr
         WHERE fpr.status = 'confirmed'
           AND fpr.student_id IS NOT NULL
-          ${schoolFpr} ${termFpr} ${sessFpr} ${purposeFpr}
+          ${schoolFpr} ${termFpr} ${sessFpr} ${purposeFpr} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
         UNION ALL
         SELECT fpss.student_id, fpss.amount
         FROM fee_payment_student_splits fpss
         JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
         WHERE fpr2.status = 'confirmed'
-          ${schoolFpr2} ${termFpr2} ${sessFpr2} ${purposeFpr2}
+          ${schoolFpr2} ${termFpr2} ${sessFpr2} ${purposeFpr2} ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
       ) combined
       GROUP BY student_id
     `);
@@ -1983,7 +2017,7 @@ export class DatabaseStorage implements IStorage {
     return out;
   }
 
-  async getPaymentBroadsheet(schoolId: string, term: string, session: string): Promise<{
+  async getPaymentBroadsheet(schoolId: string, term: string, session: string, confirmedFrom?: string, confirmedTo?: string): Promise<{
     classes: Array<{
       classId: string;
       className: string;
@@ -2029,7 +2063,7 @@ export class DatabaseStorage implements IStorage {
 
     // Per-student paid totals — same UNION used everywhere tuition collection
     // is computed (see getConfirmedPaymentTotalsByStudent).
-    const paymentsMapShared = await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session);
+    const paymentsMapShared = await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session, undefined, confirmedFrom, confirmedTo);
     const paymentsRows = { rows: Array.from(paymentsMapShared, ([studentId, totalPaid]) => ({ studentId, totalPaid })) };
 
     const tuitionFeeRows = await db.execute(sql`
@@ -2052,6 +2086,7 @@ export class DatabaseStorage implements IStorage {
     const classGroupMap = new Map<string, { classId: string; className: string; students: any[] }>();
 
     for (const s of allStudents) {
+      if ((confirmedFrom || confirmedTo) && !paymentsMap.has(s.id)) continue;
       if (!classGroupMap.has(s.classId)) {
         classGroupMap.set(s.classId, { classId: s.classId, className: s.className || s.classId, students: [] });
       }
@@ -4601,6 +4636,7 @@ export class DatabaseStorage implements IStorage {
     status: string;
     paymentDate: string | null;
     createdAt: string | null;
+    confirmedAt: string | null;
     isSplit: boolean;
     possibleDuplicate?: boolean;
   }>> {
@@ -4615,6 +4651,7 @@ export class DatabaseStorage implements IStorage {
         fpr.status AS "status",
         fpr.payment_date AS "paymentDate",
         fpr.created_at AS "createdAt",
+        fpr.confirmed_at AS "confirmedAt",
         fpr.possible_duplicate AS "possibleDuplicate",
         false AS "isSplit"
       FROM fee_payment_records fpr
@@ -4634,6 +4671,7 @@ export class DatabaseStorage implements IStorage {
         fpr2.status AS "status",
         fpr2.payment_date AS "paymentDate",
         fpr2.created_at AS "createdAt",
+        fpr2.confirmed_at AS "confirmedAt",
         fpr2.possible_duplicate AS "possibleDuplicate",
         true AS "isSplit"
       FROM fee_payment_student_splits fpss
@@ -4656,6 +4694,7 @@ export class DatabaseStorage implements IStorage {
       status: r.status,
       paymentDate: r.paymentDate ? new Date(r.paymentDate).toISOString() : null,
       createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+      confirmedAt: r.confirmedAt ? new Date(r.confirmedAt).toISOString() : null,
       isSplit: r.isSplit === true || r.isSplit === 't' || r.isSplit === 'true',
       possibleDuplicate: r.possibleDuplicate === true || r.possibleDuplicate === 't' || r.possibleDuplicate === 'true',
     }));
@@ -6110,3 +6149,9 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+function confirmedDateClause(alias: "fpr" | "fpr2", from?: string, to?: string) {
+  const column = sql.raw(alias + ".confirmed_at");
+  return sql`${from ? sql`AND ${column} >= (${from}::timestamptz AT TIME ZONE 'UTC')` : sql``}
+    ${to ? sql`AND ${column} < (${to}::timestamptz AT TIME ZONE 'UTC')` : sql``}`;
+}
