@@ -1,3 +1,6 @@
+import { ConfirmationDateFilter, confirmationRangeLabel } from "@/components/confirmation-date-filter";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
+import "@/components/finance-mobile.css";
 
 function formatRecordedAt(value: string | Date | null | undefined): string {
   if (!value) return "Not available";
@@ -174,6 +177,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const userId = user?.id;
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [confirmedFrom, setConfirmedFrom] = useState("");
   const [confirmedTo, setConfirmedTo] = useState("");
   const confirmationFiltered = !!(confirmedFrom || confirmedTo);
@@ -427,7 +431,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   };
 
   return (
-    <div className="space-y-4">
+    <div className="finance-mobile space-y-4">
       {/* Print-only header */}
       <div className="hidden print:block mb-3">
         <div className="text-center">
@@ -444,88 +448,44 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         </div>
       </div>
 
-<div className="flex flex-wrap items-end gap-3 print:hidden">
-        <label className="space-y-1 text-sm">Confirmed from (WAT)
-          <Input type="date" aria-label="Confirmed from" value={confirmedFrom} max={confirmedTo || undefined} onChange={e => setConfirmedFrom(e.target.value)} />
-        </label>
-        <label className="space-y-1 text-sm">Confirmed to (WAT)
-          <Input type="date" aria-label="Confirmed to" value={confirmedTo} min={confirmedFrom || undefined} onChange={e => setConfirmedTo(e.target.value)} />
-        </label>
-        {confirmationFiltered && <Button variant="outline" onClick={() => { setConfirmedFrom(""); setConfirmedTo(""); }}>Clear dates</Button>}
-      </div>
-      {confirmationFiltered && <p className="text-sm my-2">Confirmed collections: {confirmedFrom || "earliest"} to {confirmedTo || "latest"} (Nigerian time). Amounts include only confirmations in this range. Full-term balances and payment status are hidden.</p>}
-      {invalidConfirmationRange && <p role="alert" className="text-sm text-destructive">The start date must not be after the end date.</p>}
-      {/* Action bar (screen only) */}
-      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
-        <div role="group" aria-label="Payment status" className="flex flex-wrap gap-2">
-          {([
-            ["all", "All Students"],
-            ["outstanding", "Outstanding only"],
-            ["paid", "Has Paid"],
-            ["fully-paid", "Tuition Fully Paid"],
-          ] as const).map(([value, label]) => (
-            <Button key={value} size="sm"
-              variant={paymentStatusFilter === value ? "default" : "outline"}
-              onClick={() => setPaymentStatusFilter(value)}
-              disabled={confirmationFiltered}
-              aria-pressed={paymentStatusFilter === value}
-              data-testid={value === "outstanding" ? "button-finance-outstanding-only" : `button-finance-${value}`}>
-              {label}
-            </Button>
-          ))}
+<ConfirmationDateFilter from={confirmedFrom} to={confirmedTo} onApply={(from, to) => { setConfirmedFrom(from); setConfirmedTo(to); setSelectedStudent(null); }} />
+      {confirmationFiltered && <p className="text-sm text-muted-foreground" role="status">Confirmed collections · {confirmationRangeLabel(confirmedFrom, confirmedTo)} · Nigerian time. Only amounts confirmed in this range are shown; full-term balances and payment status are hidden.</p>}
+      <div className="flex flex-wrap items-end gap-3 print:hidden">
+        <div className="flex-1 min-w-[180px] sm:flex-none sm:w-56 space-y-1">
+          <label className="text-sm font-medium" htmlFor="ledger-payment-status">Payment status</label>
+          <Select value={confirmationFiltered ? "all" : paymentStatusFilter}
+            onValueChange={value => setPaymentStatusFilter(value as typeof paymentStatusFilter)} disabled={confirmationFiltered}>
+            <SelectTrigger id="ledger-payment-status" className="min-h-11" aria-describedby={confirmationFiltered ? "ledger-status-help" : undefined}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Students</SelectItem>
+              <SelectItem value="outstanding">Outstanding</SelectItem>
+              <SelectItem value="paid">Has Paid</SelectItem>
+              <SelectItem value="fully-paid">Tuition Fully Paid</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" data-testid="button-finance-columns">
-              <Columns3 className="h-4 w-4 mr-1" />
-              Columns
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-3" align="end">
-            <div className="text-xs font-medium text-muted-foreground mb-2">Show columns</div>
-            <div className="space-y-2">
-              {COLUMN_DEFS.map((c) => {
-                const required = "required" in c && c.required === true;
-                return (
-                  <label key={c.key} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <Checkbox
-                      checked={visibleColumns.has(c.key)}
-                      disabled={required}
-                      onCheckedChange={() => toggleColumn(c.key)}
-                      data-testid={`checkbox-col-${c.key}`}
-                    />
-                    <span className={required ? "text-muted-foreground" : ""}>
-                      {c.label}{required && " (always)"}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExportExcel}
-          disabled={filteredLedger.length === 0}
-          data-testid="button-finance-export-excel"
-        >
-          <FileSpreadsheet className="h-4 w-4 mr-1" />
-          Excel
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handlePrint}
-          disabled={filteredLedger.length === 0}
-          data-testid="button-finance-print"
-        >
-          <Printer className="h-4 w-4 mr-1" />
-          Print
-        </Button>
+        <Button variant="outline" className="min-h-11 sm:hidden" aria-expanded={showAdvancedFilters} aria-controls="ledger-advanced-filters" onClick={() => setShowAdvancedFilters(value => !value)}>Filters</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><Button variant="outline" className="min-h-11 ml-auto">Actions <span aria-hidden="true" className="ml-2">▾</span></Button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem className="min-h-11" onSelect={handlePrint} disabled={!filteredLedger.length}><Printer className="h-4 w-4 mr-2" />Print</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-11" onSelect={handleExportExcel} disabled={!filteredLedger.length}><FileSpreadsheet className="h-4 w-4 mr-2" />Export Excel</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="min-h-11"><Columns3 className="h-4 w-4 mr-2" />Columns (table / export)</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-[60dvh] overflow-y-auto">
+                {COLUMN_DEFS.map(c => <DropdownMenuCheckboxItem key={c.key} className="min-h-11"
+                  checked={visibleColumns.has(c.key)} disabled={"required" in c && c.required}
+                  onSelect={event => event.preventDefault()} onCheckedChange={() => toggleColumn(c.key)}>{c.label}</DropdownMenuCheckboxItem>)}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {confirmationFiltered && <p id="ledger-status-help" className="w-full text-xs text-muted-foreground">Clear confirmation dates to filter by outstanding or fully paid status.</p>}
       </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end print:hidden">
+      <p className="text-sm text-muted-foreground sm:hidden print:hidden">{selectedTerm} · {selectedSession} · {printClassName}</p>
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-start sm:items-end print:hidden">
+        <div id="ledger-advanced-filters" className={`${showAdvancedFilters ? "flex" : "hidden"} sm:flex w-full sm:w-auto flex-col sm:flex-row sm:flex-wrap gap-3`}>
         <div className="space-y-1 w-full sm:w-auto">
           <label className="text-xs text-muted-foreground font-medium">Term</label>
           <Select value={selectedTerm} onValueChange={setSelectedTerm}>
@@ -578,6 +538,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
               <SelectItem value="returning">Returning</SelectItem>
             </SelectContent>
           </Select>
+        </div>
         </div>
         <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-xs space-y-1">
           <label className="text-xs text-muted-foreground font-medium">Search</label>
@@ -665,7 +626,27 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
               (no term-specific override saved).
             </div>
           )}
-          <div className="rounded-md border overflow-x-auto">
+          <div className="space-y-3 sm:hidden print:hidden" data-testid="mobile-ledger-cards">
+            {filteredLedger.map(entry => <article key={entry.studentDbId} className="rounded-lg border p-3 space-y-3">
+              <div className="font-semibold break-words">{entry.lastName} {entry.firstName}{entry.studentType === "new" && <Badge variant="secondary" className="ml-2">New</Badge>}</div>
+              <p className="text-sm text-muted-foreground">{entry.className} · {entry.studentId}</p>
+              <dl className="grid grid-cols-2 gap-3 text-sm">
+                <div><dt>{confirmationFiltered ? "Confirmed in range" : "Paid"}</dt><dd className="font-semibold text-green-600 break-words">₦{(entry.totalPaid || 0).toLocaleString()}</dd></div>
+                {!confirmationFiltered && <div><dt>Outstanding tuition</dt><dd className="font-semibold">₦{Math.max(0, (entry.tuitionAssigned || 0) - (entry.totalPaid || 0)).toLocaleString()}</dd></div>}
+              </dl>
+              <p className="text-xs text-muted-foreground">Last confirmed: {formatRecordedAt(entry.lastConfirmedAt)}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                {!confirmationFiltered && <span className="text-sm">{getEntryStatus(entry)}</span>}
+                <Button variant="outline" className="min-h-11" onClick={() => setSelectedStudent(entry)} aria-label={`Payment details for ${entry.lastName} ${entry.firstName}`}>Details</Button>
+              </div>
+            </article>)}
+            {userRole === "admin" && filteredLedger.length > 0 && <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
+              <p className="font-semibold">Totals for these students</p>
+              <p>{confirmationFiltered ? "Confirmed in range" : "Paid"}: ₦{filteredLedger.reduce((sum, e) => sum + (e.totalPaid || 0), 0).toLocaleString()}</p>
+              {!confirmationFiltered && <p>Outstanding tuition: ₦{filteredLedger.reduce((sum, e) => sum + Math.max(0, (e.tuitionAssigned || 0) - (e.totalPaid || 0)), 0).toLocaleString()}</p>}
+            </div>}
+          </div>
+          <div className="hidden sm:block print:block rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -841,7 +822,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       )}
 
       <Dialog open={!!selectedStudent} onOpenChange={(open) => { if (!open) setSelectedStudent(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="finance-dialog max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {selectedStudent ? `${selectedStudent.lastName} ${selectedStudent.firstName}` : ""} — Payment Details
