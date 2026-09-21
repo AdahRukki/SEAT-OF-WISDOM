@@ -193,15 +193,32 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   session: string;
   schoolName: string;
 }) {
+  const [confirmedFrom, setConfirmedFrom] = useState("");
+  const [confirmedTo, setConfirmedTo] = useState("");
+  const confirmationFiltered = !!(confirmedFrom || confirmedTo);
+  const invalidConfirmationRange = !!(confirmedFrom && confirmedTo && confirmedFrom > confirmedTo);
+  const dateFilters = (<><div className="flex flex-wrap items-end gap-3 print:hidden">
+        <label className="space-y-1 text-sm">Confirmed from (WAT)
+          <Input type="date" aria-label="Confirmed from" value={confirmedFrom} max={confirmedTo || undefined} onChange={e => setConfirmedFrom(e.target.value)} />
+        </label>
+        <label className="space-y-1 text-sm">Confirmed to (WAT)
+          <Input type="date" aria-label="Confirmed to" value={confirmedTo} min={confirmedFrom || undefined} onChange={e => setConfirmedTo(e.target.value)} />
+        </label>
+        {confirmationFiltered && <Button variant="outline" onClick={() => { setConfirmedFrom(""); setConfirmedTo(""); }}>Clear dates</Button>}
+      </div>
+      {confirmationFiltered && <p className="text-sm my-2">Confirmed collections: {confirmedFrom || "earliest"} to {confirmedTo || "latest"} (Nigerian time). Amounts include only confirmations in this range. Full-term balances and payment status are hidden.</p>}
+      {invalidConfirmationRange && <p role="alert" className="text-sm text-destructive">The start date must not be after the end date.</p>}</>);
   const params = new URLSearchParams();
   if (schoolId) params.set("schoolId", schoolId);
   if (term) params.set("term", term);
   if (session) params.set("session", session);
+  if (confirmedFrom) params.set("confirmedFrom", confirmedFrom);
+  if (confirmedTo) params.set("confirmedTo", confirmedTo);
 
   const [bsSearch, setBsSearch] = useState("");
 
   const { data, isLoading, error } = useQuery<BroadsheetData>({
-    queryKey: ["/api/admin/payment-broadsheet", schoolId, term, session],
+    queryKey: ["/api/admin/payment-broadsheet", schoolId, term, session, confirmedFrom, confirmedTo],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
@@ -211,7 +228,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
       if (!res.ok) throw new Error("Failed to fetch broadsheet");
       return res.json();
     },
-    enabled: !!schoolId && !!term && !!session,
+    enabled: !!schoolId && !!term && !!session && !invalidConfirmationRange,
     retry: false,
   });
 
@@ -219,32 +236,31 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
     return <p className="text-sm text-muted-foreground text-center py-8">Select a term and session above to view the broadsheet.</p>;
   }
 
+  if (invalidConfirmationRange) return <div>{dateFilters}</div>;
+
   if (isLoading) {
-    return (
+    return (<>{dateFilters}
       <div className="space-y-2">
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className="h-10 w-full bg-muted animate-pulse rounded" />
         ))}
-      </div>
-    );
+      </div></>);
   }
 
   if (error) {
-    return (
+    return (<>{dateFilters}
       <div className="text-center py-12 text-destructive">
         <AlertCircle className="h-10 w-10 mx-auto mb-3 opacity-60" />
         <p className="text-sm">{(error as Error).message || "Failed to load broadsheet data."}</p>
-      </div>
-    );
+      </div></>);
   }
 
   if (!data || data.classes.length === 0) {
-    return (
+    return (<>{dateFilters}
       <div className="text-center py-12 text-muted-foreground">
         <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
         <p className="text-sm">No students found for the selected school, term, and session.</p>
-      </div>
-    );
+      </div></>);
   }
 
   const statusBadge = (status: string, totalAssigned: number) => {
@@ -269,6 +285,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
 
   return (
     <div className="broadsheet-print-content">
+      {dateFilters}
       <div className="hidden print:block text-center mb-4">
         <h2 className="text-lg font-bold">{schoolName}</h2>
         <p className="text-sm">Payment Broadsheet — {term}, {session}</p>
@@ -297,16 +314,16 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
               <TableHead>Student Name</TableHead>
               <TableHead>SOWA ID</TableHead>
               <TableHead className="text-right">Assigned (₦)</TableHead>
-              <TableHead className="text-right">Paid (₦)</TableHead>
-              <TableHead className="text-right">Balance (₦)</TableHead>
-              <TableHead className="text-center">Status</TableHead>
+              <TableHead className="text-right">{confirmationFiltered ? "Confirmed in range (₦)" : "Paid (₦)"}</TableHead>
+              {!confirmationFiltered && <TableHead className="text-right">Balance (₦)</TableHead>}
+              {!confirmationFiltered && <TableHead className="text-center">Status</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredClasses.map((cls) => (
               <Fragment key={cls.classId}>
                 <TableRow className="bg-blue-50 dark:bg-blue-950/30">
-                  <TableCell colSpan={7} className="font-bold text-sm py-2">
+                  <TableCell colSpan={confirmationFiltered ? 5 : 7} className="font-bold text-sm py-2">
                     {cls.className}
                     <span className="text-xs font-normal text-muted-foreground ml-2">({cls.students.length} students)</span>
                   </TableCell>
@@ -318,8 +335,8 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
                     <TableCell className="text-sm font-mono">{st.sowaId}</TableCell>
                     <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.totalAssigned.toLocaleString()}` : "—"}</TableCell>
                     <TableCell className="text-right text-sm font-medium text-green-600">{st.totalPaid > 0 ? `₦${st.totalPaid.toLocaleString()}` : "₦0"}</TableCell>
-                    <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.balance.toLocaleString()}` : "—"}</TableCell>
-                    <TableCell className="text-center">{statusBadge(st.status, st.totalAssigned)}</TableCell>
+                    {!confirmationFiltered && <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.balance.toLocaleString()}` : "—"}</TableCell>}
+                    {!confirmationFiltered && <TableCell className="text-center">{statusBadge(st.status, st.totalAssigned)}</TableCell>}
                   </TableRow>
                 ))}
                 <TableRow key={`subtotal-${cls.classId}`} className="bg-muted/40 border-t font-semibold">
@@ -328,8 +345,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
                   <TableCell />
                   <TableCell className="text-right text-sm">₦{cls.classTotals.totalAssigned.toLocaleString()}</TableCell>
                   <TableCell className="text-right text-sm text-green-600">₦{cls.classTotals.totalPaid.toLocaleString()}</TableCell>
-                  <TableCell className="text-right text-sm">₦{cls.classTotals.balance.toLocaleString()}</TableCell>
-                  <TableCell />
+                  {!confirmationFiltered && <><TableCell className="text-right text-sm">₦{cls.classTotals.balance.toLocaleString()}</TableCell><TableCell /></>}
                 </TableRow>
               </Fragment>
             ))}
@@ -339,8 +355,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
               <TableCell />
               <TableCell className="text-right">₦{data.grandTotal.totalAssigned.toLocaleString()}</TableCell>
               <TableCell className="text-right text-green-700">₦{data.grandTotal.totalPaid.toLocaleString()}</TableCell>
-              <TableCell className="text-right">₦{data.grandTotal.balance.toLocaleString()}</TableCell>
-              <TableCell />
+              {!confirmationFiltered && <><TableCell className="text-right">₦{data.grandTotal.balance.toLocaleString()}</TableCell><TableCell /></>}
             </TableRow>
           </TableBody>
         </Table>
