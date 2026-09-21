@@ -127,6 +127,7 @@ interface LedgerEntry {
   balance: number;
   paymentCount: number;
   lastPaymentDate: string | null;
+  lastConfirmedAt?: string | null;
 }
 
 interface SchoolClass {
@@ -143,6 +144,7 @@ interface PaymentRecord {
   status: string;
   paymentDate: string | null;
   createdAt?: string | null;
+  confirmedAt?: string | null;
   isSplit?: boolean;
   possibleDuplicate?: boolean;
 }
@@ -172,6 +174,10 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const userId = user?.id;
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
+  const [confirmedFrom, setConfirmedFrom] = useState("");
+  const [confirmedTo, setConfirmedTo] = useState("");
+  const confirmationFiltered = !!(confirmedFrom || confirmedTo);
+  const invalidConfirmationRange = !!(confirmedFrom && confirmedTo && confirmedFrom > confirmedTo);
   const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
   const [nameSearch, setNameSearch] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
@@ -202,7 +208,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       return next;
     });
   };
-  const isCol = (k: ColKey) => visibleColumns.has(k);
+  const isCol = (k: ColKey) => visibleColumns.has(k) && !(confirmationFiltered && ["balance", "status", "misc"].includes(k));
 
   useEffect(() => {
     if (currentTerm) setSelectedTerm(currentTerm);
@@ -242,7 +248,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!schoolId,
+    enabled: !!schoolId && !invalidConfirmationRange,
   });
 
   const params = new URLSearchParams();
@@ -250,9 +256,11 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   if (selectedClassId && selectedClassId !== "all") params.set("classId", selectedClassId);
   if (selectedTerm) params.set("term", selectedTerm);
   if (selectedSession) params.set("session", selectedSession);
+  if (confirmedFrom) params.set("confirmedFrom", confirmedFrom);
+  if (confirmedTo) params.set("confirmedTo", confirmedTo);
 
-  const { data: ledgerResponse, isLoading } = useQuery<LedgerResponse>({
-    queryKey: ["/api/payments/ledger", schoolId, selectedClassId, selectedTerm, selectedSession],
+  const { data: ledgerResponse, isLoading, isError: ledgerError } = useQuery<LedgerResponse>({
+    queryKey: ["/api/payments/ledger", schoolId, selectedClassId, selectedTerm, selectedSession, confirmedFrom, confirmedTo],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
@@ -271,7 +279,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const ledger: LedgerEntry[] = ledgerResponse?.entries ?? [];
   const ledgerMeta: LedgerMeta = ledgerResponse?.meta ?? { hasTuitionFeeType: false, hasGlobalTuition: false, hasScopedTuition: false };
 
-  const { data: studentRecords = [], isLoading: recordsLoading } = useQuery<PaymentRecord[]>({
+  const { data: allStudentRecords = [], isLoading: recordsLoading } = useQuery<PaymentRecord[]>({
     queryKey: ["/api/payments/student-history", schoolId, selectedStudent?.studentDbId, selectedTerm, selectedSession],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
@@ -287,6 +295,14 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     enabled: !!selectedStudent && !!schoolId,
   });
 
+  const studentRecords = allStudentRecords.filter(rec => {
+    if (!confirmationFiltered) return true;
+    if (!rec.confirmedAt) return false;
+    const value = Date.parse(rec.confirmedAt);
+    return Number.isFinite(value)
+      && (!confirmedFrom || value >= Date.parse(confirmedFrom + "T00:00:00+01:00"))
+      && (!confirmedTo || value < Date.parse(confirmedTo + "T00:00:00+01:00") + 86400000);
+  });
   const searchedLedger = nameSearch.trim()
     ? (Array.isArray(ledger) ? ledger : []).filter((e) => {
         const q = nameSearch.toLowerCase();
@@ -302,6 +318,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   // admin grand total because they all read from filteredLedger.
   const filteredLedger = (() => {
     let result = searchedLedger.filter((e) => {
+      if (confirmationFiltered) return e.paymentCount > 0;
       const hasPaid = e.paymentCount > 0 && e.totalPaid > 0;
       const assigned = Math.round((e.tuitionAssigned || 0) * 100);
       const paid = Math.round((e.totalPaid || 0) * 100);
@@ -343,11 +360,11 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("parentWhatsapp")) row["Parent WhatsApp"] = e.parentWhatsapp || "";
       if (isCol("tuition")) row["Tuition Fee (NGN)"] = tuition;
       if (isCol("discount")) row["Discount (NGN)"] = e.discount || 0;
-      if (isCol("paid")) row["Total Paid (NGN)"] = paid;
+      if (isCol("paid")) row[confirmationFiltered ? "Confirmed in range (NGN)" : "Total Paid (NGN)"] = paid;
       if (isCol("misc")) row["Miscellaneous (NGN)"] = misc;
       if (isCol("balance")) row["Balance (NGN)"] = balance;
       if (isCol("status")) row["Status"] = getEntryStatus(e);
-      if (isCol("lastPayment")) row["Last Payment"] = formatLedgerDate(e.lastPaymentDate);
+      if (isCol("lastPayment")) { row["Last Payment"] = formatLedgerDate(e.lastPaymentDate); row["Last Confirmed (WAT)"] = formatRecordedAt(e.lastConfirmedAt); }
       return row;
     });
   };
@@ -382,7 +399,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("parentWhatsapp")) totalRow["Parent WhatsApp"] = "";
       if (isCol("tuition")) totalRow["Tuition Fee (NGN)"] = totals.tuition;
       if (isCol("discount")) totalRow["Discount (NGN)"] = totals.discount;
-      if (isCol("paid")) totalRow["Total Paid (NGN)"] = totals.paid;
+      if (isCol("paid")) totalRow[confirmationFiltered ? "Confirmed in range (NGN)" : "Total Paid (NGN)"] = totals.paid;
       if (isCol("misc")) totalRow["Miscellaneous (NGN)"] = totals.misc;
       if (isCol("balance")) totalRow["Balance (NGN)"] = totals.balance;
       if (isCol("status")) totalRow["Status"] = "";
@@ -393,6 +410,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Finance");
+    if (confirmationFiltered) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ "Confirmed from (WAT)": confirmedFrom || "Earliest", "Confirmed to (WAT)": confirmedTo || "Latest", "Amounts": "Only payments confirmed in this range" }]), "Confirmation filter");
     const fname = `finance-${sanitizeFilenamePart(schoolName || "school")}-${sanitizeFilenamePart(className)}-${sanitizeFilenamePart(selectedTerm || "all-terms")}-${sanitizeFilenamePart(selectedSession || "all-sessions")}.xlsx`;
     XLSX.writeFile(wb, fname);
   };
@@ -426,6 +444,17 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         </div>
       </div>
 
+<div className="flex flex-wrap items-end gap-3 print:hidden">
+        <label className="space-y-1 text-sm">Confirmed from (WAT)
+          <Input type="date" aria-label="Confirmed from" value={confirmedFrom} max={confirmedTo || undefined} onChange={e => setConfirmedFrom(e.target.value)} />
+        </label>
+        <label className="space-y-1 text-sm">Confirmed to (WAT)
+          <Input type="date" aria-label="Confirmed to" value={confirmedTo} min={confirmedFrom || undefined} onChange={e => setConfirmedTo(e.target.value)} />
+        </label>
+        {confirmationFiltered && <Button variant="outline" onClick={() => { setConfirmedFrom(""); setConfirmedTo(""); }}>Clear dates</Button>}
+      </div>
+      {confirmationFiltered && <p className="text-sm my-2">Confirmed collections: {confirmedFrom || "earliest"} to {confirmedTo || "latest"} (Nigerian time). Amounts include only confirmations in this range. Full-term balances and payment status are hidden.</p>}
+      {invalidConfirmationRange && <p role="alert" className="text-sm text-destructive">The start date must not be after the end date.</p>}
       {/* Action bar (screen only) */}
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <div role="group" aria-label="Payment status" className="flex flex-wrap gap-2">
@@ -438,6 +467,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             <Button key={value} size="sm"
               variant={paymentStatusFilter === value ? "default" : "outline"}
               onClick={() => setPaymentStatusFilter(value)}
+              disabled={confirmationFiltered}
               aria-pressed={paymentStatusFilter === value}
               data-testid={value === "outstanding" ? "button-finance-outstanding-only" : `button-finance-${value}`}>
               {label}
@@ -567,7 +597,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         </div>
       </div>
 
-      {isLoading ? (
+      {ledgerError ? (<p role="alert" className="text-destructive">Could not load confirmed collections. Please refresh to try again.</p>) : isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-10 w-full" />
@@ -647,11 +677,11 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 {isCol("parentWhatsapp") && <TableHead>Parent WhatsApp</TableHead>}
                 {isCol("tuition") && <TableHead className="text-right">Tuition Fee (₦)</TableHead>}
                 {isCol("discount") && <TableHead className="text-right">Discount (₦)</TableHead>}
-                {isCol("paid") && <TableHead className="text-right">Total Paid (₦)</TableHead>}
+                {isCol("paid") && <TableHead className="text-right">{confirmationFiltered ? "Confirmed in range (₦)" : "Total Paid (₦)"}</TableHead>}
                 {isCol("misc") && <TableHead className="text-right">Miscellaneous (₦)</TableHead>}
                 {isCol("balance") && <TableHead className="text-right">Balance (₦)</TableHead>}
                 {isCol("status") && <TableHead>Status</TableHead>}
-                {isCol("lastPayment") && <TableHead>Last Payment</TableHead>}
+                {isCol("lastPayment") && <TableHead>Payment / Confirmation</TableHead>}
                 <TableHead className="w-[50px] print:hidden"></TableHead>
               </TableRow>
             </TableHeader>
@@ -734,7 +764,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                     <TableCell className="text-sm">{getEntryStatus(entry)}</TableCell>
                   )}
                   {isCol("lastPayment") && (
-                    <TableCell className="text-sm">{formatLedgerDate(entry.lastPaymentDate)}</TableCell>
+                    <TableCell className="text-sm">{formatLedgerDate(entry.lastPaymentDate)}<div className="text-xs text-muted-foreground">Confirmed: {formatRecordedAt(entry.lastConfirmedAt)}</div></TableCell>
                   )}
                   <TableCell className="print:hidden">
                     <Button
@@ -827,6 +857,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
               </div>
               {(() => {
                 const totalPaid = selectedStudent.totalPaid || 0;
+                if (confirmationFiltered) return <p className="text-sm font-semibold">Confirmed in selected range: ₦{totalPaid.toLocaleString()}</p>;
                 const tuitionAssigned = selectedStudent.tuitionAssigned || 0;
                 const tuitionPaid = Math.min(totalPaid, tuitionAssigned);
                 const nonTuitionPaid = Math.max(0, totalPaid - tuitionAssigned);
@@ -898,6 +929,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                           <TableCell className="text-sm">
                             {formatLedgerDate(rec.paymentDate)}
                             <div className="text-xs text-muted-foreground whitespace-nowrap">Recorded: {formatRecordedAt(rec.createdAt)}</div>
+                            <div className="text-xs text-muted-foreground">Confirmed: {formatRecordedAt(rec.confirmedAt)}</div>
                           </TableCell>
                           <TableCell className="text-right font-semibold text-green-600">
                             <div className="flex items-center justify-end gap-1.5">
