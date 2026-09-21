@@ -4859,7 +4859,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!schoolId || !term || !session) {
         return res.status(400).json({ error: "schoolId, term, and session are required" });
       }
-      const broadsheet = await storage.getPaymentBroadsheet(schoolId, term, session);
+
+      const dates = z.object({
+        confirmedFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        confirmedTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }).safeParse(req.query);
+      if (!dates.success) return res.status(400).json({ error: "Use YYYY-MM-DD confirmation dates" });
+      const { confirmedFrom, confirmedTo } = dates.data;
+      const validDay = (day?: string) => !day || (!Number.isNaN(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day);
+      if (!validDay(confirmedFrom) || !validDay(confirmedTo) || (confirmedFrom && confirmedTo && confirmedFrom > confirmedTo)) {
+        return res.status(400).json({ error: "Invalid confirmation date range" });
+      }
+      // Nigerian days: inclusive start and exclusive midnight after the end date.
+      const from = confirmedFrom ? new Date(confirmedFrom + "T00:00:00+01:00").toISOString() : undefined;
+      const to = confirmedTo ? new Date(Date.parse(confirmedTo + "T00:00:00+01:00") + 86400000).toISOString() : undefined;
+
+      const broadsheet = await storage.getPaymentBroadsheet(schoolId, term, session, from, to);
       res.json(broadsheet);
     } catch (error) {
       console.error("Get payment broadsheet error:", error);
@@ -4910,7 +4925,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const classId = req.query.classId as string | undefined;
       const term = req.query.term as string | undefined;
       const session = req.query.session as string | undefined;
-      const ledger = await storage.getStudentPaymentLedger(schoolId, classId || undefined, term || undefined, session || undefined);
+
+      const dates = z.object({
+        confirmedFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        confirmedTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }).safeParse(req.query);
+      if (!dates.success) return res.status(400).json({ error: "Use YYYY-MM-DD confirmation dates" });
+      const { confirmedFrom, confirmedTo } = dates.data;
+      const validDay = (day?: string) => !day || (!Number.isNaN(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day);
+      if (!validDay(confirmedFrom) || !validDay(confirmedTo) || (confirmedFrom && confirmedTo && confirmedFrom > confirmedTo)) {
+        return res.status(400).json({ error: "Invalid confirmation date range" });
+      }
+      // Nigerian days: inclusive start and exclusive midnight after the end date.
+      const from = confirmedFrom ? new Date(confirmedFrom + "T00:00:00+01:00").toISOString() : undefined;
+      const to = confirmedTo ? new Date(Date.parse(confirmedTo + "T00:00:00+01:00") + 86400000).toISOString() : undefined;
+
+      const ledger = await storage.getStudentPaymentLedger(schoolId, classId || undefined, term || undefined, session || undefined, from, to);
       res.json(ledger);
     } catch (error) {
       console.error("Get payment ledger error:", error);
