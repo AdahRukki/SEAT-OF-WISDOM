@@ -1,3 +1,4 @@
+import { ConfirmationDateFilter, confirmationRangeLabel } from "@/components/confirmation-date-filter";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -197,17 +198,10 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   const [confirmedTo, setConfirmedTo] = useState("");
   const confirmationFiltered = !!(confirmedFrom || confirmedTo);
   const invalidConfirmationRange = !!(confirmedFrom && confirmedTo && confirmedFrom > confirmedTo);
-  const dateFilters = (<><div className="flex flex-wrap items-end gap-3 print:hidden">
-        <label className="space-y-1 text-sm">Confirmed from (WAT)
-          <Input type="date" aria-label="Confirmed from" value={confirmedFrom} max={confirmedTo || undefined} onChange={e => setConfirmedFrom(e.target.value)} />
-        </label>
-        <label className="space-y-1 text-sm">Confirmed to (WAT)
-          <Input type="date" aria-label="Confirmed to" value={confirmedTo} min={confirmedFrom || undefined} onChange={e => setConfirmedTo(e.target.value)} />
-        </label>
-        {confirmationFiltered && <Button variant="outline" onClick={() => { setConfirmedFrom(""); setConfirmedTo(""); }}>Clear dates</Button>}
-      </div>
-      {confirmationFiltered && <p className="text-sm my-2">Confirmed collections: {confirmedFrom || "earliest"} to {confirmedTo || "latest"} (Nigerian time). Amounts include only confirmations in this range. Full-term balances and payment status are hidden.</p>}
-      {invalidConfirmationRange && <p role="alert" className="text-sm text-destructive">The start date must not be after the end date.</p>}</>);
+  const dateFilters = (<>
+    <ConfirmationDateFilter from={confirmedFrom} to={confirmedTo} onApply={(from, to) => { setConfirmedFrom(from); setConfirmedTo(to); }} />
+    {confirmationFiltered && <p className="text-sm my-2 text-muted-foreground" role="status">Confirmed collections · {confirmationRangeLabel(confirmedFrom, confirmedTo)} · Nigerian time. Only confirmations in this range are included. Full-term balances and payment status are hidden.</p>}
+  </>);
   const params = new URLSearchParams();
   if (schoolId) params.set("schoolId", schoolId);
   if (term) params.set("term", term);
@@ -5544,7 +5538,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Finance Tab */}
-          <TabsContent value="finance" className="space-y-6 table-container">
+          <TabsContent value="finance" className="finance-mobile min-w-0 space-y-6 table-container">
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium whitespace-nowrap">Term:</Label>
