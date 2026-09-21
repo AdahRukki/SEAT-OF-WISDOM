@@ -1,3 +1,4 @@
+import "@/components/finance-mobile.css";
 
 function formatRecordedAt(value: string | Date | null | undefined): string {
   if (!value) return "Not available";
@@ -911,9 +912,9 @@ export function PaymentRecording({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="finance-mobile space-y-6">
       <div className="flex items-center justify-end">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4">
           <Button
             type="button"
             variant="outline"
@@ -956,7 +957,7 @@ export function PaymentRecording({
                 Record Payment
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="finance-dialog max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 {/* UX #1: description matches actual form order */}
@@ -971,10 +972,10 @@ export function PaymentRecording({
                   {/* Student Search */}
                   <div className="space-y-2">
                     <Label>Add Students</Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       {/* UX #4: clear search when switching class filter */}
                       <Select value={classFilter} onValueChange={(v) => { setClassFilter(v); setSearchQuery(""); }}>
-                        <SelectTrigger className="w-[160px] flex-shrink-0" aria-label="Filter by class">
+                        <SelectTrigger className="w-full sm:w-[160px] flex-shrink-0" aria-label="Filter by class">
                           <SelectValue placeholder="All Classes" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1103,7 +1104,7 @@ export function PaymentRecording({
                           const hasAssigned = !!bal && bal.assigned > 0;
                           const fullyPaid = hasAssigned && bal!.due === 0;
                           return (
-                          <div key={entry.student.id} className="p-3 flex items-center gap-3">
+                          <div key={entry.student.id} className="p-3 flex flex-wrap items-center gap-3">
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-sm truncate">
                                 {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
@@ -1191,7 +1192,7 @@ export function PaymentRecording({
                   {/* Term & Session are auto-filled from currently active academic info */}
 
                   {/* Payment Details */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="paymentMethod"
@@ -1272,7 +1273,7 @@ export function PaymentRecording({
                     )}
                   />
 
-                  <div className="flex gap-2 pt-2">
+                  <div className="sticky bottom-0 z-10 flex gap-2 pt-3 pb-2 bg-background border-t">
                     <Button
                       type="button"
                       variant="outline"
@@ -1434,7 +1435,7 @@ export function PaymentRecording({
 
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <Table className="finance-payment-cards">
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
@@ -1480,9 +1481,9 @@ export function PaymentRecording({
                     ? <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-300" title="Request is in flight on a slow network and will be retried automatically."><Loader2 className="h-3 w-3 mr-1 animate-spin" />Saving — slow network</Badge>
                     : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300"><Clock className="h-3 w-3 mr-1" />Pending sync</Badge>;
                   return (
-                    <TableRow key={p.offlineId} className={status === 'failed' ? 'bg-red-50/30' : 'bg-blue-50/20'} data-testid={`row-pending-payment-${p.offlineId}`}>
-                      <TableCell className="text-sm">{formatPaymentDate(p.paymentDate)}</TableCell>
-                      <TableCell>
+                    <TableRow data-finance-card data-saved-payment="false" key={p.offlineId} className={status === 'failed' ? 'bg-red-50/30' : 'bg-blue-50/20'} data-testid={`row-pending-payment-${p.offlineId}`}>
+                      <TableCell data-label="Payment date" className="text-sm">{formatPaymentDate(p.paymentDate)}</TableCell>
+                      <TableCell data-label="Student">
                         {p.student ? (
                           <>
                             <div className="font-medium text-sm">
@@ -1494,13 +1495,13 @@ export function PaymentRecording({
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{p.student?.class?.name || '—'}</TableCell>
-                      <TableCell className="font-medium">₦{Number(p.amount).toLocaleString()}</TableCell>
-                      <TableCell className="text-sm">{p.purpose || '—'}</TableCell>
-                      <TableCell className="text-sm">{METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground font-mono">{p.reference || '—'}</TableCell>
-                      <TableCell className="text-sm">{p.term} / {p.session}</TableCell>
-                      <TableCell>
+                      <TableCell data-label="Class" className="text-sm text-muted-foreground">{p.student?.class?.name || '—'}</TableCell>
+                      <TableCell data-label="Amount" className="font-medium">₦{Number(p.amount).toLocaleString()}</TableCell>
+                      <TableCell data-label="Purpose" className="text-sm">{p.purpose || '—'}</TableCell>
+                      <TableCell data-label="Method" className="text-sm">{METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}</TableCell>
+                      <TableCell data-label="Reference" className="text-sm text-muted-foreground font-mono">{p.reference || '—'}</TableCell>
+                      <TableCell data-label="Term / Session" className="text-sm">{p.term} / {p.session}</TableCell>
+                      <TableCell data-label="Status">
                         <div className="flex flex-col gap-1">
                           {badge}
                           {status === 'failed' && p.__error && (
@@ -1508,9 +1509,9 @@ export function PaymentRecording({
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{p.depositorName || '—'}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">—</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell data-label="Depositor" className="text-sm text-muted-foreground">{p.depositorName || '—'}</TableCell>
+                      <TableCell data-label="Recorded by" className="text-sm text-muted-foreground">—</TableCell>
+                      <TableCell data-label="Actions" className="text-right">
                         {status === 'failed' ? (
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => retryFailedPayment(p.offlineId)} title="Retry" data-testid={`button-retry-${p.offlineId}`}>
@@ -1539,14 +1540,14 @@ export function PaymentRecording({
                   </TableRow>
                 ) : (
                   paginatedRecords.map((record) => (
-                    <TableRow key={record.id}>
+                    <TableRow data-finance-card data-saved-payment="true" key={record.id}>
                       {/* Fix #6: date parsed with local-time anchor to avoid off-by-one */}
-                      <TableCell className="text-sm">
+                      <TableCell data-label="Payment date" className="text-sm">
                         {formatPaymentDate(record.paymentDate)}
                         <div className="text-xs text-muted-foreground whitespace-nowrap">Recorded: {formatRecordedAt(record.createdAt)}</div>
                         <div className="text-xs text-muted-foreground">Confirmed: {formatRecordedAt(record.confirmedAt)}</div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="Student">
                         {record.student ? (
                           <>
                             <div className="font-medium text-sm">
@@ -1562,10 +1563,10 @@ export function PaymentRecording({
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell data-label="Class" className="text-sm text-muted-foreground">
                         {record.student?.class?.name || <span className="text-muted-foreground">—</span>}
                       </TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell data-label="Amount" className="font-medium">
                         <div className="flex flex-col gap-1">
                           <span>₦{parseFloat(record.amount).toLocaleString()}</span>
                           {record.posFee && record.posFee > 0 && (
@@ -1580,21 +1581,21 @@ export function PaymentRecording({
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell data-label="Purpose" className="text-sm">
                         {record.purpose || <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       {/* Fix #3: use METHOD_LABELS lookup instead of CSS capitalize */}
-                      <TableCell className="text-sm">
+                      <TableCell data-label="Method" className="text-sm">
                         {METHOD_LABELS[record.paymentMethod] ?? record.paymentMethod}
                       </TableCell>
                       {/* Fix #4: reference column */}
-                      <TableCell className="text-sm text-muted-foreground font-mono">
+                      <TableCell data-label="Reference" className="text-sm text-muted-foreground font-mono">
                         {record.reference || <span className="not-italic font-sans">—</span>}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell data-label="Term / Session" className="text-sm">
                         {record.term} / {record.session}
                       </TableCell>
-                      <TableCell>
+                      <TableCell data-label="Status">
                         <div className="flex flex-col gap-1">
                           {getStatusBadge(record.status)}
                           {record.possibleDuplicate && (
@@ -1654,26 +1655,27 @@ export function PaymentRecording({
                         </div>
                       </TableCell>
                       {/* UX #5: depositor moved from Student cell to own column */}
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell data-label="Depositor" className="text-sm text-muted-foreground">
                         {record.depositorName || <span>—</span>}
                       </TableCell>
                       {/* UX #6: fallback for missing recorded-by user */}
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell data-label="Recorded by" className="text-sm text-muted-foreground">
                         {record.recordedByUser
                           ? `${record.recordedByUser.firstName} ${record.recordedByUser.lastName}`.trim()
                           : <span>—</span>
                         }
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell data-label="Actions" className="text-right">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => setViewingRecord(record)}
                           title="View details"
+                          aria-label="View payment details"
                           data-testid={`button-view-payment-${record.id}`}
                         >
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-4 w-4" /><span className="sm:hidden ml-2">Details</span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -1685,7 +1687,7 @@ export function PaymentRecording({
         </Card>
 
         {totalRecords > 0 && (
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <p className="text-sm text-muted-foreground">
               Showing {showingFrom}–{showingTo} of {totalRecords}
             </p>
@@ -1784,7 +1786,7 @@ function PaymentDetailsDialog({
 
   return (
     <Dialog open={!!record} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="finance-dialog max-w-lg">
         <DialogHeader>
           <DialogTitle>Payment Details</DialogTitle>
           <DialogDescription>Full information for this payment record.</DialogDescription>
