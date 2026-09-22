@@ -1,4 +1,5 @@
-import { ConfirmationDateFilter, confirmationRangeLabel } from "@/components/confirmation-date-filter";
+import { PaymentDateFilters } from "@/components/payment-date-filters";
+import { confirmationRangeLabel } from "@/components/confirmation-date-filter";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -194,15 +195,19 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   session: string;
   schoolName: string;
 }) {
+  const [firstPaymentOnly, setFirstPaymentOnly] = useState(false);
   const [confirmedFrom, setConfirmedFrom] = useState("");
   const [confirmedTo, setConfirmedTo] = useState("");
   const confirmationFiltered = !!(confirmedFrom || confirmedTo);
+  const firstPaymentActive = firstPaymentOnly && !!term && !!session && confirmationFiltered;
   const invalidConfirmationRange = !!(confirmedFrom && confirmedTo && confirmedFrom > confirmedTo);
   const dateFilters = (<>
-    <ConfirmationDateFilter from={confirmedFrom} to={confirmedTo} onApply={(from, to) => { setConfirmedFrom(from); setConfirmedTo(to); }} />
+    <PaymentDateFilters firstOnly={firstPaymentOnly} onFirstChange={setFirstPaymentOnly} scopeReady={!!term && !!session} from={confirmedFrom} to={confirmedTo} onApply={(from, to) => { setConfirmedFrom(from); setConfirmedTo(to); }} />
     {confirmationFiltered && <p className="text-sm my-2 text-muted-foreground" role="status">Confirmed collections · {confirmationRangeLabel(confirmedFrom, confirmedTo)} · Nigerian time. Only confirmations in this range are included. Full-term balances and payment status are hidden.</p>}
+    {firstPaymentActive && <p className="text-sm font-medium">First payment in selected dates · {term}, {session}</p>}
   </>);
   const params = new URLSearchParams();
+  if (firstPaymentActive) params.set("firstPaymentOnly", "true");
   if (schoolId) params.set("schoolId", schoolId);
   if (term) params.set("term", term);
   if (session) params.set("session", session);
@@ -212,7 +217,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   const [bsSearch, setBsSearch] = useState("");
 
   const { data, isLoading, error } = useQuery<BroadsheetData>({
-    queryKey: ["/api/admin/payment-broadsheet", schoolId, term, session, confirmedFrom, confirmedTo],
+    queryKey: ["/api/admin/payment-broadsheet", schoolId, term, session, confirmedFrom, confirmedTo, firstPaymentActive],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};

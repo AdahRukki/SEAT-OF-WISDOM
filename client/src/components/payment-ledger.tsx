@@ -1,4 +1,7 @@
-import { ConfirmationDateFilter, confirmationRangeLabel } from "@/components/confirmation-date-filter";
+import { PaymentDateFilters } from "./payment-date-filters";
+import { buildLedgerWorkbook } from "@/lib/ledger-workbook";
+import type { LedgerPayment } from "@shared/ledger-payments";
+import { confirmationRangeLabel } from "@/components/confirmation-date-filter";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import "@/components/finance-mobile.css";
 
@@ -178,6 +181,9 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
   const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [firstPaymentOnly, setFirstPaymentOnly] = useState(false);
+  const [exportingRecords, setExportingRecords] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [confirmedFrom, setConfirmedFrom] = useState("");
   const [confirmedTo, setConfirmedTo] = useState("");
   const confirmationFiltered = !!(confirmedFrom || confirmedTo);
@@ -255,7 +261,9 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     enabled: !!schoolId && !invalidConfirmationRange,
   });
 
+  const firstPaymentActive = firstPaymentOnly && !!selectedTerm && !!selectedSession && confirmationFiltered;
   const params = new URLSearchParams();
+  if (firstPaymentActive) params.set("firstPaymentOnly", "true");
   if (schoolId) params.set("schoolId", schoolId);
   if (selectedClassId && selectedClassId !== "all") params.set("classId", selectedClassId);
   if (selectedTerm) params.set("term", selectedTerm);
@@ -264,7 +272,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   if (confirmedTo) params.set("confirmedTo", confirmedTo);
 
   const { data: ledgerResponse, isLoading, isError: ledgerError } = useQuery<LedgerResponse>({
-    queryKey: ["/api/payments/ledger", schoolId, selectedClassId, selectedTerm, selectedSession, confirmedFrom, confirmedTo],
+    queryKey: ["/api/payments/ledger", schoolId, selectedClassId, selectedTerm, selectedSession, confirmedFrom, confirmedTo, firstPaymentActive],
     queryFn: async () => {
       const token = localStorage.getItem("auth_token");
       const headers: Record<string, string> = {};
@@ -307,35 +315,39 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       && (!confirmedFrom || value >= Date.parse(confirmedFrom + "T00:00:00+01:00"))
       && (!confirmedTo || value < Date.parse(confirmedTo + "T00:00:00+01:00") + 86400000);
   });
-  const searchedLedger = nameSearch.trim()
-    ? (Array.isArray(ledger) ? ledger : []).filter((e) => {
-        const q = nameSearch.toLowerCase();
-        const name = `${e?.lastName ?? ""} ${e?.firstName ?? ""}`.toLowerCase();
-        const sid = (e?.studentId ?? "").toLowerCase();
-        return name.includes(q) || sid.includes(q);
-      })
-    : (Array.isArray(ledger) ? ledger : []);
+  const filterEntries = (ledger: LedgerEntry[]) => {
+    const searchedLedger = nameSearch.trim()
+      ? (Array.isArray(ledger) ? ledger : []).filter((e) => {
+          const q = nameSearch.toLowerCase();
+          const name = `${e?.lastName ?? ""} ${e?.firstName ?? ""}`.toLowerCase();
+          const sid = (e?.studentId ?? "").toLowerCase();
+          return name.includes(q) || sid.includes(q);
+        })
+      : (Array.isArray(ledger) ? ledger : []);
 
-  // Payment status narrows the search results using confirmed payments and tuition
-  // (balance > 0). Type filter narrows to new or returning students.
-  // Both flow through to the table, count, Excel export, Print view, and
-  // admin grand total because they all read from filteredLedger.
-  const filteredLedger = (() => {
-    let result = searchedLedger.filter((e) => {
-      if (confirmationFiltered) return e.paymentCount > 0;
-      const hasPaid = e.paymentCount > 0 && e.totalPaid > 0;
-      const assigned = Math.round((e.tuitionAssigned || 0) * 100);
-      const paid = Math.round((e.totalPaid || 0) * 100);
-      if (paymentStatusFilter === "outstanding") return assigned > paid;
-      if (paymentStatusFilter === "paid") return hasPaid;
-      if (paymentStatusFilter === "fully-paid") return hasPaid && assigned > 0 && paid >= assigned;
-      return true;
-    });
-    if (studentTypeFilter !== "all") {
-      result = result.filter((e) => (e.studentType ?? "returning") === studentTypeFilter);
-    }
-    return result;
-  })();
+    // Payment status narrows the search results using confirmed payments and tuition
+    // (balance > 0). Type filter narrows to new or returning students.
+    // Both flow through to the table, count, Excel export, Print view, and
+    // admin grand total because they all read from filteredLedger.
+    return (() => {
+      let result = searchedLedger.filter((e) => {
+        if (confirmationFiltered) return e.paymentCount > 0;
+        const hasPaid = e.paymentCount > 0 && e.totalPaid > 0;
+        const assigned = Math.round((e.tuitionAssigned || 0) * 100);
+        const paid = Math.round((e.totalPaid || 0) * 100);
+        if (paymentStatusFilter === "outstanding") return assigned > paid;
+        if (paymentStatusFilter === "paid") return hasPaid;
+        if (paymentStatusFilter === "fully-paid") return hasPaid && assigned > 0 && paid >= assigned;
+        return true;
+      });
+      if (studentTypeFilter !== "all") {
+        result = result.filter((e) => (e.studentType ?? "returning") === studentTypeFilter);
+      }
+      return result;
+    })();
+
+  };
+  const filteredLedger = filterEntries(ledger);
 
   const handlePrint = () => {
     document.body.classList.add("printing-finance");
@@ -414,9 +426,36 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Finance");
-    if (confirmationFiltered) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ "Confirmed from (WAT)": confirmedFrom || "Earliest", "Confirmed to (WAT)": confirmedTo || "Latest", "Amounts": "Only payments confirmed in this range" }]), "Confirmation filter");
+    if (confirmationFiltered) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ "Confirmed from (WAT)": confirmedFrom || "Earliest", "Confirmed to (WAT)": confirmedTo || "Latest", "Amounts": "Only payments confirmed in this range", "Students": firstPaymentActive ? "First payment in selected dates" : "All matching students" }]), "Confirmation filter");
     const fname = `finance-${sanitizeFilenamePart(schoolName || "school")}-${sanitizeFilenamePart(className)}-${sanitizeFilenamePart(selectedTerm || "all-terms")}-${sanitizeFilenamePart(selectedSession || "all-sessions")}.xlsx`;
     XLSX.writeFile(wb, fname);
+  };
+
+  const handleExportWithRecords = async () => {
+    if (exportingRecords) return;
+    setExportingRecords(true); setExportError("");
+    try {
+      const exportParams = new URLSearchParams(params);
+      exportParams.set("includeRecords", "true");
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(`/api/payments/ledger?${exportParams}`, { credentials: "include", headers: token ? {Authorization: `Bearer ${token}`} : {} });
+      if (!response.ok) throw new Error("Could not download payment records. Please try again.");
+      const data: LedgerResponse & {paymentRecords?: LedgerPayment[]} = await response.json();
+      if (!Array.isArray(data.paymentRecords)) throw new Error("The server needs the latest update before this download is available.");
+      const entries = filterEntries(data.entries);
+      if (!entries.length) throw new Error("No students match these filters. Clear a filter and try again.");
+      const workbook = buildLedgerWorkbook(entries, data.paymentRecords, {
+        School: schoolName || "School", Class: printClassName, Term: selectedTerm || "All terms", Session: selectedSession || "All sessions",
+        "Confirmed from (WAT)": confirmedFrom || "Earliest", "Confirmed to (WAT)": confirmedTo || "Latest",
+        Students: firstPaymentActive ? "First payment in these dates" : "All matching students",
+        "Payment status filter": confirmationFiltered ? "Confirmed in range" : paymentStatusFilter,
+        "Student type": studentTypeFilter, Search: nameSearch || "None",
+        "Generated at": formatRecordedAt(new Date()),
+      }, confirmationFiltered);
+      XLSX.writeFile(workbook, `ledger-with-payments-${sanitizeFilenamePart(schoolName || "school")}-${sanitizeFilenamePart(selectedTerm)}-${sanitizeFilenamePart(selectedSession)}.xlsx`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Download failed. Please try again.");
+    } finally { setExportingRecords(false); }
   };
 
   const printClassName = selectedClassId === "all"
@@ -448,7 +487,10 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         </div>
       </div>
 
-<ConfirmationDateFilter from={confirmedFrom} to={confirmedTo} onApply={(from, to) => { setConfirmedFrom(from); setConfirmedTo(to); setSelectedStudent(null); }} />
+<PaymentDateFilters from={confirmedFrom} to={confirmedTo} firstOnly={firstPaymentOnly} onFirstChange={setFirstPaymentOnly} scopeReady={!!selectedTerm && !!selectedSession} onApply={(from, to) => { setConfirmedFrom(from); setConfirmedTo(to); setSelectedStudent(null); }} />
+      {firstPaymentActive && <p className="text-sm font-medium" role="status">First payment in selected dates · {selectedTerm}, {selectedSession}</p>}
+      {exportingRecords && <p className="text-sm" role="status">Preparing ledger and payment records…</p>}
+      {exportError && <p className="text-sm text-destructive" role="alert">{exportError}</p>}
       {confirmationFiltered && <p className="text-sm text-muted-foreground" role="status">Confirmed collections · {confirmationRangeLabel(confirmedFrom, confirmedTo)} · Nigerian time. Only amounts confirmed in this range are shown; full-term balances and payment status are hidden.</p>}
       <div className="flex flex-wrap items-end gap-3 print:hidden">
         <div className="flex-1 min-w-[180px] sm:flex-none sm:w-56 space-y-1">
@@ -467,9 +509,10 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         <Button variant="outline" className="min-h-11 sm:hidden" aria-expanded={showAdvancedFilters} aria-controls="ledger-advanced-filters" onClick={() => setShowAdvancedFilters(value => !value)}>Filters</Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="outline" className="min-h-11 ml-auto">Actions <span aria-hidden="true" className="ml-2">▾</span></Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
             <DropdownMenuItem className="min-h-11" onSelect={handlePrint} disabled={!filteredLedger.length}><Printer className="h-4 w-4 mr-2" />Print</DropdownMenuItem>
             <DropdownMenuItem className="min-h-11" onSelect={handleExportExcel} disabled={!filteredLedger.length}><FileSpreadsheet className="h-4 w-4 mr-2" />Export Excel</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-11" onSelect={handleExportWithRecords} disabled={exportingRecords || isLoading || !filteredLedger.length}><FileSpreadsheet className="h-4 w-4 mr-2" />{exportingRecords ? "Preparing download…" : "Ledger with payment records"}</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="min-h-11"><Columns3 className="h-4 w-4 mr-2" />Columns (table / export)</DropdownMenuSubTrigger>

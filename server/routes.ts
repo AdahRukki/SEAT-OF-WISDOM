@@ -1,3 +1,5 @@
+import { getLedgerPayments } from "./ledger-payments";
+import { firstPaymentStudents, inConfirmationRange } from "@shared/ledger-payments";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -4874,7 +4876,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const from = confirmedFrom ? new Date(confirmedFrom + "T00:00:00+01:00").toISOString() : undefined;
       const to = confirmedTo ? new Date(Date.parse(confirmedTo + "T00:00:00+01:00") + 86400000).toISOString() : undefined;
 
+      if (req.query.firstPaymentOnly !== undefined && !['true', 'false'].includes(String(req.query.firstPaymentOnly))) return res.status(400).json({ error: "Invalid first payment filter" });
+      const firstPaymentOnly = req.query.firstPaymentOnly === 'true';
+      if (firstPaymentOnly && (!term || !session || (!from && !to))) return res.status(400).json({ error: "Choose a term, session and confirmation dates for first payments" });
       const broadsheet = await storage.getPaymentBroadsheet(schoolId, term, session, from, to);
+      if (firstPaymentOnly) {
+        const eligible = firstPaymentStudents(await getLedgerPayments(schoolId, term, session), from, to);
+        broadsheet.classes = broadsheet.classes.map(group => {
+          const students = group.students.filter(student => eligible.has(student.studentId));
+          const classTotals = students.reduce((sum, student) => ({totalAssigned: sum.totalAssigned + student.totalAssigned, totalPaid: sum.totalPaid + student.totalPaid, balance: sum.balance + student.balance}), {totalAssigned: 0, totalPaid: 0, balance: 0});
+          return {...group, students, classTotals};
+        }).filter(group => group.students.length > 0);
+        broadsheet.grandTotal = broadsheet.classes.reduce((sum, group) => ({totalAssigned: sum.totalAssigned + group.classTotals.totalAssigned, totalPaid: sum.totalPaid + group.classTotals.totalPaid, balance: sum.balance + group.classTotals.balance}), {totalAssigned: 0, totalPaid: 0, balance: 0});
+      }
       res.json(broadsheet);
     } catch (error) {
       console.error("Get payment broadsheet error:", error);
@@ -4940,7 +4954,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const from = confirmedFrom ? new Date(confirmedFrom + "T00:00:00+01:00").toISOString() : undefined;
       const to = confirmedTo ? new Date(Date.parse(confirmedTo + "T00:00:00+01:00") + 86400000).toISOString() : undefined;
 
+      if (req.query.firstPaymentOnly !== undefined && !['true', 'false'].includes(String(req.query.firstPaymentOnly))) return res.status(400).json({ error: "Invalid first payment filter" });
+      const firstPaymentOnly = req.query.firstPaymentOnly === 'true';
+      if (firstPaymentOnly && (!term || !session || (!from && !to))) return res.status(400).json({ error: "Choose a term, session and confirmation dates for first payments" });
       const ledger = await storage.getStudentPaymentLedger(schoolId, classId || undefined, term || undefined, session || undefined, from, to);
+      const includeRecords = req.query.includeRecords === 'true';
+      if (firstPaymentOnly || includeRecords) {
+        const allRecords = await getLedgerPayments(schoolId, term, session);
+        if (firstPaymentOnly) {
+          const eligible = firstPaymentStudents(allRecords, from, to);
+          ledger.entries = ledger.entries.filter(entry => eligible.has(entry.studentDbId));
+        }
+        if (includeRecords) {
+          const ids = new Set(ledger.entries.map(entry => entry.studentDbId));
+          const paymentRecords = allRecords.filter(record => ids.has(record.studentDbId) && inConfirmationRange(record.confirmedAt, from, to));
+          // Summary totals use the same fetched records as the detail sheet.
+          const grouped = new Map<string, typeof paymentRecords>();
+          for (const record of paymentRecords) {
+            const group = grouped.get(record.studentDbId) || [];
+            group.push(record); grouped.set(record.studentDbId, group);
+          }
+          for (const entry of ledger.entries) {
+            const records = grouped.get(entry.studentDbId) || [];
+            entry.totalPaid = records.reduce((sum, record) => sum + Math.round(Number(record.amount) * 100), 0) / 100;
+            entry.paymentCount = records.length;
+            entry.balance = Math.max(0, entry.totalAssigned - entry.totalPaid);
+            entry.lastConfirmedAt = records.map(record => record.confirmedAt).filter((date): date is string => !!date).sort().pop() || null;
+            entry.lastPaymentDate = records.map(record => record.paymentDate).filter((date): date is string => !!date).sort().pop() || null;
+          }
+          return res.json({ ...ledger, paymentRecords });
+        }
+      }
       res.json(ledger);
     } catch (error) {
       console.error("Get payment ledger error:", error);
