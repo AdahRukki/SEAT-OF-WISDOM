@@ -103,6 +103,10 @@ function getLagosDateInputValue(date = new Date()): string {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 interface Student {
   id: string;
   studentId: string;
@@ -145,6 +149,7 @@ export function PaymentRecording({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
   const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [isTotalAmountManuallyEdited, setIsTotalAmountManuallyEdited] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -552,14 +557,17 @@ export function PaymentRecording({
       return due > 0 ? { ...entry, amount: due } : entry;
     }));
 
-    const suggestedTotal = suggestedAmounts.reduce((sum, amount) => sum + amount, 0);
-    setTotalAmount((prev) => prev > 0 ? prev : suggestedTotal);
-  }, [isTuitionPurpose, selectedStudentKey, tuitionBalanceMap]);
+    const suggestedTotal = roundMoney(suggestedAmounts.reduce((sum, amount) => sum + amount, 0));
+    if (!isTotalAmountManuallyEdited) {
+      setTotalAmount(suggestedTotal);
+    }
+  }, [isTuitionPurpose, selectedStudentKey, tuitionBalanceMap, isTotalAmountManuallyEdited]);
 
-  // Allocation tally
+  // Allocation tally (rounded to cents so valid decimal splits do not fail due
+  // to JavaScript floating-point representation).
   const studentCount = selectedEntries.length;
-  const allocatedTotal = selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const unallocated = totalAmount - allocatedTotal;
+  const allocatedTotal = roundMoney(selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0));
+  const unallocated = roundMoney(totalAmount - allocatedTotal);
 
   const onSubmit = async (commonData: CommonFields) => {
     if (selectedEntries.length === 0) {
@@ -643,7 +651,7 @@ export function PaymentRecording({
         return;
       }
 
-      if (allocatedTotal !== totalAmount) {
+      if (Math.abs(allocatedTotal - totalAmount) > 0.009) {
         toast({
           title: "Allocation Mismatch",
           description: `Allocated amounts (₦${allocatedTotal.toLocaleString()}) do not match the total (₦${totalAmount.toLocaleString()}).`,
@@ -850,6 +858,7 @@ export function PaymentRecording({
     setIsRecordDialogOpen(false);
     setSelectedEntries([]);
     setTotalAmount(0);
+    setIsTotalAmountManuallyEdited(false);
     setSearchQuery("");
     setClassFilter("all");
     setCustomPurpose("");
@@ -1153,7 +1162,10 @@ export function PaymentRecording({
                         placeholder="0.00"
                         className="pl-7"
                         value={totalAmount || ""}
-                        onChange={(e) => setTotalAmount(parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          setIsTotalAmountManuallyEdited(true);
+                          setTotalAmount(roundMoney(parseFloat(e.target.value) || 0));
+                        }}
                         onFocus={(e) => e.target.select()}
                         min={0}
                         max={9999999999.99}
