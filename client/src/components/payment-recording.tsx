@@ -384,7 +384,12 @@ export function PaymentRecording({
 
   // Tuition balance per student for the current term/session, fetched only
   // when the dialog is open so we don't ping the server unnecessarily.
-  const { data: tuitionBalancesData = [] } = useQuery<{
+  const {
+    data: tuitionBalancesData = [],
+    isLoading: tuitionBalancesLoading,
+    isFetching: tuitionBalancesFetching,
+    isError: tuitionBalancesError,
+  } = useQuery<{
     studentDbId: string;
     tuitionAssigned: number;
     tuitionPaid: number;
@@ -402,7 +407,7 @@ export function PaymentRecording({
       if (currentTerm) params.set('term', currentTerm);
       if (currentSession) params.set('session', currentSession);
       const res = await fetch(`/api/payments/tuition-balances?${params.toString()}`, { credentials: 'include', headers });
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error("Failed to fetch tuition balances");
       return res.json();
     },
     enabled: !!schoolId && !!currentTerm && !!currentSession && isRecordDialogOpen,
@@ -611,6 +616,21 @@ export function PaymentRecording({
 
     const selectedFeeType = feeTypesData.find(ft => ft.name === commonData.purpose);
     if (selectedFeeType?.isTuition) {
+      if (tuitionBalancesFetching) {
+        toast({
+          title: "Checking Tuition Balance",
+          description: "The latest tuition balance is still being verified.",
+        });
+        return;
+      }
+      if (tuitionBalancesError) {
+        toast({
+          title: "Unable to Verify Tuition",
+          description: "The latest tuition balance could not be loaded. Refresh and try again.",
+          variant: "destructive",
+        });
+        return;
+      }
       for (const entry of selectedEntries) {
         const bal = tuitionBalanceMap.get(entry.student.id);
         const amountForStudent = studentCount > 1 ? entry.amount : totalAmount;
@@ -1205,7 +1225,15 @@ export function PaymentRecording({
                               <div className="text-xs text-muted-foreground">
                                 {entry.student.studentId} | {entry.student.className || "N/A"}
                               </div>
-                              {hasAssigned ? (
+                              {tuitionBalancesLoading ? (
+                                <div className="text-[11px] mt-0.5 text-muted-foreground">
+                                  Loading tuition balance...
+                                </div>
+                              ) : tuitionBalancesError ? (
+                                <div className="text-[11px] mt-0.5 text-red-600 dark:text-red-400">
+                                  Unable to load tuition balance
+                                </div>
+                              ) : hasAssigned ? (
                                 fullyPaid ? (
                                   <div className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-green-700 dark:text-green-400" data-testid={`text-tuition-balance-${entry.student.id}`}>
                                     <CheckCircle2 className="h-3 w-3" />
@@ -1390,7 +1418,13 @@ export function PaymentRecording({
                     <Button
                       type="submit"
                       className="flex-1"
-                      disabled={isSubmitting || selectedEntries.length === 0 || !currentTerm || !currentSession}
+                      disabled={
+                        isSubmitting ||
+                        selectedEntries.length === 0 ||
+                        !currentTerm ||
+                        !currentSession ||
+                        (isTuitionPurpose && tuitionBalancesFetching)
+                      }
                     >
                       {isSubmitting ? (
                         <>
