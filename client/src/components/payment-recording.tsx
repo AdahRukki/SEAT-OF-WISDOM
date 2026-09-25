@@ -92,6 +92,17 @@ function formatPaymentDate(dateStr: string | Date | null | undefined): string {
   return `${day} ${month} ${year}`;
 }
 
+function getLagosDateInputValue(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
 interface Student {
   id: string;
   studentId: string;
@@ -325,16 +336,19 @@ export function PaymentRecording({
       })();
 
   const { data: students = [], isLoading: studentsLoading } = useQuery<Student[]>({
-    queryKey: ["/api/admin/students", schoolId],
+    queryKey: ["/api/payments/students", schoolId],
+    queryFn: () => apiRequest(`/api/payments/students?schoolId=${encodeURIComponent(schoolId || "")}`),
     enabled: !!schoolId,
   });
 
   // Fetch historical class membership so the class filter works for past sessions
   // (after promotion students have a new classId, so s.classId !== classFilter would exclude them)
   const { data: historicalClassStudents = [] } = useQuery<Student[]>({
-    queryKey: ['/api/admin/students/historical-by-class', classFilter, filterTerm, filterSession, 'finance'],
-    queryFn: () => apiRequest(`/api/admin/students/historical-by-class?classId=${classFilter}&term=${encodeURIComponent(filterTerm)}&session=${encodeURIComponent(filterSession)}&context=finance`),
-    enabled: classFilter !== "all" && !!filterTerm && !!filterSession,
+    queryKey: ['/api/payments/students/historical-by-class', schoolId, classFilter, currentTerm, currentSession],
+    queryFn: () => apiRequest(
+      `/api/payments/students/historical-by-class?schoolId=${encodeURIComponent(schoolId || "")}&classId=${encodeURIComponent(classFilter)}&term=${encodeURIComponent(currentTerm || "")}&session=${encodeURIComponent(currentSession || "")}`,
+    ),
+    enabled: classFilter !== "all" && !!schoolId && !!currentTerm && !!currentSession,
   });
   const historicalClassStudentIds = useMemo(
     () => new Set(historicalClassStudents.map((s: Student) => s.id)),
@@ -342,16 +356,8 @@ export function PaymentRecording({
   );
 
   const { data: schoolClasses = [] } = useQuery<SchoolClass[]>({
-    queryKey: ["/api/admin/classes", schoolId],
-    queryFn: async () => {
-      const token = localStorage.getItem('auth_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const url = schoolId ? `/api/admin/classes?schoolId=${schoolId}` : `/api/admin/classes`;
-      const res = await fetch(url, { credentials: "include", headers });
-      if (!res.ok) throw new Error("Failed to fetch classes");
-      return res.json();
-    },
+    queryKey: ["/api/payments/classes", schoolId],
+    queryFn: () => apiRequest(`/api/payments/classes?schoolId=${encodeURIComponent(schoolId || "")}`),
     enabled: !!schoolId,
   });
 
@@ -371,31 +377,15 @@ export function PaymentRecording({
 
   const tuitionFeeType = feeTypesData.find(ft => ft.isTuition);
 
-  const { data: tuitionAmounts = [] } = useQuery<any[]>({
-    queryKey: ["/api/admin/tuition-amounts", tuitionFeeType?.id],
-    queryFn: async () => {
-      const token = localStorage.getItem('auth_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`/api/admin/tuition-amounts/${tuitionFeeType!.id}`, { credentials: "include", headers });
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!tuitionFeeType?.id,
-  });
-
-  // Fix #1: memoize so the Map reference is stable across renders
-  const tuitionAmountMap = useMemo(
-    () => new Map(tuitionAmounts.map((ta: any) => [ta.classId, Number(ta.amount)])),
-    [tuitionAmounts]
-  );
-
   // Tuition balance per student for the current term/session, fetched only
   // when the dialog is open so we don't ping the server unnecessarily.
   const { data: tuitionBalancesData = [] } = useQuery<{
     studentDbId: string;
     tuitionAssigned: number;
     tuitionPaid: number;
+    tuitionPending: number;
+    tuitionDue: number;
+    effectiveClassId: string | null;
   }[]>({
     queryKey: ["/api/payments/tuition-balances", schoolId, currentTerm, currentSession],
     queryFn: async () => {
@@ -414,13 +404,47 @@ export function PaymentRecording({
   });
 
   const tuitionBalanceMap = useMemo(() => {
-    const m = new Map<string, { assigned: number; paid: number; due: number }>();
+    const localPendingByStudent = new Map<string, number>();
+    const tuitionPurpose = tuitionFeeType?.name;
+    if (tuitionPurpose && currentTerm && currentSession) {
+      for (const p of pendingPayments) {
+        if (
+          p.purpose !== tuitionPurpose ||
+          p.term !== currentTerm ||
+          p.session !== currentSession ||
+          p.__status === "failed"
+        ) continue;
+        localPendingByStudent.set(
+          p.studentId,
+          (localPendingByStudent.get(p.studentId) || 0) + Number(p.amount || 0),
+        );
+      }
+    }
+
+    const m = new Map<string, {
+      assigned: number;
+      paid: number;
+      pending: number;
+      dueAfterConfirmed: number;
+      due: number;
+      effectiveClassId: string | null;
+    }>();
     for (const r of tuitionBalancesData) {
-      const due = Math.max(0, r.tuitionAssigned - r.tuitionPaid);
-      m.set(r.studentDbId, { assigned: r.tuitionAssigned, paid: r.tuitionPaid, due });
+      const localPending = localPendingByStudent.get(r.studentDbId) || 0;
+      const pending = Number(r.tuitionPending || 0) + localPending;
+      const assigned = Number(r.tuitionAssigned || 0);
+      const paid = Number(r.tuitionPaid || 0);
+      m.set(r.studentDbId, {
+        assigned,
+        paid,
+        pending,
+        dueAfterConfirmed: Math.max(0, assigned - paid),
+        due: Math.max(0, assigned - paid - pending),
+        effectiveClassId: r.effectiveClassId || null,
+      });
     }
     return m;
-  }, [tuitionBalancesData]);
+  }, [tuitionBalancesData, pendingPayments, tuitionFeeType?.name, currentTerm, currentSession]);
 
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
     queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, filterTerm, filterSession],
@@ -447,7 +471,7 @@ export function PaymentRecording({
     resolver: zodResolver(commonFieldsSchema),
     defaultValues: {
       paymentMethod: "cash",
-      paymentDate: new Date().toISOString().split("T")[0],
+      paymentDate: getLagosDateInputValue(),
       purpose: "",
       depositorName: "",
       reference: "",
@@ -456,6 +480,11 @@ export function PaymentRecording({
       notes: "",
     },
   });
+
+  useEffect(() => {
+    form.setValue("term", currentTerm || "", { shouldValidate: isRecordDialogOpen });
+    form.setValue("session", currentSession || "", { shouldValidate: isRecordDialogOpen });
+  }, [currentTerm, currentSession, form, isRecordDialogOpen]);
 
   // Legacy helper kept for the manual "Sync Now" button. Replays ONLY rows
   // that originated as single-student offline submissions (offlineId prefix
@@ -503,22 +532,29 @@ export function PaymentRecording({
 
   const currentPurpose = form.watch("purpose");
 
-  // Fix #1b: only overwrite amounts that are still 0 (preserve user-typed values)
+  const currentFeeType = feeTypesData.find(ft => ft.name === currentPurpose);
+  const isTuitionPurpose = !!currentFeeType?.isTuition;
+  const selectedStudentKey = selectedEntries.map((e) => e.student.id).join("|");
+
+  // For tuition, default blank amounts to the authoritative remaining balance
+  // after confirmed + pending payments. Preserve anything the user already typed.
   useEffect(() => {
-    if (!currentPurpose || selectedEntries.length === 0) return;
-    const matchedFee = feeTypesData.find(ft => ft.name === currentPurpose);
-    if (matchedFee?.isTuition) {
-      setSelectedEntries(prev => prev.map(e => {
-        if (e.amount > 0) return e;
-        const rate = e.student.classId ? (tuitionAmountMap.get(e.student.classId) || 0) : 0;
-        return { ...e, amount: rate };
-      }));
-      const sum = selectedEntries.reduce((acc, e) => {
-        return acc + (tuitionAmountMap.get(e.student.classId || '') || 0);
-      }, 0);
-      if (sum > 0) setTotalAmount(sum);
-    }
-  }, [selectedEntries.length, currentPurpose, feeTypesData, tuitionAmountMap]);
+    if (!isTuitionPurpose || selectedEntries.length === 0) return;
+
+    const suggestedAmounts = selectedEntries.map((entry) => {
+      if (entry.amount > 0) return entry.amount;
+      return tuitionBalanceMap.get(entry.student.id)?.due || 0;
+    });
+
+    setSelectedEntries((prev) => prev.map((entry) => {
+      if (entry.amount > 0) return entry;
+      const due = tuitionBalanceMap.get(entry.student.id)?.due || 0;
+      return due > 0 ? { ...entry, amount: due } : entry;
+    }));
+
+    const suggestedTotal = suggestedAmounts.reduce((sum, amount) => sum + amount, 0);
+    setTotalAmount((prev) => prev > 0 ? prev : suggestedTotal);
+  }, [isTuitionPurpose, selectedStudentKey, tuitionBalanceMap]);
 
   // Allocation tally
   const studentCount = selectedEntries.length;
@@ -552,6 +588,47 @@ export function PaymentRecording({
         variant: "destructive",
       });
       return;
+    }
+
+    if (!commonData.term || !commonData.session) {
+      toast({
+        title: "Academic Period Required",
+        description: "Select a term and session in Finance before recording a payment.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedFeeType = feeTypesData.find(ft => ft.name === commonData.purpose);
+    if (selectedFeeType?.isTuition) {
+      for (const entry of selectedEntries) {
+        const bal = tuitionBalanceMap.get(entry.student.id);
+        const amountForStudent = studentCount > 1 ? entry.amount : totalAmount;
+        if (!bal || bal.assigned <= 0) {
+          toast({
+            title: "Tuition Not Configured",
+            description: `No tuition amount is configured for ${entry.student.studentId} in ${commonData.term} ${commonData.session}.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (bal.due <= 0) {
+          toast({
+            title: "Tuition Already Covered",
+            description: `${entry.student.studentId} has no remaining tuition balance after confirmed and pending payments.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (amountForStudent - bal.due > 0.009) {
+          toast({
+            title: "Amount Exceeds Tuition Balance",
+            description: `${entry.student.studentId} has ₦${bal.due.toLocaleString()} remaining. Record any excess under the appropriate non-tuition purpose.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
     }
 
     // Fix #2: skip per-student amount checks for single student
@@ -778,7 +855,7 @@ export function PaymentRecording({
     setCustomPurpose("");
     form.reset({
       paymentMethod: "cash",
-      paymentDate: new Date().toISOString().split("T")[0],
+      paymentDate: getLagosDateInputValue(),
       purpose: "",
       depositorName: "",
       reference: "",
@@ -790,7 +867,7 @@ export function PaymentRecording({
 
   const addStudent = (student: Student) => {
     if (selectedEntries.some((e) => e.student.id === student.id)) return;
-    setSelectedEntries([...selectedEntries, { student, amount: 0 }]);
+    setSelectedEntries((prev) => [...prev, { student, amount: 0 }]);
     setSearchQuery("");
   };
 
@@ -801,7 +878,7 @@ export function PaymentRecording({
   };
 
   const removeStudent = (studentId: string) => {
-    setSelectedEntries(selectedEntries.filter((e) => e.student.id !== studentId));
+    setSelectedEntries((prev) => prev.filter((e) => e.student.id !== studentId));
   };
 
   const selectedIds = new Set(selectedEntries.map((e) => e.student.id));
@@ -940,12 +1017,12 @@ export function PaymentRecording({
           </Badge>
           <Dialog open={isRecordDialogOpen} onOpenChange={(open) => { if (!open) closeAndReset(); else setIsRecordDialogOpen(true); }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={!schoolId || !currentTerm || !currentSession}>
                 <Plus className="h-4 w-4 mr-2" />
                 Record Payment
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 {/* UX #1: description matches actual form order */}
@@ -954,16 +1031,23 @@ export function PaymentRecording({
                 </DialogDescription>
               </DialogHeader>
 
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                <span className="font-medium">Recording for:</span>{" "}
+                {currentTerm && currentSession
+                  ? `${currentTerm} · ${currentSession}`
+                  : "Select a term and session in Finance before recording"}
+              </div>
+
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
 
                   {/* Student Search */}
                   <div className="space-y-2">
                     <Label>Add Students</Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       {/* UX #4: clear search when switching class filter */}
                       <Select value={classFilter} onValueChange={(v) => { setClassFilter(v); setSearchQuery(""); }}>
-                        <SelectTrigger className="w-[160px] flex-shrink-0" aria-label="Filter by class">
+                        <SelectTrigger className="w-full sm:w-[160px] sm:flex-shrink-0" aria-label="Filter by class">
                           <SelectValue placeholder="All Classes" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1072,6 +1156,9 @@ export function PaymentRecording({
                         onChange={(e) => setTotalAmount(parseFloat(e.target.value) || 0)}
                         onFocus={(e) => e.target.select()}
                         min={0}
+                        max={9999999999.99}
+                        step="0.01"
+                        inputMode="decimal"
                       />
                     </div>
                   </div>
@@ -1090,9 +1177,13 @@ export function PaymentRecording({
                         {selectedEntries.map((entry) => {
                           const bal = tuitionBalanceMap.get(entry.student.id);
                           const hasAssigned = !!bal && bal.assigned > 0;
-                          const fullyPaid = hasAssigned && bal!.due === 0;
+                          const fullyPaid = hasAssigned && bal!.dueAfterConfirmed === 0;
+                          const coveredByPending = hasAssigned && !fullyPaid && bal!.due === 0 && bal!.pending > 0;
+                          const effectiveClassName = bal?.effectiveClassId
+                            ? schoolClasses.find((cls) => cls.id === bal.effectiveClassId)?.name
+                            : undefined;
                           return (
-                          <div key={entry.student.id} className="p-3 flex items-center gap-3">
+                          <div key={entry.student.id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-3">
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-sm truncate">
                                 {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
@@ -1107,24 +1198,33 @@ export function PaymentRecording({
                                     Tuition fully paid for {currentTerm}
                                   </div>
                                 ) : (
-                                  <div className={`text-[11px] mt-0.5 ${bal!.paid > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                    Tuition: ₦{bal!.assigned.toLocaleString()} assigned · ₦{bal!.paid.toLocaleString()} paid ·{" "}
-                                    <span className="font-medium">₦{bal!.due.toLocaleString()} due</span>
+                                  <div className={`text-[11px] mt-0.5 ${bal!.paid > 0 || bal!.pending > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
+                                    Tuition: ₦{bal!.assigned.toLocaleString()} assigned · ₦{bal!.paid.toLocaleString()} confirmed
+                                    {bal!.pending > 0 && <> · ₦{bal!.pending.toLocaleString()} pending</>}
+                                    {" · "}
+                                    <span className="font-medium">
+                                      {coveredByPending ? "covered after pending" : `₦${bal!.due.toLocaleString()} remaining`}
+                                    </span>
+                                    {effectiveClassName && effectiveClassName !== entry.student.className && (
+                                      <> · Period class: {effectiveClassName}</>
+                                    )}
                                   </div>
                                 )
-                              ) : bal && bal.paid > 0 ? (
+                              ) : bal && (bal.paid > 0 || bal.pending > 0) ? (
                                 <div className="text-[11px] mt-0.5 text-muted-foreground" data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                  Tuition: ₦{bal.paid.toLocaleString()} paid · no tuition amount set for this class
+                                  Tuition: ₦{bal.paid.toLocaleString()} confirmed
+                                  {bal.pending > 0 && <> · ₦{bal.pending.toLocaleString()} pending</>}
+                                  {" · no tuition amount configured for this period"}
                                 </div>
                               ) : (
                                 <div className="text-[11px] mt-0.5 text-muted-foreground italic" data-testid={`text-tuition-balance-${entry.student.id}`}>
                                   {entry.student.classId
-                                    ? `No tuition configured for this class (${currentTerm} ${currentSession})`
+                                    ? `No tuition configured for this student (${currentTerm} ${currentSession})`
                                     : "Student has no class assigned — tuition cannot be tracked"}
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex items-center justify-end gap-2 w-full sm:w-auto sm:flex-shrink-0">
                               {/* Fix #2a: single student shows read-only amount from totalAmount */}
                               {studentCount === 1 ? (
                                 <span className="text-sm font-medium w-28 text-right pr-2">
@@ -1136,6 +1236,9 @@ export function PaymentRecording({
                                   <Input
                                     type="number"
                                     min={0}
+                                    max={9999999999.99}
+                                    step="0.01"
+                                    inputMode="decimal"
                                     className="pl-6 h-8 text-sm"
                                     value={entry.amount || ""}
                                     onChange={(e) => updateStudentAmount(entry.student.id, parseFloat(e.target.value) || 0)}
@@ -1177,10 +1280,10 @@ export function PaymentRecording({
 
                   <Separator />
 
-                  {/* Term & Session are auto-filled from currently active academic info */}
+                  {/* Term & Session are synchronized from the Finance period and shown above. */}
 
                   {/* Payment Details */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="paymentMethod"
@@ -1211,7 +1314,7 @@ export function PaymentRecording({
                         <FormItem>
                           <FormLabel>Payment Date</FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <Input type="date" max={getLagosDateInputValue()} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -1261,7 +1364,7 @@ export function PaymentRecording({
                     )}
                   />
 
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -1273,7 +1376,7 @@ export function PaymentRecording({
                     <Button
                       type="submit"
                       className="flex-1"
-                      disabled={isSubmitting || selectedEntries.length === 0}
+                      disabled={isSubmitting || selectedEntries.length === 0 || !currentTerm || !currentSession}
                     >
                       {isSubmitting ? (
                         <>
