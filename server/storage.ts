@@ -271,6 +271,9 @@ export interface IStorage {
     studentDbId: string;
     tuitionAssigned: number;
     tuitionPaid: number;
+    tuitionPending: number;
+    tuitionDue: number;
+    effectiveClassId: string | null;
   }[]>;
   getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
     totalFees: number;
@@ -1846,6 +1849,9 @@ export class DatabaseStorage implements IStorage {
     studentDbId: string;
     tuitionAssigned: number;
     tuitionPaid: number;
+    tuitionPending: number;
+    tuitionDue: number;
+    effectiveClassId: string | null;
   }[]> {
     // Find the active tuition fee type for the school.
     const tuitionFeeRows = await db.execute(sql`
@@ -1856,15 +1862,42 @@ export class DatabaseStorage implements IStorage {
     const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
     if (!tuitionFee) return [];
 
-    // Build per-class assigned amount map: scoped (term+session) overrides global.
+    // Load every rate row so the resolver can apply:
+    // scoped+typed > scoped+universal > global+typed > global+universal.
     const allTuitionRows = await this.getTuitionClassAmounts(tuitionFee.id);
     const tuitionResolver = this.buildTuitionResolver(allTuitionRows, term, session);
 
-    // Per-student tuition paid (confirmed only, scoped to term+session and
-    // matched by purpose = tuition fee type name). Includes split allocations.
+    // Determine each student's class for the requested historical period.
+    // Promotion ledger is authoritative after end-of-session promotion; an
+    // assessment row is the fallback for older periods with no promotion row.
+    // Only then do we fall back to the student's current class.
+    //
+    // Return both confirmed tuition and still-recorded (pending verification)
+    // tuition. Pending records reserve part of the balance so the popup cannot
+    // accidentally record the same outstanding amount twice.
     const paidRows = await db.execute(sql`
       SELECT s.id AS "studentDbId",
-             s.class_id AS "classId",
+             COALESCE(
+               (
+                 SELECT pr.from_class_id
+                 FROM promotion_records pr
+                 WHERE pr.student_id = s.id
+                   AND pr.school_id = ${schoolId}
+                   AND pr.session = ${session}
+                 ORDER BY pr.created_at DESC
+                 LIMIT 1
+               ),
+               (
+                 SELECT a.class_id
+                 FROM assessments a
+                 WHERE a.student_id = s.id
+                   AND a.term = ${term}
+                   AND a.session = ${session}
+                 ORDER BY a.updated_at DESC NULLS LAST, a.created_at DESC NULLS LAST
+                 LIMIT 1
+               ),
+               s.class_id
+             ) AS "effectiveClassId",
              CASE WHEN s.student_type = 'returning'
                    AND s.student_type_flipped_term = ${term}
                    AND s.student_type_flipped_session = ${session}
@@ -1893,19 +1926,50 @@ export class DatabaseStorage implements IStorage {
                    AND fpr2.session = ${session}
                    AND fpr2.purpose = ${tuitionFee.name}
                ), 0)
-             )::numeric AS "tuitionPaid"
+             )::numeric AS "tuitionPaid",
+             (
+               COALESCE((
+                 SELECT SUM(fpr.amount) FROM fee_payment_records fpr
+                 WHERE fpr.student_id = s.id
+                   AND fpr.school_id = ${schoolId}
+                   AND fpr.status = 'recorded'
+                   AND fpr.term = ${term}
+                   AND fpr.session = ${session}
+                   AND fpr.purpose = ${tuitionFee.name}
+               ), 0)
+               +
+               COALESCE((
+                 SELECT SUM(fpss.amount) FROM fee_payment_student_splits fpss
+                 JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+                 WHERE fpss.student_id = s.id
+                   AND fpr2.school_id = ${schoolId}
+                   AND fpr2.status = 'recorded'
+                   AND fpr2.term = ${term}
+                   AND fpr2.session = ${session}
+                   AND fpr2.purpose = ${tuitionFee.name}
+               ), 0)
+             )::numeric AS "tuitionPending"
       FROM students s
       JOIN users u ON s.user_id = u.id
       WHERE u.is_active = true AND u.school_id = ${schoolId}
     `);
 
-    return ((paidRows as any).rows || paidRows).map((r: any) => {
-      const rawAssigned = r.classId ? tuitionResolver(r.classId, r.studentType ?? null) : 0;
+    return (((paidRows as any).rows || paidRows) as any[]).map((r: any) => {
+      const effectiveClassId = r.effectiveClassId || null;
+      const rawAssigned = effectiveClassId
+        ? tuitionResolver(effectiveClassId, r.studentType ?? null)
+        : 0;
       const discount = Number(r.discount) || 0;
+      const tuitionAssigned = Math.max(0, rawAssigned - discount);
+      const tuitionPaid = Number(r.tuitionPaid) || 0;
+      const tuitionPending = Number(r.tuitionPending) || 0;
       return {
         studentDbId: r.studentDbId,
-        tuitionAssigned: Math.max(0, rawAssigned - discount),
-        tuitionPaid: Number(r.tuitionPaid) || 0,
+        tuitionAssigned,
+        tuitionPaid,
+        tuitionPending,
+        tuitionDue: Math.max(0, tuitionAssigned - tuitionPaid - tuitionPending),
+        effectiveClassId,
       };
     });
   }
@@ -3828,43 +3892,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudentsByClassTermSessionForFinance(classId: string, term: string, session: string): Promise<StudentWithDetails[]> {
-    // Finance-aware roster: used by the finance tab's class filter.
-    // Primary: assessment-derived (same as scores, covers classes with both scores and fees).
-    // Fallback for finance-only classes (no assessed subjects): students whose current
-    // classId matches AND who have payment records for the selected session.
-    // Finance-only classes don't have academic promotions, so current classId is a
-    // reliable proxy for historical class membership, and joining payment records
-    // ensures we only surface students who actually paid in that session.
-    const distinctRows = await db
-      .selectDistinct({ studentId: assessments.studentId })
-      .from(assessments)
-      .where(
-        and(
-          eq(assessments.classId, classId),
-          eq(assessments.term, term),
-          eq(assessments.session, session)
-        )
-      );
+    // Finance uses the same promotion-aware historical roster as scores whenever
+    // academic history exists. This is important after promotion: returning a
+    // student's CURRENT class here makes past-session fee lookups use the wrong rate.
+    const historicalRoster = await this.getStudentsByClassTermSession(classId, term, session);
+    if (historicalRoster.length > 0) return historicalRoster;
 
-    let ids: string[] = distinctRows.map(r => r.studentId);
-
-    if (ids.length === 0) {
-      // Finance-only class fallback: scoped to class membership via current classId
-      // joined with payment records for the selected session.
-      const payerRows = await db
-        .selectDistinct({ studentId: feePaymentRecords.studentId })
-        .from(feePaymentRecords)
-        .innerJoin(students, eq(feePaymentRecords.studentId, students.id))
-        .where(
-          and(
-            eq(students.classId, classId),
-            eq(feePaymentRecords.term, term),
-            eq(feePaymentRecords.session, session),
-            isNotNull(feePaymentRecords.studentId)
-          )
-        );
-      ids = payerRows.map(r => r.studentId!);
-    }
+    // Finance-only class fallback: there may be no assessments at all. Include
+    // students with either a direct payment record or a multi-student split in
+    // the selected period, scoped to students whose current class is this class.
+    // (Without academic/promotion history, current class is the only available
+    // membership signal.)
+    const payerRows = await db.execute(sql`
+      SELECT DISTINCT p.student_id AS "studentId"
+      FROM (
+        SELECT fpr.student_id
+        FROM fee_payment_records fpr
+        WHERE fpr.student_id IS NOT NULL
+          AND fpr.term = ${term}
+          AND fpr.session = ${session}
+        UNION
+        SELECT fpss.student_id
+        FROM fee_payment_student_splits fpss
+        JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
+        WHERE fpr2.term = ${term}
+          AND fpr2.session = ${session}
+      ) p
+      JOIN students s ON s.id = p.student_id
+      WHERE s.class_id = ${classId}
+    `);
+    const ids = (((payerRows as any).rows ?? payerRows) as any[])
+      .map((r: any) => r.studentId)
+      .filter(Boolean) as string[];
 
     if (ids.length === 0) return [];
 
@@ -4295,6 +4354,9 @@ export class DatabaseStorage implements IStorage {
     // Comparison pool intentionally includes confirmed payments so the flag
     // surfaces real duplicates that another bursar already confirmed.
     if (record.studentId) {
+      const purposeMatch = record.purpose
+        ? eq(feePaymentRecords.purpose, record.purpose)
+        : sql`${feePaymentRecords.purpose} IS NULL`;
       const earlier = await db
         .select({ id: feePaymentRecords.id })
         .from(feePaymentRecords)
@@ -4302,6 +4364,7 @@ export class DatabaseStorage implements IStorage {
           eq(feePaymentRecords.studentId, record.studentId),
           sql`${feePaymentRecords.amount}::numeric = ${record.amount}::numeric`,
           sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${record.paymentDate})`,
+          purposeMatch,
           ne(feePaymentRecords.status, 'reversed'),
           ne(feePaymentRecords.id, record.id),
         ))
@@ -4433,6 +4496,9 @@ export class DatabaseStorage implements IStorage {
     const paymentDateSql = paymentRecord.paymentDate;
     for (const split of splits) {
       // Single-student earlier payments: same student + same amount + same day
+      const purposeMatch = paymentRecord.purpose
+        ? eq(feePaymentRecords.purpose, paymentRecord.purpose)
+        : sql`${feePaymentRecords.purpose} IS NULL`;
       const singleMatches = await db
         .select({ id: feePaymentRecords.id, createdAt: feePaymentRecords.createdAt })
         .from(feePaymentRecords)
@@ -4440,6 +4506,7 @@ export class DatabaseStorage implements IStorage {
           eq(feePaymentRecords.studentId, split.studentId),
           sql`${feePaymentRecords.amount}::numeric = ${split.amount}`,
           sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${paymentDateSql})`,
+          purposeMatch,
           ne(feePaymentRecords.status, 'reversed'),
           ne(feePaymentRecords.id, paymentRecord.id),
         ))
@@ -4459,6 +4526,7 @@ export class DatabaseStorage implements IStorage {
           eq(feePaymentStudentSplits.studentId, split.studentId),
           sql`${feePaymentStudentSplits.amount}::numeric = ${split.amount}`,
           sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${paymentDateSql})`,
+          purposeMatch,
           ne(feePaymentRecords.status, 'reversed'),
           ne(feePaymentRecords.id, paymentRecord.id),
         ))
