@@ -247,6 +247,101 @@ const requireBursarOrAdmin = (req: Request, res: Response, next: NextFunction) =
   next();
 };
 
+const getLagosDateKey = (date = new Date()): string => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+};
+
+const paymentInputError = (
+  status: number,
+  message: string,
+  code?: string,
+  details?: Record<string, unknown>,
+) => Object.assign(new Error(message), { status, code, details });
+
+const assertPaymentDateNotFuture = (paymentDate: string) => {
+  const today = getLagosDateKey();
+  if (paymentDate > today) {
+    throw paymentInputError(
+      400,
+      `Payment date cannot be in the future (today is ${today}).`,
+      "FUTURE_PAYMENT_DATE",
+    );
+  }
+};
+
+const resolveFinanceSchoolId = (
+  user: any,
+  requestedSchoolId?: string | null,
+): string => {
+  if (user.role === "admin") {
+    if (!requestedSchoolId) {
+      throw paymentInputError(400, "schoolId is required", "SCHOOL_REQUIRED");
+    }
+    return requestedSchoolId;
+  }
+  if (!user.schoolId) {
+    throw paymentInputError(400, "Your account is not assigned to a school", "SCHOOL_REQUIRED");
+  }
+  if (requestedSchoolId && requestedSchoolId !== user.schoolId) {
+    throw paymentInputError(403, "Access denied to this school's data", "SCHOOL_FORBIDDEN");
+  }
+  return user.schoolId;
+};
+
+const assertTuitionPaymentWithinOutstanding = async (args: {
+  schoolId: string;
+  purpose: string;
+  term: string;
+  session: string;
+  entries: Array<{ studentId: string; amount: number }>;
+}) => {
+  const feeTypes = await storage.getFeeTypes(args.schoolId);
+  const tuitionFee = feeTypes.find((ft) => ft.isTuition && ft.isActive);
+  if (!tuitionFee || args.purpose !== tuitionFee.name) return;
+
+  const balances = await storage.getStudentTuitionBalances(
+    args.schoolId,
+    args.term,
+    args.session,
+  );
+  const byStudent = new Map(balances.map((b) => [b.studentDbId, b]));
+
+  for (const entry of args.entries) {
+    const balance = byStudent.get(entry.studentId);
+    if (!balance || balance.tuitionAssigned <= 0) {
+      throw paymentInputError(
+        409,
+        "Tuition is not configured for one of the selected students in this term/session.",
+        "TUITION_NOT_CONFIGURED",
+        { studentId: entry.studentId },
+      );
+    }
+    if (entry.amount - balance.tuitionDue > 0.009) {
+      throw paymentInputError(
+        409,
+        balance.tuitionDue <= 0
+          ? "This student's tuition is already fully covered by confirmed or pending payments."
+          : `Tuition payment exceeds the remaining balance of ₦${balance.tuitionDue.toLocaleString()}.`,
+        "TUITION_OVERPAYMENT",
+        {
+          studentId: entry.studentId,
+          tuitionAssigned: balance.tuitionAssigned,
+          tuitionPaid: balance.tuitionPaid,
+          tuitionPending: balance.tuitionPending,
+          tuitionDue: balance.tuitionDue,
+        },
+      );
+    }
+  }
+};
+
 // Middleware factory for per-sub-admin tab/feature permission checks (Task #152).
 // Main admins always pass. Sub-admins pass only if the permission key is enabled
 // for them (or is part of the legacy default set when they have no permissions saved).
@@ -4656,6 +4751,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== PAYMENT TRACKING & RECONCILIATION ====================
 
+  // Finance-scoped lookup endpoints. These deliberately expose only the fields
+  // needed by the payment popup and are available to bursars without granting
+  // broad /api/admin/students or /api/admin/classes access.
+  app.get("/api/payments/students", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    try {
+      const schoolId = resolveFinanceSchoolId(user, req.query.schoolId as string | undefined);
+      const rows = await storage.getAllStudentsWithDetails(schoolId);
+      res.json(rows.map((s: any) => ({
+        id: s.id,
+        studentId: s.studentId,
+        firstName: s.user?.firstName,
+        lastName: s.user?.lastName,
+        classId: s.classId,
+        className: s.class?.name || "",
+      })));
+    } catch (error: any) {
+      if (error?.status) {
+        return res.status(error.status).json({ error: error.message, code: error.code });
+      }
+      console.error("[GET /api/payments/students] Error:", error);
+      res.status(500).json({ error: "Failed to fetch finance students" });
+    }
+  });
+
+  app.get("/api/payments/classes", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    try {
+      const schoolId = resolveFinanceSchoolId(user, req.query.schoolId as string | undefined);
+      const rows = await storage.getAllClasses(schoolId);
+      res.json(rows.map((cls: any) => ({ id: cls.id, name: cls.name })));
+    } catch (error: any) {
+      if (error?.status) {
+        return res.status(error.status).json({ error: error.message, code: error.code });
+      }
+      console.error("[GET /api/payments/classes] Error:", error);
+      res.status(500).json({ error: "Failed to fetch finance classes" });
+    }
+  });
+
+  app.get("/api/payments/students/historical-by-class", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    try {
+      const schoolId = resolveFinanceSchoolId(user, req.query.schoolId as string | undefined);
+      const classId = req.query.classId as string | undefined;
+      const term = req.query.term as string | undefined;
+      const session = req.query.session as string | undefined;
+      if (!classId || !term || !session) {
+        return res.status(400).json({ error: "classId, term, and session are required" });
+      }
+      const classInfo = await storage.getClassById(classId);
+      if (!classInfo || classInfo.schoolId !== schoolId) {
+        return res.status(403).json({ error: "Class does not belong to this school" });
+      }
+      const rows = await storage.getStudentsByClassTermSessionForFinance(classId, term, session);
+      res.json(rows.map((s: any) => ({
+        id: s.id,
+        studentId: s.studentId,
+        firstName: s.user?.firstName,
+        lastName: s.user?.lastName,
+        classId,
+        className: classInfo.name,
+      })));
+    } catch (error: any) {
+      if (error?.status) {
+        return res.status(error.status).json({ error: error.message, code: error.code });
+      }
+      console.error("[GET /api/payments/students/historical-by-class] Error:", error);
+      res.status(500).json({ error: "Failed to fetch historical finance students" });
+    }
+  });
+
   // Record a new fee payment (bursar, sub-admin, or admin)
   app.post("/api/payments/record", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {
     const user = (req as any).user;
@@ -4665,6 +4832,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = recordFeePaymentSchema.parse(req.body);
       console.log('[POST /api/payments/record] Validated data:', validatedData);
+      assertPaymentDateNotFuture(validatedData.paymentDate);
 
       // Get student to determine school (needed for both auth + idempotency)
       const student = await storage.getStudent(validatedData.studentId);
@@ -4694,6 +4862,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
         return res.status(403).json({ error: "You can only record payments for your school's students" });
       }
+      if (!schoolId) {
+        return res.status(400).json({ error: "Student is not assigned to a school" });
+      }
+
+      await assertTuitionPaymentWithinOutstanding({
+        schoolId,
+        purpose: validatedData.purpose,
+        term: validatedData.term,
+        session: validatedData.session,
+        entries: [{ studentId: validatedData.studentId, amount: validatedData.amount }],
+      });
 
       // Create the payment record
       let paymentRecord;
@@ -4748,6 +4927,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error.name === "ZodError") {
         return res.status(400).json({ error: "Invalid payment data", details: error.errors });
       }
+      if (error?.status) {
+        return res.status(error.status).json({
+          error: error.message,
+          code: error.code,
+          ...(error.details || {}),
+        });
+      }
       res.status(500).json({ error: "Failed to record payment" });
     }
   });
@@ -4758,6 +4944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('[POST /api/payments/records/multi] User:', user.id, 'Role:', user.role);
       const validatedData = recordMultiStudentPaymentSchema.parse(req.body);
       const { schoolId, entries, amount, paymentMethod, paymentDate, purpose, depositorName, reference, term, session, notes, clientRequestId } = validatedData;
+      assertPaymentDateNotFuture(paymentDate);
 
       if ((user.role === 'sub-admin' || user.role === 'bursar') && user.schoolId && schoolId !== user.schoolId) {
         return res.status(403).json({ error: "You can only record payments for your school's students" });
@@ -4781,6 +4968,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (Math.abs(splitSum - amount) > 0.01) {
         return res.status(400).json({ error: `Split amounts (₦${splitSum.toLocaleString()}) must equal total amount (₦${amount.toLocaleString()})` });
       }
+      if (new Set(entries.map((entry) => entry.studentId)).size !== entries.length) {
+        return res.status(400).json({ error: "A student cannot appear more than once in the same payment" });
+      }
 
       // Validate all student IDs belong to the specified school
       for (const entry of entries) {
@@ -4793,6 +4983,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ error: `Student ${entry.studentId} does not belong to the specified school` });
         }
       }
+
+      await assertTuitionPaymentWithinOutstanding({
+        schoolId,
+        purpose,
+        term,
+        session,
+        entries,
+      });
 
       let paymentRecord;
       try {
@@ -4844,6 +5042,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("[POST /api/payments/records/multi] Error:", error);
       if (error.name === "ZodError") {
         return res.status(400).json({ error: "Invalid payment data", details: error.errors });
+      }
+      if (error?.status) {
+        return res.status(error.status).json({
+          error: error.message,
+          code: error.code,
+          ...(error.details || {}),
+        });
       }
       res.status(500).json({ error: "Failed to record multi-student payment" });
     }
