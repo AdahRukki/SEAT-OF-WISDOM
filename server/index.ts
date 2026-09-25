@@ -30,6 +30,17 @@ async function runMigrations() {
         ON bank_transactions (school_id) WHERE possible_duplicate = TRUE;
       CREATE INDEX IF NOT EXISTS idx_fee_payment_records_possible_duplicate
         ON fee_payment_records (school_id) WHERE possible_duplicate = TRUE;
+      -- Duplicate-payment matching now includes payment purpose. Repair legacy
+      -- false-positive flags created when same-student/same-day/same-amount
+      -- payments had different purposes (for example Tuition vs Books).
+      UPDATE fee_payment_records newer
+         SET possible_duplicate = FALSE,
+             duplicate_of_payment_id = NULL,
+             updated_at = NOW()
+        FROM fee_payment_records older
+       WHERE newer.possible_duplicate = TRUE
+         AND newer.duplicate_of_payment_id = older.id
+         AND newer.purpose IS DISTINCT FROM older.purpose;
       -- Task #128 phase 2: remember admin "Not a duplicate" decisions so a
       -- later statement re-scan respects them.
       CREATE TABLE IF NOT EXISTS cleared_duplicate_pairs (
