@@ -4964,8 +4964,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate split amounts sum to total (within 1 penny tolerance)
-      const splitSum = entries.reduce((acc, e) => acc + e.amount, 0);
-      if (Math.abs(splitSum - amount) > 0.01) {
+      const splitSum = Math.round((entries.reduce((acc, e) => acc + e.amount, 0) + Number.EPSILON) * 100) / 100;
+      if (Math.abs(splitSum - amount) > 0.009) {
         return res.status(400).json({ error: `Split amounts (₦${splitSum.toLocaleString()}) must equal total amount (₦${amount.toLocaleString()})` });
       }
       if (new Set(entries.map((entry) => entry.studentId)).size !== entries.length) {
