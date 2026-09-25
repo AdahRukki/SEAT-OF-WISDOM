@@ -406,6 +406,8 @@ export function PaymentRecording({
       return res.json();
     },
     enabled: !!schoolId && !!currentTerm && !!currentSession && isRecordDialogOpen,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const tuitionBalanceMap = useMemo(() => {
