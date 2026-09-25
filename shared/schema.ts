@@ -1263,7 +1263,7 @@ const feePaymentAmountSchema = z.coerce
 const feePaymentDateSchema = z
   .string()
   .min(1, "Payment date is required")
-  .regex(/^\\d{4}-\\d{2}-\\d{2}$/, "Payment date must use YYYY-MM-DD")
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Payment date must use YYYY-MM-DD")
   .refine((value) => {
     const parsed = new Date(`${value}T00:00:00Z`);
     return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
