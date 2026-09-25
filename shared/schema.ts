@@ -1250,18 +1250,37 @@ export const insertFeePaymentRecordSchema = createInsertSchema(feePaymentRecords
   reversalReason: true,
 });
 
+const feePaymentAmountSchema = z.coerce
+  .number()
+  .finite("Amount must be a valid number")
+  .positive("Amount must be positive")
+  .max(9_999_999_999.99, "Amount is too large")
+  .refine(
+    (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8,
+    "Amount can have at most 2 decimal places",
+  );
+
+const feePaymentDateSchema = z
+  .string()
+  .min(1, "Payment date is required")
+  .regex(/^\\d{4}-\\d{2}-\\d{2}$/, "Payment date must use YYYY-MM-DD")
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "Payment date is invalid");
+
 export const recordFeePaymentSchema = z.object({
   studentId: z.string().min(1, "Student is required"),
-  amount: z.coerce.number().positive("Amount must be positive"),
+  amount: feePaymentAmountSchema,
   paymentMethod: z.enum(["transfer", "pos", "cash"], { 
     required_error: "Payment method is required" 
   }),
-  paymentDate: z.string().min(1, "Payment date is required"),
-  purpose: z.string().max(100).optional(),
-  depositorName: z.string().min(1, "Depositor name is required").max(150),
-  reference: z.string().optional(),
-  term: z.string().optional(),
-  session: z.string().optional(),
+  paymentDate: feePaymentDateSchema,
+  purpose: z.string().trim().min(1, "Payment purpose is required").max(100),
+  depositorName: z.string().trim().min(1, "Depositor name is required").max(150),
+  reference: z.string().trim().max(255).optional(),
+  term: z.string().trim().min(1, "Term is required"),
+  session: z.string().trim().min(1, "Session is required"),
   notes: z.string().optional(),
   clientRequestId: z.string().min(1).max(80).optional(),
 });
@@ -1354,19 +1373,19 @@ export type ClearedDuplicatePair = typeof clearedDuplicatePairs.$inferSelect;
 
 // Schema for recording a multi-student payment (single record with per-student splits)
 export const recordMultiStudentPaymentSchema = z.object({
-  amount: z.coerce.number().positive("Total amount must be positive"),
+  amount: feePaymentAmountSchema,
   paymentMethod: z.enum(["transfer", "pos", "cash"]),
-  paymentDate: z.string().min(1, "Payment date is required"),
-  purpose: z.string().max(100).optional(),
-  depositorName: z.string().min(1, "Depositor name is required").max(150),
-  reference: z.string().optional(),
-  term: z.string().optional(),
-  session: z.string().optional(),
+  paymentDate: feePaymentDateSchema,
+  purpose: z.string().trim().min(1, "Payment purpose is required").max(100),
+  depositorName: z.string().trim().min(1, "Depositor name is required").max(150),
+  reference: z.string().trim().max(255).optional(),
+  term: z.string().trim().min(1, "Term is required"),
+  session: z.string().trim().min(1, "Session is required"),
   notes: z.string().optional(),
   schoolId: z.string().min(1, "School is required"),
   entries: z.array(z.object({
     studentId: z.string().min(1, "Student is required"),
-    amount: z.coerce.number().positive("Amount must be positive"),
+    amount: feePaymentAmountSchema,
   })).min(2, "Multi-student payment requires at least 2 students"),
   clientRequestId: z.string().min(1).max(80).optional(),
 });
