@@ -4308,6 +4308,9 @@ export class DatabaseStorage implements IStorage {
     // Comparison pool intentionally includes confirmed payments so the flag
     // surfaces real duplicates that another bursar already confirmed.
     if (record.studentId) {
+      const purposeMatch = record.purpose
+        ? eq(feePaymentRecords.purpose, record.purpose)
+        : sql`${feePaymentRecords.purpose} IS NULL`;
       const earlier = await db
         .select({ id: feePaymentRecords.id })
         .from(feePaymentRecords)
@@ -4315,6 +4318,7 @@ export class DatabaseStorage implements IStorage {
           eq(feePaymentRecords.studentId, record.studentId),
           sql`${feePaymentRecords.amount}::numeric = ${record.amount}::numeric`,
           sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${record.paymentDate})`,
+          purposeMatch,
           ne(feePaymentRecords.status, 'reversed'),
           ne(feePaymentRecords.id, record.id),
         ))
@@ -4446,6 +4450,9 @@ export class DatabaseStorage implements IStorage {
     const paymentDateSql = paymentRecord.paymentDate;
     for (const split of splits) {
       // Single-student earlier payments: same student + same amount + same day
+      const purposeMatch = paymentRecord.purpose
+        ? eq(feePaymentRecords.purpose, paymentRecord.purpose)
+        : sql`${feePaymentRecords.purpose} IS NULL`;
       const singleMatches = await db
         .select({ id: feePaymentRecords.id, createdAt: feePaymentRecords.createdAt })
         .from(feePaymentRecords)
@@ -4453,6 +4460,7 @@ export class DatabaseStorage implements IStorage {
           eq(feePaymentRecords.studentId, split.studentId),
           sql`${feePaymentRecords.amount}::numeric = ${split.amount}`,
           sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${paymentDateSql})`,
+          purposeMatch,
           ne(feePaymentRecords.status, 'reversed'),
           ne(feePaymentRecords.id, paymentRecord.id),
         ))
@@ -4472,6 +4480,7 @@ export class DatabaseStorage implements IStorage {
           eq(feePaymentStudentSplits.studentId, split.studentId),
           sql`${feePaymentStudentSplits.amount}::numeric = ${split.amount}`,
           sql`DATE(${feePaymentRecords.paymentDate}) = DATE(${paymentDateSql})`,
+          purposeMatch,
           ne(feePaymentRecords.status, 'reversed'),
           ne(feePaymentRecords.id, paymentRecord.id),
         ))
