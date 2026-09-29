@@ -195,6 +195,6 @@ if (typeof window !== 'undefined') {
     queryClient,
     persister: localStoragePersister,
     maxAge: 1000 * 60 * 60 * 24,
-    buster: 'sowa-v2',
+    buster: 'sowa-ledger-v3',
   });
 }

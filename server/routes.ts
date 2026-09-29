@@ -53,7 +53,7 @@ import {
 } from "@shared/schema";
 import { sendContactFormNotification, sendAdmissionsApplicationNotification } from "./resend";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
@@ -4978,7 +4978,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const records = grouped.get(entry.studentDbId) || [];
             entry.totalPaid = records.reduce((sum, record) => sum + Math.round(Number(record.amount) * 100), 0) / 100;
             entry.paymentCount = records.length;
-            entry.balance = Math.max(0, entry.totalAssigned - entry.totalPaid);
+            entry.tuitionPaid = records.filter(record => record.isTuition).reduce((sum, record) => sum + Math.round(Number(record.amount) * 100), 0) / 100;
+            entry.nonTuitionPaid = Math.round((entry.totalPaid - entry.tuitionPaid) * 100) / 100;
+            entry.balance = entry.tuitionKnown ? Math.max(0, Math.round((entry.tuitionAssigned - entry.tuitionPaid) * 100) / 100) : 0;
             entry.lastConfirmedAt = records.map(record => record.confirmedAt).filter((date): date is string => !!date).sort().pop() || null;
             entry.lastPaymentDate = records.map(record => record.paymentDate).filter((date): date is string => !!date).sort().pop() || null;
           }

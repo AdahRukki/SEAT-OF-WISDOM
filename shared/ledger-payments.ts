@@ -13,6 +13,7 @@ export interface LedgerPayment {
   term: string;
   session: string;
   isSplit: boolean;
+  isTuition?: boolean;
 }
 
 export function inConfirmationRange(value: string | null, from?: string, to?: string): boolean {

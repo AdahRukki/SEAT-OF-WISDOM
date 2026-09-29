@@ -58,7 +58,7 @@ const COLUMN_DEFS = [
   { key: "tuition", label: "Tuition Fee (₦)" },
   { key: "discount", label: "Discount (₦)" },
   { key: "paid", label: "Total Paid (₦)" },
-  { key: "misc", label: "Miscellaneous (₦)" },
+  { key: "misc", label: "Other payments (₦)" },
   { key: "balance", label: "Balance (₦)" },
   { key: "status", label: "Status" },
   { key: "lastPayment", label: "Last Payment" },
@@ -87,10 +87,11 @@ function loadVisibleColumns(userId?: string | null): Set<ColKey> {
   return new Set<ColKey>(ALL_COL_KEYS.filter((k) => !DEFAULT_OFF.has(k)));
 }
 
-function getEntryStatus(e: { tuitionAssigned: number; totalPaid: number }): string {
+function getEntryStatus(e: { tuitionAssigned: number; tuitionPaid: number; tuitionKnown: boolean }): string {
+  if (!e.tuitionKnown) return "Not verified";
   if (!e.tuitionAssigned) return "—";
-  if (e.totalPaid >= e.tuitionAssigned) return "Paid";
-  if (e.totalPaid > 0) return "Partial";
+  if (e.tuitionPaid >= e.tuitionAssigned) return "Paid";
+  if (e.tuitionPaid > 0) return "Partial";
   return "Owing";
 }
 
@@ -127,6 +128,11 @@ interface LedgerEntry {
   /** 'new' | 'returning' — effective type for the requested term/session */
   studentType: string;
   totalPaid: number;
+  tuitionPaid: number;
+  nonTuitionPaid: number;
+  tuitionKnown: boolean;
+  discountKnown: boolean;
+  tuitionSource: string;
   totalAssigned: number;
   tuitionAssigned: number;
   discount: number;
@@ -287,8 +293,15 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       return json;
     },
     enabled: !!schoolId,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
   const ledger: LedgerEntry[] = ledgerResponse?.entries ?? [];
+  useEffect(() => {
+    setSelectedStudent(previous => previous
+      ? ledgerResponse?.entries.find(entry => entry.studentDbId === previous.studentDbId) ?? null
+      : null);
+  }, [ledgerResponse]);
   const ledgerMeta: LedgerMeta = ledgerResponse?.meta ?? { hasTuitionFeeType: false, hasGlobalTuition: false, hasScopedTuition: false };
 
   const { data: allStudentRecords = [], isLoading: recordsLoading } = useQuery<PaymentRecord[]>({
@@ -334,10 +347,10 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         if (confirmationFiltered) return e.paymentCount > 0;
         const hasPaid = e.paymentCount > 0 && e.totalPaid > 0;
         const assigned = Math.round((e.tuitionAssigned || 0) * 100);
-        const paid = Math.round((e.totalPaid || 0) * 100);
-        if (paymentStatusFilter === "outstanding") return assigned > paid;
+        const paid = Math.round((e.tuitionPaid || 0) * 100);
+        if (paymentStatusFilter === "outstanding") return e.tuitionKnown && assigned > paid;
         if (paymentStatusFilter === "paid") return hasPaid;
-        if (paymentStatusFilter === "fully-paid") return hasPaid && assigned > 0 && paid >= assigned;
+        if (paymentStatusFilter === "fully-paid") return e.tuitionKnown && assigned > 0 && paid >= assigned;
         return true;
       });
       if (studentTypeFilter !== "all") {
@@ -365,8 +378,8 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     return filteredLedger.map((e, idx) => {
       const tuition = e.tuitionAssigned || 0;
       const paid = e.totalPaid || 0;
-      const misc = Math.max(0, paid - tuition);
-      const balance = Math.max(0, tuition - paid);
+      const misc = e.nonTuitionPaid || 0;
+      const balance = e.balance || 0;
       // Order matches the on-screen table for predictability.
       const row: Record<string, string | number> = { "#": idx + 1 };
       if (isCol("name")) row["Student Name"] = `${e.lastName ?? ""} ${e.firstName ?? ""}`.trim();
@@ -374,11 +387,11 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("studentId")) row["SOWA ID"] = e.studentId || "";
       if (isCol("studentType")) row["Student Type"] = e.studentType === "new" ? "New" : "Returning";
       if (isCol("parentWhatsapp")) row["Parent WhatsApp"] = e.parentWhatsapp || "";
-      if (isCol("tuition")) row["Tuition Fee (NGN)"] = tuition;
-      if (isCol("discount")) row["Discount (NGN)"] = e.discount || 0;
+      if (isCol("tuition")) row["Tuition Fee (NGN)"] = e.tuitionKnown ? tuition : "Not verified";
+      if (isCol("discount")) row["Discount (NGN)"] = e.discountKnown ? e.discount || 0 : "Not verified";
       if (isCol("paid")) row[confirmationFiltered ? "Confirmed in range (NGN)" : "Total Paid (NGN)"] = paid;
-      if (isCol("misc")) row["Miscellaneous (NGN)"] = misc;
-      if (isCol("balance")) row["Balance (NGN)"] = balance;
+      if (isCol("misc")) row["Other payments (NGN)"] = misc;
+      if (isCol("balance")) row["Balance (NGN)"] = e.tuitionKnown ? balance : "Not verified";
       if (isCol("status")) row["Status"] = getEntryStatus(e);
       if (isCol("lastPayment")) { row["Last Payment"] = formatLedgerDate(e.lastPaymentDate); row["Last Confirmed (WAT)"] = formatRecordedAt(e.lastConfirmedAt); }
       return row;
@@ -400,23 +413,23 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
           const paid = e.totalPaid || 0;
           acc.tuition += tuition;
           acc.discount += e.discount || 0;
-          acc.tuitionPaid += Math.min(paid, tuition);
+          acc.tuitionPaid += e.tuitionPaid || 0;
           acc.paid += paid;
-          acc.misc += Math.max(0, paid - tuition);
-          acc.balance += Math.max(0, tuition - paid);
+          acc.misc += e.nonTuitionPaid || 0;
+          acc.balance += e.tuitionKnown ? e.balance : 0;
           return acc;
         },
         { tuition: 0, discount: 0, tuitionPaid: 0, paid: 0, misc: 0, balance: 0 },
       );
       const totalRow: Record<string, string | number> = { "#": "" };
-      if (isCol("name")) totalRow["Student Name"] = "GRAND TOTAL";
+      if (isCol("name")) totalRow["Student Name"] = filteredLedger.some(e => !e.tuitionKnown) ? "GRAND TOTAL (tuition charges/balances: verified only)" : "GRAND TOTAL";
       if (isCol("className")) totalRow["Class"] = "";
       if (isCol("studentId")) totalRow["SOWA ID"] = "";
       if (isCol("parentWhatsapp")) totalRow["Parent WhatsApp"] = "";
       if (isCol("tuition")) totalRow["Tuition Fee (NGN)"] = totals.tuition;
       if (isCol("discount")) totalRow["Discount (NGN)"] = totals.discount;
       if (isCol("paid")) totalRow[confirmationFiltered ? "Confirmed in range (NGN)" : "Total Paid (NGN)"] = totals.paid;
-      if (isCol("misc")) totalRow["Miscellaneous (NGN)"] = totals.misc;
+      if (isCol("misc")) totalRow["Other payments (NGN)"] = totals.misc;
       if (isCol("balance")) totalRow["Balance (NGN)"] = totals.balance;
       if (isCol("status")) totalRow["Status"] = "";
       if (isCol("lastPayment")) totalRow["Last Payment"] = "";
@@ -601,6 +614,10 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         </div>
       </div>
 
+      {!confirmationFiltered && ledger.some(e => !e.tuitionKnown) && <p className="rounded-md border p-3 text-sm text-muted-foreground" role="status">
+        Some tuition charges are not verified for this period. Their balances and paid status are not calculated; tuition totals include verified charges only. Past discounts and current fee settings are not used to guess old charges.
+      </p>}
+      <p className="text-xs text-muted-foreground">Tuition balances use tuition payments only. Other payments are grouped by their recorded purpose. For past periods, students without recorded class history appear under All classes as “Historical class not verified”.</p>
       {ledgerError ? (<p role="alert" className="text-destructive">Could not load confirmed collections. Please refresh to try again.</p>) : isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -675,7 +692,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
               <p className="text-sm text-muted-foreground">{entry.className} · {entry.studentId}</p>
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div><dt>{confirmationFiltered ? "Confirmed in range" : "Paid"}</dt><dd className="font-semibold text-green-600 break-words">₦{(entry.totalPaid || 0).toLocaleString()}</dd></div>
-                {!confirmationFiltered && <div><dt>Outstanding tuition</dt><dd className="font-semibold">₦{Math.max(0, (entry.tuitionAssigned || 0) - (entry.totalPaid || 0)).toLocaleString()}</dd></div>}
+                {!confirmationFiltered && <div><dt>Outstanding tuition</dt><dd className="font-semibold">{entry.tuitionKnown ? `₦${entry.balance.toLocaleString()}` : "Not verified"}</dd></div>}
               </dl>
               <p className="text-xs text-muted-foreground">Last confirmed: {formatRecordedAt(entry.lastConfirmedAt)}</p>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -686,7 +703,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             {userRole === "admin" && filteredLedger.length > 0 && <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
               <p className="font-semibold">Totals for these students</p>
               <p>{confirmationFiltered ? "Confirmed in range" : "Paid"}: ₦{filteredLedger.reduce((sum, e) => sum + (e.totalPaid || 0), 0).toLocaleString()}</p>
-              {!confirmationFiltered && <p>Outstanding tuition: ₦{filteredLedger.reduce((sum, e) => sum + Math.max(0, (e.tuitionAssigned || 0) - (e.totalPaid || 0)), 0).toLocaleString()}</p>}
+              {!confirmationFiltered && <p>Outstanding tuition (verified charges): ₦{filteredLedger.reduce((sum, e) => sum + (e.tuitionKnown ? e.balance : 0), 0).toLocaleString()}</p>}
             </div>}
           </div>
           <div className="hidden sm:block print:block rounded-md border overflow-x-auto">
@@ -702,9 +719,9 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 {isCol("tuition") && <TableHead className="text-right">Tuition Fee (₦)</TableHead>}
                 {isCol("discount") && <TableHead className="text-right">Discount (₦)</TableHead>}
                 {isCol("paid") && <TableHead className="text-right">{confirmationFiltered ? "Confirmed in range (₦)" : "Total Paid (₦)"}</TableHead>}
-                {isCol("misc") && <TableHead className="text-right">Miscellaneous (₦)</TableHead>}
+                {isCol("misc") && <TableHead className="text-right">Other payments (₦)</TableHead>}
                 {isCol("balance") && <TableHead className="text-right">Balance (₦)</TableHead>}
-                {isCol("status") && <TableHead>Status</TableHead>}
+                {isCol("status") && <TableHead>Tuition status</TableHead>}
                 {isCol("lastPayment") && <TableHead>Payment / Confirmation</TableHead>}
                 <TableHead className="w-[50px] print:hidden"></TableHead>
               </TableRow>
@@ -713,8 +730,8 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
               {filteredLedger.map((entry, idx) => {
                 const tuition = entry.tuitionAssigned || 0;
                 const paid = entry.totalPaid || 0;
-                const misc = Math.max(0, paid - tuition);
-                const balance = Math.max(0, tuition - paid);
+                const misc = entry.nonTuitionPaid || 0;
+                const balance = entry.balance || 0;
                 const prevClass = idx > 0 ? filteredLedger[idx - 1].className : null;
                 // When printing "All Classes", insert a class section header
                 // before the first row of each class. Hidden on screen.
@@ -756,7 +773,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   )}
                   {isCol("tuition") && (
                     <TableCell className="text-right font-semibold">
-                      {tuition > 0 ? `₦${tuition.toLocaleString()}` : "—"}
+                      {entry.tuitionKnown ? `₦${tuition.toLocaleString()}` : "Not verified"}
                       {(entry.discount || 0) > 0 && (
                         <div className="text-[10px] font-normal text-emerald-600">
                           -₦{(entry.discount || 0).toLocaleString()} discount applied
@@ -766,7 +783,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   )}
                   {isCol("discount") && (
                     <TableCell className="text-right font-semibold text-emerald-600">
-                      {(entry.discount || 0) > 0 ? `₦${(entry.discount || 0).toLocaleString()}` : "—"}
+                      {entry.discountKnown ? `₦${(entry.discount || 0).toLocaleString()}` : "Not verified"}
                     </TableCell>
                   )}
                   {isCol("paid") && (
@@ -781,7 +798,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   )}
                   {isCol("balance") && (
                     <TableCell className={`text-right font-semibold ${balance > 0 ? "text-red-500" : "text-green-600"}`}>
-                      {tuition > 0 ? `₦${balance.toLocaleString()}` : "—"}
+                      {entry.tuitionKnown ? `₦${balance.toLocaleString()}` : "Not verified"}
                     </TableCell>
                   )}
                   {isCol("status") && (
@@ -812,10 +829,10 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                     const paid = e.totalPaid || 0;
                     acc.tuition += tuition;
                     acc.discount += e.discount || 0;
-                    acc.tuitionPaid += Math.min(paid, tuition);
+                    acc.tuitionPaid += e.tuitionPaid || 0;
                     acc.paid += paid;
-                    acc.misc += Math.max(0, paid - tuition);
-                    acc.balance += Math.max(0, tuition - paid);
+                    acc.misc += e.nonTuitionPaid || 0;
+                    acc.balance += e.tuitionKnown ? e.balance : 0;
                     return acc;
                   },
                   { tuition: 0, discount: 0, tuitionPaid: 0, paid: 0, misc: 0, balance: 0 }
@@ -826,7 +843,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                     data-testid="row-ledger-grand-total"
                   >
                     <TableCell></TableCell>
-                    {isCol("name") && <TableCell>Grand Total</TableCell>}
+                    {isCol("name") && <TableCell>Grand Total{filteredLedger.some(e => !e.tuitionKnown) && <span className="block text-xs font-normal">Tuition charges/balances: verified only</span>}</TableCell>}
                     {isCol("className") && <TableCell></TableCell>}
                     {isCol("studentId") && <TableCell></TableCell>}
                     {isCol("studentType") && <TableCell></TableCell>}
@@ -879,12 +896,13 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 <span>Term: <strong className="text-foreground">{selectedTerm || "All"}</strong></span>
                 <span>Session: <strong className="text-foreground">{selectedSession || "All"}</strong></span>
               </div>
+              {!selectedStudent.tuitionKnown && <p className="text-sm text-muted-foreground">Tuition charge and outstanding balance are not verified for this period.</p>}
               {(() => {
                 const totalPaid = selectedStudent.totalPaid || 0;
                 if (confirmationFiltered) return <p className="text-sm font-semibold">Confirmed in selected range: ₦{totalPaid.toLocaleString()}</p>;
                 const tuitionAssigned = selectedStudent.tuitionAssigned || 0;
-                const tuitionPaid = Math.min(totalPaid, tuitionAssigned);
-                const nonTuitionPaid = Math.max(0, totalPaid - tuitionAssigned);
+                const tuitionPaid = selectedStudent.tuitionPaid || 0;
+                const nonTuitionPaid = selectedStudent.nonTuitionPaid || 0;
                 const tuitionOutstanding = Math.max(0, tuitionAssigned - tuitionPaid);
                 if (!tuitionAssigned && totalPaid === 0) return null;
                 return (
@@ -944,7 +962,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                         <TableHead>Purpose</TableHead>
                         <TableHead>Method</TableHead>
                         <TableHead>Reference</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Tuition status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

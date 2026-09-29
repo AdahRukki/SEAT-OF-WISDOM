@@ -39,7 +39,7 @@ test('workbook retains student split amounts and matching numeric totals after s
   assert.equal(read.Sheets['Payment records']['J2'].f,undefined);
   assert.match(details[0]['Confirmed at (WAT)'],/21 Sept 2026.*00:00:00/);
   const summary = XLSX.utils.sheet_to_json<any>(read.Sheets['Ledger summary'])[0];
-  assert.equal(summary['Confirmed in range (NGN)'],3000); assert.equal(summary['Outstanding fees (NGN)'],undefined);
+  assert.equal(summary['Confirmed in range (NGN)'],3000); assert.equal(summary['Outstanding tuition (NGN)'],undefined);
   const totals = XLSX.utils.sheet_to_json<any>(read.Sheets['Filters and totals']);
   assert.equal(totals.find(row=>row.Filter==='Records total (NGN)').Value,3000);
   assert.equal(totals.find(row=>row.Filter==='Summary total (NGN)').Value,3000);
@@ -48,7 +48,7 @@ test('unpaid students can export with an empty, headed payment sheet', () => {
   const entry = {studentDbId:'a',studentId:'SOWA001',firstName:'Ada',lastName:'Test',className:'JSS1',studentType:'returning',totalPaid:0,tuitionAssigned:10000,totalAssigned:10000,discount:0,balance:10000};
   const wb = buildLedgerWorkbook([entry],[],{},false);
   assert.equal(wb.Sheets['Payment records'].A1.v,'Student ID');
-  assert.equal(XLSX.utils.sheet_to_json<any>(wb.Sheets['Ledger summary'])[0]['Outstanding fees (NGN)'],10000);
+  assert.equal(XLSX.utils.sheet_to_json<any>(wb.Sheets['Ledger summary'])[0]['Outstanding tuition (NGN)'],10000);
 });
 
 import fs from 'node:fs';
@@ -72,9 +72,9 @@ function ledgerHandler(storage: any, getLedgerPayments: any) {
 test('ledger API keeps bursar school scope, filters first-payment students and reconciles export amounts', async () => {
   const calls: string[] = [];
   const handler = ledgerHandler({getStudentPaymentLedger: async (schoolId: string) => {
-    calls.push(schoolId); return {entries:[{studentDbId:'new',totalPaid:999,totalAssigned:10000},{studentDbId:'old',totalPaid:900,totalAssigned:10000}],meta:{}};
+    calls.push(schoolId); return {entries:[{studentDbId:'new',totalPaid:999,totalAssigned:10000,tuitionAssigned:10000,tuitionKnown:true},{studentDbId:'old',totalPaid:900,totalAssigned:10000}],meta:{}};
   }}, async (schoolId: string) => {
-    calls.push(schoolId); return [record('new',from,{amount:'3000'}),record('old','2026-09-01T10:00:00Z'),record('old',from)];
+    calls.push(schoolId); return [record('new',from,{amount:'3000',isTuition:true}),record('old','2026-09-01T10:00:00Z'),record('old',from)];
   });
   let body: any;
   await handler({user:{role:'bursar',schoolId:'allowed'},query:{schoolId:'other-school',term:'First Term',session:'2026/2027',confirmedFrom:'2026-09-21',confirmedTo:'2026-09-21',firstPaymentOnly:'true',includeRecords:'true'}},{json:(value:any)=>body=value,status:()=>{throw Error('Unexpected status');}});

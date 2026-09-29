@@ -4,6 +4,7 @@ import type { LedgerPayment } from '@shared/ledger-payments';
 interface ExportStudent {
   studentDbId: string; studentId: string; firstName: string; lastName: string;
   className: string; studentType: string; totalPaid: number; tuitionAssigned: number;
+  tuitionPaid?: number; nonTuitionPaid?: number; tuitionKnown?: boolean; discountKnown?: boolean; tuitionSource?: string;
   totalAssigned: number; discount: number; balance: number;
 }
 export function buildLedgerWorkbook(entries: ExportStudent[], records: LedgerPayment[], filters: Record<string, string>, dateFiltered: boolean) {
@@ -15,9 +16,10 @@ export function buildLedgerWorkbook(entries: ExportStudent[], records: LedgerPay
   const summaries = entries.map(entry => ({
     'Student ID': entry.studentId, 'Student name': `${entry.lastName} ${entry.firstName}`.trim(), 'Class': entry.className,
     'Student type': entry.studentType === 'new' ? 'New' : 'Returning',
-    ...(!dateFiltered ? {'Assigned fees (NGN)': entry.totalAssigned, 'Tuition after discount (NGN)': entry.tuitionAssigned, 'Discount (NGN)': entry.discount} : {}),
+    ...(!dateFiltered ? {'Tuition charge (NGN)': entry.tuitionKnown === false ? 'Not verified' : entry.tuitionAssigned, 'Discount (NGN)': entry.discountKnown === false ? 'Not verified' : entry.discount, 'Charge source': entry.tuitionSource || ''} : {}),
     [paidColumn]: entry.totalPaid,
-    ...(!dateFiltered ? {'Outstanding fees (NGN)': entry.balance} : {}),
+    'Tuition paid (NGN)': entry.tuitionPaid ?? 0, 'Other payments (NGN)': entry.nonTuitionPaid ?? 0,
+    ...(!dateFiltered ? {'Outstanding tuition (NGN)': entry.tuitionKnown === false ? 'Not verified' : entry.balance} : {}),
   }));
   const details = selectedRecords.map(record => {
     const student = names.get(record.studentDbId)!;
@@ -41,6 +43,7 @@ export function buildLedgerWorkbook(entries: ExportStudent[], records: LedgerPay
   addSheet('Payment records', details, ['Student ID','Student name','Class','Student amount (NGN)','Purpose','Payment date','Recorded at (WAT)','Confirmed at (WAT)','Method','Reference','Status','Allocation','Term','Session','Payment record ID','Allocation ID']);
   addSheet('Filters and totals', [
     ...Object.entries(filters).map(([Filter, Value]) => ({Filter, Value})),
+    {Filter: 'Tuition balances', Value: 'Only tuition payments reduce tuition outstanding. Missing historical charges are not verified; current discounts are not applied to saved term charges.'},
     {Filter: 'Included records', Value: 'Confirmed only; pending and reversed payments excluded'},
     {Filter: 'Split payments', Value: 'Each row contains only the amount allocated to that student'},
     {Filter: 'First-payment definition', Value: 'Earliest confirmed payment in the selected term and session, across all purposes; missing historical confirmation times cannot qualify'},

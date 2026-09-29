@@ -2893,6 +2893,9 @@ export default function AdminDashboard() {
       setNameChangeReviewNotes(prev => { const next = { ...prev }; delete next[variables.id]; return next; });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/name-change-requests'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
+      if (wasApproved) {
+        queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
+      }
     },
     onError: (error: any) => {
       toast({

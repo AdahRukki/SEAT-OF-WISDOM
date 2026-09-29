@@ -244,6 +244,11 @@ export interface IStorage {
       /** 'new' | 'returning' — effective type for the requested term/session */
       studentType: string;
       totalPaid: number;
+      tuitionPaid: number;
+      nonTuitionPaid: number;
+      tuitionKnown: boolean;
+      discountKnown: boolean;
+      tuitionSource: string;
       totalAssigned: number;
       tuitionAssigned: number;
       balance: number;
@@ -1695,211 +1700,103 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string, confirmedFrom?: string, confirmedTo?: string): Promise<{
-    entries: {
-      studentDbId: string;
-      studentId: string;
-      firstName: string;
-      lastName: string;
-      className: string;
-      classId: string;
-      parentWhatsapp: string | null;
-      studentType: string;
-      totalPaid: number;
-      totalAssigned: number;
-      tuitionAssigned: number;
-      discount: number;
-      balance: number;
-      paymentCount: number;
-      lastPaymentDate: string | null;
-      lastConfirmedAt: string | null;
-    }[];
-    meta: {
-      hasTuitionFeeType: boolean;
-      hasGlobalTuition: boolean;
-      hasScopedTuition: boolean;
-    };
-  }> {
-    const paymentConditions = [
-      sql`fpr.school_id = ${schoolId}`,
-      sql`fpr.status = 'confirmed'`,
-    ];
-    if (term) paymentConditions.push(sql`fpr.term = ${term}`);
-    if (session) paymentConditions.push(sql`fpr.session = ${session}`);
-
-    const studentConditions = [
-      sql`u.is_active = true`,
-      sql`u.school_id = ${schoolId}`,
-    ];
-    if (classId) studentConditions.push(sql`s.class_id = ${classId}`);
-
-    const paymentJoinClause = paymentConditions.map(c => c).reduce((a, b) => sql`${a} AND ${b}`);
-    const studentWhereClause = studentConditions.map(c => c).reduce((a, b) => sql`${a} AND ${b}`);
-
+  async getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string, confirmedFrom?: string, confirmedTo?: string) {
+    const academic = await this.getCurrentAcademicInfo(schoolId);
+    const currentPeriod = !!(term && session && term === academic.currentTerm && session === academic.currentSession);
+    const scoped = !!(term && session);
     const rows = await db.execute(sql`
-      SELECT
-        s.id AS "studentDbId",
-        s.student_id AS "studentId",
-        u.first_name AS "firstName",
-        u.last_name AS "lastName",
-        c.name AS "className",
-        s.class_id AS "classId",
-        s.parent_whatsapp AS "parentWhatsapp",
-        s.discount AS "discount",
-        ${term && session
-          ? sql`CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term} AND s.student_type_flipped_session = ${session} THEN 'new' ELSE COALESCE(s.student_type, 'returning') END AS "studentType"`
-          : sql`COALESCE(s.student_type, 'returning') AS "studentType"`},
-        (
-          COALESCE((
-            SELECT SUM(fpr.amount) FROM fee_payment_records fpr
-            WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
-          ), 0)
-          +
-          COALESCE((
-            SELECT SUM(fpss.amount) FROM fee_payment_student_splits fpss
-            JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-            WHERE fpss.student_id = s.id
-              AND fpr2.school_id = ${schoolId}
-              AND fpr2.status = 'confirmed'
-              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
-              ${term ? sql`AND fpr2.term = ${term}` : sql``}
-              ${session ? sql`AND fpr2.session = ${session}` : sql``}
-          ), 0)
-        )::numeric AS "totalPaid",
-        (
-          COALESCE((
-            SELECT COUNT(fpr.id) FROM fee_payment_records fpr
-            WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
-          ), 0)
-          +
-          COALESCE((
-            SELECT COUNT(fpss.id) FROM fee_payment_student_splits fpss
-            JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-            WHERE fpss.student_id = s.id
-              AND fpr2.school_id = ${schoolId}
-              AND fpr2.status = 'confirmed'
-              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
-              ${term ? sql`AND fpr2.term = ${term}` : sql``}
-              ${session ? sql`AND fpr2.session = ${session}` : sql``}
-          ), 0)
-        )::int AS "paymentCount",
-        COALESCE(
-          GREATEST(
-            (SELECT MAX(fpr.payment_date) FROM fee_payment_records fpr
-             WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
-            (SELECT MAX(fpr2.payment_date) FROM fee_payment_student_splits fpss
-             JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-             WHERE fpss.student_id = s.id
-               AND fpr2.school_id = ${schoolId}
-               AND fpr2.status = 'confirmed'
-              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
-               ${term ? sql`AND fpr2.term = ${term}` : sql``}
-               ${session ? sql`AND fpr2.session = ${session}` : sql``})
-          ),
-          (SELECT MAX(fpr.payment_date) FROM fee_payment_records fpr
-           WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
-          (SELECT MAX(fpr2.payment_date) FROM fee_payment_student_splits fpss
-           JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-           WHERE fpss.student_id = s.id
-             AND fpr2.school_id = ${schoolId}
-             AND fpr2.status = 'confirmed'
-              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
-             ${term ? sql`AND fpr2.term = ${term}` : sql``}
-             ${session ? sql`AND fpr2.session = ${session}` : sql``})
-        ) AS "lastPaymentDate",
-        COALESCE(
-          GREATEST(
-            (SELECT MAX(fpr.confirmed_at) FROM fee_payment_records fpr
-             WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
-            (SELECT MAX(fpr2.confirmed_at) FROM fee_payment_student_splits fpss
-             JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-             WHERE fpss.student_id = s.id
-               AND fpr2.school_id = ${schoolId}
-               AND fpr2.status = 'confirmed'
-              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
-               ${term ? sql`AND fpr2.term = ${term}` : sql``}
-               ${session ? sql`AND fpr2.session = ${session}` : sql``})
-          ),
-          (SELECT MAX(fpr.confirmed_at) FROM fee_payment_records fpr
-           WHERE fpr.student_id = s.id AND ${paymentJoinClause} ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}),
-          (SELECT MAX(fpr2.confirmed_at) FROM fee_payment_student_splits fpss
-           JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-           WHERE fpss.student_id = s.id
-             AND fpr2.school_id = ${schoolId}
-             AND fpr2.status = 'confirmed'
-              ${confirmedDateClause('fpr2', confirmedFrom, confirmedTo)}
-             ${term ? sql`AND fpr2.term = ${term}` : sql``}
-             ${session ? sql`AND fpr2.session = ${session}` : sql``})
-        ) AS "lastConfirmedAt",
-        COALESCE((
-          SELECT SUM(sf.amount) FROM student_fees sf
-          WHERE sf.student_id = s.id
-            ${term ? sql`AND sf.term = ${term}` : sql``}
-            ${session ? sql`AND sf.session = ${session}` : sql``}
-        ), 0)::numeric AS "sfAssigned"
-      FROM students s
-      JOIN users u ON s.user_id = u.id
-      LEFT JOIN classes c ON s.class_id = c.id
-      WHERE ${studentWhereClause}
-      GROUP BY s.id, s.student_id, u.first_name, u.last_name, c.name, s.class_id, s.parent_whatsapp, s.discount, s.student_type
-      ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
+      WITH allocated AS (
+        SELECT fpr.student_id, fpr.amount, fpr.purpose, fpr.payment_date, fpr.confirmed_at
+        FROM fee_payment_records fpr
+        WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed' AND fpr.student_id IS NOT NULL
+          ${term ? sql`AND fpr.term = ${term}` : sql``}
+          ${session ? sql`AND fpr.session = ${session}` : sql``}
+          ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
+        UNION ALL
+        SELECT fpss.student_id, fpss.amount, fpr.purpose, fpr.payment_date, fpr.confirmed_at
+        FROM fee_payment_student_splits fpss
+        JOIN fee_payment_records fpr ON fpr.id = fpss.payment_record_id
+        WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'
+          ${term ? sql`AND fpr.term = ${term}` : sql``}
+          ${session ? sql`AND fpr.session = ${session}` : sql``}
+          ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
+      ), classified AS (
+        SELECT a.*, EXISTS (
+          SELECT 1 FROM fee_types ft WHERE ft.school_id = ${schoolId}
+            AND ft.is_tuition = true AND ft.name = a.purpose
+        ) AS is_tuition FROM allocated a
+      ), totals AS (
+        SELECT student_id, SUM(amount) AS paid,
+          COALESCE(SUM(amount) FILTER (WHERE is_tuition), 0) AS tuition_paid,
+          COALESCE(SUM(amount) FILTER (WHERE NOT is_tuition), 0) AS other_paid,
+          COUNT(*) AS payment_count, MAX(payment_date) AS last_payment,
+          MAX(confirmed_at AT TIME ZONE 'UTC') AS last_confirmed
+        FROM classified GROUP BY student_id
+      ), roster AS (
+        SELECT s.*, COALESCE(
+          (SELECT CASE WHEN COUNT(DISTINCT pr.from_class_id) = 1 THEN MIN(pr.from_class_id) END
+           FROM promotion_records pr WHERE pr.student_id = s.id AND pr.school_id = ${schoolId}
+             AND pr.session = ${session || ''} AND pr.is_bulk = true),
+          CASE WHEN ${currentPeriod || !scoped} THEN s.class_id ELSE (SELECT CASE WHEN COUNT(DISTINCT a.class_id) = 1 THEN MIN(a.class_id) END
+           FROM assessments a JOIN classes ac ON ac.id = a.class_id
+           WHERE a.student_id = s.id AND a.session = ${session || ''}
+             AND a.term = ${term || ''} AND ac.school_id = ${schoolId}) END
+        ) AS effective_class_id
+        FROM students s
+      )
+      SELECT s.id AS "studentDbId", s.student_id AS "studentId", u.first_name AS "firstName",
+        u.last_name AS "lastName", c.name AS "className", s.effective_class_id AS "classId",
+        s.parent_whatsapp AS "parentWhatsapp", s.discount,
+        CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term || ''}
+          AND s.student_type_flipped_session = ${session || ''} THEN 'new'
+          ELSE COALESCE(s.student_type, 'returning') END AS "studentType",
+        COALESCE(t.paid, 0) AS "totalPaid", COALESCE(t.tuition_paid, 0) AS "tuitionPaid",
+        COALESCE(t.other_paid, 0) AS "nonTuitionPaid", COALESCE(t.payment_count, 0) AS "paymentCount",
+        t.last_payment AS "lastPaymentDate", t.last_confirmed AS "lastConfirmedAt",
+        (SELECT SUM(sf.amount) FROM student_fees sf JOIN fee_types ft ON ft.id = sf.fee_type_id
+         WHERE sf.student_id = s.id AND sf.term = ${term || ''} AND sf.session = ${session || ''}
+           AND ft.school_id = ${schoolId} AND ft.is_tuition = true) AS "savedTuition"
+      FROM roster s JOIN users u ON u.id = s.user_id
+      LEFT JOIN classes c ON c.id = s.effective_class_id AND c.school_id = ${schoolId}
+      LEFT JOIN totals t ON t.student_id = s.id
+      WHERE u.is_active = true AND u.school_id = ${schoolId}
+        ${classId ? sql`AND s.effective_class_id = ${classId}` : sql``}
+      ORDER BY c.name ASC NULLS LAST, u.last_name, u.first_name
     `);
-
-    const tuitionFeeRows = await db.execute(sql`
-      SELECT ft.id FROM fee_types ft
-      WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.is_active = true
-      LIMIT 1
+    const feeRows = await db.execute(sql`
+      SELECT id FROM fee_types WHERE school_id = ${schoolId} AND is_tuition = true AND is_active = true
+      ORDER BY created_at, id
     `);
-    const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
-
-    let hasGlobalTuition = false;
-    let hasScopedTuition = false;
-    let tuitionResolver: (classId: string, studentType: string | null) => number = () => 0;
-    if (tuitionFee) {
-      // Resolve per-class tuition: term/session-specific rows override
-      // global (NULL term/session) rows. This avoids "—" in the ledger when
-      // tuition was set up without a scope but the caller passes term/session.
-      const allRows = await this.getTuitionClassAmounts(tuitionFee.id);
-      hasGlobalTuition = allRows.some(ta => ta.term === null && ta.session === null);
-      hasScopedTuition = !!(term && session && allRows.some(ta => ta.term === term && ta.session === session));
-      tuitionResolver = this.buildTuitionResolver(allRows, term, session);
-    }
-
-    const entries = (rows.rows || rows).map((r: any) => {
-      const totalPaid = Number(r.totalPaid) || 0;
-      const sfAssigned = Number(r.sfAssigned) || 0;
-      const discount = Number(r.discount) || 0;
-      const rawTuitionAssigned = tuitionResolver(r.classId, r.studentType ?? null);
-      const tuitionAssigned = Math.max(0, rawTuitionAssigned - discount);
-      const totalAssigned = sfAssigned + tuitionAssigned;
-      return {
-        studentDbId: r.studentDbId,
-        studentId: r.studentId,
-        firstName: r.firstName,
-        lastName: r.lastName,
-        className: r.className || '',
-        classId: r.classId,
-        parentWhatsapp: r.parentWhatsapp ?? null,
-        studentType: (r.studentType as string) ?? 'returning',
-        discount,
-        totalPaid,
-        totalAssigned,
-        tuitionAssigned,
-        balance: Math.max(0, totalAssigned - totalPaid),
+    const tuitionFees = ((feeRows as any).rows || feeRows) as any[];
+    // Multiple active tuition types are ambiguous; do not arbitrarily pick one.
+    const rates = tuitionFees.length === 1 ? await this.getTuitionClassAmounts(tuitionFees[0].id) : [];
+    const resolve = this.buildTuitionResolver(rates, term, session);
+    const entries = (((rows as any).rows || rows) as any[]).map(r => {
+      const applicable = rates.some(rate => rate.classId === r.classId
+        && (!rate.studentType || rate.studentType === r.studentType)
+        && ((!rate.term && !rate.session) || (rate.term === term && rate.session === session)));
+      const saved = scoped && r.savedTuition !== null && r.savedTuition !== undefined;
+      const tuitionKnown = saved || (currentPeriod && !!r.classId && applicable);
+      // Explicit term assessments are authoritative amounts; never subtract today's discount again.
+      const discount = !saved && currentPeriod ? Number(r.discount) || 0 : 0;
+      const tuitionAssigned = saved ? Number(r.savedTuition) : tuitionKnown ? Math.max(0, resolve(r.classId, r.studentType) - discount) : 0;
+      const tuitionPaid = Number(r.tuitionPaid) || 0;
+      return { ...r, classId: r.classId || '', className: r.className || 'Historical class not verified',
+        discount, discountKnown: !saved && currentPeriod, tuitionKnown,
+        tuitionSource: saved ? 'Saved term charge' : tuitionKnown ? 'Current fee settings' : 'Not verified',
+        tuitionAssigned, totalAssigned: tuitionAssigned,
+        tuitionPaid, nonTuitionPaid: Number(r.nonTuitionPaid) || 0, totalPaid: Number(r.totalPaid) || 0,
+        balance: tuitionKnown ? Math.max(0, Math.round((tuitionAssigned - tuitionPaid) * 100) / 100) : 0,
         paymentCount: Number(r.paymentCount) || 0,
         lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
         lastConfirmedAt: r.lastConfirmedAt ? new Date(r.lastConfirmedAt).toISOString() : null,
       };
     });
-
-    return {
-      entries: confirmedFrom || confirmedTo ? entries.filter((entry: any) => entry.paymentCount > 0) : entries,
-      meta: {
-        hasTuitionFeeType: !!tuitionFee,
-        hasGlobalTuition,
-        hasScopedTuition,
-      },
-    };
+    return { entries: confirmedFrom || confirmedTo ? entries.filter(e => e.paymentCount > 0) : entries,
+      meta: { hasTuitionFeeType: tuitionFees.length > 0,
+        hasGlobalTuition: rates.some(r => !r.term && !r.session),
+        hasScopedTuition: rates.some(r => r.term === term && r.session === session),
+      } };
   }
 
   async getStudentTuitionBalances(schoolId: string, term: string, session: string): Promise<{
@@ -6127,33 +6024,36 @@ export class DatabaseStorage implements IStorage {
     newFirstName?: string; newLastName?: string; newMiddleName?: string | null;
     studentUserId?: string;
   }): Promise<any> {
-    // Atomically claim the request only if it is still pending, preventing
-    // concurrent reviewers from double-applying or overwriting a decision.
-    const updateResult = await db.execute(sql`
-      UPDATE student_name_change_requests
-      SET status       = ${data.action},
-          reviewed_by  = ${data.reviewedBy},
-          reviewer_notes = ${data.reviewerNotes ?? null},
-          reviewed_at  = NOW()
-      WHERE id = ${id}
-        AND status = 'pending'
-      RETURNING *
-    `);
-    const updatedRows = ((updateResult as any).rows ?? updateResult) as any[];
-    if (updatedRows.length === 0) {
-      throw new Error('Name change request not found or already reviewed');
-    }
-    if (data.action === 'approved' && data.studentUserId) {
-      await db.execute(sql`
-        UPDATE users
-        SET first_name  = ${data.newFirstName ?? null},
-            last_name   = ${data.newLastName ?? null},
-            middle_name = ${data.newMiddleName ?? null},
-            updated_at  = NOW()
-        WHERE id = ${data.studentUserId}
+    return db.transaction(async (tx) => {
+      // Atomically claim the request only if it is still pending, preventing
+      // concurrent reviewers from double-applying or overwriting a decision.
+      const updateResult = await tx.execute(sql`
+        UPDATE student_name_change_requests
+        SET status       = ${data.action},
+            reviewed_by  = ${data.reviewedBy},
+            reviewer_notes = ${data.reviewerNotes ?? null},
+            reviewed_at  = NOW()
+        WHERE id = ${id}
+          AND status = 'pending'
+        RETURNING *
       `);
-    }
-    return updatedRows[0];
+      const updatedRows = ((updateResult as any).rows ?? updateResult) as any[];
+      if (updatedRows.length === 0) {
+        throw new Error('Name change request not found or already reviewed');
+      }
+      if (data.action === 'approved') {
+        if (!data.studentUserId || !data.newFirstName || !data.newLastName) throw new Error('Approved name change is missing student details');
+        await tx.execute(sql`
+          UPDATE users
+          SET first_name  = ${data.newFirstName ?? null},
+              last_name   = ${data.newLastName ?? null},
+              middle_name = ${data.newMiddleName ?? null},
+              updated_at  = NOW()
+          WHERE id = ${data.studentUserId}
+        `);
+      }
+      return updatedRows[0];
+    });
   }
 }
 
