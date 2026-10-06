@@ -389,7 +389,7 @@ function ClassTuitionBreakdownDialog({
   session: string;
   sortClassesByOrder: <T extends { name: string }>(c: T[]) => T[];
 }) {
-  const { data: ledgerResp, isLoading } = useQuery<{ entries: Array<{ classId: string; className: string; tuitionAssigned: number; totalPaid: number }> }>({
+  const { data: ledgerResp, isLoading } = useQuery<{ entries: Array<{ classId: string; className: string; tuitionAssigned: number; tuitionPaid: number; tuitionKnown: boolean; totalPaid: number }> }>({
     queryKey: ['/api/payments/ledger', schoolId, 'all', term, session],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -406,8 +406,8 @@ function ClassTuitionBreakdownDialog({
     const entries = ledgerResp?.entries ?? [];
     const byClass = new Map<string, ClassTuitionRow>();
     for (const e of entries) {
-      const tuition = e.tuitionAssigned || 0;
-      const paid = e.totalPaid || 0;
+      const tuition = e.tuitionKnown ? e.tuitionAssigned || 0 : 0;
+      const paid = e.tuitionPaid || 0;
       const tuitionPaid = Math.min(paid, tuition);
       const cur = byClass.get(e.classId) ?? {
         classId: e.classId,
@@ -1628,7 +1628,7 @@ export default function AdminDashboard() {
     staleTime: 0
   });
 
-  const { data: financeLedgerResp } = useQuery<{ entries: Array<{ tuitionAssigned: number; totalPaid: number }> }>({
+  const { data: financeLedgerResp } = useQuery<{ entries: Array<{ tuitionAssigned: number; tuitionPaid: number; tuitionKnown: boolean; totalPaid: number }> }>({
     queryKey: ['/api/payments/ledger', selectedSchoolId, 'all', selectedFinanceTerm, selectedFinanceSession],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -1647,8 +1647,8 @@ export default function AdminDashboard() {
     let expected = 0;
     let collected = 0;
     for (const e of entries) {
-      const tuition = e.tuitionAssigned || 0;
-      const paid = e.totalPaid || 0;
+      const tuition = e.tuitionKnown ? e.tuitionAssigned || 0 : 0;
+      const paid = e.tuitionPaid || 0;
       expected += tuition;
       collected += Math.min(paid, tuition);
     }
@@ -5591,16 +5591,16 @@ export default function AdminDashboard() {
               {perm('finance_total_revenue') && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
-                    <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
+                    <CardTitle className="text-xs sm:text-sm font-medium">Tuition Confirmed</CardTitle>
                     <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
                     <div className="text-lg sm:text-2xl font-bold truncate">
-                      ₦{(financialSummary?.totalRevenue ?? financialSummary?.totalPaid ?? 0).toLocaleString()}
+                      ₦{(financialSummary?.totalPaid ?? 0).toLocaleString()}
                     </div>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedFinanceTerm} confirmed</p>
                     <p className="text-[10px] sm:text-xs text-muted-foreground mt-1" data-testid="text-actual-tuition">
-                      Actual tuition: ₦{(financialSummary?.actualTuitionCollected ?? 0).toLocaleString()}
+                      Applied to tuition charges: ₦{(financialSummary?.actualTuitionCollected ?? 0).toLocaleString()}
                     </p>
                     {financialSummary?.typeBreakdown && (
                       <div className="mt-2 pt-2 border-t border-muted space-y-0.5">
@@ -5627,7 +5627,7 @@ export default function AdminDashboard() {
               {perm('finance_outstanding_fees') && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
-                    <CardTitle className="text-xs sm:text-sm font-medium">Outstanding Fees</CardTitle>
+                    <CardTitle className="text-xs sm:text-sm font-medium">Tuition Outstanding</CardTitle>
                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
@@ -5661,7 +5661,7 @@ export default function AdminDashboard() {
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
-                  <CardTitle className="text-xs sm:text-sm font-medium">Collection Rate</CardTitle>
+                  <CardTitle className="text-xs sm:text-sm font-medium">Tuition Collection Rate</CardTitle>
                   <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
@@ -5705,23 +5705,15 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
 
-              {perm('finance_pos_fees') && (
-                <Card data-testid="card-pos-fees">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
-                    <CardTitle className="text-xs sm:text-sm font-medium">POS Fees Absorbed</CardTitle>
-                    <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent className="p-3 sm:p-6 pt-0">
-                    <div className="text-lg sm:text-2xl font-bold truncate" data-testid="text-total-pos-fees">
-                      ₦{(financialSummary?.totalPosFees ?? 0).toLocaleString()}
-                    </div>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">
-                      Moniepoint POS fees ({selectedFinanceTerm})
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
+              {(perm('finance_outstanding_fees') || perm('finance_total_revenue')) && <Card>
+                <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2"><CardTitle className="text-xs sm:text-sm font-medium">Tuition Expected</CardTitle></CardHeader>
+                <CardContent className="p-3 sm:p-6 pt-0"><div className="text-lg sm:text-2xl font-bold">₦{(financialSummary?.totalFees ?? 0).toLocaleString()}</div><p className="text-[10px] sm:text-xs text-muted-foreground">Assigned tuition after applicable discounts</p></CardContent>
+              </Card>}
+
             </div>
+
+            <p className="text-xs text-muted-foreground">These cards show tuition only. Other payment purposes remain in payment records and the ledger. Pending payments do not count as confirmed collections.</p>
+            {!!financialSummary?.tuitionUnverifiedCount && <p className="text-sm text-amber-700">{financialSummary.tuitionUnverifiedCount} students have unverified tuition charges. Expected, outstanding and collection-rate figures cover verified charges only.</p>}
 
             {perm('finance_class_tuition_breakdown') && (
               <div className="mb-4">

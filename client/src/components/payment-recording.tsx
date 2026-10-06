@@ -146,6 +146,9 @@ export function PaymentRecording({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
   const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [amountReceived, setAmountReceived] = useState<number>(0);
+  const [additionalPayments, setAdditionalPayments] = useState<{id:string;studentId:string;purpose:string;customPurpose:string;amount:number}[]>([]);
+  const submissionLock = useRef(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -381,58 +384,39 @@ export function PaymentRecording({
     enabled: !!schoolId,
   });
 
-  const tuitionFeeType = feeTypesData.find(ft => ft.isTuition);
-
-  const { data: tuitionAmounts = [] } = useQuery<any[]>({
-    queryKey: ["/api/admin/tuition-amounts", tuitionFeeType?.id],
-    queryFn: async () => {
-      const token = localStorage.getItem('auth_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`/api/admin/tuition-amounts/${tuitionFeeType!.id}`, { credentials: "include", headers });
-      if (!res.ok) return [];
-      return res.json();
+  const form = useForm<CommonFields>({
+    resolver: zodResolver(commonFieldsSchema),
+    defaultValues: {
+      paymentMethod: "transfer",
+      paymentDate: new Date().toISOString().split("T")[0],
+      purpose: "",
+      depositorName: "",
+      reference: "",
+      term: currentTerm || "",
+      session: currentSession || "",
+      notes: "",
     },
-    enabled: !!tuitionFeeType?.id,
   });
 
-  // Fix #1: memoize so the Map reference is stable across renders
-  const tuitionAmountMap = useMemo(
-    () => new Map(tuitionAmounts.map((ta: any) => [ta.classId, Number(ta.amount)])),
-    [tuitionAmounts]
-  );
+  const entryTerm = form.watch("term");
+  const entrySession = form.watch("session");
+  const tuitionFeeType = feeTypesData.find(ft => ft.isTuition && ft.isActive);
 
-  // Tuition balance per student for the current term/session, fetched only
+  // Fresh confirmed and pending tuition balances for the form period, fetched only
   // when the dialog is open so we don't ping the server unnecessarily.
-  const { data: tuitionBalancesData = [] } = useQuery<{
-    studentDbId: string;
-    tuitionAssigned: number;
-    tuitionPaid: number;
+  const { data: tuitionBalancesData = [], isFetching: balancesLoading, isError: balancesError } = useQuery<{
+    studentDbId: string; tuitionAssigned: number; tuitionPaid: number; tuitionPending: number; tuitionKnown: boolean;
   }[]>({
-    queryKey: ["/api/payments/tuition-balances", schoolId, currentTerm, currentSession],
-    queryFn: async () => {
-      const token = localStorage.getItem('auth_token');
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const params = new URLSearchParams();
-      if (schoolId) params.set('schoolId', schoolId);
-      if (currentTerm) params.set('term', currentTerm);
-      if (currentSession) params.set('session', currentSession);
-      const res = await fetch(`/api/payments/tuition-balances?${params.toString()}`, { credentials: 'include', headers });
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!schoolId && !!currentTerm && !!currentSession && isRecordDialogOpen,
+    queryKey: ["/api/payments/tuition-balances", "entry", schoolId, entryTerm, entrySession],
+    queryFn: async () => apiRequest(`/api/payments/entry-balances?${new URLSearchParams({schoolId:schoolId || '',term:entryTerm,session:entrySession})}`),
+    enabled: isRecordDialogOpen && !!schoolId && !!entryTerm && !!entrySession,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
-
-  const tuitionBalanceMap = useMemo(() => {
-    const m = new Map<string, { assigned: number; paid: number; due: number }>();
-    for (const r of tuitionBalancesData) {
-      const due = Math.max(0, r.tuitionAssigned - r.tuitionPaid);
-      m.set(r.studentDbId, { assigned: r.tuitionAssigned, paid: r.tuitionPaid, due });
-    }
-    return m;
-  }, [tuitionBalancesData]);
+  const tuitionBalanceMap = useMemo(() => new Map(tuitionBalancesData.map(r => [r.studentDbId, {
+    assigned:r.tuitionAssigned,paid:r.tuitionPaid,pending:r.tuitionPending,known:r.tuitionKnown,
+    due:Math.max(0,Math.round((r.tuitionAssigned-r.tuitionPaid-r.tuitionPending)*100)/100),
+  }])), [tuitionBalancesData]);
 
   const { data: paymentRecords = [], isLoading: recordsLoading, refetch: refetchRecords } = useQuery<FeePaymentRecordWithDetails[]>({
     queryKey: ["/api/payments/records", schoolId, statusFilter, dateFrom, dateTo, filterTerm, filterSession],
@@ -455,19 +439,6 @@ export function PaymentRecording({
     },
   });
 
-  const form = useForm<CommonFields>({
-    resolver: zodResolver(commonFieldsSchema),
-    defaultValues: {
-      paymentMethod: "cash",
-      paymentDate: new Date().toISOString().split("T")[0],
-      purpose: "",
-      depositorName: "",
-      reference: "",
-      term: currentTerm || "",
-      session: currentSession || "",
-      notes: "",
-    },
-  });
 
   // Legacy helper kept for the manual "Sync Now" button. Replays ONLY rows
   // that originated as single-student offline submissions (offlineId prefix
@@ -515,215 +486,63 @@ export function PaymentRecording({
 
   const currentPurpose = form.watch("purpose");
 
-  // Fix #1b: only overwrite amounts that are still 0 (preserve user-typed values)
   useEffect(() => {
-    if (!currentPurpose || selectedEntries.length === 0) return;
-    const matchedFee = feeTypesData.find(ft => ft.name === currentPurpose);
-    if (matchedFee?.isTuition) {
-      setSelectedEntries(prev => prev.map(e => {
-        if (e.amount > 0) return e;
-        const rate = e.student.classId ? (tuitionAmountMap.get(e.student.classId) || 0) : 0;
-        return { ...e, amount: rate };
-      }));
-      const sum = selectedEntries.reduce((acc, e) => {
-        return acc + (tuitionAmountMap.get(e.student.classId || '') || 0);
-      }, 0);
-      if (sum > 0) setTotalAmount(sum);
-    }
-  }, [selectedEntries.length, currentPurpose, feeTypesData, tuitionAmountMap]);
+    if (isRecordDialogOpen && !form.getValues('purpose') && tuitionFeeType) form.setValue('purpose', tuitionFeeType.name);
+  }, [isRecordDialogOpen, tuitionFeeType, form]);
 
-  // Allocation tally
   const studentCount = selectedEntries.length;
-  const allocatedTotal = selectedEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const unallocated = totalAmount - allocatedTotal;
+  const allocatedTotal = selectedEntries.reduce((sum,e)=>sum+Math.round(e.amount*100),0)/100;
+  const unallocated = Math.round((totalAmount-allocatedTotal)*100)/100;
+  const paymentRows = [
+    ...selectedEntries.map(e=>({studentId:e.student.id,purpose:currentPurpose==='Other'?customPurpose.trim():currentPurpose,amount:studentCount===1?totalAmount:e.amount})),
+    ...additionalPayments.map(row=>({studentId:row.studentId,purpose:row.purpose==='Other'?row.customPurpose.trim():row.purpose,amount:row.amount})),
+  ];
+  const paymentTotal = paymentRows.reduce((sum,row)=>sum+Math.round(row.amount*100),0)/100;
+  const tuitionTotal = paymentRows.filter(row=>feeTypesData.some(ft=>ft.isTuition&&ft.name===row.purpose)).reduce((sum,row)=>sum+Math.round(row.amount*100),0)/100;
+  const tuitionWarnings = selectedEntries.flatMap(({student})=>{
+    const requested=paymentRows.filter(row=>row.studentId===student.id&&feeTypesData.some(ft=>ft.isTuition&&ft.name===row.purpose)).reduce((sum,row)=>sum+Math.round(row.amount*100),0)/100;
+    if(!requested) return [];
+    const bal=tuitionBalanceMap.get(student.id);
+    const name=[student.user?.firstName || student.firstName,student.user?.lastName || student.lastName].filter(Boolean).join(' ');
+    if(balancesLoading) return [`Checking tuition for ${name}…`];
+    if(balancesError || !bal?.known) return [`Tuition for ${name} is not verified. Check the term and tuition settings.`];
+    return requested > bal.due ? [`${name}: ₦${(requested-bal.due).toLocaleString()} above available tuition. Pending payments are included. Reduce tuition and add another purpose.`] : [];
+  });
 
   const onSubmit = async (commonData: CommonFields) => {
-    if (selectedEntries.length === 0) {
-      toast({
-        title: "No Students Selected",
-        description: "Please add at least one student before recording a payment.",
-        variant: "destructive",
-      });
-      return;
+    if(submissionLock.current) return;
+    const invalid=paymentRows.some(row=>!row.purpose||!selectedEntries.some(e=>e.student.id===row.studentId)||!Number.isFinite(row.amount)||row.amount<=0||Number(row.amount.toFixed(2))!==row.amount);
+    if(!schoolId || !studentCount || invalid || (studentCount>1&&unallocated!==0) || tuitionWarnings.length || Math.round(amountReceived*100)!==Math.round(paymentTotal*100)) {
+      toast({title:'Check payment details',description:tuitionWarnings[0] || 'Enter a purpose and amount for every payment. The breakdown must equal the amount received.',variant:'destructive'});return;
     }
-
-    if (!totalAmount || totalAmount <= 0) {
-      toast({
-        title: "Missing Amount",
-        description: "Please enter a total amount greater than zero.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Fix #5: validate custom purpose description
-    if (commonData.purpose === "Other" && !customPurpose.trim()) {
-      toast({
-        title: "Purpose Required",
-        description: 'Please describe the payment purpose when selecting "Other".',
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Fix #2: skip per-student amount checks for single student
-    if (studentCount > 1) {
-      const hasZeroAmount = selectedEntries.some(e => !e.amount || e.amount <= 0);
-      if (hasZeroAmount) {
-        toast({
-          title: "Missing Amount",
-          description: "Please enter an amount for each student.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (allocatedTotal !== totalAmount) {
-        toast({
-          title: "Allocation Mismatch",
-          description: `Allocated amounts (₦${allocatedTotal.toLocaleString()}) do not match the total (₦${totalAmount.toLocaleString()}).`,
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    const resolvedPurpose = commonData.purpose === "Other" ? customPurpose.trim() : commonData.purpose;
-    const dataWithPurpose = { ...commonData, purpose: resolvedPurpose };
-
-    // No hard offline block: every submission flows through the queued helper
-    // below so it appears optimistically and syncs when online — single-student
-    // and multi-student alike. Server idempotency keeps replays safe.
-
-    setIsSubmitting(true);
-
-    // One stable idempotency key per submission. If the request hangs and the
-    // offline queue eventually replays it, the server returns the original record
-    // instead of inserting a duplicate.
-    const submissionKey = generateClientRequestId();
-    const optimisticId = `opt_${Date.now()}`;
-
-    // Insert an optimistic row for EVERY entry immediately so the user sees
-    // their work in the table the moment they hit Submit, regardless of
-    // network condition. Status: 'saving' until server confirms.
-    // Capture the EXACT request shape used for this submission so a later
-    // Retry replays the same endpoint with the same body — preserving
-    // single vs. multi semantics. All rows from one submission share the
-    // same `__submission` so a single retry re-runs the original atomic op.
-    const submission = studentCount > 1
-      ? {
-          url: '/api/payments/records/multi',
-          type: 'create-multi-payment',
-          body: {
-            ...dataWithPurpose,
-            schoolId: schoolId,
-            amount: totalAmount,
-            entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
-            clientRequestId: submissionKey,
-          },
-        }
-      : {
-          url: '/api/payments/record',
-          type: 'create-payment-record',
-          body: {
-            ...dataWithPurpose,
-            studentId: selectedEntries[0].student.id,
-            amount: totalAmount,
-            clientRequestId: submissionKey,
-          },
-        };
-    const optimisticRows = selectedEntries.map((entry, i) => ({
-      ...dataWithPurpose,
-      studentId: entry.student.id,
-      student: entry.student,
-      amount: studentCount > 1 ? entry.amount : totalAmount,
-      offlineId: `${optimisticId}_${i}`,
-      clientRequestId: submissionKey,
-      createdAt: new Date().toISOString(),
-      __status: 'saving' as const,
-      __submission: submission,
-    }));
-    setPendingPayments(prev => [...prev, ...optimisticRows]);
-    const removeOptimistic = () =>
-      setPendingPayments(prev => prev.filter(p => !p.offlineId?.startsWith(optimisticId)));
-    const markOptimisticAs = (status: 'pending-sync' | 'pending-slow' | 'failed', error?: string) =>
-      setPendingPayments(prev => prev.map(p =>
-        p.offlineId?.startsWith(optimisticId) ? { ...p, __status: status, __error: error } : p
-      ));
-
+    submissionLock.current=true;setIsSubmitting(true);
+    const submissionKey=generateClientRequestId();
+    const optimisticId=`opt_${submissionKey}`;
+    const submission={url:'/api/payments/records/batch',type:'create-payment-batch',body:{...commonData,schoolId,totalAmount:amountReceived,rows:paymentRows,clientRequestId:submissionKey}};
+    setPendingPayments(prev=>[...prev,...paymentRows.map((row,i)=>({...commonData,...row,student:selectedEntries.find(e=>e.student.id===row.studentId)?.student,offlineId:`${optimisticId}_${i}`,clientRequestId:submissionKey,createdAt:new Date().toISOString(),__status:'saving',__submission:submission}))]);
+    const remove=()=>setPendingPayments(prev=>prev.filter(p=>p.clientRequestId!==submissionKey));
     try {
-      if (studentCount > 1) {
-        // Multi-student: send a single request with splits via the queued helper so
-        // a 30s timeout falls back to the offline queue (still deduped via key).
-        const multiResult = await queuedApiRequest("/api/payments/records/multi", {
-          method: "POST",
-          body: {
-            ...dataWithPurpose,
-            schoolId: schoolId,
-            amount: totalAmount,
-            entries: selectedEntries.map(e => ({ studentId: e.student.id, amount: e.amount })),
-            clientRequestId: submissionKey,
-          },
-        }, 'create-multi-payment');
-        if (multiResult?.queued) {
-          markOptimisticAs(multiResult.offline ? 'pending-sync' : 'pending-slow');
-          toast({
-            title: multiResult.offline ? "Saved offline" : "Saving — slow network",
-            description: `Split payment will sync automatically. It will appear once confirmed by the server.`,
-          });
-        } else {
-          removeOptimistic();
-          queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
-          toast({
-            title: multiResult?.idempotent ? "Already Recorded" : "Payment Recorded",
-            description: `Split payment of ₦${totalAmount.toLocaleString()} recorded for ${studentCount} students.`,
-          });
-        }
-        closeAndReset();
+      const result=await queuedApiRequest(submission.url,{method:'POST',body:submission.body},submission.type);
+      if(result?.queued){
+        setPendingPayments(prev=>prev.map(p=>p.clientRequestId===submissionKey?{...p,__status:result.offline?'pending-sync':'pending-slow'}:p));
+        toast({title:result.offline?'Saved offline':'Waiting for connection',description:'The complete payment breakdown will sync together. Tuition balances will be checked again.'});
       } else {
-        // Single student — use queued helper for slow-network resilience
-        const entry = selectedEntries[0];
-        const singleResult = await queuedApiRequest("/api/payments/record", {
-          method: "POST",
-          body: {
-            ...dataWithPurpose,
-            studentId: entry.student.id,
-            amount: totalAmount,
-            clientRequestId: submissionKey,
-          },
-        }, 'create-payment-record');
-        if (singleResult?.queued) {
-          markOptimisticAs(singleResult.offline ? 'pending-sync' : 'pending-slow');
-          toast({
-            title: singleResult.offline ? "Saved offline" : "Saving — slow network",
-            description: "Payment will sync automatically. It is safe to record more.",
-          });
-          closeAndReset();
-          setIsSubmitting(false);
-          return;
-        }
-        removeOptimistic();
-        queryClient.invalidateQueries({ queryKey: ["/api/payments/records"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
-        toast({
-          title: "Payment Recorded",
-          description: `Payment of ₦${totalAmount.toLocaleString()} recorded successfully.`,
-        });
+        remove();
+        queryClient.invalidateQueries({queryKey:['/api/payments/records']});
+        queryClient.invalidateQueries({queryKey:['/api/payments/tuition-balances']});
+        queryClient.invalidateQueries({queryKey:['/api/admin/financial-summary']});
+        toast({title:'Payments recorded',description:`${paymentRows.length} payments totalling ₦${paymentTotal.toLocaleString()} are awaiting confirmation.`});
+      }
+      closeAndReset();
+    } catch(error:any){
+      if(/^4\d\d:/.test(error.message||'')){remove();}
+      else {
+        setPendingPayments(prev=>prev.map(p=>p.clientRequestId===submissionKey?{...p,__status:'failed',__error:error.message}:p));
         closeAndReset();
       }
-    } catch (err: any) {
-      // Keep the optimistic row visible but mark it failed so the user can
-      // retry or discard from the table — never silently lose their input.
-      markOptimisticAs('failed', err?.message || 'Failed to record payment');
-      toast({
-        title: "Payment Failed",
-        description: err.message || "Failed to record payment. You can retry or discard the row.",
-        variant: "destructive",
-      });
-    }
-
-    setIsSubmitting(false);
+      queryClient.invalidateQueries({queryKey:['/api/payments/tuition-balances']});
+      toast({title:'Payment not saved',description:error.message||'Retry the saved submission.',variant:'destructive'});
+    } finally {submissionLock.current=false;setIsSubmitting(false);}
   };
 
   // Retry a failed optimistic payment row. Reuses its stable clientRequestId
@@ -785,11 +604,13 @@ export function PaymentRecording({
     setIsRecordDialogOpen(false);
     setSelectedEntries([]);
     setTotalAmount(0);
+    setAmountReceived(0);
+    setAdditionalPayments([]);
     setSearchQuery("");
     setClassFilter("all");
     setCustomPurpose("");
     form.reset({
-      paymentMethod: "cash",
+      paymentMethod: "transfer",
       paymentDate: new Date().toISOString().split("T")[0],
       purpose: "",
       depositorName: "",
@@ -814,6 +635,7 @@ export function PaymentRecording({
 
   const removeStudent = (studentId: string) => {
     setSelectedEntries(selectedEntries.filter((e) => e.student.id !== studentId));
+    setAdditionalPayments(prev=>prev.filter(row=>row.studentId!==studentId));
   };
 
   const selectedIds = new Set(selectedEntries.map((e) => e.student.id));
@@ -950,7 +772,7 @@ export function PaymentRecording({
               </>
             )}
           </Badge>
-          <Dialog open={isRecordDialogOpen} onOpenChange={(open) => { if (!open) closeAndReset(); else setIsRecordDialogOpen(true); }}>
+          <Dialog open={isRecordDialogOpen} onOpenChange={(open) => { if (!open && !submissionLock.current) closeAndReset(); else if (open) { form.setValue("term", currentTerm || ""); form.setValue("session", currentSession || ""); setIsRecordDialogOpen(true); } }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -1038,14 +860,14 @@ export function PaymentRecording({
                     name="purpose"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Purpose</FormLabel>
+                        <FormLabel>First payment purpose</FormLabel>
                         <Select onValueChange={(val) => {
                           field.onChange(val);
                           if (val !== "Other") setCustomPurpose("");
                         }} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="What is this payment for?" />
+                              <SelectValue placeholder="Select tuition or another purpose" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
@@ -1073,11 +895,12 @@ export function PaymentRecording({
 
                   {/* Total Amount */}
                   <div className="space-y-2">
-                    <Label>Total Amount (₦)</Label>
+                    <Label>Amount for this purpose (₦)</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">₦</span>
                       <Input
                         type="number"
+                        step="0.01"
                         placeholder="0.00"
                         className="pl-7"
                         value={totalAmount || ""}
@@ -1086,6 +909,25 @@ export function PaymentRecording({
                         min={0}
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border p-3">
+                    <div className="text-sm font-medium">Additional payments</div>
+                    <p className="text-xs text-muted-foreground">Add books, uniforms or another purpose. No amount is automatically moved to miscellaneous.</p>
+                    {additionalPayments.map((row,index)=><div key={row.id} className="space-y-2 rounded-md bg-muted/30 p-3">
+                      <div className="flex items-center justify-between"><span className="text-sm font-medium">Payment {index+2}</span><Button type="button" variant="ghost" size="icon" aria-label={`Remove payment ${index+2}`} onClick={()=>setAdditionalPayments(prev=>prev.filter(p=>p.id!==row.id))}><X className="h-4 w-4" /></Button></div>
+                      <label className="block text-xs">Student
+                        <select className="mt-1 min-h-11 w-full rounded-md border bg-background p-2 text-sm" value={row.studentId} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,studentId:e.target.value}:p))}>
+                          <option value="">Select student</option>{selectedEntries.map(({student})=><option key={student.id} value={student.id}>{student.user?.lastName || student.lastName} {student.user?.firstName || student.firstName} ({student.studentId})</option>)}
+                        </select>
+                      </label>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label className="text-xs">Purpose<select className="mt-1 min-h-11 w-full rounded-md border bg-background p-2 text-sm" value={row.purpose} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,purpose:e.target.value}:p))}><option value="">Select purpose</option>{feeTypesData.filter(ft=>ft.isActive).map(ft=><option key={ft.id} value={ft.name}>{ft.name}{ft.isTuition?' (Tuition)':''}</option>)}<option value="Other">Other — describe</option></select></label>
+                        <label className="text-xs">Amount (₦)<Input className="mt-1 min-h-11" type="number" min="0.01" step="0.01" value={row.amount||''} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,amount:Number(e.target.value)}:p))}/></label>
+                      </div>
+                      {row.purpose==='Other'&&<Input aria-label="Describe payment purpose" placeholder="Describe the purpose" maxLength={100} value={row.customPurpose} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,customPurpose:e.target.value}:p))}/>}
+                    </div>)}
+                    <Button type="button" variant="outline" className="min-h-11 w-full" disabled={!studentCount||additionalPayments.length>=20} onClick={()=>setAdditionalPayments(prev=>[...prev,{id:generateClientRequestId(),studentId:selectedEntries[0]?.student.id||'',purpose:'',customPurpose:'',amount:0}])}><Plus className="mr-2 h-4 w-4"/>Add another payment</Button>
                   </div>
 
                   {/* Selected Students List */}
@@ -1116,22 +958,22 @@ export function PaymentRecording({
                                 fullyPaid ? (
                                   <div className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-green-700 dark:text-green-400" data-testid={`text-tuition-balance-${entry.student.id}`}>
                                     <CheckCircle2 className="h-3 w-3" />
-                                    Tuition fully paid for {currentTerm}
+                                    No tuition remaining to record for {entryTerm} (including pending payments)
                                   </div>
                                 ) : (
                                   <div className={`text-[11px] mt-0.5 ${bal!.paid > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                    Tuition: ₦{bal!.assigned.toLocaleString()} assigned · ₦{bal!.paid.toLocaleString()} paid ·{" "}
+                                    Tuition: ₦{bal!.assigned.toLocaleString()} assigned · ₦{bal!.paid.toLocaleString()} confirmed · ₦{bal!.pending.toLocaleString()} pending ·{" "}
                                     <span className="font-medium">₦{bal!.due.toLocaleString()} due</span>
                                   </div>
                                 )
                               ) : bal && bal.paid > 0 ? (
                                 <div className="text-[11px] mt-0.5 text-muted-foreground" data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                  Tuition: ₦{bal.paid.toLocaleString()} paid · no tuition amount set for this class
+                                  Tuition: ₦{bal.paid.toLocaleString()} confirmed · no tuition amount set for this class
                                 </div>
                               ) : (
                                 <div className="text-[11px] mt-0.5 text-muted-foreground italic" data-testid={`text-tuition-balance-${entry.student.id}`}>
                                   {entry.student.classId
-                                    ? `No tuition configured for this class (${currentTerm} ${currentSession})`
+                                    ? `No tuition configured for this class (${entryTerm} ${entrySession})`
                                     : "Student has no class assigned — tuition cannot be tracked"}
                                 </div>
                               )}
@@ -1147,6 +989,7 @@ export function PaymentRecording({
                                   <span className="absolute left-2.5 top-2 text-sm text-muted-foreground">₦</span>
                                   <Input
                                     type="number"
+                                    step="0.01"
                                     min={0}
                                     className="pl-6 h-8 text-sm"
                                     value={entry.amount || ""}
@@ -1273,11 +1116,22 @@ export function PaymentRecording({
                     )}
                   />
 
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3" aria-live="polite">
+                    <p className="font-medium">Review payment breakdown</p>
+                    {paymentRows.map((row,i)=><div key={i} className="flex justify-between gap-3 text-sm"><span>{row.purpose||'Choose purpose'} · {selectedEntries.find(e=>e.student.id===row.studentId)?.student.studentId}</span><span>₦{row.amount.toLocaleString()}</span></div>)}
+                    <div className="border-t pt-2 text-sm">Tuition: ₦{tuitionTotal.toLocaleString()} · Other payments: ₦{(Math.round((paymentTotal-tuitionTotal)*100)/100).toLocaleString()}</div>
+                    <p className="font-semibold">Total being recorded: ₦{paymentTotal.toLocaleString()}</p>
+                    <label className="block text-sm font-medium">Amount received (₦)<Input className="mt-1 min-h-11" type="number" min="0.01" step="0.01" value={amountReceived||''} onChange={e=>setAmountReceived(Number(e.target.value))}/></label>
+                    {amountReceived>0&&Math.round(amountReceived*100)!==Math.round(paymentTotal*100)&&<p className="text-sm text-destructive">The breakdown differs from the amount received by ₦{Math.abs(Math.round((amountReceived-paymentTotal)*100)/100).toLocaleString()}.</p>}
+                    {tuitionWarnings.map(message=><p key={message} className="text-sm text-destructive">{message}</p>)}
+                    <p className="text-xs text-muted-foreground">All rows share the date, depositor and reference above. They count toward collections after confirmation.</p>
+                  </div>
                   <div className="sticky bottom-0 z-10 flex gap-2 pt-3 pb-2 bg-background border-t">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={closeAndReset}
+                      disabled={isSubmitting}
                       className="flex-1"
                     >
                       Cancel
@@ -1285,7 +1139,7 @@ export function PaymentRecording({
                     <Button
                       type="submit"
                       className="flex-1"
-                      disabled={isSubmitting || selectedEntries.length === 0}
+                      disabled={isSubmitting || selectedEntries.length === 0 || tuitionWarnings.length>0}
                     >
                       {isSubmitting ? (
                         <>
@@ -1293,9 +1147,7 @@ export function PaymentRecording({
                           Recording...
                         </>
                       ) : isOnline ? (
-                        selectedEntries.length > 1
-                          ? `Record ${selectedEntries.length} Payments`
-                          : "Record Payment"
+                        `Record ${paymentRows.length} payment${paymentRows.length===1?'':'s'}`
                       ) : (
                         "Save Offline"
                       )}

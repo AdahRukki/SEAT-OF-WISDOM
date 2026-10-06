@@ -1,3 +1,4 @@
+import { recordPaymentBatch, PaymentBatchError } from "./payment-batch";
 import { getLedgerPayments } from "./ledger-payments";
 import { firstPaymentStudents, inConfirmationRange } from "@shared/ledger-payments";
 import type { Express } from "express";
@@ -4639,6 +4640,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ==================== PAYMENT TRACKING & RECONCILIATION ====================
+
+  app.get("/api/payments/entry-balances", authenticate, requireBursarOrAdmin, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const schoolId = user.role === 'admin' ? String(req.query.schoolId || '') : user.schoolId;
+      const term = String(req.query.term || ''), session = String(req.query.session || '');
+      if (!schoolId || !term || !session) return res.status(400).json({error:'Select school, term and session'});
+      const ledger = await storage.getStudentPaymentLedger(schoolId, undefined, term, session);
+      const pending = await db.execute(sql`
+        SELECT student_id, SUM(amount) AS amount FROM (
+          SELECT p.student_id,p.amount FROM fee_payment_records p WHERE p.school_id=${schoolId} AND p.term=${term} AND p.session=${session} AND p.status='recorded' AND p.student_id IS NOT NULL
+            AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=p.purpose)
+          UNION ALL SELECT ss.student_id,ss.amount FROM fee_payment_student_splits ss JOIN fee_payment_records p ON p.id=ss.payment_record_id WHERE p.school_id=${schoolId} AND p.term=${term} AND p.session=${session} AND p.status='recorded'
+            AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=p.purpose)
+        ) payments GROUP BY student_id`);
+      const pendingMap = new Map((pending.rows as any[]).map(row=>[row.student_id, Number(row.amount)]));
+      return res.json(ledger.entries.map(entry=>({...entry,tuitionPending:pendingMap.get(entry.studentDbId)||0})));
+    } catch (error) { console.error('Entry balances failed',error); return res.status(500).json({error:'Could not load tuition balances'}); }
+  });
+
+  app.post("/api/payments/records/batch", authenticate, requireBursarOrAdmin, async (req, res) => {
+    try {
+      const result = await recordPaymentBatch(db, req.body, (req as any).user,
+        (schoolId, term, session) => storage.getStudentPaymentLedger(schoolId, undefined, term, session), req.ip);
+      return res.status(result.idempotent ? 200 : 201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({error:error.issues.map(issue => issue.message).join('; ')});
+      if (error instanceof PaymentBatchError) return res.status(error.status).json({error:error.message});
+      console.error("Record payment batch failed", error);
+      return res.status(500).json({error:"Payment was not saved. Retry the same submission."});
+    }
+  });
 
   // Record a new fee payment (bursar, sub-admin, or admin)
   app.post("/api/payments/record", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {

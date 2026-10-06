@@ -1,3 +1,4 @@
+import { summarizeTuition } from "../shared/tuition-summary";
 import {
   schools,
   users,
@@ -2038,6 +2039,7 @@ export class DatabaseStorage implements IStorage {
     collectionRate: number;
     studentsOwing: number;
     totalPosFees: number;
+    tuitionUnverifiedCount: number;
     typeBreakdown: {
       new:       { totalFees: number; actualCollected: number; studentsOwing: number };
       returning: { totalFees: number; actualCollected: number; studentsOwing: number };
@@ -2054,95 +2056,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(...revenueConditions));
     const totalRevenue = Number(revenueRow?.total || 0);
 
-    const activeStudentsRows = await db.execute(sql`
-      SELECT s.id, s.class_id AS "classId", s.discount AS "discount",
-             ${term && session
-               ? sql`CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term} AND s.student_type_flipped_session = ${session} THEN 'new' ELSE COALESCE(s.student_type, 'returning') END`
-               : sql`COALESCE(s.student_type, 'returning')`} AS "studentType"
-      FROM students s
-      JOIN users u ON s.user_id = u.id
-      WHERE u.is_active = true
-        ${schoolId ? sql`AND u.school_id = ${schoolId}` : sql``}
-    `);
-    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as { id: string; classId: string; discount: string | number | null; studentType: string | null }[];
-
-    const tuitionFeeConditions: any[] = [eq(feeTypes.isTuition, true), eq(feeTypes.isActive, true)];
-    if (schoolId) tuitionFeeConditions.push(eq(feeTypes.schoolId, schoolId));
-    const [tuitionFeeType] = await db.select().from(feeTypes).where(and(...tuitionFeeConditions)).limit(1);
-
-    let totalTuitionOwed = 0;
-    let tuitionPaid = 0;
-    let studentsOwing = 0;
-
-    let actualTuitionCollected = 0;
-
-    // Per-type breakdown (new vs returning students)
-    const typeBreakdown = {
-      new:       { totalFees: 0, actualCollected: 0, studentsOwing: 0 },
-      returning: { totalFees: 0, actualCollected: 0, studentsOwing: 0 },
-    };
-
-    if (tuitionFeeType) {
-      // Always load ALL rows (global + every scoped set) so the resolver can
-      // apply the correct priority fallback: scoped+typed > scoped+universal >
-      // global+typed > global+universal. Fetching only scoped rows would prevent
-      // the global fallback from firing for classes/types not in that scope.
-      const tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
-      const summaryResolver = this.buildTuitionResolver(tuitionAmounts, term, session);
-
-      // Track both owed amount and student type so we can break down by type later.
-      const studentOwedMap = new Map<string, number>();
-      const studentTypeMap = new Map<string, 'new' | 'returning'>();
-      for (const student of allActiveStudents) {
-        const classAmount = student.classId ? summaryResolver(student.classId, student.studentType ?? null) : 0;
-        if (classAmount > 0) {
-          const discount = Number(student.discount) || 0;
-          const owed = Math.max(0, classAmount - discount);
-          studentOwedMap.set(student.id, owed);
-          totalTuitionOwed += owed;
-          const typeKey: 'new' | 'returning' = student.studentType === 'new' ? 'new' : 'returning';
-          studentTypeMap.set(student.id, typeKey);
-          typeBreakdown[typeKey].totalFees += owed;
-        }
-      }
-
-      // Per-student paid TUITION totals. Same UNION as the Payment Broadsheet
-      // (records + multi-student splits) but filtered to the tuition fee
-      // purpose. Tuition payments can never exceed what's owed (any excess on
-      // the tuition column is recorded as miscellaneous instead), so this
-      // gives the exact tuition collected without double-counting other fees.
-      const studentPaidMap = await this.getConfirmedPaymentTotalsByStudent(
-        schoolId, term, session, tuitionFeeType.name,
-      );
-
-      // tuitionPaid: raw sum of all confirmed tuition payments (uncapped).
-      tuitionPaid = Array.from(studentPaidMap.values()).reduce((s, v) => s + v, 0);
-
-      // actualTuitionCollected: per-student capped at what they actually owe —
-      // overpayments do NOT inflate collection; partial payments DO count
-      // toward the rate and outstanding.
-      // studentsOwing: every active student whose owed > paid (partial payers
-      // included), only counting students who actually have a tuition assigned.
-      let owingCount = 0;
-      for (const [studentId, owed] of studentOwedMap) {
-        const paid = studentPaidMap.get(studentId) || 0;
-        const capped = Math.min(paid, owed);
-        actualTuitionCollected += capped;
-        if (paid < owed) owingCount += 1;
-        // Per-type accumulation
-        const typeKey = studentTypeMap.get(studentId) ?? 'returning';
-        typeBreakdown[typeKey].actualCollected += capped;
-        if (paid < owed) typeBreakdown[typeKey].studentsOwing += 1;
-      }
-      studentsOwing = owingCount;
-    } else {
-      studentsOwing = 0;
-    }
-
-    const totalOutstanding = Math.max(0, totalTuitionOwed - actualTuitionCollected);
-    const collectionRate = totalTuitionOwed > 0
-      ? Math.round((actualTuitionCollected / totalTuitionOwed) * 100)
-      : 0;
+    const schoolIds = schoolId ? [schoolId] : (await db.select({id:schools.id}).from(schools)).map(row=>row.id);
+    const ledgers = await Promise.all(schoolIds.map(id=>this.getStudentPaymentLedger(id, undefined, term, session)));
+    const summary = summarizeTuition(ledgers.flatMap(ledger=>ledger.entries));
 
     // Sum POS fees absorbed for Moniepoint-matched allocations.
     // Fee per allocation = |bankTransactionAmount - allocatedAmount|.
@@ -2160,19 +2076,7 @@ export class DatabaseStorage implements IStorage {
     `);
     const totalPosFees = Number(((posFeeRows as any).rows ?? posFeeRows)[0]?.total || 0);
 
-    return {
-      totalFees: totalTuitionOwed,
-      totalPaid: tuitionPaid,
-      totalPending: 0,
-      totalOverdue: 0,
-      totalRevenue,
-      actualTuitionCollected,
-      totalOutstanding,
-      collectionRate,
-      studentsOwing,
-      totalPosFees,
-      typeBreakdown,
-    };
+    return { ...summary, totalPending:0, totalOverdue:0, totalRevenue, totalPosFees };
   }
 
   async getTuitionCollectionByClass(schoolId: string, term?: string, session?: string): Promise<Array<{
@@ -2227,8 +2131,8 @@ export class DatabaseStorage implements IStorage {
 
     // Per-student paid TUITION totals. Same UNION the Payment Broadsheet uses
     // (records + splits) but scoped to the tuition fee purpose so the popup
-    // shows real tuition collected per class — excess on tuition is impossible
-    // (it's auto-routed to miscellaneous), so no cap is needed beyond the
+    // shows tuition collected per class; overpayments are never reassigned
+    // to another purpose automatically. Apply the
     // safety min(paid, owed) below.
     const studentPaidMap = tuitionFeeType
       ? await this.getConfirmedPaymentTotalsByStudent(
