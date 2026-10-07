@@ -1707,14 +1707,14 @@ export class DatabaseStorage implements IStorage {
     const scoped = !!(term && session);
     const rows = await db.execute(sql`
       WITH allocated AS (
-        SELECT fpr.student_id, fpr.amount, fpr.purpose, fpr.payment_date, fpr.confirmed_at
+        SELECT fpr.student_id, fpr.amount, fpr.purpose, fpr.payment_date, fpr.confirmed_at, fpr.id AS payment_id
         FROM fee_payment_records fpr
         WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed' AND fpr.student_id IS NOT NULL
           ${term ? sql`AND fpr.term = ${term}` : sql``}
           ${session ? sql`AND fpr.session = ${session}` : sql``}
           ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
         UNION ALL
-        SELECT fpss.student_id, fpss.amount, fpr.purpose, fpr.payment_date, fpr.confirmed_at
+        SELECT fpss.student_id, fpss.amount, COALESCE(fpss.purpose, fpr.purpose) AS purpose, fpr.payment_date, fpr.confirmed_at, fpr.id AS payment_id
         FROM fee_payment_student_splits fpss
         JOIN fee_payment_records fpr ON fpr.id = fpss.payment_record_id
         WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'
@@ -1730,7 +1730,7 @@ export class DatabaseStorage implements IStorage {
         SELECT student_id, SUM(amount) AS paid,
           COALESCE(SUM(amount) FILTER (WHERE is_tuition), 0) AS tuition_paid,
           COALESCE(SUM(amount) FILTER (WHERE NOT is_tuition), 0) AS other_paid,
-          COUNT(*) AS payment_count, MAX(payment_date) AS last_payment,
+          COUNT(DISTINCT payment_id) AS payment_count, MAX(payment_date) AS last_payment,
           MAX(confirmed_at AT TIME ZONE 'UTC') AS last_confirmed
         FROM classified GROUP BY student_id
       ), roster AS (
@@ -1849,7 +1849,7 @@ export class DatabaseStorage implements IStorage {
                    AND fpr2.status = 'confirmed'
                    AND fpr2.term = ${term}
                    AND fpr2.session = ${session}
-                   AND fpr2.purpose = ${tuitionFee.name}
+                   AND COALESCE(fpss.purpose, fpr2.purpose) = ${tuitionFee.name}
                ), 0)
              )::numeric AS "tuitionPaid"
       FROM students s
@@ -1888,7 +1888,7 @@ export class DatabaseStorage implements IStorage {
     const schoolFpr2 = schoolId ? sql`AND fpr2.school_id = ${schoolId}` : sql``;
     const termFpr2 = term ? sql`AND fpr2.term = ${term}` : sql``;
     const sessFpr2 = session ? sql`AND fpr2.session = ${session}` : sql``;
-    const purposeFpr2 = purpose ? sql`AND fpr2.purpose = ${purpose}` : sql``;
+    const purposeFpr2 = purpose ? sql`AND COALESCE(fpss.purpose, fpr2.purpose) = ${purpose}` : sql``;
 
     const rows = await db.execute(sql`
       SELECT student_id AS "studentId",
@@ -4475,7 +4475,7 @@ export class DatabaseStorage implements IStorage {
         fpss.id AS "id",
         fpr2.id AS "paymentRecordId",
         fpss.amount::text AS "amount",
-        fpr2.purpose AS "purpose",
+        COALESCE(fpss.purpose, fpr2.purpose) AS "purpose",
         fpr2.payment_method AS "paymentMethod",
         fpr2.reference AS "reference",
         fpr2.status AS "status",
@@ -4685,6 +4685,7 @@ export class DatabaseStorage implements IStorage {
           paymentRecordId: feePaymentStudentSplits.paymentRecordId,
           studentId: feePaymentStudentSplits.studentId,
           amount: feePaymentStudentSplits.amount,
+          purpose: feePaymentStudentSplits.purpose,
           createdAt: feePaymentStudentSplits.createdAt,
           studentDbId: students.id,
           studentDisplayId: students.studentId,
@@ -4703,6 +4704,7 @@ export class DatabaseStorage implements IStorage {
           paymentRecordId: r.paymentRecordId,
           studentId: r.studentId,
           amount: r.amount,
+          purpose: r.purpose,
           createdAt: r.createdAt,
           student: r.studentDbId && r.studentDisplayId
             ? {
@@ -5480,6 +5482,7 @@ export class DatabaseStorage implements IStorage {
         .select({
           paymentRecordId: feePaymentStudentSplits.paymentRecordId,
           amount: feePaymentStudentSplits.amount,
+          purpose: feePaymentStudentSplits.purpose,
           studentDbId: students.id,
           studentDisplayId: students.studentId,
           firstName: users.firstName,
@@ -5496,6 +5499,7 @@ export class DatabaseStorage implements IStorage {
           studentDbId: r.studentDbId,
           studentId: r.studentDisplayId,
           amount: r.amount,
+          purpose: r.purpose,
           user: {
             firstName: r.firstName ?? '',
             lastName: r.lastName ?? '',

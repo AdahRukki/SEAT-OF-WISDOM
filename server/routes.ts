@@ -4653,7 +4653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           SELECT p.student_id,p.amount FROM fee_payment_records p WHERE p.school_id=${schoolId} AND p.term=${term} AND p.session=${session} AND p.status='recorded' AND p.student_id IS NOT NULL
             AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=p.purpose)
           UNION ALL SELECT ss.student_id,ss.amount FROM fee_payment_student_splits ss JOIN fee_payment_records p ON p.id=ss.payment_record_id WHERE p.school_id=${schoolId} AND p.term=${term} AND p.session=${session} AND p.status='recorded'
-            AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=p.purpose)
+            AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=COALESCE(ss.purpose,p.purpose))
         ) payments GROUP BY student_id`);
       const pendingMap = new Map((pending.rows as any[]).map(row=>[row.student_id, Number(row.amount)]));
       return res.json(ledger.entries.map(entry=>({...entry,tuitionPending:pendingMap.get(entry.studentDbId)||0})));
@@ -5010,7 +5010,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           for (const entry of ledger.entries) {
             const records = grouped.get(entry.studentDbId) || [];
             entry.totalPaid = records.reduce((sum, record) => sum + Math.round(Number(record.amount) * 100), 0) / 100;
-            entry.paymentCount = records.length;
+            entry.paymentCount = new Set(records.map(record => record.paymentRecordId)).size;
             entry.tuitionPaid = records.filter(record => record.isTuition).reduce((sum, record) => sum + Math.round(Number(record.amount) * 100), 0) / 100;
             entry.nonTuitionPaid = Math.round((entry.totalPaid - entry.tuitionPaid) * 100) / 100;
             entry.balance = entry.tuitionKnown ? Math.max(0, Math.round((entry.tuitionAssigned - entry.tuitionPaid) * 100) / 100) : 0;

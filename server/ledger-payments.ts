@@ -18,11 +18,11 @@ export async function getLedgerPayments(schoolId: string, term?: string, session
       ${session ? sql`AND fpr.session = ${session}` : sql``}
     UNION ALL
     SELECT fpss.id, fpr.id AS "paymentRecordId", fpss.student_id AS "studentDbId",
-      fpss.amount::text AS amount, fpr.purpose, fpr.payment_method AS "paymentMethod",
+      fpss.amount::text AS amount, COALESCE(fpss.purpose,fpr.purpose) AS purpose, fpr.payment_method AS "paymentMethod",
       fpr.reference, fpr.status, fpr.payment_date AS "paymentDate",
       (fpr.created_at AT TIME ZONE 'UTC') AS "createdAt", (fpr.confirmed_at AT TIME ZONE 'UTC') AS "confirmedAt",
       fpr.term, fpr.session, true AS "isSplit",
-      EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.name = fpr.purpose) AS "isTuition"
+      EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.name = COALESCE(fpss.purpose,fpr.purpose)) AS "isTuition"
     FROM fee_payment_student_splits fpss
     JOIN fee_payment_records fpr ON fpr.id = fpss.payment_record_id
     WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'

@@ -83,7 +83,7 @@ import { recordFeePaymentSchema, type FeePaymentRecordWithDetails, type FeePayme
 
 type RecordPaymentForm = z.infer<typeof recordFeePaymentSchema>;
 
-const commonFieldsSchema = recordFeePaymentSchema.omit({ studentId: true, amount: true });
+const commonFieldsSchema = recordFeePaymentSchema.omit({ studentId: true, amount: true, purpose: true });
 type CommonFields = z.infer<typeof commonFieldsSchema>;
 
 const METHOD_LABELS: Record<string, string> = {
@@ -145,7 +145,6 @@ export function PaymentRecording({
   const [isBodyVisible, setIsBodyVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEntries, setSelectedEntries] = useState<SelectedStudentEntry[]>([]);
-  const [totalAmount, setTotalAmount] = useState<number>(0);
   const [amountReceived, setAmountReceived] = useState<number>(0);
   const [additionalPayments, setAdditionalPayments] = useState<{id:string;studentId:string;purpose:string;customPurpose:string;amount:number}[]>([]);
   const submissionLock = useRef(false);
@@ -153,7 +152,6 @@ export function PaymentRecording({
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [customPurpose, setCustomPurpose] = useState("");
   const [classSortDir, setClassSortDir] = useState<"asc" | "desc" | null>(null);
   const [classFilter, setClassFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -389,7 +387,6 @@ export function PaymentRecording({
     defaultValues: {
       paymentMethod: "transfer",
       paymentDate: new Date().toISOString().split("T")[0],
-      purpose: "",
       depositorName: "",
       reference: "",
       term: currentTerm || "",
@@ -484,19 +481,8 @@ export function PaymentRecording({
         queryClient.invalidateQueries({ queryKey: ["/api/payments/tuition-balances"] });
   };
 
-  const currentPurpose = form.watch("purpose");
-
-  useEffect(() => {
-    if (isRecordDialogOpen && !form.getValues('purpose') && tuitionFeeType) form.setValue('purpose', tuitionFeeType.name);
-  }, [isRecordDialogOpen, tuitionFeeType, form]);
-
   const studentCount = selectedEntries.length;
-  const allocatedTotal = selectedEntries.reduce((sum,e)=>sum+Math.round(e.amount*100),0)/100;
-  const unallocated = Math.round((totalAmount-allocatedTotal)*100)/100;
-  const paymentRows = [
-    ...selectedEntries.map(e=>({studentId:e.student.id,purpose:currentPurpose==='Other'?customPurpose.trim():currentPurpose,amount:studentCount===1?totalAmount:e.amount})),
-    ...additionalPayments.map(row=>({studentId:row.studentId,purpose:row.purpose==='Other'?row.customPurpose.trim():row.purpose,amount:row.amount})),
-  ];
+  const paymentRows = additionalPayments.map(row=>({studentId:row.studentId,purpose:row.purpose==='Other'?row.customPurpose.trim():row.purpose,amount:row.amount}));
   const paymentTotal = paymentRows.reduce((sum,row)=>sum+Math.round(row.amount*100),0)/100;
   const tuitionTotal = paymentRows.filter(row=>feeTypesData.some(ft=>ft.isTuition&&ft.name===row.purpose)).reduce((sum,row)=>sum+Math.round(row.amount*100),0)/100;
   const tuitionWarnings = selectedEntries.flatMap(({student})=>{
@@ -512,14 +498,14 @@ export function PaymentRecording({
   const onSubmit = async (commonData: CommonFields) => {
     if(submissionLock.current) return;
     const invalid=paymentRows.some(row=>!row.purpose||!selectedEntries.some(e=>e.student.id===row.studentId)||!Number.isFinite(row.amount)||row.amount<=0||Number(row.amount.toFixed(2))!==row.amount);
-    if(!schoolId || !studentCount || invalid || (studentCount>1&&unallocated!==0) || tuitionWarnings.length || Math.round(amountReceived*100)!==Math.round(paymentTotal*100)) {
+    if(!schoolId || !studentCount || invalid || !paymentRows.length || amountReceived<=0 || tuitionWarnings.length || Math.round(amountReceived*100)!==Math.round(paymentTotal*100)) {
       toast({title:'Check payment details',description:tuitionWarnings[0] || 'Enter a purpose and amount for every payment. The breakdown must equal the amount received.',variant:'destructive'});return;
     }
     submissionLock.current=true;setIsSubmitting(true);
     const submissionKey=generateClientRequestId();
     const optimisticId=`opt_${submissionKey}`;
     const submission={url:'/api/payments/records/batch',type:'create-payment-batch',body:{...commonData,schoolId,totalAmount:amountReceived,rows:paymentRows,clientRequestId:submissionKey}};
-    setPendingPayments(prev=>[...prev,...paymentRows.map((row,i)=>({...commonData,...row,student:selectedEntries.find(e=>e.student.id===row.studentId)?.student,offlineId:`${optimisticId}_${i}`,clientRequestId:submissionKey,createdAt:new Date().toISOString(),__status:'saving',__submission:submission}))]);
+    setPendingPayments(prev=>[...prev,{...commonData,amount:amountReceived,purpose:Array.from(new Set(paymentRows.map(row=>row.purpose))).join(', '),allocationCount:paymentRows.length,student:studentCount===1?selectedEntries[0].student:undefined,offlineId:optimisticId,clientRequestId:submissionKey,createdAt:new Date().toISOString(),__status:'saving',__submission:submission}]);
     const remove=()=>setPendingPayments(prev=>prev.filter(p=>p.clientRequestId!==submissionKey));
     try {
       const result=await queuedApiRequest(submission.url,{method:'POST',body:submission.body},submission.type);
@@ -531,7 +517,7 @@ export function PaymentRecording({
         queryClient.invalidateQueries({queryKey:['/api/payments/records']});
         queryClient.invalidateQueries({queryKey:['/api/payments/tuition-balances']});
         queryClient.invalidateQueries({queryKey:['/api/admin/financial-summary']});
-        toast({title:'Payments recorded',description:`${paymentRows.length} payments totalling ₦${paymentTotal.toLocaleString()} are awaiting confirmation.`});
+        toast({title:'Payment recorded',description:`One payment of ₦${paymentTotal.toLocaleString()} with ${paymentRows.length} allocations is awaiting confirmation.`});
       }
       closeAndReset();
     } catch(error:any){
@@ -603,16 +589,13 @@ export function PaymentRecording({
   const closeAndReset = () => {
     setIsRecordDialogOpen(false);
     setSelectedEntries([]);
-    setTotalAmount(0);
     setAmountReceived(0);
     setAdditionalPayments([]);
     setSearchQuery("");
     setClassFilter("all");
-    setCustomPurpose("");
     form.reset({
       paymentMethod: "transfer",
       paymentDate: new Date().toISOString().split("T")[0],
-      purpose: "",
       depositorName: "",
       reference: "",
       term: currentTerm || "",
@@ -624,18 +607,8 @@ export function PaymentRecording({
   const addStudent = (student: Student) => {
     if (selectedEntries.some((e) => e.student.id === student.id)) return;
     setSelectedEntries([...selectedEntries, { student, amount: 0 }]);
+    setAdditionalPayments(prev=>[...prev,{id:generateClientRequestId(),studentId:student.id,purpose:tuitionFeeType?.name||'',customPurpose:'',amount:0}]);
     setSearchQuery("");
-  };
-
-  const updateStudentAmount = (studentId: string, amount: number) => {
-    setSelectedEntries(prev =>
-      prev.map(e => e.student.id === studentId ? { ...e, amount } : e)
-    );
-  };
-
-  const removeStudent = (studentId: string) => {
-    setSelectedEntries(selectedEntries.filter((e) => e.student.id !== studentId));
-    setAdditionalPayments(prev=>prev.filter(row=>row.studentId!==studentId));
   };
 
   const selectedIds = new Set(selectedEntries.map((e) => e.student.id));
@@ -784,12 +757,70 @@ export function PaymentRecording({
                 <DialogTitle>Record Fee Payment</DialogTitle>
                 {/* UX #1: description matches actual form order */}
                 <DialogDescription>
-                  Add students, select a purpose, then confirm the amount(s).
+                  One transfer, one confirmation. Allocate it to students below.
                 </DialogDescription>
               </DialogHeader>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
+                  <p className="text-sm text-muted-foreground">{entryTerm} · {entrySession}</p>
+                  <label className="block text-sm font-medium">Amount received (₦)<Input className="mt-1 min-h-11" type="number" min="0.01" step="0.01" value={amountReceived||''} onChange={e=>setAmountReceived(Number(e.target.value))}/></label>
+                  {/* Term & Session are auto-filled from currently active academic info */}
+
+                  {/* Payment Details */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="paymentMethod"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Method</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select method" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="transfer">Bank Transfer</SelectItem>
+                              <SelectItem value="pos">POS</SelectItem>
+                              <SelectItem value="cash">Cash</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="paymentDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Payment Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="depositorName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Depositor Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Name of person who made the deposit" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   {/* Student Search */}
                   <div className="space-y-2">
@@ -854,240 +885,34 @@ export function PaymentRecording({
                     )}
                   </div>
 
-                  {/* UX #1: Purpose moved above Total Amount so tuition auto-fill is immediately visible */}
-                  <FormField
-                    control={form.control}
-                    name="purpose"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>First payment purpose</FormLabel>
-                        <Select onValueChange={(val) => {
-                          field.onChange(val);
-                          if (val !== "Other") setCustomPurpose("");
-                        }} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select tuition or another purpose" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {feeTypesData.filter(ft => ft.isActive).map((ft) => (
-                              <SelectItem key={ft.id} value={ft.name}>
-                                {ft.name}{ft.isTuition ? " (Tuition)" : ""}
-                              </SelectItem>
-                            ))}
-                            <SelectItem value="Other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {field.value === "Other" && (
-                          <Input
-                            placeholder="Describe the payment purpose..."
-                            value={customPurpose}
-                            onChange={(e) => setCustomPurpose(e.target.value.slice(0, 100))}
-                            maxLength={100}
-                            className="mt-2"
-                          />
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {/* Total Amount */}
                   <div className="space-y-2">
-                    <Label>Amount for this purpose (₦)</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-sm text-muted-foreground">₦</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        className="pl-7"
-                        value={totalAmount || ""}
-                        onChange={(e) => setTotalAmount(parseFloat(e.target.value) || 0)}
-                        onFocus={(e) => e.target.select()}
-                        min={0}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 rounded-lg border p-3">
-                    <div className="text-sm font-medium">Additional payments</div>
-                    <p className="text-xs text-muted-foreground">Add books, uniforms or another purpose. No amount is automatically moved to miscellaneous.</p>
-                    {additionalPayments.map((row,index)=><div key={row.id} className="space-y-2 rounded-md bg-muted/30 p-3">
-                      <div className="flex items-center justify-between"><span className="text-sm font-medium">Payment {index+2}</span><Button type="button" variant="ghost" size="icon" aria-label={`Remove payment ${index+2}`} onClick={()=>setAdditionalPayments(prev=>prev.filter(p=>p.id!==row.id))}><X className="h-4 w-4" /></Button></div>
-                      <label className="block text-xs">Student
-                        <select className="mt-1 min-h-11 w-full rounded-md border bg-background p-2 text-sm" value={row.studentId} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,studentId:e.target.value}:p))}>
-                          <option value="">Select student</option>{selectedEntries.map(({student})=><option key={student.id} value={student.id}>{student.user?.lastName || student.lastName} {student.user?.firstName || student.firstName} ({student.studentId})</option>)}
-                        </select>
-                      </label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <label className="text-xs">Purpose<select className="mt-1 min-h-11 w-full rounded-md border bg-background p-2 text-sm" value={row.purpose} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,purpose:e.target.value}:p))}><option value="">Select purpose</option>{feeTypesData.filter(ft=>ft.isActive).map(ft=><option key={ft.id} value={ft.name}>{ft.name}{ft.isTuition?' (Tuition)':''}</option>)}<option value="Other">Other — describe</option></select></label>
-                        <label className="text-xs">Amount (₦)<Input className="mt-1 min-h-11" type="number" min="0.01" step="0.01" value={row.amount||''} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,amount:Number(e.target.value)}:p))}/></label>
-                      </div>
-                      {row.purpose==='Other'&&<Input aria-label="Describe payment purpose" placeholder="Describe the purpose" maxLength={100} value={row.customPurpose} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,customPurpose:e.target.value}:p))}/>}
-                    </div>)}
-                    <Button type="button" variant="outline" className="min-h-11 w-full" disabled={!studentCount||additionalPayments.length>=20} onClick={()=>setAdditionalPayments(prev=>[...prev,{id:generateClientRequestId(),studentId:selectedEntries[0]?.student.id||'',purpose:'',customPurpose:'',amount:0}])}><Plus className="mr-2 h-4 w-4"/>Add another payment</Button>
-                  </div>
-
-                  {/* Selected Students List */}
-                  {selectedEntries.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <Label>{selectedEntries.length} student{selectedEntries.length > 1 ? "s" : ""} selected</Label>
-                        {studentCount > 1 && (
-                          <span className="text-xs text-muted-foreground ml-auto">Each gets a separate payment record</span>
-                        )}
-                      </div>
-                      <div className="border rounded-md divide-y">
-                        {selectedEntries.map((entry) => {
-                          const bal = tuitionBalanceMap.get(entry.student.id);
-                          const hasAssigned = !!bal && bal.assigned > 0;
-                          const fullyPaid = hasAssigned && bal!.due === 0;
-                          return (
-                          <div key={entry.student.id} className="p-3 flex flex-wrap items-center gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm truncate">
-                                {entry.student.user?.lastName || entry.student.lastName} {entry.student.user?.firstName || entry.student.firstName}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {entry.student.studentId} | {entry.student.className || "N/A"}
-                              </div>
-                              {hasAssigned ? (
-                                fullyPaid ? (
-                                  <div className="text-[11px] mt-0.5 inline-flex items-center gap-1 text-green-700 dark:text-green-400" data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                    <CheckCircle2 className="h-3 w-3" />
-                                    No tuition remaining to record for {entryTerm} (including pending payments)
-                                  </div>
-                                ) : (
-                                  <div className={`text-[11px] mt-0.5 ${bal!.paid > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`} data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                    Tuition: ₦{bal!.assigned.toLocaleString()} assigned · ₦{bal!.paid.toLocaleString()} confirmed · ₦{bal!.pending.toLocaleString()} pending ·{" "}
-                                    <span className="font-medium">₦{bal!.due.toLocaleString()} due</span>
-                                  </div>
-                                )
-                              ) : bal && bal.paid > 0 ? (
-                                <div className="text-[11px] mt-0.5 text-muted-foreground" data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                  Tuition: ₦{bal.paid.toLocaleString()} confirmed · no tuition amount set for this class
-                                </div>
-                              ) : (
-                                <div className="text-[11px] mt-0.5 text-muted-foreground italic" data-testid={`text-tuition-balance-${entry.student.id}`}>
-                                  {entry.student.classId
-                                    ? `No tuition configured for this class (${entryTerm} ${entrySession})`
-                                    : "Student has no class assigned — tuition cannot be tracked"}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {/* Fix #2a: single student shows read-only amount from totalAmount */}
-                              {studentCount === 1 ? (
-                                <span className="text-sm font-medium w-28 text-right pr-2">
-                                  {totalAmount > 0 ? `₦${totalAmount.toLocaleString()}` : "—"}
-                                </span>
-                              ) : (
-                                <div className="relative w-28">
-                                  <span className="absolute left-2.5 top-2 text-sm text-muted-foreground">₦</span>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min={0}
-                                    className="pl-6 h-8 text-sm"
-                                    value={entry.amount || ""}
-                                    onChange={(e) => updateStudentAmount(entry.student.id, parseFloat(e.target.value) || 0)}
-                                    onFocus={(e) => e.target.select()}
-                                  />
-                                </div>
-                              )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 text-muted-foreground hover:text-red-500"
-                                onClick={() => removeStudent(entry.student.id)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          );
-                        })}
-                      </div>
-                      {/* Fix #2b: hide allocation strip for single student */}
-                      {totalAmount > 0 && studentCount > 1 && (
-                        <div className={`text-xs rounded p-2 ${
-                          unallocated === 0
-                            ? "bg-green-50 text-green-700 border border-green-200"
-                            : unallocated > 0
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : "bg-red-50 text-red-700 border border-red-200"
-                        }`}>
-                          ₦{allocatedTotal.toLocaleString()} allocated of ₦{totalAmount.toLocaleString()} total
-                          {unallocated > 0 && ` — ₦${unallocated.toLocaleString()} remaining`}
-                          {unallocated < 0 && ` — ₦${Math.abs(unallocated).toLocaleString()} over total`}
-                          {unallocated === 0 && " ✓ Fully allocated"}
+                    <div className="text-sm font-medium">Allocations</div>
+                    {additionalPayments.length===0 && <p className="text-sm text-muted-foreground">Search for a student above to add the first allocation.</p>}
+                    {additionalPayments.map((row,index)=>{
+                      const balance=tuitionBalanceMap.get(row.studentId);
+                      return <div key={row.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label className="min-w-0 flex-1 text-xs">Student
+                            <select aria-label={`Student for allocation ${index+1}`} className="mt-1 min-h-11 w-full rounded-md border bg-background p-2 text-sm" value={row.studentId} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,studentId:e.target.value}:p))}>
+                              {selectedEntries.map(({student})=><option key={student.id} value={student.id}>{student.user?.lastName||student.lastName} {student.user?.firstName||student.firstName} ({student.studentId})</option>)}
+                            </select>
+                          </label>
+                          <Button type="button" variant="ghost" size="icon" className="mt-4 shrink-0" aria-label={`Remove allocation ${index+1}`} onClick={()=>setAdditionalPayments(prev=>prev.filter(p=>p.id!==row.id))}><X className="h-4 w-4"/></Button>
                         </div>
-                      )}
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  {/* Term & Session are auto-filled from currently active academic info */}
-
-                  {/* Payment Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="paymentMethod"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Payment Method</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select method" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="transfer">Bank Transfer</SelectItem>
-                              <SelectItem value="pos">POS</SelectItem>
-                              <SelectItem value="cash">Cash</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="paymentDate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Payment Date</FormLabel>
-                          <FormControl>
-                            <Input type="date" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="min-w-0 text-xs">Purpose<select className="mt-1 min-h-11 w-full rounded-md border bg-background p-2 text-sm" value={row.purpose} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,purpose:e.target.value}:p))}><option value="">Select purpose</option>{feeTypesData.filter(ft=>ft.isActive).map(ft=><option key={ft.id} value={ft.name}>{ft.name}</option>)}<option value="Other">Other — describe</option></select></label>
+                          <label className="min-w-0 text-xs">Amount (₦)<Input aria-label={`Amount for allocation ${index+1}`} className="mt-1 min-h-11" type="number" min="0.01" step="0.01" value={row.amount||''} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,amount:Number(e.target.value)}:p))}/></label>
+                        </div>
+                        {row.purpose==='Other'&&<Input aria-label="Describe payment purpose" placeholder="Describe the purpose" maxLength={100} value={row.customPurpose} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,customPurpose:e.target.value}:p))}/>}
+                        {feeTypesData.some(ft=>ft.isTuition&&ft.name===row.purpose)&&<p className="text-xs text-muted-foreground">{balancesLoading?'Checking tuition…':balance?.known?`Available tuition: ₦${balance.due.toLocaleString()} (pending payments included)`:'Tuition not verified for this period'}</p>}
+                      </div>;
+                    })}
+                    <Button type="button" variant="outline" className="min-h-11 w-full" disabled={!studentCount||additionalPayments.length>=100} onClick={()=>setAdditionalPayments(prev=>[...prev,{id:generateClientRequestId(),studentId:selectedEntries[0]?.student.id||'',purpose:tuitionFeeType?.name||'',customPurpose:'',amount:0}])}><Plus className="mr-2 h-4 w-4"/>Add allocation</Button>
                   </div>
 
-                  <FormField
-                    control={form.control}
-                    name="depositorName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Depositor Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Name of person who made the deposit" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
+                  <details className="rounded-lg border p-3">
+                    <summary className="cursor-pointer text-sm font-medium">More details <span className="font-normal text-muted-foreground">(reference and notes)</span></summary>
+                    <div className="mt-3 space-y-3">
                   <FormField
                     control={form.control}
                     name="reference"
@@ -1116,17 +941,13 @@ export function PaymentRecording({
                     )}
                   />
 
-                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3" aria-live="polite">
-                    <p className="font-medium">Review payment breakdown</p>
-                    {paymentRows.map((row,i)=><div key={i} className="flex justify-between gap-3 text-sm"><span>{row.purpose||'Choose purpose'} · {selectedEntries.find(e=>e.student.id===row.studentId)?.student.studentId}</span><span>₦{row.amount.toLocaleString()}</span></div>)}
-                    <div className="border-t pt-2 text-sm">Tuition: ₦{tuitionTotal.toLocaleString()} · Other payments: ₦{(Math.round((paymentTotal-tuitionTotal)*100)/100).toLocaleString()}</div>
-                    <p className="font-semibold">Total being recorded: ₦{paymentTotal.toLocaleString()}</p>
-                    <label className="block text-sm font-medium">Amount received (₦)<Input className="mt-1 min-h-11" type="number" min="0.01" step="0.01" value={amountReceived||''} onChange={e=>setAmountReceived(Number(e.target.value))}/></label>
-                    {amountReceived>0&&Math.round(amountReceived*100)!==Math.round(paymentTotal*100)&&<p className="text-sm text-destructive">The breakdown differs from the amount received by ₦{Math.abs(Math.round((amountReceived-paymentTotal)*100)/100).toLocaleString()}.</p>}
-                    {tuitionWarnings.map(message=><p key={message} className="text-sm text-destructive">{message}</p>)}
-                    <p className="text-xs text-muted-foreground">All rows share the date, depositor and reference above. They count toward collections after confirmation.</p>
-                  </div>
-                  <div className="sticky bottom-0 z-10 flex gap-2 pt-3 pb-2 bg-background border-t">
+                    </div>
+                  </details>
+                  {tuitionWarnings.map(message=><p key={message} role="alert" className="text-sm text-destructive">{message}</p>)}
+                  <div className="sticky bottom-0 z-10 bg-background border-t pt-3 pb-2 space-y-2">
+                    <div className="flex flex-wrap justify-between gap-1 text-sm" aria-live="polite"><span>Allocated: <strong>₦{paymentTotal.toLocaleString()}</strong></span><span className={Math.round(amountReceived*100)===Math.round(paymentTotal*100)?'text-green-700':'text-amber-700'}>{paymentTotal>amountReceived?'Over by':'Remaining'}: ₦{Math.abs(Math.round((amountReceived-paymentTotal)*100)/100).toLocaleString()}</span></div>
+                    <p className="text-xs text-muted-foreground">Tuition ₦{tuitionTotal.toLocaleString()} · Other ₦{(Math.round((paymentTotal-tuitionTotal)*100)/100).toLocaleString()}</p>
+                    <div className="flex gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -1139,7 +960,7 @@ export function PaymentRecording({
                     <Button
                       type="submit"
                       className="flex-1"
-                      disabled={isSubmitting || selectedEntries.length === 0 || tuitionWarnings.length>0}
+                      disabled={isSubmitting || paymentRows.length === 0 || tuitionWarnings.length>0 || amountReceived<=0 || Math.round(amountReceived*100)!==Math.round(paymentTotal*100)}
                     >
                       {isSubmitting ? (
                         <>
@@ -1147,11 +968,12 @@ export function PaymentRecording({
                           Recording...
                         </>
                       ) : isOnline ? (
-                        `Record ${paymentRows.length} payment${paymentRows.length===1?'':'s'}`
+                        "Record payment"
                       ) : (
                         "Save Offline"
                       )}
                     </Button>
+                    </div>
                   </div>
                 </form>
               </Form>
@@ -1344,7 +1166,7 @@ export function PaymentRecording({
                             <div className="text-xs text-muted-foreground">{p.student.studentId}</div>
                           </>
                         ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
+                          <span className="text-xs text-muted-foreground">{p.allocationCount ? `${p.allocationCount} allocations` : "—"}</span>
                         )}
                       </TableCell>
                       <TableCell data-label="Class" className="text-sm text-muted-foreground">{p.student?.class?.name || '—'}</TableCell>
@@ -1411,7 +1233,7 @@ export function PaymentRecording({
                           </>
                         ) : (
                           <Badge variant="secondary" className="text-xs">
-                            Split: {record.splitCount ?? "N"} students
+                            {record.splitCount ?? "N"} allocations
                           </Badge>
                         )}
                       </TableCell>
@@ -1706,9 +1528,9 @@ function PaymentDetailsDialog({
           ) : (
             <>
               <div className="flex items-center justify-between">
-                <div className="text-xs uppercase text-muted-foreground tracking-wide">Split Between Students</div>
+                <div className="text-xs uppercase text-muted-foreground tracking-wide">Payment allocations</div>
                 <Badge variant="secondary" className="text-xs">
-                  {splits?.length ?? record.splitCount ?? "…"} students
+                  {splits?.length ?? record.splitCount ?? "…"} allocations
                 </Badge>
               </div>
               {splitsLoading ? (
@@ -1724,7 +1546,7 @@ function PaymentDetailsDialog({
                           {s.student?.user ? `${s.student.user.lastName} ${s.student.user.firstName}` : "—"}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {s.student?.studentId || "—"} · {s.student?.class?.name || "No class"}
+                          {s.student?.studentId || "—"} · {s.purpose || record.purpose || "—"}
                         </div>
                       </div>
                       <div className="font-medium text-sm flex-shrink-0 pl-3">

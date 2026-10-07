@@ -70,6 +70,7 @@ async function runMigrations() {
         amount DECIMAL(12,2) NOT NULL,
         created_at TIMESTAMP DEFAULT NOW()
       );
+      ALTER TABLE fee_payment_student_splits ADD COLUMN IF NOT EXISTS purpose VARCHAR(100);
       -- SMS bank-alert ingestion: source tracking + masked-account -> school routing.
       ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'statement';
       ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_sender VARCHAR(100);

@@ -23,7 +23,7 @@ async function fixture(){
     CREATE TABLE fee_types (id text PRIMARY KEY,name text,school_id text,is_tuition boolean,is_active boolean,created_at timestamp);
     CREATE TABLE student_fees (student_id text,fee_type_id text,amount numeric,term text,session text);
     CREATE TABLE fee_payment_records (id text PRIMARY KEY,student_id text,school_id text,status text,amount numeric,purpose text,term text,session text,payment_date timestamp,confirmed_at timestamp);
-    CREATE TABLE fee_payment_student_splits (student_id text,payment_record_id text,amount numeric);
+    CREATE TABLE fee_payment_student_splits (student_id text,payment_record_id text,amount numeric,purpose text);
     CREATE TABLE promotion_records (student_id text,school_id text,session text,from_class_id text,is_bulk boolean);
     CREATE TABLE student_name_change_requests (id text PRIMARY KEY,status text,reviewed_by text,reviewer_notes text,reviewed_at timestamp);
     INSERT INTO student_name_change_requests VALUES ('request','pending',null,null,null);
@@ -40,7 +40,7 @@ async function fixture(){
       ('reversed','s','school','reversed',99999,'Tuition','First Term','2026/2027','2026-09-29','2026-09-29 12:00'),
       ('foreign','s','other','confirmed',99999,'Tuition','First Term','2026/2027','2026-09-29','2026-09-29 12:00'),
       ('historic','s','school','confirmed',30000,'Tuition','Third Term','2025/2026','2026-07-01','2026-07-01 12:00');
-    INSERT INTO fee_payment_student_splits VALUES ('s','split',10000);
+    INSERT INTO fee_payment_student_splits VALUES ('s','split',10000,NULL);
     INSERT INTO promotion_records VALUES ('s','school','2025/2026','old',true);
   `);
   const adapter=(connection:any):any=>({execute: async(query:any)=>{const q=new PgDialect().sqlToQuery(query); return connection.query(q.sql,q.params);},transaction:async(fn:any)=>connection.transaction((tx:any)=>fn(adapter(tx)))});
@@ -143,4 +143,16 @@ test('tuition status and ledger filters do not count books as tuition or guess u
   assert.equal(factory('',false,'outstanding','all')([entry]).length,1);
   assert.equal(factory('',false,'paid','all')([entry]).length,1);
   assert.equal(factory('',false,'outstanding','all')([{...entry,tuitionKnown:false}]).length,0);
+});
+test('mixed-purpose allocations use their own purposes and count one transfer per student; reversal removes all shares',async()=>{
+  const {pg,store}=await fixture();try{
+    await pg.exec(`UPDATE fee_payment_records SET purpose='Multiple purposes' WHERE id='split';
+      UPDATE fee_payment_student_splits SET purpose='Tuition';
+      INSERT INTO fee_payment_student_splits VALUES ('s','split',10000,'Books')`);
+    let e=(await store.getStudentPaymentLedger('school',undefined,'First Term','2026/2027')).entries[0];
+    assert.equal(e.totalPaid,110000);assert.equal(e.tuitionPaid,80000);assert.equal(e.nonTuitionPaid,30000);assert.equal(e.paymentCount,3);
+    await pg.exec("UPDATE fee_payment_records SET status='reversed' WHERE id='split'");
+    e=(await store.getStudentPaymentLedger('school',undefined,'First Term','2026/2027')).entries[0];
+    assert.equal(e.totalPaid,90000);assert.equal(e.tuitionPaid,70000);assert.equal(e.nonTuitionPaid,20000);assert.equal(e.paymentCount,2);
+  }finally{await pg.close();}
 });

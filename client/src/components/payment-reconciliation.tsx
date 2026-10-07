@@ -184,12 +184,31 @@ interface BankTransactionAllocation {
     studentDbId: string;
     studentId: string;
     amount: string;
+    purpose?: string | null;
     user: { firstName: string; lastName: string };
   }>;
 }
 
 interface BankTransactionWithAllocations extends BankTransaction {
   allocations?: BankTransactionAllocation[];
+}
+
+function paymentStudentLabel(payment: FeePaymentRecordWithDetails): string {
+  if (payment.student) return `${payment.student.user?.lastName || ''} ${payment.student.user?.firstName || ''}`.trim();
+  return payment.depositorName || 'Allocated payment';
+}
+
+function PaymentAllocationDetails({payment}: {payment: FeePaymentRecordWithDetails}) {
+  if (!payment.splits?.length) return null;
+  return <details className="mt-2 text-xs">
+    <summary className="cursor-pointer font-medium">View {payment.splits.length} allocations</summary>
+    <div className="mt-2 space-y-2">
+      {payment.splits.map(split=><div key={split.id} className="flex justify-between gap-2 border-b pb-1">
+        <span>{split.student?.user?.lastName} {split.student?.user?.firstName}<span className="block text-muted-foreground">{split.student?.studentId} · {split.purpose || payment.purpose}</span></span>
+        <span className="shrink-0">₦{Number(split.amount).toLocaleString()}</span>
+      </div>)}
+    </div>
+  </details>;
 }
 
 interface PaymentReconciliationProps {
@@ -1492,9 +1511,9 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1 flex-wrap mb-1">
                                   <span className="font-medium text-sm truncate">
-                                    {payment.student?.user?.lastName || 'Unknown'} {payment.student?.user?.firstName || ''}
+                                    {paymentStudentLabel(payment)}
                                   </span>
-                                  <Badge variant="outline" className="text-xs">{payment.student?.studentId || 'N/A'}</Badge>
+                                  <Badge variant="outline" className="text-xs">{payment.student?.studentId || `${payment.splits?.length || 0} allocations`}</Badge>
                                   {payment.possibleDuplicate && (
                                     <Badge
                                       variant="outline"
@@ -1514,6 +1533,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                   {formatRecoDate(payment.paymentDate)}
                                   <Badge variant="secondary" className="text-xs ml-1">{payment.paymentMethod}</Badge>
                                 </div>
+                                <PaymentAllocationDetails payment={payment}/>
                                 {payment.reference && (
                                   <div className="text-xs text-muted-foreground mt-1">
                                     Ref: {payment.reference}
@@ -1969,7 +1989,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                             <>
                                               <div className="flex items-center gap-1 flex-wrap">
                                                 <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-300">
-                                                  Split · {splitStudents.length} students
+                                                  {splitStudents.length} allocations
                                                 </Badge>
                                                 <span className="text-muted-foreground">
                                                   • ₦{parseFloat(alloc.allocatedAmount).toLocaleString()}
@@ -1981,7 +2001,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                                   <li key={sp.studentDbId} className="text-[11px] flex items-center gap-1">
                                                     <span className="font-medium">{sp.user.lastName} {sp.user.firstName}</span>
                                                     <span className="text-muted-foreground">({sp.studentId})</span>
-                                                    <span className="text-muted-foreground">• ₦{parseFloat(sp.amount).toLocaleString()}</span>
+                                                    <span className="text-muted-foreground">{sp.purpose ? `${sp.purpose} · ` : ""}₦{parseFloat(sp.amount).toLocaleString()}</span>
                                                   </li>
                                                 ))}
                                               </ul>
@@ -2027,7 +2047,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <div className="flex items-center justify-between gap-2 flex-wrap">
                                       <div className="flex-1 min-w-0">
                                         <span className="font-medium">
-                                          {p.student?.user?.lastName || 'Unknown'} {p.student?.user?.firstName || ''}
+                                          {paymentStudentLabel(p)}
                                         </span>
                                         <span className="text-muted-foreground ml-1">
                                           ({p.student?.studentId || 'N/A'})
@@ -2678,7 +2698,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             <div className="space-y-4">
               <div className="p-4 border rounded-lg bg-muted/50 space-y-1">
                 <p className="font-semibold">
-                  {selectedPayment.student?.user?.lastName} {selectedPayment.student?.user?.firstName}
+                  {paymentStudentLabel(selectedPayment)}
                 </p>
                 <p className="text-2xl font-bold text-green-600">
                   ₦{parseFloat(selectedPayment.amount).toLocaleString()}
@@ -2692,6 +2712,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 {selectedPayment.depositorName && (
                   <p className="text-sm"><span className="font-medium">Depositor:</span> {selectedPayment.depositorName}</p>
                 )}
+                <PaymentAllocationDetails payment={selectedPayment}/>
                 {selectedPayment.reference && (
                   <p className="text-sm"><span className="font-medium">Ref:</span> {selectedPayment.reference}</p>
                 )}
@@ -2806,7 +2827,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             <div className="space-y-4">
               <div className="p-4 border rounded-lg bg-red-50">
                 <p className="font-medium mb-1">
-                  {selectedPayment.student?.user?.lastName} {selectedPayment.student?.user?.firstName}
+                  {paymentStudentLabel(selectedPayment)}
                 </p>
                 <p className="text-xl font-bold">
                   ₦{parseFloat(selectedPayment.amount).toLocaleString()}
@@ -2941,7 +2962,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1 flex-wrap">
                                 <span className="font-medium text-sm">
-                                  {p.student?.user?.lastName || "Unknown"} {p.student?.user?.firstName || ""}
+                                  {paymentStudentLabel(p)}
                                 </span>
                                 <Badge variant="outline" className="text-xs">
                                   {p.student?.studentId || "N/A"}
@@ -3050,7 +3071,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <div key={c.payment.id} className="p-2 text-xs flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0 truncate">
                     <span className="font-medium">
-                      {c.payment.student?.user?.lastName} {c.payment.student?.user?.firstName}
+                      {paymentStudentLabel(c.payment)}
                     </span>
                     <span className="text-muted-foreground ml-1">
                       ({c.payment.student?.studentId})

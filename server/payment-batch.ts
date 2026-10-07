@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { recordFeePaymentSchema, feePaymentRecords, paymentAuditLogs } from '../shared/schema';
+import { recordFeePaymentSchema, feePaymentRecords, feePaymentStudentSplits, paymentAuditLogs } from '../shared/schema';
 
 export const paymentBatchSchema = recordFeePaymentSchema.omit({studentId:true, amount:true, purpose:true}).extend({
   schoolId: z.string().uuid(),
@@ -29,6 +29,15 @@ export async function recordPaymentBatch(database:any, input:unknown, actor:{id:
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${data.clientRequestId}, 0))`);
     const keys = data.rows.map((_,i)=>`batch:${data.clientRequestId}:${i}`);
     const existing = await tx.select().from(feePaymentRecords).where(sql`${feePaymentRecords.clientRequestId} LIKE ${`batch:${data.clientRequestId}:%`}`);
+    const parent = existing.find((r:any)=>r.clientRequestId===`batch:${data.clientRequestId}:parent`);
+    if(parent) {
+      const splits=await tx.select().from(feePaymentStudentSplits).where(sql`${feePaymentStudentSplits.paymentRecordId}=${parent.id}`);
+      const signature=(rows:any[])=>rows.map(r=>`${r.studentId}:${r.purpose}:${Math.round(Number(r.amount)*100)}`).sort().join('|');
+      if(parent.schoolId!==data.schoolId || parent.recordedBy!==actor.id || Number(parent.amount)!==data.totalAmount || parent.term!==data.term || parent.session!==data.session || parent.depositorName!==data.depositorName || parent.paymentMethod!==data.paymentMethod || (parent.reference||'')!==(data.reference||'') || new Date(parent.paymentDate).toISOString().slice(0,10)!==data.paymentDate || signature(splits)!==signature(data.rows)) throw new PaymentBatchError('This submission was already saved with different details',409);
+      return {records:[parent],idempotent:true};
+    }
+    // Older queued submissions may already have separate child records. A retry
+    // must return those records, never insert a second transfer.
     if(existing.length){
       if(existing.length !== data.rows.length || existing.some((r:any)=>r.schoolId !== data.schoolId || r.recordedBy !== actor.id)) throw new PaymentBatchError('This submission key is already in use',409);
       for(let i=0;i<data.rows.length;i++) {
@@ -53,25 +62,27 @@ export async function recordPaymentBatch(database:any, input:unknown, actor:{id:
             SELECT p.amount FROM fee_payment_records p WHERE p.student_id=${studentId} AND p.school_id=${data.schoolId} AND p.term=${data.term} AND p.session=${data.session} AND p.status IN ('recorded','confirmed')
               AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=p.purpose)
             UNION ALL SELECT ss.amount FROM fee_payment_student_splits ss JOIN fee_payment_records p ON p.id=ss.payment_record_id WHERE ss.student_id=${studentId} AND p.school_id=${data.schoolId} AND p.term=${data.term} AND p.session=${data.session} AND p.status IN ('recorded','confirmed')
-              AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=p.purpose)
+              AND EXISTS (SELECT 1 FROM fee_types ft WHERE ft.school_id=p.school_id AND ft.is_tuition=true AND ft.name=COALESCE(ss.purpose,p.purpose))
           ) payments`);
         const due=Math.max(0,Math.round(charge.tuitionAssigned*100)-Math.round(Number(pending.rows[0].amount)*100));
         const requested=tuitionRows.filter(r=>r.studentId===studentId).reduce((sum,r)=>sum+Math.round(r.amount*100),0);
         if(requested>due) throw new PaymentBatchError(`Tuition exceeds the available balance by ₦${((requested-due)/100).toLocaleString()}. Pending payments are included. Reduce tuition and add the correct purpose for any other payment.`);
       }
     }
-    const records=[];
+    let duplicateId:string|null=null;
     for(let i=0;i<data.rows.length;i++){
       const row=data.rows[i];
       const dup=await tx.execute(sql`
         SELECT p.id FROM fee_payment_records p
-        WHERE p.school_id=${data.schoolId} AND p.status<>'reversed' AND p.purpose=${row.purpose} AND p.payment_date::date=${data.paymentDate}::date
-          AND ((p.student_id=${row.studentId} AND p.amount=${row.amount}) OR EXISTS (SELECT 1 FROM fee_payment_student_splits ss WHERE ss.payment_record_id=p.id AND ss.student_id=${row.studentId} AND ss.amount=${row.amount}))
+        WHERE p.school_id=${data.schoolId} AND p.status<>'reversed' AND p.payment_date::date=${data.paymentDate}::date
+          AND ((p.student_id=${row.studentId} AND p.amount=${row.amount} AND p.purpose=${row.purpose}) OR EXISTS (SELECT 1 FROM fee_payment_student_splits ss WHERE ss.payment_record_id=p.id AND ss.student_id=${row.studentId} AND ss.amount=${row.amount} AND COALESCE(ss.purpose,p.purpose)=${row.purpose}))
         ORDER BY p.created_at,p.id LIMIT 1`);
-      const [record]=await tx.insert(feePaymentRecords).values({studentId:row.studentId,schoolId:data.schoolId,amount:row.amount.toFixed(2),purpose:row.purpose,paymentMethod:data.paymentMethod,paymentDate:new Date(data.paymentDate+'T00:00:00Z'),depositorName:data.depositorName,reference:data.reference,term:data.term,session:data.session,notes:data.notes,recordedBy:actor.id,status:'recorded',clientRequestId:keys[i],possibleDuplicate:!!dup.rows[0],duplicateOfPaymentId:dup.rows[0]?.id??null}).returning();
-      await tx.insert(paymentAuditLogs).values({action:'record_payment',entityType:'payment_record',entityId:record.id,userId:actor.id,schoolId:data.schoolId,newData:{...record,batchId:data.clientRequestId,batchTotal:data.totalAmount},ipAddress});
-      records.push(record);
+      duplicateId ??= dup.rows[0]?.id ?? null;
     }
-    return {records,idempotent:false};
+    const purposes=Array.from(new Set(data.rows.map(row=>row.purpose)));
+    const [record]=await tx.insert(feePaymentRecords).values({studentId:null,schoolId:data.schoolId,amount:data.totalAmount.toFixed(2),purpose:purposes.length===1?purposes[0]:'Multiple purposes',paymentMethod:data.paymentMethod,paymentDate:new Date(data.paymentDate+'T00:00:00Z'),depositorName:data.depositorName,reference:data.reference,term:data.term,session:data.session,notes:data.notes,recordedBy:actor.id,status:'recorded',clientRequestId:`batch:${data.clientRequestId}:parent`,possibleDuplicate:!!duplicateId,duplicateOfPaymentId:duplicateId}).returning();
+    await tx.insert(feePaymentStudentSplits).values(data.rows.map(row=>({paymentRecordId:record.id,studentId:row.studentId,amount:row.amount.toFixed(2),purpose:row.purpose})));
+    await tx.insert(paymentAuditLogs).values({action:'record_payment',entityType:'payment_record',entityId:record.id,userId:actor.id,schoolId:data.schoolId,newData:{...record,batchId:data.clientRequestId,allocations:data.rows},ipAddress});
+    return {records:[record],idempotent:false};
   });
 }

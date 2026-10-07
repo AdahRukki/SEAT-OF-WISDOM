@@ -640,6 +640,7 @@ export const feePaymentStudentSplits = pgTable("fee_payment_student_splits", {
   paymentRecordId: uuid("payment_record_id").notNull().references(() => feePaymentRecords.id, { onDelete: "cascade" }),
   studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  purpose: varchar("purpose", { length: 100 }), // Null preserves the parent purpose for older splits.
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1552,6 +1553,7 @@ export type BankTransactionAllocationSummary = PaymentAllocation & {
     studentDbId: string;
     studentId: string;
     amount: string;
+    purpose?: string | null;
     user: { firstName: string; lastName: string };
   }>;
 };
