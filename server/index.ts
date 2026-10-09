@@ -71,6 +71,16 @@ async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW()
       );
       ALTER TABLE fee_payment_student_splits ADD COLUMN IF NOT EXISTS purpose VARCHAR(100);
+      CREATE TABLE IF NOT EXISTS payment_student_receipts (
+        id BIGSERIAL PRIMARY KEY,
+        payment_record_id UUID NOT NULL REFERENCES fee_payment_records(id),
+        student_id UUID NOT NULL REFERENCES students(id),
+        school_id UUID NOT NULL REFERENCES schools(id),
+        snapshot JSONB NOT NULL,
+        issued_by UUID NOT NULL REFERENCES users(id),
+        issued_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE(payment_record_id,student_id)
+      );
       -- SMS bank-alert ingestion: source tracking + masked-account -> school routing.
       ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'statement';
       ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS sms_sender VARCHAR(100);

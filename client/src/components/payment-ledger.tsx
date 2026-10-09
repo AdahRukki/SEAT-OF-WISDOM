@@ -1,3 +1,4 @@
+import { BulkPaymentReceipts, receiptCandidates, type ReceiptCandidate } from "./bulk-payment-receipts";
 import { PaymentDateFilters } from "./payment-date-filters";
 import { buildLedgerWorkbook } from "@/lib/ledger-workbook";
 import type { LedgerPayment } from "@shared/ledger-payments";
@@ -190,6 +191,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [firstPaymentOnly, setFirstPaymentOnly] = useState(false);
   const [exportingRecords, setExportingRecords] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [receiptChoices,setReceiptChoices] = useState<ReceiptCandidate[] | null>(null);
   const [confirmedFrom, setConfirmedFrom] = useState("");
   const [confirmedTo, setConfirmedTo] = useState("");
   const confirmationFiltered = !!(confirmedFrom || confirmedTo);
@@ -471,6 +473,23 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     } finally { setExportingRecords(false); }
   };
 
+  const prepareReceipts = async () => {
+    if (exportingRecords) return;
+    setExportingRecords(true); setExportError("");
+    try {
+      const query = new URLSearchParams(params); query.set('includeRecords','true');
+      const token=localStorage.getItem('auth_token');
+      const response=await fetch(`/api/payments/ledger?${query}`,{credentials:'include',headers:token?{Authorization:`Bearer ${token}`}:{}});
+      if(!response.ok)throw new Error('Could not load confirmed payments. Please try again.');
+      const data=await response.json();
+      if(!Array.isArray(data.paymentRecords))throw new Error('Update the server before printing receipts.');
+      const choices=receiptCandidates(filterEntries(data.entries),data.paymentRecords);
+      if(!choices.length)throw new Error('No confirmed payments match these filters.');
+      setReceiptChoices(choices);
+    }catch(error){setExportError(error instanceof Error?error.message:'Could not load receipts');}
+    finally{setExportingRecords(false);}
+  };
+
   const printClassName = selectedClassId === "all"
     ? "All Classes"
     : (schoolClasses.find((c) => c.id === selectedClassId)?.name || "—");
@@ -484,6 +503,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
 
   return (
     <div className="finance-mobile space-y-4">
+      {receiptChoices && schoolId && <BulkPaymentReceipts schoolId={schoolId} candidates={receiptChoices} onClose={()=>setReceiptChoices(null)}/>}
       {/* Print-only header */}
       <div className="hidden print:block mb-3">
         <div className="text-center">
@@ -525,6 +545,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
           <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
             <DropdownMenuItem className="min-h-11" onSelect={handlePrint} disabled={!filteredLedger.length}><Printer className="h-4 w-4 mr-2" />Print</DropdownMenuItem>
             <DropdownMenuItem className="min-h-11" onSelect={handleExportExcel} disabled={!filteredLedger.length}><FileSpreadsheet className="h-4 w-4 mr-2" />Export Excel</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-11" onSelect={prepareReceipts} disabled={exportingRecords || isLoading || !filteredLedger.length}><Printer className="h-4 w-4 mr-2"/>Print / download student receipts</DropdownMenuItem>
             <DropdownMenuItem className="min-h-11" onSelect={handleExportWithRecords} disabled={exportingRecords || isLoading || !filteredLedger.length}><FileSpreadsheet className="h-4 w-4 mr-2" />{exportingRecords ? "Preparing download…" : "Ledger with payment records"}</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuSub>

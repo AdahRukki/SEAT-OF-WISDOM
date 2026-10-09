@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable,
+  bigserial,
   varchar,
   timestamp,
   text,
@@ -643,6 +644,17 @@ export const feePaymentStudentSplits = pgTable("fee_payment_student_splits", {
   purpose: varchar("purpose", { length: 100 }), // Null preserves the parent purpose for older splits.
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Permanent receipt identity and immutable details for a student's payment share.
+export const paymentStudentReceipts = pgTable("payment_student_receipts", {
+  id: bigserial("id", { mode: "bigint" }).primaryKey(),
+  paymentRecordId: uuid("payment_record_id").notNull().references(() => feePaymentRecords.id),
+  studentId: uuid("student_id").notNull().references(() => students.id),
+  schoolId: uuid("school_id").notNull().references(() => schools.id),
+  snapshot: jsonb("snapshot").notNull(),
+  issuedBy: uuid("issued_by").notNull().references(() => users.id),
+  issuedAt: timestamp("issued_at").notNull().defaultNow(),
+}, table => [unique().on(table.paymentRecordId, table.studentId)]);
 
 // Payment Pattern History table (for smart matching)
 export const paymentPatternHistory = pgTable("payment_pattern_history", {

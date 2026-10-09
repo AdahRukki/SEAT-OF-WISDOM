@@ -1,3 +1,4 @@
+import { issueStudentReceipts, ReceiptError } from "./payment-receipts";
 import { recordPaymentBatch, PaymentBatchError } from "./payment-batch";
 import { getLedgerPayments } from "./ledger-payments";
 import { firstPaymentStudents, inConfirmationRange } from "@shared/ledger-payments";
@@ -4961,6 +4962,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get tuition balances error:", error);
       res.status(500).json({ error: "Failed to fetch tuition balances" });
+    }
+  });
+
+  app.post("/api/payments/receipts", authenticate, requireBursarOrAdmin, async (req, res) => {
+    try {
+      const receipts = await issueStudentReceipts(db, req.body, (req as any).user);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({receipts});
+    } catch (error) {
+      if (error instanceof z.ZodError) return res.status(400).json({error:"Select confirmed payments and a school (maximum 2,000 receipts)."});
+      if (error instanceof ReceiptError) return res.status(error.status).json({error:error.message});
+      console.error('Issue receipts:', error);
+      return res.status(500).json({error:"Could not prepare receipts. Please try again."});
     }
   });
 
