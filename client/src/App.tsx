@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import Login from "@/pages/login";
 import AdminDashboard from "@/pages/admin-dashboard";
+import GeneralSchool, { SchoolSelection } from "@/pages/general-school";
+import AdminSchool from "@/pages/admin-school";
 import StudentDashboard from "@/pages/student-dashboard";
 import UserManagement from "@/pages/user-management";
 import Profile from "@/pages/profile";
@@ -93,9 +95,8 @@ function PortalRoutes() {
   if (!isAuthenticated) {
     return (
       <Switch>
-        <Route path="login" component={Login} />
-        <Route path="/portal/login" component={Login} />
-        <Route path="" component={Login} />
+        <Route path="/login" component={Login} />
+        <Route path="/" component={Login} />
         <Route component={Login} />
       </Switch>
     );
@@ -103,20 +104,22 @@ function PortalRoutes() {
 
   return (
     <Switch>
-      <Route path="login" component={Login} />
-      <Route path="/portal/login" component={Login} />
+      <Route path="/login" component={Login} />
       {(user?.role === 'admin' || user?.role === 'sub-admin') ? (
         <>
-          <Route path="" component={AdminDashboard} />
-          <Route path="admin" component={AdminDashboard} />
-          <Route path="users" component={UserManagement} />
-          <Route path="profile" component={Profile} />
+          <Route path="/">{user?.role === 'admin' ? <GeneralSchool /> : <AdminDashboard />}</Route>
+          <Route path="/admin">{user?.role === 'admin' ? <GeneralSchool /> : <AdminDashboard />}</Route>
+          <Route path="/admin/general"><GeneralSchool /></Route>
+          <Route path="/admin/schools" component={SchoolSelection} />
+          <Route path="/admin/school/:schoolId" component={AdminSchool} />
+          <Route path="/users" component={UserManagement} />
+          <Route path="/profile" component={Profile} />
         </>
       ) : (
         <>
-          <Route path="" component={StudentDashboard} />
-          <Route path="student" component={StudentDashboard} />
-          <Route path="profile" component={Profile} />
+          <Route path="/" component={StudentDashboard} />
+          <Route path="/student" component={StudentDashboard} />
+          <Route path="/profile" component={Profile} />
         </>
       )}
       <Route component={NotFound} />

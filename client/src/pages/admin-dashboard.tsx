@@ -2,6 +2,9 @@ import { formatStudentName } from "@shared/student-name";
 import { PaymentDateFilters } from "@/components/payment-date-filters";
 import { confirmationRangeLabel } from "@/components/confirmation-date-filter";
 import { useState, useEffect, useRef, Fragment } from "react";
+import { useLocation } from "wouter";
+import { SchoolSelection } from "@/pages/general-school";
+import { GENERAL_SCHOOL_OPTION, schoolSelectionPath } from "@/lib/admin-navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -763,8 +766,9 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
   );
 }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ schoolId }: { schoolId?: string } = {}) {
   const { user, logout } = useAuth();
+  const [, navigate] = useLocation();
   const perm = (key: string) => checkPermission(user?.role, user?.permissions, key);
   const { logoUrl: currentLogoUrl, isLoading: logoLoading } = useLogo();
   const { toast } = useToast();
@@ -818,7 +822,11 @@ export default function AdminDashboard() {
   const [selectedClassId, setSelectedClassId] = useState("");
 
   // School selection for main admin
-  const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  const [selectedSchoolId, setSelectedSchoolId] = useState(user?.role === 'admin' ? schoolId || '' : user?.schoolId || '');
+  const selectManagementView = (selection: string) => {
+    const destination = schoolSelectionPath(selection, schools);
+    if (user?.role === 'admin' && destination) navigate(destination);
+  };
 
   // Active tab state — pick the first tab the user has permission to see
   const getDefaultTab = () => {
@@ -1016,7 +1024,7 @@ export default function AdminDashboard() {
   });
 
   // Queries - Move queries to the top to avoid initialization issues
-  const { data: schools = [], isLoading: isLoadingSchools } = useQuery<SchoolType[]>({ 
+  const { data: schools = [] } = useQuery<SchoolType[]>({
     queryKey: ['/api/admin/schools'],
     enabled: user?.role === 'admin'
   });
@@ -3845,71 +3853,8 @@ export default function AdminDashboard() {
     return <div>Loading...</div>;
   }
 
-  // Show school selector screen for main admin who hasn't selected a school yet
-  if (user.role === 'admin' && !selectedSchoolId) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="max-w-md w-full mx-auto">
-          <Card className="shadow-lg">
-            <CardHeader className="text-center">
-              <div className="flex justify-center mb-4">
-                <img 
-                  src={currentLogoUrl} 
-                  alt="Seat of Wisdom Academy Logo" 
-                  className="h-16 w-16 object-contain rounded-md bg-white p-2" 
-                />
-              </div>
-              <CardTitle className="text-2xl font-bold">Seat of Wisdom Academy</CardTitle>
-              <CardDescription>
-                Welcome back, {user.firstName}! Choose which school branch you'd like to manage today.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <Label htmlFor="school-select" className="text-sm font-medium">
-                  Available School Branches
-                </Label>
-                <div className="grid gap-2">
-                  {isLoadingSchools ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                      <span className="ml-3 text-sm text-muted-foreground">Loading school branches...</span>
-                    </div>
-                  ) : schools?.map((school) => (
-                    <Button
-                      key={school.id}
-                      variant="outline"
-                      className="w-full justify-start h-auto p-4 hover:bg-blue-50 hover:border-blue-300 transition-colors"
-                      onClick={() => setSelectedSchoolId(school.id)}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <Building className="h-5 w-5 text-blue-600" />
-                        <div className="text-left">
-                          <div className="font-medium">{school.name}</div>
-                          <div className="text-xs text-gray-500">Click to manage this branch</div>
-                        </div>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="pt-4 border-t">
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={logout}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  // Direct school selection uses the same isolated navigation page.
+  if (user.role === 'admin' && !selectedSchoolId) return <SchoolSelection />;
 
   return (
     <TooltipProvider>
@@ -3954,7 +3899,7 @@ export default function AdminDashboard() {
               {/* Active School Display for Main Admin - Hidden on mobile */}
               {user.role === 'admin' && selectedSchoolId && (
                 <div className="hidden lg:flex items-center space-x-2">
-                  <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+                  <Select value={selectedSchoolId} onValueChange={selectManagementView}>
                     <SelectTrigger className="w-48">
                       <div className="flex items-center space-x-2">
                         <Building className="h-4 w-4" />
@@ -3962,6 +3907,7 @@ export default function AdminDashboard() {
                       </div>
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={GENERAL_SCHOOL_OPTION}>General School — All Schools</SelectItem>
                       {schools?.map((school) => (
                         <SelectItem key={school.id} value={school.id}>
                           {school.name}
@@ -4099,7 +4045,7 @@ export default function AdminDashboard() {
           {/* Mobile School Selector - Shown below header on mobile for admin */}
           {user.role === 'admin' && selectedSchoolId && (
             <div className="lg:hidden pb-3 border-t border-gray-200 dark:border-gray-700 pt-3">
-              <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+              <Select value={selectedSchoolId} onValueChange={selectManagementView}>
                 <SelectTrigger className="w-full">
                   <div className="flex items-center space-x-2">
                     <Building className="h-4 w-4" />
@@ -4107,6 +4053,7 @@ export default function AdminDashboard() {
                   </div>
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={GENERAL_SCHOOL_OPTION}>General School — All Schools</SelectItem>
                   {schools?.map((school) => (
                     <SelectItem key={school.id} value={school.id}>
                       {school.name}
