@@ -156,6 +156,64 @@ export const students = pgTable("students", {
 });
 
 // Assessments table (First CA, Second CA, Exam)
+// Historical facts deliberately have no cascading foreign keys. See the explicit
+// Phase 1 SQL migration for append-only guards and student lifecycle triggers.
+export const studentStatusEvents = pgTable("student_status_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sequence: bigserial("sequence", { mode: "number" }).notNull().unique(),
+  studentId: uuid("student_id").notNull(),
+  studentNumber: varchar("student_number", { length: 50 }).notNull(),
+  studentName: text("student_name").notNull(),
+  schoolId: uuid("school_id"),
+  schoolName: text("school_name"),
+  classId: varchar("class_id", { length: 50 }),
+  className: text("class_name"),
+  eventType: varchar("event_type", { length: 30 }).notNull(),
+  admissionCategory: varchar("admission_category", { length: 20 }),
+  occurredAt: timestamp("occurred_at"),
+  term: varchar("term", { length: 50 }),
+  session: varchar("session", { length: 20 }),
+  dateVerified: boolean("date_verified").notNull().default(false),
+  periodVerified: boolean("period_verified").notNull().default(false),
+  classVerified: boolean("class_verified").notNull().default(false),
+  reason: text("reason"),
+  actorId: uuid("actor_id"),
+  actorRole: varchar("actor_role", { length: 30 }),
+  requestId: text("request_id"),
+  source: varchar("source", { length: 30 }).notNull(),
+  previousData: jsonb("previous_data"),
+  newData: jsonb("new_data").notNull(),
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+});
+
+export const studentHistoryCommands = pgTable("student_history_commands", {
+  actorId: uuid("actor_id").notNull(),
+  requestId: text("request_id").notNull(),
+  command: jsonb("command").notNull(),
+  recordedAt: timestamp("recorded_at").notNull().defaultNow(),
+}, table => [unique().on(table.actorId, table.requestId)]);
+
+export type PopulationSnapshotStudent = {
+  studentId: string; studentNumber: string; studentName: string;
+  classId: string | null; className: string | null;
+  historicalClassVerified: boolean;
+  status: string | null; accountActive: boolean | null;
+};
+export const studentPopulationSnapshots = pgTable("student_population_snapshots", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: uuid("school_id").notNull(),
+  schoolName: text("school_name").notNull(),
+  term: varchar("term", { length: 50 }).notNull(),
+  session: varchar("session", { length: 20 }).notNull(),
+  snapshotKind: varchar("snapshot_kind", { length: 20 }).notNull(),
+  capturedAt: timestamp("captured_at").notNull().defaultNow(),
+  capturedBy: uuid("captured_by"),
+  coverage: varchar("coverage", { length: 30 }).notNull().default("point_in_time"),
+  students: jsonb("students").$type<PopulationSnapshotStudent[]>().notNull(),
+}, table => [unique().on(table.schoolId, table.session, table.term, table.snapshotKind)]);
+export type StudentStatusEvent = typeof studentStatusEvents.$inferSelect;
+export type StudentPopulationSnapshot = typeof studentPopulationSnapshots.$inferSelect;
+
 export const assessments = pgTable("assessments", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   studentId: uuid("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),

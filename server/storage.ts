@@ -1,4 +1,5 @@
 import { formatStudentName } from "../shared/student-name";
+import { setHistoryContext, authorizeStudentMutation, lockHistorySchools, claimHistoryCommand, type HistoryContext, StudentHistoryError } from './student-history';
 import { summarizeTuition } from "../shared/tuition-summary";
 import {
   schools,
@@ -130,8 +131,8 @@ export interface IStorage {
   updateUserPermissions(userId: string, permissions: string[]): Promise<User>;
   updateSchoolLogo(schoolId: string, logoUrl: string): Promise<School>;
   updateSchoolPrincipalSignature(schoolId: string, signatureUrl: string): Promise<School>;
-  createStudent(studentData: InsertStudent): Promise<Student>;
-  updateStudent(studentId: string, updateData: Partial<InsertStudent>): Promise<Student>;
+  createStudent(studentData: InsertStudent, history?: HistoryContext): Promise<Student>;
+  updateStudent(studentId: string, updateData: Partial<InsertStudent>, history?: HistoryContext, accountActive?: boolean): Promise<Student>;
   updateStudentProfileImage(studentId: string, profileImagePath: string): Promise<Student>;
   getStudent(studentId: string): Promise<Student | undefined>;
   createClass(classData: InsertClass): Promise<Class>;
@@ -322,7 +323,7 @@ export interface IStorage {
     currentSession: string | null;
     currentTerm: string | null;
   }>;
-  advanceAcademicTermForSchool(schoolId: string): Promise<{ newTerm: string; newSession: string }>;
+  advanceAcademicTermForSchool(schoolId: string, history?: HistoryContext): Promise<{ newTerm: string; newSession: string }>;
 
   // Academic sessions and terms management
   createAcademicSession(sessionData: InsertAcademicSession): Promise<AcademicSession>;
@@ -343,9 +344,9 @@ export interface IStorage {
   promoteStudentsToNextClass(currentClassId: string, nextClassId: string, studentIds: string[]): Promise<void>;
   hasBulkPromotionForSession(schoolId: string, session: string): Promise<{ promoted: boolean; promotedAt: Date | null; count: number }>;
   recordPromotions(rows: { schoolId: string; session: string; studentId: string; fromClassId: string; toClassId: string; isBulk: boolean; promotedBy?: string }[]): Promise<void>;
-  executeBulkPromotion(args: { schoolId: string; session: string; term?: string; promotedBy?: string; promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] }): Promise<{ totalPromoted: number; totalGraduated: number }>;
+  executeBulkPromotion(args: { schoolId: string; session: string; term?: string; promotedBy?: string; history?: HistoryContext; promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] }): Promise<{ totalPromoted: number; totalGraduated: number }>;
   markStudentsAsGraduated(studentIds: string[], session?: string, term?: string): Promise<void>;
-  markStudentsAsWithdrawn(studentIds: string[], session?: string, term?: string): Promise<void>;
+  markStudentsAsWithdrawn(studentIds: string[], history?: HistoryContext): Promise<void>;
   getStudentSchoolIds(studentIds: string[]): Promise<{ id: string; schoolId: string | null }[]>;
   getGraduatedStudents(schoolId?: string): Promise<StudentWithDetails[]>;
   getWithdrawnStudents(schoolId?: string): Promise<StudentWithDetails[]>;
@@ -353,7 +354,7 @@ export interface IStorage {
     mismatched: Array<{ id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; resolvedClassId: string; resolvedClassName: string; status: string }>;
     noHistory: Array<{ id: string; studentId: string; firstName: string | null; middleName: string | null; lastName: string | null; currentClassId: string; currentClassName: string; status: string }>;
   }>;
-  rollbackStudentClasses(moves: { studentId: string; targetClassId: string }[]): Promise<number>;
+  rollbackStudentClasses(moves: { studentId: string; targetClassId: string }[], history?: HistoryContext): Promise<number>;
   reorderClasses(schoolId: string, orderedClassIds: string[]): Promise<void>;
   
   // Attendance tracking
@@ -375,7 +376,7 @@ export interface IStorage {
     results: Record<string, { hasAllScores: boolean; hasAttendance: boolean; missingSubjects: string[] }>;
     summary: { total: number; ready: number; partial: number; incomplete: number };
   }>;
-  setSchoolAcademicInfo(schoolId: string, term: string, session: string): Promise<void>;
+  setSchoolAcademicInfo(schoolId: string, term: string, session: string, history?: HistoryContext): Promise<void>;
   validateReportCardDataSchool(term: string, session: string, schoolId?: string): Promise<{
     classes: Record<string, {
       className: string;
@@ -619,88 +620,114 @@ export class DatabaseStorage implements IStorage {
 
 
 
-  async createStudent(studentData: InsertStudent): Promise<Student> {
-    // Auto-generate student ID if not provided
-    if (!studentData.studentId) {
-      // Get the school through the class to determine the school number
-      const classData = await db
-        .select({ schoolId: classes.schoolId })
-        .from(classes)
-        .where(eq(classes.id, studentData.classId!))
-        .limit(1);
-      
-      if (classData.length === 0) {
-        throw new Error('Class not found');
+  async createStudent(studentData: InsertStudent, history: HistoryContext = {}): Promise<Student> {
+    return db.transaction(async (tx) => {
+      await setHistoryContext(tx, { ...history, action: 'registration' });
+      const [registrationClass] = await tx.select().from(classes).where(eq(classes.id, studentData.classId));
+      if (!registrationClass?.schoolId) throw new StudentHistoryError('Class must belong to a school');
+      if (history.actorRole && history.actorRole !== 'admin' && registrationClass.schoolId !== history.schoolId) throw new StudentHistoryError('Cannot register students outside your school', 403);
+      if (history.admissionClassId) {
+        const [originalClass] = await tx.select().from(classes).where(eq(classes.id, history.admissionClassId));
+        if (originalClass?.schoolId !== registrationClass.schoolId) throw new StudentHistoryError('Original admission class must belong to the registration school');
       }
-      
-      const schoolId = classData[0].schoolId;
-      
-      // Use the authoritative getSchoolNumber function
-      const schoolNumber = await this.getSchoolNumber(schoolId);
-      
-      // Get existing students for this school to determine next number
-      const existingStudents = await db
-        .select()
-        .from(students)
-        .leftJoin(classes, eq(students.classId, classes.id))
-        .where(eq(classes.schoolId, schoolId));
-      
-      // Extract existing numbers for this school to find gaps
-      const existingNumbers: number[] = [];
-      const schoolPrefix = `SOWA/${schoolNumber}`;
-      
-      existingStudents.forEach((row) => {
-        const studentId = row.students?.studentId;
-        if (studentId && studentId.startsWith(schoolPrefix)) {
-          // Extract number from format SOWA/1001 (school number + sequence)
-          const numberPart = studentId.substring(schoolPrefix.length);
-          // Ensure the remaining part is ONLY digits (prevents matching School 41 when checking School 4)
-          if (/^\d+$/.test(numberPart)) {
-            const num = parseInt(numberPart, 10);
-            if (!isNaN(num)) {
-              existingNumbers.push(num);
+      await lockHistorySchools(tx, [registrationClass.schoolId]);
+      if (studentData.clientRequestId) {
+        const [existing] = await tx.select().from(students).where(eq(students.clientRequestId, studentData.clientRequestId));
+        if (existing) {
+          await authorizeStudentMutation(tx, existing.id, undefined, history);
+          return existing;
+        }
+      }
+      // Auto-generate student ID if not provided
+      if (!studentData.studentId) {
+        // Get the school through the class to determine the school number
+        const classData = await tx
+          .select({ schoolId: classes.schoolId })
+          .from(classes)
+          .where(eq(classes.id, studentData.classId!))
+          .limit(1);
+
+        if (classData.length === 0) {
+          throw new Error('Class not found');
+        }
+
+        const schoolId = classData[0].schoolId;
+
+        // Use the authoritative getSchoolNumber function
+        const schoolNumber = await this.getSchoolNumber(schoolId, tx);
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`student-number:${schoolNumber}`}, 0))`);
+
+        // A transferred student keeps their number. Reserve that number even
+        // after they leave the original school, and serialize shared prefixes.
+        const existingStudents = await tx.select({ students }).from(students);
+
+        // Extract existing numbers for this school to find gaps
+        const existingNumbers: number[] = [];
+        const schoolPrefix = `SOWA/${schoolNumber}`;
+
+        existingStudents.forEach((row) => {
+          const studentId = row.students?.studentId;
+          if (studentId && studentId.startsWith(schoolPrefix)) {
+            // Extract number from format SOWA/1001 (school number + sequence)
+            const numberPart = studentId.substring(schoolPrefix.length);
+            // Ensure the remaining part is ONLY digits (prevents matching School 41 when checking School 4)
+            if (/^\d+$/.test(numberPart)) {
+              const num = parseInt(numberPart, 10);
+              if (!isNaN(num)) {
+                existingNumbers.push(num);
+              }
             }
           }
+        });
+
+        // Sort numbers to find gaps
+        existingNumbers.sort((a, b) => a - b);
+
+        // Find the lowest available number (fill gaps first)
+        let nextNumber = 1;
+        for (const num of existingNumbers) {
+          if (num === nextNumber) {
+            nextNumber++;
+          } else if (num > nextNumber) {
+            // Found a gap, use it
+            break;
+          }
         }
-      });
-      
-      // Sort numbers to find gaps
-      existingNumbers.sort((a, b) => a - b);
-      
-      // Find the lowest available number (fill gaps first)
-      let nextNumber = 1;
-      for (const num of existingNumbers) {
-        if (num === nextNumber) {
-          nextNumber++;
-        } else if (num > nextNumber) {
-          // Found a gap, use it
-          break;
-        }
+
+        // Format as 3-digit number (e.g., 001, 002, 123)
+        studentData.studentId = `SOWA/${schoolNumber}${nextNumber.toString().padStart(3, '0')}`;
       }
-      
-      // Format as 3-digit number (e.g., 001, 002, 123)
-      studentData.studentId = `SOWA/${schoolNumber}${nextNumber.toString().padStart(3, '0')}`;
-    }
-    
-    const [student] = await db
-      .insert(students)
-      .values(studentData)
-      .returning();
-    return student;
+
+      const [student] = await tx
+        .insert(students)
+        .values({ ...studentData, discount: studentData.discount === undefined ? undefined : String(studentData.discount) })
+        .returning();
+      return student;
+    });
   }
 
-  async updateStudent(studentId: string, updateData: Partial<InsertStudent>): Promise<Student> {
-    const [updatedStudent] = await db
-      .update(students)
-      .set(updateData)
-      .where(eq(students.id, studentId))
-      .returning();
-    
-    if (!updatedStudent) {
-      throw new Error('Student not found');
-    }
-    
-    return updatedStudent;
+  async updateStudent(studentId: string, updateData: Partial<InsertStudent>, history: HistoryContext = {}, accountActive?: boolean): Promise<Student> {
+    return db.transaction(async (tx) => {
+      await setHistoryContext(tx, { ...history, action: history.action ?? 'edit' });
+      const scope = await authorizeStudentMutation(tx, studentId, updateData.classId, history);
+      const execute = await claimHistoryCommand(tx, history, { studentId, updateData, accountActive: accountActive ?? null, reason: history.reason ?? null });
+      const [before] = await tx.select().from(students).where(eq(students.id, studentId)).for('update');
+      const [lockedClass] = await tx.select().from(classes).where(eq(classes.id, before.classId));
+      if (lockedClass.schoolId !== scope.schoolId) throw new StudentHistoryError('Student school changed; refresh before editing', 409);
+      if (!execute) return before;
+      const patch = { ...updateData };
+      // Re-enabling a withdrawn account is an explicit readmission. Ordinary
+      // account deactivation is not a withdrawal and never creates one.
+      if (accountActive === true && ['withdrawn', 'graduated'].includes(before.status ?? '')) patch.status = 'active';
+      const [updated] = Object.values(patch).some(value => value !== undefined)
+        ? await tx.update(students).set({ ...patch, discount: patch.discount === undefined ? undefined : String(patch.discount) }).where(eq(students.id, studentId)).returning()
+        : [before];
+      const active = patch.status === 'withdrawn' || patch.status === 'graduated' ? false : patch.status === 'active' ? true : accountActive;
+      if (active !== undefined || scope.schoolId !== scope.destination) {
+        await tx.update(users).set({ ...(active !== undefined ? { isActive: active } : {}), schoolId: scope.destination }).where(eq(users.id, before.userId));
+      }
+      return updated;
+    });
   }
 
   async updateStudentProfileImage(studentId: string, profileImagePath: string): Promise<Student> {
@@ -2299,12 +2326,16 @@ export class DatabaseStorage implements IStorage {
     await db.insert(promotionRecords).values(rows);
   }
 
-  async executeBulkPromotion(args: { schoolId: string; session: string; term?: string; promotedBy?: string; promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] }): Promise<{ totalPromoted: number; totalGraduated: number }> {
+  async executeBulkPromotion(args: { schoolId: string; session: string; term?: string; promotedBy?: string; history?: HistoryContext; promotions: { currentClassId: string; nextClassId: string; studentIds: string[] }[] }): Promise<{ totalPromoted: number; totalGraduated: number }> {
     const { schoolId, session, term, promotedBy, promotions } = args;
     let totalPromoted = 0;
     let totalGraduated = 0;
 
     await db.transaction(async (tx) => {
+      await setHistoryContext(tx, { ...args.history, actorId: promotedBy, action: 'promotion' });
+      await lockHistorySchools(tx, [schoolId]);
+      const [lockedSchool] = await tx.select().from(schools).where(eq(schools.id, schoolId));
+      if (lockedSchool?.currentSession !== session || lockedSchool.currentTerm !== 'Third Term') throw Object.assign(new Error('School academic period changed; refresh before promoting'), { invalidPromotion: true });
       // Serialize bulk promotion per school+session: an advisory transaction lock
       // makes a concurrent second run (even with DISJOINT student sets, which the
       // per-student unique index would not catch) wait here, then fail the
@@ -2341,9 +2372,11 @@ export class DatabaseStorage implements IStorage {
       }
       const allStudentIds = promotions.flatMap(p => p.studentIds);
       const studentRows = await tx
-        .select({ id: students.id, classId: students.classId })
+        .select({ id: students.id, classId: students.classId, status: students.status })
         .from(students)
-        .where(inArray(students.id, allStudentIds));
+        .where(inArray(students.id, allStudentIds)).orderBy(students.id).for('update');
+      if (studentRows.some(s => s.status !== 'active')) throw Object.assign(new Error('Only active students can be promoted'), { invalidPromotion: true });
+      if (new Set(allStudentIds).size !== allStudentIds.length) throw Object.assign(new Error('A student cannot appear twice in a promotion'), { invalidPromotion: true });
       const studentClass = new Map(studentRows.map(s => [s.id, s.classId]));
       for (const p of promotions) {
         for (const sid of p.studentIds) {
@@ -2433,29 +2466,28 @@ export class DatabaseStorage implements IStorage {
     return rows;
   }
 
-  async markStudentsAsWithdrawn(studentIds: string[], session?: string, term?: string): Promise<void> {
-    const targetStudents = await db
-      .select({ userId: students.userId })
-      .from(students)
-      .where(inArray(students.id, studentIds));
-
-    await db
-      .update(students)
-      .set({
-        status: 'withdrawn',
-        statusSession: session,
-        statusTerm: term,
-        updatedAt: new Date()
-      })
-      .where(inArray(students.id, studentIds));
-
-    const userIds = targetStudents.map(s => s.userId).filter(Boolean) as string[];
-    if (userIds.length > 0) {
-      await db
-        .update(users)
-        .set({ isActive: false })
-        .where(inArray(users.id, userIds));
-    }
+  async markStudentsAsWithdrawn(studentIds: string[], history: HistoryContext = {}): Promise<void> {
+    if (!studentIds.length) return;
+    await db.transaction(async (tx) => {
+      await setHistoryContext(tx, { ...history, action: 'withdrawal' });
+      const ids = Array.from(new Set(studentIds)).sort();
+      const schoolsForStudents = await tx.select({ id: students.id, schoolId: classes.schoolId }).from(students).innerJoin(classes, eq(students.classId, classes.id)).where(inArray(students.id, ids));
+      if (schoolsForStudents.length !== ids.length) throw new StudentHistoryError('One or more students were not found');
+      if (history.actorRole && history.actorRole !== 'admin' && schoolsForStudents.some(s => s.schoolId !== history.schoolId)) throw new StudentHistoryError('Cannot manage students outside your school', 403);
+      await lockHistorySchools(tx, schoolsForStudents.map(s => s.schoolId!).filter(Boolean));
+      if (!await claimHistoryCommand(tx, history, { action: 'withdrawal', studentIds: ids, reason: history.reason ?? null })) return;
+      const rows = await tx.select().from(students).where(inArray(students.id, ids)).orderBy(students.id).for('update');
+      const originalSchools = new Map(schoolsForStudents.map(s => [s.id, s.schoolId]));
+      const classRows = await tx.select().from(classes).where(inArray(classes.id, Array.from(new Set(rows.map(s => s.classId)))));
+      const schoolByClass = new Map(classRows.map(c => [c.id,c.schoolId]));
+      if (rows.some(s => schoolByClass.get(s.classId) !== originalSchools.get(s.id))) throw new StudentHistoryError('Student school changed; refresh before withdrawing', 409);
+      if (rows.some(s => s.status === 'graduated')) throw new StudentHistoryError('Graduated students cannot be marked withdrawn');
+      // Repeated unkeyed clicks are no-ops. They preserve the original period.
+      const changing = rows.filter(s => s.status !== 'withdrawn');
+      if (!changing.length) return;
+      await tx.update(students).set({ status: 'withdrawn', updatedAt: new Date() }).where(inArray(students.id, changing.map(s => s.id)));
+      await tx.update(users).set({ isActive: false }).where(inArray(users.id, changing.map(s => s.userId)));
+    });
   }
 
   async getGraduatedStudents(schoolId?: string): Promise<StudentWithDetails[]> {
@@ -2607,40 +2639,23 @@ export class DatabaseStorage implements IStorage {
     return { mismatched, noHistory };
   }
 
-  async rollbackStudentClasses(moves: { studentId: string; targetClassId: string }[]): Promise<number> {
-    if (moves.length === 0) return 0;
-
-    const studentIds = moves.map(m => m.studentId);
-
-    // Fetch user IDs so we can reactivate deactivated (graduated) users
-    const studentUsers = await db
-      .select({ id: students.id, userId: students.userId })
-      .from(students)
-      .where(inArray(students.id, studentIds));
-
-    const userIdByStudentId = new Map<string, string>();
-    for (const s of studentUsers) {
-      if (s.userId) userIdByStudentId.set(s.id, s.userId);
-    }
-
-    // Update each student
-    for (const move of moves) {
-      await db.update(students).set({
-        classId: move.targetClassId,
-        status: 'active',
-        statusSession: null,
-        statusTerm: null,
-        updatedAt: new Date(),
-      }).where(eq(students.id, move.studentId));
-    }
-
-    // Reactivate user accounts (graduated students have isActive=false on their user)
-    const userIds = [...new Set(moves.map(m => userIdByStudentId.get(m.studentId)).filter(Boolean))] as string[];
-    if (userIds.length > 0) {
-      await db.update(users).set({ isActive: true }).where(inArray(users.id, userIds));
-    }
-
-    return moves.length;
+  async rollbackStudentClasses(moves: { studentId: string; targetClassId: string }[], history: HistoryContext = {}): Promise<number> {
+    if (!moves.length) return 0;
+    return db.transaction(async (tx) => {
+      await setHistoryContext(tx, { ...history, action: 'rollback' });
+      const owned = await tx.select({ id: students.id, schoolId: classes.schoolId }).from(students).innerJoin(classes, eq(students.classId, classes.id)).where(inArray(students.id, moves.map(m => m.studentId)));
+      const destinations = await tx.select().from(classes).where(inArray(classes.id, moves.map(m => m.targetClassId)));
+      await lockHistorySchools(tx, owned.map(s => s.schoolId!).concat(destinations.map(c => c.schoolId!)).filter(Boolean));
+      if (!await claimHistoryCommand(tx, history, { action: 'rollback', moves, reason: history.reason ?? null })) return 0;
+      for (const move of [...moves].sort((a,b) => a.studentId.localeCompare(b.studentId))) {
+        await authorizeStudentMutation(tx, move.studentId, move.targetClassId, history);
+        const [student] = await tx.select().from(students).where(eq(students.id, move.studentId)).for('update');
+        if (student.status === 'withdrawn') throw new StudentHistoryError('Readmit a withdrawn student explicitly before correcting their class');
+        await tx.update(students).set({ classId: move.targetClassId, status: 'active', updatedAt: new Date() }).where(eq(students.id, move.studentId));
+        await tx.update(users).set({ isActive: true }).where(eq(users.id, student.userId));
+      }
+      return moves.length;
+    });
   }
 
   // Enhanced student creation helper methods
@@ -2898,90 +2913,99 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async advanceAcademicTermForSchool(schoolId: string): Promise<{ newTerm: string; newSession: string }> {
-    try {
-      const currentInfo = await this.getCurrentAcademicInfo(schoolId);
-      const currentTerm = currentInfo.currentTerm;
-      const currentSession = currentInfo.currentSession;
+  async advanceAcademicTermForSchool(schoolId: string, history: HistoryContext = {}): Promise<{ newTerm: string; newSession: string }> {
+    return db.transaction(async (tx) => {
+      await setHistoryContext(tx, { ...history, action: 'academic_period' });
+      if (history.actorRole && history.actorRole !== 'admin' && history.schoolId !== schoolId) throw new StudentHistoryError('Cannot change another school academic period', 403);
+      await lockHistorySchools(tx, [schoolId]);
+      try {
+        const [school] = await tx.select().from(schools).where(eq(schools.id, schoolId));
+        if (!school) throw new StudentHistoryError('School not found', 404);
+        const currentInfo = { currentTerm: school.currentTerm, currentSession: school.currentSession };
+        const currentTerm = currentInfo.currentTerm;
+        const currentSession = currentInfo.currentSession;
 
-      if (!currentTerm || !currentSession) {
-        throw new Error("No active term or session found for this school");
+        if (!currentTerm || !currentSession) {
+          throw new Error("No active term or session found for this school");
+        }
+
+        let newTerm: string;
+        let newSession: string;
+
+        if (currentTerm === "First Term") {
+          newTerm = "Second Term";
+          newSession = currentSession;
+        } else if (currentTerm === "Second Term") {
+          newTerm = "Third Term";
+          newSession = currentSession;
+        } else if (currentTerm === "Third Term") {
+          newTerm = "First Term";
+          const [startYear, endYear] = currentSession.split('/');
+          newSession = `${parseInt(startYear) + 1}/${parseInt(endYear) + 1}`;
+        } else {
+          throw new Error("Invalid current term");
+        }
+
+        // Ensure the session record exists in academic_sessions
+        const existingSession = await tx
+          .select()
+          .from(academicSessions)
+          .where(eq(academicSessions.sessionYear, newSession))
+          .limit(1);
+
+        if (existingSession.length === 0) {
+          await tx.insert(academicSessions).values({
+            sessionYear: newSession,
+            startDate: new Date(),
+            endDate: new Date(new Date().getFullYear() + 1, 7, 31),
+            isActive: false
+          });
+        }
+
+        // Ensure the term record exists in academic_terms for that session
+        const [session] = await tx
+          .select()
+          .from(academicSessions)
+          .where(eq(academicSessions.sessionYear, newSession));
+
+        const existingTerm = await tx
+          .select()
+          .from(academicTerms)
+          .where(and(eq(academicTerms.sessionId, session.id), eq(academicTerms.termName, newTerm)))
+          .limit(1);
+
+        if (existingTerm.length === 0) {
+          await tx.insert(academicTerms).values({
+            sessionId: session.id,
+            termName: newTerm,
+            startDate: new Date(),
+            endDate: new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000),
+            isActive: false
+          });
+        }
+
+        // Update ONLY this school's current term/session
+        await tx
+          .update(schools)
+          .set({ currentTerm: newTerm, currentSession: newSession, updatedAt: new Date() })
+          .where(eq(schools.id, schoolId));
+
+        return { newTerm, newSession };
+      } catch (error) {
+        console.error("Error advancing academic term for school:", error);
+        throw error;
       }
-
-      let newTerm: string;
-      let newSession: string;
-
-      if (currentTerm === "First Term") {
-        newTerm = "Second Term";
-        newSession = currentSession;
-      } else if (currentTerm === "Second Term") {
-        newTerm = "Third Term";
-        newSession = currentSession;
-      } else if (currentTerm === "Third Term") {
-        newTerm = "First Term";
-        const [startYear, endYear] = currentSession.split('/');
-        newSession = `${parseInt(startYear) + 1}/${parseInt(endYear) + 1}`;
-      } else {
-        throw new Error("Invalid current term");
-      }
-
-      // Ensure the session record exists in academic_sessions
-      const existingSession = await db
-        .select()
-        .from(academicSessions)
-        .where(eq(academicSessions.sessionYear, newSession))
-        .limit(1);
-
-      if (existingSession.length === 0) {
-        await db.insert(academicSessions).values({
-          sessionYear: newSession,
-          startDate: new Date(),
-          endDate: new Date(new Date().getFullYear() + 1, 7, 31),
-          isActive: false
-        });
-      }
-
-      // Ensure the term record exists in academic_terms for that session
-      const [session] = await db
-        .select()
-        .from(academicSessions)
-        .where(eq(academicSessions.sessionYear, newSession));
-
-      const existingTerm = await db
-        .select()
-        .from(academicTerms)
-        .where(and(eq(academicTerms.sessionId, session.id), eq(academicTerms.termName, newTerm)))
-        .limit(1);
-
-      if (existingTerm.length === 0) {
-        await db.insert(academicTerms).values({
-          sessionId: session.id,
-          termName: newTerm,
-          startDate: new Date(),
-          endDate: new Date(new Date().getTime() + 90 * 24 * 60 * 60 * 1000),
-          isActive: false
-        });
-      }
-
-      // Update ONLY this school's current term/session
-      await db
-        .update(schools)
-        .set({ currentTerm: newTerm, currentSession: newSession, updatedAt: new Date() })
-        .where(eq(schools.id, schoolId));
-
-      return { newTerm, newSession };
-    } catch (error) {
-      console.error("Error advancing academic term for school:", error);
-      throw error;
-    }
+    });
   }
 
   // Directly set a school's current term and session
-  async setSchoolAcademicInfo(schoolId: string, term: string, session: string): Promise<void> {
-    await db
-      .update(schools)
-      .set({ currentTerm: term, currentSession: session, updatedAt: new Date() })
-      .where(eq(schools.id, schoolId));
+  async setSchoolAcademicInfo(schoolId: string, term: string, session: string, history: HistoryContext = {}): Promise<void> {
+    await db.transaction(async (tx) => {
+      await setHistoryContext(tx, { ...history, action: 'academic_period' });
+      await lockHistorySchools(tx, [schoolId]);
+      if (history.actorRole && history.actorRole !== 'admin' && history.schoolId !== schoolId) throw new StudentHistoryError('Cannot change another school academic period', 403);
+      await tx.update(schools).set({ currentTerm: term, currentSession: session, updatedAt: new Date() }).where(eq(schools.id, schoolId));
+    });
   }
 
   // Attendance tracking methods
@@ -3459,9 +3483,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Enhanced student creation helpers
-  async getSchoolNumber(schoolId: string): Promise<string> {
+  async getSchoolNumber(schoolId: string, connection: Pick<typeof db, 'select'> = db): Promise<string> {
     // Get school info and extract number from name or use a default pattern
-    const school = await db.select().from(schools).where(eq(schools.id, schoolId)).limit(1);
+    const school = await connection.select().from(schools).where(eq(schools.id, schoolId)).limit(1);
     if (school.length > 0) {
       // Try to extract number from school name (e.g., "School 1" -> "1")
       const match = school[0].name.match(/(\d+)/);

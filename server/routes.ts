@@ -1,3 +1,5 @@
+import { historyContextSchema, promoteWithHistory, studentImportKey, StudentHistoryError, type HistoryContext } from './student-history';
+import { studentStatusEvents, studentPopulationSnapshots } from '@shared/schema';
 import { formatStudentName } from "../shared/student-name";
 import { issueStudentReceipts, ReceiptError } from "./payment-receipts";
 import { recordPaymentBatch, PaymentBatchError } from "./payment-batch";
@@ -61,6 +63,14 @@ import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { hasPermission, validatePermissions, getEffectivePermissions } from "@shared/permissions";
+
+function studentHistoryContext(req: Request, action: HistoryContext['action'] = 'edit'): HistoryContext {
+  const actor = (req as any).user;
+  return historyContextSchema.parse({ actorId: actor.id, actorRole: actor.role, schoolId: actor.schoolId,
+    requestId: req.body.clientRequestId, reason: req.body.reason, action,
+    admissionDate: req.body.admissionDate, admissionTerm: req.body.admissionTerm,
+    admissionSession: req.body.admissionSession, admissionClassId: req.body.admissionClassId, admissionCategory: req.body.admissionCategory });
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development' ? 'development-jwt-secret-change-in-production' : null);
 
@@ -584,7 +594,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!term || !session) {
         return res.status(400).json({ error: 'term and session are required' });
       }
-      await storage.setSchoolAcademicInfo(id, term, session);
+      if ((req as any).user.role !== 'admin' && (req as any).user.schoolId !== id) return res.status(403).json({ error: 'Cannot change another school academic period' });
+      if (!['First Term','Second Term','Third Term'].includes(term) || !/^\d{4}\/\d{4}$/.test(session)) return res.status(400).json({ error: 'Invalid academic period' });
+      await storage.setSchoolAcademicInfo(id, term, session, studentHistoryContext(req, 'academic_period'));
       await logActivity(req, {
         action: 'set_school_academic_info',
         entityType: 'term',
@@ -734,10 +746,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { schoolId } = req.body;
       if (schoolId) {
-        const result = await storage.advanceAcademicTermForSchool(schoolId);
+        if ((req as any).user.role !== 'admin' && (req as any).user.schoolId !== schoolId) return res.status(403).json({ error: 'Cannot change another school academic period' });
+        const result = await storage.advanceAcademicTermForSchool(schoolId, studentHistoryContext(req, 'academic_period'));
         await logActivity(req, { action: 'advance_term', entityType: 'term', schoolId, newData: result as any });
         res.json(result);
       } else {
+        if ((req as any).user.role !== 'admin') return res.status(403).json({ error: 'Only the main administrator can change global academic information' });
         const result = await storage.advanceAcademicTerm();
         await logActivity(req, { action: 'advance_term', entityType: 'term', schoolId: null, newData: result as any });
         res.json(result);
@@ -767,31 +781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = (req as any).user;
       const { currentClassId, nextClassId, studentIds } = req.body;
 
-      const currentInfo = await storage.getCurrentAcademicInfo();
-      if (nextClassId === 'graduated') {
-        await storage.markStudentsAsGraduated(studentIds, currentInfo?.currentSession ?? undefined, currentInfo?.currentTerm ?? undefined);
-      } else {
-        await storage.promoteStudentsToNextClass(currentClassId, nextClassId, studentIds);
-      }
-
-      // Ledger (best-effort audit; never blocks the promotion itself)
-      try {
-        const classSchools = await storage.getStudentSchoolIds(studentIds);
-        const session = currentInfo?.currentSession;
-        if (session && classSchools.length > 0) {
-          await storage.recordPromotions(classSchools.filter(s => !!s.schoolId).map(s => ({
-            schoolId: s.schoolId as string,
-            session,
-            studentId: s.id,
-            fromClassId: currentClassId,
-            toClassId: nextClassId,
-            isBulk: false,
-            promotedBy: user?.id,
-          })));
-        }
-      } catch (ledgerErr) {
-        console.error("Promotion ledger write failed (individual):", ledgerErr);
-      }
+      await promoteWithHistory(db, req.body, studentHistoryContext(req, 'promotion'));
 
       const fromClass = currentClassId ? await storage.getClassById(currentClassId) : undefined;
       await logActivity(req, {
@@ -803,7 +793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Students promoted successfully" });
     } catch (error) {
       console.error("Promote students error:", error);
-      res.status(400).json({ error: "Failed to promote students" });
+      res.status(error instanceof StudentHistoryError ? error.status : 400).json({ error: error instanceof StudentHistoryError ? error.message : "Failed to promote students" });
     }
   });
 
@@ -855,6 +845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         session,
         term: currentInfo?.currentTerm ?? undefined,
         promotedBy: user?.id,
+        history: studentHistoryContext(req, 'promotion'),
         promotions: validPromotions,
       });
 
@@ -880,7 +871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error?.invalidPromotion) {
         return res.status(400).json({ error: error.message });
       }
-      res.status(400).json({ error: "Failed to promote students" });
+      res.status(error instanceof StudentHistoryError ? error.status : 400).json({ error: error instanceof StudentHistoryError ? error.message : "Failed to promote students" });
     }
   });
 
@@ -926,7 +917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { moves } = req.body as { moves: { studentId: string; targetClassId: string }[] };
       if (!Array.isArray(moves) || moves.length === 0) return res.status(400).json({ error: 'moves array is required' });
-      const count = await storage.rollbackStudentClasses(moves);
+      const count = await storage.rollbackStudentClasses(moves, studentHistoryContext(req, 'rollback'));
       const moveSchools = await storage.getStudentSchoolIds(moves.map(m => m.studentId));
       await logActivity(req, {
         action: 'rollback_student_classes',
@@ -956,20 +947,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ error: "Cannot manage students outside your school" });
         }
       }
-      const currentInfo = await storage.getCurrentAcademicInfo();
-      await storage.markStudentsAsWithdrawn(studentIds, currentInfo?.currentSession ?? undefined, currentInfo?.currentTerm ?? undefined);
+      await storage.markStudentsAsWithdrawn(studentIds, studentHistoryContext(req, 'withdrawal'));
       const withdrawnSchools = await storage.getStudentSchoolIds(studentIds);
       await logActivity(req, {
         action: 'withdraw_students',
         entityType: 'student',
         schoolId: withdrawnSchools.find(s => !!s.schoolId)?.schoolId ?? undefined,
         previousData: { status: 'active' },
-        newData: { status: 'withdrawn', studentIds, session: currentInfo?.currentSession, term: currentInfo?.currentTerm },
+        newData: { status: 'withdrawn', studentIds, reason: req.body.reason ?? null, periodSource: 'student_school' },
       });
       res.json({ message: "Students marked as withdrawn" });
     } catch (error) {
       console.error("Withdraw students error:", error);
-      res.status(400).json({ error: "Failed to withdraw students" });
+      res.status(error instanceof StudentHistoryError ? error.status : 400).json({ error: error instanceof StudentHistoryError ? error.message : "Failed to withdraw students" });
     }
   });
 
@@ -1807,6 +1797,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         schoolId = user.schoolId;
       }
 
+      const registrationClass = await storage.getClassById(classId);
+      if (!registrationClass || registrationClass.schoolId !== schoolId) return res.status(403).json({ error: 'Class does not belong to the selected school' });
+      const registrationHistory = studentHistoryContext(req, 'registration');
+      if (registrationHistory.admissionCategory && registrationHistory.admissionCategory !== (req.body.studentType === 'returning' ? 'returning' : 'new')) return res.status(400).json({ error: 'Admission category must match the registration category' });
       // Validate single words only (no spaces allowed for names)
       if (firstName.includes(' ') || lastName.includes(' ') || (middleName && middleName.includes(' '))) {
         return res.status(400).json({ error: "Names must be single words without spaces" });
@@ -1820,6 +1814,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userData = insertUserSchema.parse({
         firstName,
         lastName,
+        middleName,
         email: tempEmail,
         password,
         role: 'student',
@@ -1853,7 +1848,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let student;
       try {
-        student = await storage.createStudent(studentData);
+        student = await storage.createStudent(studentData, registrationHistory);
+        if (student.userId !== newUser.id) {
+          await storage.deleteUser(newUser.id);
+          const existingUser = await storage.getUserById(student.userId);
+          return res.json({ message: 'Student already created (idempotent replay)', user: existingUser, student, studentId: student.studentId, idempotent: true });
+        }
       } catch (err: any) {
         // Always clean up the just-created orphan user — there is no scenario where
         // we want a user row without a matching student row from this endpoint.
@@ -1909,15 +1909,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Create student error:", error);
-      res.status(500).json({ error: error.message || "Failed to create student" });
+      res.status(error instanceof StudentHistoryError ? error.status : error instanceof z.ZodError ? 400 : 500).json({ error: error.message || "Failed to create student" });
     }
   });
 
   // Update student details (admin only)
+  app.get('/api/admin/students/:id/history', authenticate, requirePermission('tab_students'), async (req, res) => {
+    try {
+      const id = z.string().uuid().parse(req.params.id);
+      const actor = (req as any).user;
+      if (actor.role !== 'admin' && !actor.schoolId) return res.status(403).json({ error: 'A school assignment is required' });
+      const events = await db.select().from(studentStatusEvents).where(and(
+        eq(studentStatusEvents.studentId, id),
+        actor.role === 'admin' ? undefined : eq(studentStatusEvents.schoolId, actor.schoolId),
+      )).orderBy(studentStatusEvents.sequence);
+      res.json({ studentId: id, events, admissionVerified: events.some(e => e.eventType === 'admission' && e.periodVerified && e.dateVerified) });
+    } catch (error) {
+      res.status(error instanceof z.ZodError ? 400 : 500).json({ error: 'Failed to fetch student history' });
+    }
+  });
+
+  app.get('/api/admin/student-population-snapshots', authenticate, requireMainAdmin, async (req, res) => {
+    try {
+      const filters = z.object({ schoolId: z.string().uuid().optional(), session: z.string().regex(/^\d{4}\/\d{4}$/).optional(), term: z.enum(['First Term','Second Term','Third Term']).optional() }).parse(req.query);
+      const snapshots = await db.select().from(studentPopulationSnapshots).where(and(
+        filters.schoolId ? eq(studentPopulationSnapshots.schoolId, filters.schoolId) : undefined,
+        filters.session ? eq(studentPopulationSnapshots.session, filters.session) : undefined,
+        filters.term ? eq(studentPopulationSnapshots.term, filters.term) : undefined,
+      )).orderBy(desc(studentPopulationSnapshots.capturedAt));
+      res.json({ snapshots, missingPeriodsAreUnknown: true });
+    } catch (error) {
+      res.status(error instanceof z.ZodError ? 400 : 500).json({ error: 'Failed to fetch population snapshots' });
+    }
+  });
+
   app.patch('/api/admin/students/:id', authenticate, requirePermission('tab_students'), async (req, res) => {
     try {
       const { id } = req.params;
       const updateData = req.body;
+      const mutationHistory = studentHistoryContext(req);
+      if (updateData.isActive !== undefined && typeof updateData.isActive !== 'boolean') return res.status(400).json({ error: 'isActive must be a boolean' });
+      if (updateData.status !== undefined && !['active','withdrawn','graduated'].includes(updateData.status)) return res.status(400).json({ error: 'Invalid student status' });
       const user = (req as any).user;
 
       // Snapshot for the activity log (before state)
@@ -1939,10 +1971,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      if (updateData.classId) {
+        const destination = await storage.getClassById(updateData.classId);
+        if (!destination?.schoolId) return res.status(400).json({ error: 'Class must belong to a school' });
+        if (user.role !== 'admin' && destination.schoolId !== user.schoolId) return res.status(403).json({ error: 'Cannot transfer students outside your school' });
+      }
+
       // Handle date conversion properly and filter out non-student fields
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { firstName, lastName, middleName, email, isActive, id: _bodyId, ...studentOnlyData } = updateData;
+      const { firstName, lastName, middleName, email, isActive, id: _bodyId, userId: _userId, studentId: _studentNumber, statusSession: _statusSession, statusTerm: _statusTerm, clientRequestId: _requestId, reason: _reason, admissionDate: _admissionDate, admissionTerm: _admissionTerm, admissionSession: _admissionSession, admissionCategory: _admissionCategory, admissionClassId: _admissionClassId, ...studentOnlyData } = updateData;
       
+      const allowedStudentFields = new Set(['classId','dateOfBirth','age','gender','profileImage','parentWhatsapp','address','status','discount','studentType']);
+      Object.keys(studentOnlyData).forEach(key => { if (!allowedStudentFields.has(key)) delete studentOnlyData[key]; });
       // Convert date string to Date object if provided
       if (studentOnlyData.dateOfBirth && typeof studentOnlyData.dateOfBirth === 'string') {
         studentOnlyData.dateOfBirth = new Date(studentOnlyData.dateOfBirth);
@@ -2022,7 +2062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const applyFirst  = nameChangePending ? undefined : firstName;
       const applyLast   = nameChangePending ? undefined : lastName;
       const applyMiddle = nameChangePending ? undefined : middleName;
-      if (applyFirst !== undefined || applyLast !== undefined || applyMiddle !== undefined || email !== undefined || isActive !== undefined) {
+      if (applyFirst !== undefined || applyLast !== undefined || applyMiddle !== undefined || email !== undefined) {
         const student = await storage.getStudent(id);
         if (student && student.userId) {
           const userUpdateData: any = {};
@@ -2030,7 +2070,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (applyLast   !== undefined) userUpdateData.lastName   = applyLast;
           if (applyMiddle !== undefined) userUpdateData.middleName = applyMiddle;
           if (email    !== undefined) userUpdateData.email    = email;
-          if (isActive !== undefined) userUpdateData.isActive = isActive;
           
           // Update the user record directly in database
           await db.update(users)
@@ -2042,8 +2081,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update student fields (only when there are actual student-table columns to change)
       let updatedStudent;
       const studentOnlyKeys = Object.keys(studentOnlyData).filter(k => studentOnlyData[k] !== undefined);
-      if (studentOnlyKeys.length > 0) {
-        updatedStudent = await storage.updateStudent(id, studentOnlyData);
+      if (studentOnlyKeys.length > 0 || isActive !== undefined) {
+        updatedStudent = await storage.updateStudent(id, studentOnlyData, mutationHistory, isActive);
       } else {
         updatedStudent = await storage.getStudent(id);
       }
@@ -2072,7 +2111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedStudent);
     } catch (error: any) {
       console.error('Error updating student:', error);
-      res.status(500).json({ error: 'Failed to update student' });
+      res.status(error instanceof StudentHistoryError ? error.status : error instanceof z.ZodError ? 400 : 500).json({ error: error instanceof StudentHistoryError ? error.message : 'Failed to update student' });
     }
   });
 
@@ -2315,8 +2354,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         failed: [] as any[]
       };
 
-      // Process each row
-      for (const row of data as any[]) {
+      const batchKey = studentImportKey(classId, data as Record<string, unknown>[]);
+      const batchHistory = studentHistoryContext(req, 'registration');
+      // Stable file content + school class + row index, never names as identities.
+      for (const [rowIndex, row] of Array.from((data as any[]).entries())) {
+        const rowKey = `student-import:${batchKey}:${rowIndex}`;
+        const existing = await storage.getStudentByClientRequestId(rowKey);
+        if (existing) {
+          const existingClass = await storage.getClassById(existing.classId);
+          if (user.role !== 'admin' && existingClass?.schoolId !== user.schoolId) {
+            results.failed.push({ row, error: 'This previously imported student now belongs to another school' });
+            continue;
+          }
+          results.successful.push({ studentId: existing.studentId, idempotent: true });
+          continue;
+        }
         try {
           const firstName = row['First Name']?.toString().trim();
           const lastName = row['Last Name']?.toString().trim();
@@ -2373,6 +2425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const userData = insertUserSchema.parse({
             firstName,
             lastName,
+            middleName,
             email: tempEmail,
             password: defaultStudentPassword,
             role: 'student',
@@ -2392,15 +2445,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             gender: gender || null,
             parentWhatsapp: parentWhatsApp,
             address: address,
+            clientRequestId: rowKey,
             studentType: 'new', // bulk-imported students are new by default
           });
 
-          const student = await storage.createStudent(studentData);
+          let student;
+          try {
+            student = await storage.createStudent(studentData, { ...batchHistory, requestId: rowKey, admissionCategory: 'new' });
+            if (student.userId !== newUser.id) await storage.deleteUser(newUser.id);
+          } catch (error) {
+            await storage.deleteUser(newUser.id);
+            throw error;
+          }
 
           // Update user email with actual student ID if no email was provided
           if (!emailInput) {
             const actualEmail = `${student.studentId.replace('/', '')}@student.local`;
-            await storage.updateUserProfile(newUser.id, { email: actualEmail });
+            await storage.updateUserProfile(student.userId, { email: actualEmail });
           }
 
           results.successful.push({

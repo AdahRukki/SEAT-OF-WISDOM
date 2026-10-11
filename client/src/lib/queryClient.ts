@@ -1,7 +1,7 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { enqueueOperation } from "./offline-queue";
+import { enqueueOperation, generateClientRequestId } from "./offline-queue";
 
 export class OfflineQueuedError extends Error {
   queued = true;
@@ -66,6 +66,13 @@ export async function apiRequest(
   const token = localStorage.getItem('auth_token');
   
   const isFormData = options?.body instanceof FormData;
+  // Keep the same command key in the HTTP attempt and any offline replay.
+  // An old withdrawal replay must not withdraw a subsequently readmitted child.
+  const studentLifecycleWrite = method.toUpperCase() === 'PATCH' && /^\/api\/admin\/students\/[^/]+$/.test(url)
+    || method.toUpperCase() === 'POST' && ['/api/admin/withdraw-students','/api/admin/promote-students','/api/admin/students/rollback-class'].includes(url);
+  const requestBody = studentLifecycleWrite && !isFormData && options?.body && typeof options.body === 'object'
+    ? { ...options.body, clientRequestId: (options.body as { clientRequestId?: string }).clientRequestId || generateClientRequestId() }
+    : options?.body;
   const headers: Record<string, string> = {};
   
   if (!isFormData && options?.body) {
@@ -81,14 +88,14 @@ export async function apiRequest(
     res = await fetch(url, {
       method,
       headers,
-      body: isFormData ? options.body as FormData : (options?.body ? JSON.stringify(options.body) : undefined),
+      body: isFormData ? options!.body as FormData : (requestBody ? JSON.stringify(requestBody) : undefined),
       credentials: "include",
     });
   } catch (err) {
     if (err instanceof TypeError) {
       dispatchOffline();
       if (isWriteMethod(method) && !isFormData) {
-        enqueueOperation(url, method, options?.body, 'generic');
+        enqueueOperation(url, method, requestBody, 'generic');
         throw new OfflineQueuedError();
       }
     }
@@ -98,7 +105,7 @@ export async function apiRequest(
   if (await isOfflineStub(res)) {
     dispatchOffline();
     if (isWriteMethod(method) && !isFormData) {
-      enqueueOperation(url, method, options?.body, 'generic');
+      enqueueOperation(url, method, requestBody, 'generic');
       throw new OfflineQueuedError();
     }
   } else if (res.ok) {
