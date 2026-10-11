@@ -138,6 +138,11 @@ const authenticate = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(401).json({ error: "Invalid token" });
     }
 
+    // Recheck current account status on every request, including existing JWTs.
+    if (user.isActive !== true) {
+      return res.status(401).json({ error: "Account is disabled" });
+    }
+
     // Check if token was issued before password was last updated (session invalidation)
     if (decoded.iat && user.passwordUpdatedAt) {
       const tokenIssuedAt = decoded.iat * 1000; // Convert JWT iat (seconds) to milliseconds
@@ -170,7 +175,7 @@ const optionalAuthenticate = async (req: Request, _res: Response, next: NextFunc
       const staleAfterPasswordChange =
         !!(decoded.iat && user?.passwordUpdatedAt &&
           decoded.iat * 1000 < new Date(user.passwordUpdatedAt).getTime());
-      if (user && !staleAfterPasswordChange) {
+      if (user?.isActive === true && !staleAfterPasswordChange) {
         (req as any).user = user;
         (req as any).token = token;
       }
