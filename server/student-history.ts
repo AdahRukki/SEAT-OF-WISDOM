@@ -1,6 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
+import { analyticsSessionSchema } from '../shared/general-school-analytics';
 
 export const historyContextSchema = z.object({
   actorId: z.string().uuid().optional(),
@@ -11,7 +12,7 @@ export const historyContextSchema = z.object({
   action: z.enum(['registration', 'edit', 'withdrawal', 'readmission', 'promotion', 'rollback', 'academic_period']).optional(),
   admissionDate: z.string().date().optional(),
   admissionTerm: z.enum(['First Term', 'Second Term', 'Third Term']).optional(),
-  admissionSession: z.string().regex(/^\d{4}\/\d{4}$/).optional(),
+  admissionSession: analyticsSessionSchema.optional(),
   admissionCategory: z.enum(['new', 'returning', 'readmitted']).optional(),
   admissionClassId: z.string().min(1).max(50).optional(),
 }).refine(d => !!d.admissionTerm === !!d.admissionSession, 'Supply both admission term and session');

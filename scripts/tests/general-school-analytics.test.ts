@@ -1,66 +1,65 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import ts from 'typescript';
-import { drizzle } from 'drizzle-orm/pglite';
-import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import * as schema from '../../shared/schema';
-import { GeneralSchoolAnalytics, type TuitionResolver } from '../../server/general-school-analytics';
 import { AnalyticsError } from '../../server/analytics-repository';
 import { analyticsFiltersSchema, analyticsComparisonSchema, metricChange, previousPeriod } from '../../shared/general-school-analytics';
-import { setHistoryContext } from '../../server/student-history';
+import { setHistoryContext, historyContextSchema } from '../../server/student-history';
 
-const ids = [1, 2, 3, 4].map(n => `00000000-0000-4000-8000-00000000000${n}`);
-const actor = '00000000-0000-4000-8000-000000000099';
-const migration = fs.readFileSync(new URL('../migrations/20261011_student_history.sql', import.meta.url), 'utf8');
-// Exercise the same tuition resolver used by the existing financial workflows.
-const source = fs.readFileSync(new URL('../../server/storage.ts', import.meta.url), 'utf8');
-const ast = ts.createSourceFile('storage.ts', source, ts.ScriptTarget.Latest, true);
-const storage = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'DatabaseStorage') as ts.ClassDeclaration;
-const method = storage.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(ast) === 'buildTuitionResolver')!;
-const emitted = ts.transpileModule('class Storage {' + method.getText(ast) + '}', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-const resolver: TuitionResolver = new (new Function(emitted + ';return Storage;')())().buildTuitionResolver;
+import { ids, actor, createAnalyticsFixture as fixture } from './analytics-database-fixture';
 
-async function fixture(applyMigration = true) {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pg = new PGlite();
-  for (const table of [schema.schools, schema.users, schema.classes, schema.students, schema.promotionRecords, schema.academicSessions, schema.academicTerms,
-    schema.subjects, schema.assessments, schema.attendance, schema.feeTypes, schema.tuitionClassAmounts, schema.studentFees, schema.feePaymentRecords, schema.feePaymentStudentSplits]) {
-    const config = getTableConfig(table);
-    const columns = config.columns.map(column => `"${column.name}" ${column.getSQLType()}${column.primary ? ' PRIMARY KEY' : ''}${column.notNull ? ' NOT NULL' : ''}${column.default !== undefined ? ' DEFAULT ' + (typeof column.default === 'object' ? new PgDialect().sqlToQuery(column.default as any).sql : typeof column.default === 'string' ? "'" + column.default.replaceAll("'", "''") + "'" : column.default) : ''}`);
-    await pg.exec(`CREATE TABLE ${config.name} (${columns.join(',')})`);
-  }
-  await pg.query('INSERT INTO users(id,email,password,first_name,last_name,role) VALUES ($1,$2,$3,$4,$5,$6)', [actor, 'admin@test', 'test', 'Main', 'Admin', 'admin']);
-  const db = drizzle(pg);
-  const students: any[] = [];
-  for (let i = 0; i < ids.length; i++) {
-    await pg.query('INSERT INTO schools(id,name,current_term,current_session) VALUES ($1,$2,$3,$4)', [ids[i], ['Ikpoto', 'Bonsaac', 'Akwuofor', 'Akwuose'][i], i === 3 ? 'Third Term' : 'First Term', i === 3 ? '2025/2026' : '2026/2027']);
-    for (const [prefix, name] of [['p', 'Primary 1'], ['s', 'JSS 1']]) await pg.query('INSERT INTO classes(id,name,school_id) VALUES ($1,$2,$3)', [`${prefix}${i}`, name, ids[i]]);
-    const [user] = await db.insert(schema.users).values({ email: `${i}@test`, password: 'test', firstName: 'Ada', middleName: 'Grace', lastName: `Student${i}`, schoolId: ids[i] }).returning();
-    const [student] = await db.insert(schema.students).values({ userId: user.id, classId: `p${i}`, studentId: `SOWA/${i + 1}`, parentWhatsapp: '123' }).returning();
-    students.push(student);
-    const [fee] = await db.insert(schema.feeTypes).values({ schoolId: ids[i], name: 'Tuition', category: 'tuition', amount: '100', isTuition: true }).returning();
-    await db.insert(schema.tuitionClassAmounts).values([{ feeTypeId: fee.id, classId: `p${i}`, amount: '100' }, { feeTypeId: fee.id, classId: `s${i}`, amount: '200' }]);
-  }
-  if (applyMigration) await pg.exec(migration);
-  const reporting = new GeneralSchoolAnalytics(db, resolver);
-  async function create(index = 0, admissionDate?: string) {
-    return db.transaction(async tx => {
-      await setHistoryContext(tx, { actorId: actor, actorRole: 'admin', schoolId: ids[index], admissionDate });
-      const [user] = await tx.insert(schema.users).values({ email: `${crypto.randomUUID()}@test`, password: 'test', firstName: 'New', middleName: 'Full', lastName: 'Admission', schoolId: ids[index] }).returning();
-      const [student] = await tx.insert(schema.students).values({ userId: user.id, classId: `p${index}`, studentId: `SOWA/${crypto.randomUUID()}`, parentWhatsapp: '123', studentType: 'new' }).returning();
-      return student;
-    });
-  }
-  async function payment(amount: string, studentId: string | null, purpose = 'Tuition', term = 'First Term', session = '2026/2027', received = '2026-09-10', status = 'confirmed') {
-    const [record] = await db.insert(schema.feePaymentRecords).values({ amount, studentId, schoolId: ids[0], purpose, term, session, paymentDate: new Date(received), recordedBy: actor, paymentMethod: 'cash', status }).returning();
-    return record;
-  }
-  return { pg, db, reporting, students, create, payment };
-}
+test('whole-session population and admission growth use the previous complete session; date slices have no full-period admission growth', async () => {
+  const f = await fixture(); try {
+    // Place the observation baseline before the two sessions being compared.
+    await f.pg.exec('ALTER TABLE student_population_snapshots DISABLE TRIGGER population_snapshot_immutable');
+    await f.pg.query("UPDATE student_population_snapshots SET session='2023/2024',term='Third Term',captured_at='2024-07-01' WHERE school_id=$1 AND snapshot_kind='baseline'", [ids[0]]);
+    await f.pg.exec('ALTER TABLE student_population_snapshots ENABLE TRIGGER population_snapshot_immutable');
+    const census = (await f.pg.query('SELECT students FROM student_population_snapshots WHERE school_id=$1 AND snapshot_kind=\'baseline\'', [ids[0]])).rows[0] as any;
+    for (const [term, session, population] of [['Third Term', '2025/2026', census.students], ['Second Term', '2026/2027', []], ['Third Term', '2026/2027', [...census.students, { ...census.students[0], studentId: 'second-historical-student' }]]] as const) {
+      await f.pg.query('INSERT INTO student_population_snapshots(school_id,school_name,term,session,snapshot_kind,students) VALUES ($1,$2,$3,$4,$5,$6)', [ids[0], 'Ikpoto', term, session, 'term_end', JSON.stringify(population)]);
+    }
+    await f.pg.query("UPDATE schools SET current_session='2025/2026',current_term='Third Term' WHERE id=$1", [ids[0]]);
+    await f.create(0, '2025-09-10');
+    await f.pg.query("UPDATE schools SET current_session='2026/2027',current_term='First Term' WHERE id=$1", [ids[0]]);
+    await f.create(0, '2026-09-10'); await f.create(0, '2026-09-11');
+    const annual = await f.reporting.report({ schoolId: ids[0], session: '2026/2027' });
+    assert.equal(annual.population.growth.original, 1);
+    assert.equal(annual.population.growth.comparison, 2);
+    assert.equal(annual.population.growth.percentageChange, 100);
+    assert.equal(annual.admissions.previousRecordedAdmissions, 1);
+    assert.equal(annual.admissions.growth.percentageChange, 100);
+    const dated = await f.reporting.report({ schoolId: ids[0], session: '2026/2027', term: 'First Term', dateFrom: '2026-09-10', dateTo: '2026-09-10' });
+    assert.equal(dated.admissions.originalNewAdmissions, 1);
+    assert.equal(dated.admissions.growth.percentageChange, null);
+  } finally { await f.pg.close(); }
+});
+
+test('reports cannot certify historical event coverage when recording triggers are disabled', async () => {
+  const f = await fixture(); try {
+    await f.pg.exec('ALTER TABLE students DISABLE TRIGGER record_student_history');
+    await assert.rejects(f.reporting.report({}), (error: any) => error instanceof AnalyticsError && error.status === 503);
+    await assert.rejects(f.reporting.availablePeriods({}), (error: any) => error instanceof AnalyticsError && error.status === 503);
+    await f.pg.exec('ALTER TABLE students ENABLE TRIGGER record_student_history');
+    assert.equal((await f.reporting.report({})).population.combined.activeEnrolled, 4);
+  } finally { await f.pg.close(); }
+});
+
+test('invalid legacy school sessions do not become selectable reporting periods or verified current populations', async () => {
+  const f = await fixture(); try {
+    await f.pg.query("UPDATE schools SET current_session='2026/2028' WHERE id=$1", [ids[0]]);
+    const metadata = await f.reporting.availablePeriods({ schoolId: ids[0] });
+    assert.equal(metadata.periods.some(period => period.session === '2026/2028'), false);
+    assert.equal(metadata.periods.some(period => period.session === '2026/2027'), true);
+    const report = await f.reporting.report({ schoolId: ids[0] });
+    assert.equal(report.population.combined.activeEnrolled, null);
+    assert.equal(report.population.coverage, 'unavailable');
+    assert.equal(report.finance.combined.confirmedRevenue, null);
+  } finally { await f.pg.close(); }
+});
 
 test('report filters reject fake schools, duplicate branches, malformed dates and incomplete comparison periods', () => {
+  assert.equal(historyContextSchema.safeParse({ admissionTerm: 'First Term', admissionSession: '2026/2028' }).success, false);
+  assert.equal(historyContextSchema.safeParse({ admissionTerm: 'First Term', admissionSession: '2026/2027' }).success, true);
   for (const input of [{ schoolId: 'general-school-view' }, { schoolId: ids[0], schoolIds: ids }, { schoolIds: [ids[0], ids[0]] }, { term: 'First Term' }, { session: '2025/2028' }, { dateFrom: '2026-02-30' }, { dateFrom: '2026-10-11', dateTo: '2026-10-10' }, { passThreshold: '101' }, { unexpected: 'anything' }]) assert.equal(analyticsFiltersSchema.safeParse(input).success, false);
   assert.equal(analyticsFiltersSchema.parse({ schoolIds: ids.join(',') }).schoolIds?.length, 4);
   assert.equal(analyticsComparisonSchema.safeParse({ mode: 'term', originalSession: '2025/2026', comparisonSession: '2026/2027' }).success, false);

@@ -1,5 +1,5 @@
 import { summarizeTuition } from '../shared/tuition-summary';
-import { ANALYTICS_TERMS, previousPeriod, metricChange, analyticsFiltersSchema, analyticsComparisonSchema, type AnalyticsFilters, type AnalyticsComparisonFilters, type AcademicPeriod } from '../shared/general-school-analytics';
+import { ANALYTICS_TERMS, previousPeriod, metricChange, analyticsFiltersSchema, analyticsComparisonSchema, analyticsSessionSchema, type AnalyticsFilters, type AnalyticsComparisonFilters, type AcademicPeriod } from '../shared/general-school-analytics';
 import { AnalyticsError, loadAnalyticsData, loadAvailablePeriods, type AnalyticsData, type ReportingDatabase, type ReportingSchool, type ReportingEvent, type ReportingRate } from './analytics-repository';
 import type { PopulationSnapshotStudent } from '../shared/schema';
 
@@ -25,7 +25,7 @@ function sumCents(values: number[]): number {
 
 function periods(school: ReportingSchool, filters: AnalyticsFilters): AcademicPeriod[] {
   if (filters.session) return (filters.term ? [filters.term] : ANALYTICS_TERMS).map(term => ({ session: filters.session!, term }));
-  return school.currentSession && /^\d{4}\/\d{4}$/.test(school.currentSession) && ANALYTICS_TERMS.includes(school.currentTerm as typeof ANALYTICS_TERMS[number])
+  return school.currentSession && analyticsSessionSchema.safeParse(school.currentSession).success && ANALYTICS_TERMS.includes(school.currentTerm as typeof ANALYTICS_TERMS[number])
     ? [{ session: school.currentSession, term: school.currentTerm! }] : [];
 }
 function inPeriod(row: { session: string | null; term: string | null }, school: ReportingSchool, filters: AnalyticsFilters) {
@@ -149,7 +149,9 @@ function buildPopulation(data: AnalyticsData, schools: ReportingSchool[], filter
   const available = rosters.length > 0 && rosters.every(roster => roster.source !== 'unavailable' && (!filters.classId || roster.classUnknown === 0));
   const combined = uniqueRoster(rosters);
   const counts = populationCounts(combined.students, available, data.events, event => eventMatches(event, schools, filters, false));
-  const opening = rosters.map(roster => rosterFor(data, roster.school, roster.period ? previousPeriod(roster.period) : null, filters));
+  const opening = rosters.map(roster => rosterFor(data, roster.school, filters.session && !filters.term
+    ? previousPeriod({ session: filters.session, term: 'First Term' })
+    : roster.period ? previousPeriod(roster.period) : null, filters));
   // Live data is never a substitute for the previous period's closing census.
   const previousAvailable = opening.length > 0 && opening.every(roster => roster.source === 'term_end' && (!filters.classId || roster.classUnknown === 0));
   const previous = uniqueRoster(opening).students.filter(active).length;
@@ -181,7 +183,11 @@ function buildAdmissions(data: AnalyticsData, schools: ReportingSchool[], filter
   const verifiedDates = newEvents.filter(event => event.dateVerified && event.occurredAt).length;
   const unknown = data.events.filter(event => schools.some(school => school.id === event.schoolId) && ['admission', 'legacy_observation'].includes(event.eventType)
     && (!event.periodVerified || !event.dateVerified || !event.classVerified)).length;
-  const previousFilters = filters.term && filters.session ? analyticsFiltersSchema.parse({ ...filters, ...previousPeriod({ term: filters.term, session: filters.session }), dateFrom: undefined, dateTo: undefined }) : undefined;
+  // A date slice cannot be compared with the entire previous academic period.
+  const previousFilters = filters.session && !datesRequested(filters) ? analyticsFiltersSchema.parse({ ...filters,
+    ...(filters.term ? previousPeriod({ term: filters.term, session: filters.session })
+      : { session: `${Number(filters.session.slice(0, 4)) - 1}/${Number(filters.session.slice(5)) - 1}`, term: undefined }),
+    dateFrom: undefined, dateTo: undefined }) : undefined;
   const previousCount = previousFilters ? data.events.filter(event => event.eventType === 'admission' && event.admissionCategory === 'new' && eventMatches(event, schools, previousFilters)).length : null;
   // Event history establishes recorded admissions, not a complete historical
   // admission census. Do not produce a growth claim from an unknown baseline.
@@ -437,7 +443,7 @@ export class GeneralSchoolAnalytics {
       const rows = new Map<string, { schoolId: string; schoolName: string; session: string; term: string; populationSnapshot: boolean; baselineObservation: boolean; lifecycleEvents: boolean; confirmedPayments: boolean; assessments: boolean; attendance: boolean }>();
       const add = (schoolId: string, period: { session: string | null; term: string | null }, source: 'populationSnapshot' | 'baselineObservation' | 'lifecycleEvents' | 'confirmedPayments' | 'assessments' | 'attendance' | null) => {
         const school = selected.find(row => row.id === schoolId);
-        if (!school || !period.session || !ANALYTICS_TERMS.includes(period.term as typeof ANALYTICS_TERMS[number])) return;
+        if (!school || !period.session || !analyticsSessionSchema.safeParse(period.session).success || !ANALYTICS_TERMS.includes(period.term as typeof ANALYTICS_TERMS[number])) return;
         if (filters.session && period.session !== filters.session || filters.term && period.term !== filters.term) return;
         const id = `${schoolId}:${period.session}:${period.term}`;
         const row = rows.get(id) || { schoolId, schoolName: school.name, session: period.session, term: period.term!, populationSnapshot: false, baselineObservation: false, lifecycleEvents: false, confirmedPayments: false, assessments: false, attendance: false };

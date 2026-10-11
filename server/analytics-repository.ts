@@ -37,7 +37,9 @@ export interface AnalyticsData {
 // All sources are read in one repeatable-read transaction. Reports cannot mix a
 // pre-withdrawal population with post-withdrawal events or half a payment split.
 async function reportingScope(tx: ReportingConnection, filters: AnalyticsFilters) {
-  const ready = await tx.execute(sql`SELECT to_regclass('student_status_events') IS NOT NULL AND to_regclass('student_population_snapshots') IS NOT NULL AS ready`);
+  const ready = await tx.execute(sql`SELECT to_regclass('student_status_events') IS NOT NULL
+    AND to_regclass('student_history_commands') IS NOT NULL AND to_regclass('student_population_snapshots') IS NOT NULL
+    AND (SELECT count(*)=3 FROM pg_trigger WHERE tgname IN ('record_student_history','student_status_period','close_school_period') AND tgenabled IN ('O','A')) AS ready`);
   if (!(ready.rows[0] as { ready: boolean })?.ready) throw new AnalyticsError('Apply the reviewed Phase 1 student-history migration before using analytics', 503);
   const ids = filters.schoolIds || (filters.schoolId ? [filters.schoolId] : undefined);
   const schoolRows = await tx.execute(sql`SELECT id,name,current_term AS "currentTerm",current_session AS "currentSession" FROM schools

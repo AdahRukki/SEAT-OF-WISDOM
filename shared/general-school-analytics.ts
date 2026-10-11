@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const ANALYTICS_TERMS = ['First Term', 'Second Term', 'Third Term'] as const;
 const session = z.string().regex(/^\d{4}\/\d{4}$/).refine(value => Number(value.slice(5)) === Number(value.slice(0, 4)) + 1, 'Use consecutive academic years');
+export const analyticsSessionSchema = session;
 const date = z.string().date();
 export const analyticsFiltersSchema = z.object({
   schoolId: z.string().uuid().optional(),
