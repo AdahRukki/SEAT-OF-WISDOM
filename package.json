@@ -13,7 +13,8 @@
     "test:navigation": "node --import tsx --test scripts/tests/admin-navigation.test.ts",
     "test:navigation:browser": "node --test scripts/tests/admin-navigation.browser.mjs",
     "test:analytics": "node --import tsx --test scripts/tests/general-school-analytics.test.ts scripts/tests/general-school-analytics-routes.test.ts",
-    "test:analytics:browser": "node --import tsx --test scripts/tests/general-school-analytics.browser.mjs"
+    "test:analytics:browser": "node --import tsx --test scripts/tests/general-school-analytics.browser.mjs",
+    "test:analytics:exports": "node --import tsx --test scripts/tests/analytics-export.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",

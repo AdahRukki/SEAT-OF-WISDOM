@@ -9,6 +9,8 @@ import { ANALYTICS_TERMS, analyticsFiltersSchema, type AnalyticsFilters } from '
 import type { AnalyticsReport, AnalyticsPeriods } from '@shared/general-school-analytics-contracts';
 import { REPORT_SECTIONS, ReportSections, type ReportSection } from './report-sections';
 import { HistoricalComparisons } from './historical-comparisons';
+import { ExportControls } from './export-controls';
+import { buildAnalyticsExport, EXPORT_REPORTS, type ExportReport } from '@shared/analytics-export';
 
 const current: AnalyticsFilters = { passThreshold: 40 };
 export default function GeneralSchoolAnalytics({ userId }: { userId: string }) {
@@ -16,6 +18,7 @@ export default function GeneralSchoolAnalytics({ userId }: { userId: string }) {
   const [filters, setFilters] = useState<AnalyticsFilters>(current);
   const [filterError, setFilterError] = useState('');
   const [section, setSection] = useState<ReportSection>('overview');
+  const [exportKind, setExportKind] = useState<Exclude<ExportReport, 'comparison'>>('overview');
   const request = analyticsQuery(filters);
   const metadata = useQuery<AnalyticsPeriods>({ queryKey: ['/api/admin/analytics/periods', userId], queryFn: () => apiRequest('/api/admin/analytics/periods'), staleTime: 0, gcTime: 0 });
   const report = useQuery<AnalyticsReport>({ queryKey: ['/api/admin/analytics/overview', userId, request], queryFn: () => apiRequest(`/api/admin/analytics/overview?${request}`), staleTime: 0, gcTime: 0 });
@@ -54,11 +57,12 @@ export default function GeneralSchoolAnalytics({ userId }: { userId: string }) {
         <div className="flex flex-wrap items-center gap-3"><Button type="submit" disabled={report.isFetching || draft.schoolIds?.length === 0}>Apply filters</Button><Button type="button" variant="outline" onClick={() => { setDraft(current); setFilters(current); setFilterError(''); }}>Reset filters</Button>{draft.schoolIds?.length === 0 ? <p role="status" className="text-sm">Select at least one school.</p> : filtersChanged && <p role="status" className="text-sm text-amber-800 dark:text-amber-200">Filters changed. Apply filters to update the figures.</p>}</div>
       </form>
     </CardContent></Card>
-    <nav aria-label="Analytics sections" className="flex flex-wrap gap-2">{REPORT_SECTIONS.map(([id, label]) => <Button key={id} variant={section === id ? 'default' : 'outline'} size="sm" aria-pressed={section === id} onClick={() => setSection(id)}>{label}</Button>)}</nav>
+    <nav aria-label="Analytics sections" className="flex flex-wrap gap-2">{REPORT_SECTIONS.map(([id, label]) => <Button key={id} variant={section === id ? 'default' : 'outline'} size="sm" aria-pressed={section === id} onClick={() => { setSection(id); if (id !== 'comparisons') setExportKind(id in EXPORT_REPORTS ? id as Exclude<ExportReport, 'comparison'> : 'overview'); }}>{label}</Button>)}</nav>
     {report.isError && <Card><CardContent className="space-y-3 p-6"><p role="alert">Management reports could not be loaded. Historical records may need to be prepared before reports become available.</p><Button variant="outline" onClick={() => void report.refetch()}>Retry reports</Button></CardContent></Card>}
     {report.isFetching && <p role="status" className="rounded-lg border bg-white p-6 dark:bg-slate-900">Loading management reports…</p>}
     {report.data && !report.isError && !report.isFetching && <>
       <div className="space-y-1 text-sm text-muted-foreground" aria-label="Applied report scope"><p>{report.data.meta.selectedSchools.map(s => s.name).join(' · ') || 'No schools in scope'} · {filters.session ? `${filters.session} · ${filters.term || 'Whole session'}` : 'Each school’s current academic period'}{filters.classId ? ` · ${metadata.data?.classes.find(c => c.id === filters.classId)?.name || 'Selected class'}` : ' · All classes'}</p><p>Report generated {new Date(report.data.meta.generatedAt).toLocaleString('en-GB', { timeZone: 'UTC' })} UTC{filters.dateFrom || filters.dateTo ? ` · Event/receipt dates: ${filters.dateFrom || 'Any'} to ${filters.dateTo || 'Any'}` : ''}</p></div>
+      {section !== 'comparisons' && <div className="flex flex-wrap items-end justify-between gap-4 rounded-lg border bg-white p-4 dark:bg-slate-900"><div className="min-w-0 space-y-2"><label className="block text-sm font-medium">Management report<select aria-label="Management report" value={exportKind} onChange={event => setExportKind(event.target.value as typeof exportKind)} className="mt-1 block w-full max-w-full rounded-md border bg-background px-3 py-2">{Object.entries(EXPORT_REPORTS).filter(([id]) => id !== 'comparison').map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><p className="text-xs text-muted-foreground">Uses the displayed report and applied filters. Registers include all returned records.</p></div><ExportControls disabled={filtersChanged} makeDocument={() => buildAnalyticsExport(report.data!, exportKind, metadata.data)} /></div>}
       {section === 'comparisons' ? metadata.data ? <HistoricalComparisons key={request} metadata={metadata.data} scope={filters} userId={userId} /> : <p className="text-sm text-muted-foreground">Load reporting periods to compare historical results.</p> : <ReportSections key={`${section}:${request}`} section={section} report={report.data} />}
     </>}
   </section>;

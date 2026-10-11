@@ -6,6 +6,8 @@ import { analyticsQuery, COMPARISON_METRICS, formatMetric as f } from '@/lib/ana
 import { ANALYTICS_TERMS, type AnalyticsComparisonFilters, type AnalyticsFilters } from '@shared/general-school-analytics';
 import type { AnalyticsComparison, AnalyticsPeriods } from '@shared/general-school-analytics-contracts';
 import { Coverage, Note, ReportChart, ReportPanel, ReportTable } from './report-elements';
+import { ExportControls } from './export-controls';
+import { buildComparisonExport } from '@shared/analytics-export';
 
 export function HistoricalComparisons({ metadata, scope, userId }: { metadata: AnalyticsPeriods; scope: AnalyticsFilters; userId: string }) {
   const sessions = Array.from(new Set(metadata.periods.map(p => p.session))).sort().reverse();
@@ -47,6 +49,7 @@ export function HistoricalComparisons({ metadata, scope, userId }: { metadata: A
     {query.isError && <div role="alert" className="space-y-3"><p>Historical comparison could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void query.refetch()}>Retry comparison</Button></div>}
     {query.isFetching && <p role="status">Loading historical comparison…</p>}
     {result && !query.isError && !query.isFetching && <div className="space-y-5" aria-label="Comparison results"><p className="font-medium">{originalLabel} → {comparedLabel}</p>
+      <ExportControls disabled={controlsChanged} makeDocument={() => buildComparisonExport(result, metadata)} />
       <Note>N/A means the baseline or comparison evidence is unavailable. Percentage change needs a non-zero original value. Academic scores remain provisional; event comparisons require verified history. Changes in rate metrics use percentage points for the absolute difference.</Note>
       <ReportTable caption="Combined historical comparison" columns={['Metric', 'Original value', 'Comparison value', 'Absolute difference', 'Percentage change']} rows={Object.entries(COMPARISON_METRICS).map(([id, definition]) => { const change = result.metrics[id]; return [definition.label, f(change?.original, definition.unit), f(change?.comparison, definition.unit), change?.difference == null ? 'N/A' : `${f(change.difference, definition.unit === 'percent' ? 'number' : definition.unit)}${definition.unit === 'percent' ? ' pp' : ''}`, f(change?.percentageChange, 'percent')]; })} />
       <ReportChart title={`${selectedMetric.label} comparison by school`} unit={selectedMetric.unit} compared rows={result.bySchool.map(s => ({ name: s.schoolName, value: s.metrics[metric]?.original ?? null, comparison: s.metrics[metric]?.comparison ?? null }))} />
