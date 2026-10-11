@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GENERAL_SCHOOL_PATH, SCHOOL_SELECTION_PATH, schoolManagementPath } from '@/lib/admin-navigation';
 import type { School } from '@shared/schema';
+import GeneralSchoolAnalytics from '@/components/analytics/general-school-analytics';
 
 export function ManagementAccessDenied() {
   return <main className="min-h-screen bg-gray-50 px-4 py-16 dark:bg-gray-900">
@@ -57,8 +58,9 @@ function ManagementHome({ selectionOnly }: { selectionOnly: boolean }) {
       <section className="rounded-2xl bg-blue-950 p-6 text-white sm:p-8" aria-labelledby="management-heading">
         <p className="mb-2 text-sm font-medium text-blue-200">Academy management</p>
         <h1 id="management-heading" className="text-3xl font-bold sm:text-4xl">{selectionOnly ? 'Choose your school' : 'General School'}</h1>
-        <p className="mt-3 max-w-2xl text-blue-100">{selectionOnly ? 'Open General School for the academy view, or choose a branch to manage its students, assessments and payments.' : 'All Schools — view your academy branches and their current academic periods. Open a branch for school administration.'}</p>
+        <p className="mt-3 max-w-2xl text-blue-100">{selectionOnly ? 'Open General School for the academy view, or choose a branch to manage its students, assessments and payments.' : 'All Schools — monitor population, enrolment, retention, finance and learning across the academy. Compare recorded terms and sessions.'}</p>
       </section>
+      {!selectionOnly && user && <GeneralSchoolAnalytics userId={user.id} />}
       <section aria-labelledby="branches-heading" className="space-y-4">
         <h2 id="branches-heading" className="text-xl font-semibold">{selectionOnly ? 'Available management views' : 'School branches'}</h2>
         {selectionOnly && <Card className="border-blue-200 dark:border-blue-800"><CardContent className="flex flex-wrap items-center justify-between gap-4 p-6">

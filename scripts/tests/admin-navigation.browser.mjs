@@ -24,6 +24,7 @@ async function setup(role = 'admin', viewport = { width: 1440, height: 1000 }, s
     const url = new URL(req.url());
     requests.push({ pathname: url.pathname, schoolId: url.searchParams.get('schoolId'), method: req.method() });
     let body = [];
+    if (url.pathname.startsWith('/api/admin/analytics/')) return route.fulfill({ status: 503, json: { error: 'Reporting unavailable in navigation fixture' } });
     if (url.pathname === '/api/auth/me') body = role === null ? null : { id: `test-${role}`, role, schoolId: schools[0].id, firstName: 'Test', lastName: 'Admin', permissions: null };
     if (url.pathname === '/api/admin/schools') {
       if (schoolResponse === 'error') return route.fulfill({ status: 500, json: { error: 'Test failure' } });

@@ -127,6 +127,8 @@ test('official withdrawal remains in its school period after readmission and rep
     assert.equal(report.withdrawals.uniqueStudentsWithdrawn, 1);
     assert.equal(report.withdrawals.withdrawalEvents, 2);
     assert.equal(report.withdrawals.readmissionEvents, 1);
+    assert.equal(report.withdrawals.readmissionRegister[0].className, 'Primary 1');
+    assert.equal(report.withdrawals.readmissionRegister[0].studentNumber, 'SOWA/1');
     assert.equal(report.withdrawals.withdrawalRate, null);
     await f.pg.query('UPDATE users SET is_active=false WHERE id=$1', [f.students[1].userId]);
     const untouched = await f.reporting.report({ schoolId: ids[1] });
@@ -282,6 +284,8 @@ test('comparison preserves unavailable baselines and handles matching terms and 
     const unknown = await f.reporting.compare({ mode: 'session', schoolId: ids[0], originalSession: '2024/2025', comparisonSession: '2026/2027' });
     assert.equal(unknown.metrics.activePopulation.percentageChange, null);
     const periods = await f.reporting.availablePeriods({ schoolId: ids[0] });
+    assert.ok(periods.classes.some(cls => cls.id === 'p0' && cls.schoolId === ids[0]));
+    assert.ok(periods.classes.every(cls => cls.schoolId === ids[0]));
     assert.equal(periods.periods.find(row => row.term === 'First Term')?.populationSnapshot, true);
     assert.equal(periods.periods.some(row => row.session === '2024/2025'), false);
     await f.payment('12', f.students[0].id, 'Tuition', 'First Term', '2025/2026');
@@ -309,6 +313,9 @@ test('overlapping frozen school rosters never duplicate the combined population;
     const archived = await f.reporting.report({ schoolId: ids[0], classId: 'p0', session: '2026/2027', term: 'First Term' });
     assert.equal(archived.population.combined.activeEnrolled, 1);
     assert.equal(archived.population.bySchool[0].classes[0].className, 'Primary 1');
+    const archivedPeriods = await f.reporting.availablePeriods({ schoolId: ids[0] });
+    assert.ok(archivedPeriods.classes.some(cls => cls.id === 'p0' && cls.name === 'Primary 1'));
+    assert.ok(archivedPeriods.classes.every(cls => cls.schoolId === ids[0]));
   } finally { await f.pg.close(); }
 });
 

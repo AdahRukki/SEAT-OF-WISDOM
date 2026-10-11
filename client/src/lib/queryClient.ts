@@ -1,4 +1,4 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient, QueryFunction, defaultShouldDehydrateQuery } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { enqueueOperation, generateClientRequestId } from "./offline-queue";
@@ -203,5 +203,11 @@ if (typeof window !== 'undefined') {
     persister: localStoragePersister,
     maxAge: 1000 * 60 * 60 * 24,
     buster: 'sowa-ledger-v3',
+    dehydrateOptions: {
+      // Management reports include names and mutable financial figures. Always
+      // fetch them for the current authenticated user; don't persist them offline.
+      shouldDehydrateQuery: query => defaultShouldDehydrateQuery(query)
+        && !(typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('/api/admin/analytics/')),
+    },
   });
 }

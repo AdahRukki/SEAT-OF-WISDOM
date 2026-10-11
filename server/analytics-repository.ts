@@ -112,7 +112,7 @@ export async function loadAnalyticsData(tx: ReportingConnection, filters: Analyt
 export async function loadAvailablePeriods(tx: ReportingConnection, filters: AnalyticsFilters) {
   const { schools, classes, scope } = await reportingScope(tx, filters);
   const selectedSchools = schools.filter(school => !filters.classId || classes.some(cls => cls.id === filters.classId && cls.schoolId === school.id));
-  if (!selectedSchools.length) return { schools: selectedSchools, periods: [] };
+  if (!selectedSchools.length) return { schools: selectedSchools, classes: [], periods: [] };
   const result = await tx.execute(sql`SELECT school_id AS "schoolId",session,term,source FROM (
     SELECT id AS school_id,current_session AS session,current_term AS term,'current' AS source FROM schools WHERE id IN (${scope})
     UNION SELECT school_id,session,term,snapshot_kind FROM student_population_snapshots WHERE school_id IN (${scope})
@@ -126,5 +126,5 @@ export async function loadAvailablePeriods(tx: ReportingConnection, filters: Ana
   ) periods WHERE session IS NOT NULL AND term IS NOT NULL
     ${filters.session ? sql`AND session=${filters.session}` : sql``} ${filters.term ? sql`AND term=${filters.term}` : sql``}
     ORDER BY session,term,school_id`);
-  return { schools: selectedSchools, periods: result.rows as { schoolId: string; session: string; term: string; source: string }[] };
+  return { schools: selectedSchools, classes: classes.filter(cls => selectedSchools.some(school => school.id === cls.schoolId)), periods: result.rows as { schoolId: string; session: string; term: string; source: string }[] };
 }

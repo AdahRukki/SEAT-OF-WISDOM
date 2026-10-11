@@ -227,7 +227,8 @@ function buildWithdrawals(data: AnalyticsData, schools: ReportingSchool[], filte
     currentStatusUnknown: Array.from(unique).filter(id => !now.has(id)).length,
     readmissionEvents: data.events.filter(event => event.eventType === 'readmission' && eventMatches(event, schools, filters)).length,
     readmissionRegister: data.events.filter(event => event.eventType === 'readmission' && eventMatches(event, schools, filters)).map(event => ({
-      eventId: event.id, studentId: event.studentId, studentName: event.studentName, schoolId: event.schoolId, classId: event.classId,
+      eventId: event.id, studentId: event.studentId, studentNumber: event.studentNumber, studentName: event.studentName, schoolId: event.schoolId, classId: event.classId,
+      className: event.classVerified ? event.className : null,
       term: event.term, session: event.session, readmittedDate: event.dateVerified ? event.occurredAt?.slice(0, 10) || null : null, actorId: event.actorId,
     })),
     graduatedDuringPeriod: new Set(data.events.filter(event => event.eventType === 'graduation' && eventMatches(event, schools, filters)).map(event => event.studentId)).size,
@@ -445,7 +446,7 @@ export class GeneralSchoolAnalytics {
       };
       const sourceNames = { current: null, baseline: 'baselineObservation', term_end: 'populationSnapshot', events: 'lifecycleEvents', payments: 'confirmedPayments', scores: 'assessments', attendance: 'attendance' } as const;
       data.periods.forEach(row => add(row.schoolId, row, sourceNames[row.source as keyof typeof sourceNames]));
-      return { schools: selected, periods: Array.from(rows.values()).sort((a, b) => a.session.localeCompare(b.session) || ANALYTICS_TERMS.indexOf(a.term as typeof ANALYTICS_TERMS[number]) - ANALYTICS_TERMS.indexOf(b.term as typeof ANALYTICS_TERMS[number]) || a.schoolId.localeCompare(b.schoolId)) };
+      return { schools: selected, classes: data.classes, periods: Array.from(rows.values()).sort((a, b) => a.session.localeCompare(b.session) || ANALYTICS_TERMS.indexOf(a.term as typeof ANALYTICS_TERMS[number]) - ANALYTICS_TERMS.indexOf(b.term as typeof ANALYTICS_TERMS[number]) || a.schoolId.localeCompare(b.schoolId)) };
     }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
   }
   async compare(input: unknown) {
