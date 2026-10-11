@@ -19,7 +19,7 @@ export async function issueStudentReceipts(database:any,input:unknown,actor:{id:
         UNION ALL
         SELECT ss.payment_record_id,ss.student_id,ss.amount,COALESCE(ss.purpose,p.purpose) FROM fee_payment_student_splits ss JOIN fee_payment_records p ON p.id=ss.payment_record_id
       )
-      SELECT p.id AS "paymentId",s.id AS "studentId",s.student_id AS "studentCode",u.first_name AS "firstName",u.last_name AS "lastName",
+      SELECT p.id AS "paymentId",s.id AS "studentId",s.student_id AS "studentCode",u.first_name AS "firstName",u.middle_name AS "middleName",u.last_name AS "lastName",
         COALESCE(c.name,'Unassigned') AS "className",sch.name AS "schoolName",COALESCE(sch.address,'') AS "schoolAddress",sch.logo_url AS "logoUrl",
         p.term,p.session,COALESCE(p.depositor_name,'') AS depositor,p.payment_method AS method,COALESCE(p.reference,'') AS reference,
         p.payment_date::date::text AS "paymentDate",(p.confirmed_at AT TIME ZONE 'UTC') AS "confirmedAt",
@@ -38,6 +38,14 @@ export async function issueStudentReceipts(database:any,input:unknown,actor:{id:
       if(!saved.rows[0])throw new ReceiptError('Receipt could not be issued',409);
       const financialSignature=(r:any)=>JSON.stringify({total:Math.round(Number(r.total)*100),items:r.items.map((item:any)=>[item.purpose,Math.round(Number(item.amount)*100)]).sort(),term:r.term,session:r.session,paymentDate:r.paymentDate,confirmedAt:r.confirmedAt?new Date(r.confirmedAt).toISOString():null,method:r.method,reference:r.reference,depositor:r.depositor});
       if(financialSignature(saved.rows[0].snapshot)!==financialSignature(snapshot))throw new ReceiptError('Payment details changed after this receipt was issued. Review the original receipt before reissuing.',409);
+      // Correct identity labels only; the issued financial snapshot and receipt number stay fixed.
+      const previousNames = Object.fromEntries(['firstName','middleName','lastName'].map(key=>[key,saved.rows[0].snapshot[key] ?? null]));
+      const currentNames = Object.fromEntries(['firstName','middleName','lastName'].map(key=>[key,snapshot[key] ?? null]));
+      if (JSON.stringify(previousNames) !== JSON.stringify(currentNames)) {
+        await tx.execute(sql`UPDATE payment_student_receipts SET snapshot=snapshot || ${JSON.stringify(currentNames)}::jsonb WHERE id=${saved.rows[0].id}::bigint`);
+        await tx.insert(paymentAuditLogs).values({action:'correct_receipt_name',entityType:'payment_record',entityId:selection.paymentId,userId:actor.id,schoolId:data.schoolId,previousData:previousNames,newData:{...currentNames,studentId:selection.studentId,receiptNumber:`SOW-${saved.rows[0].id.padStart(8,'0')}`}});
+        Object.assign(saved.rows[0].snapshot,currentNames);
+      }
       const receipt={...saved.rows[0].snapshot,number:`SOW-${saved.rows[0].id.padStart(8,'0')}`} as StudentReceipt;
       receipts.push(receipt);
       await tx.insert(paymentAuditLogs).values({action:inserted.rows.length?'issue_receipt':'reprint_receipt',entityType:'payment_record',entityId:selection.paymentId,userId:actor.id,schoolId:data.schoolId,newData:{receiptNumber:receipt.number,studentId:selection.studentId}});

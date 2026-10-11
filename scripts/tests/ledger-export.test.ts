@@ -28,12 +28,13 @@ test('reversed and pending records cannot establish the first confirmed payment'
   assert.deepEqual([...firstPaymentStudents([record('a','2026-09-01T10:00:00Z',{status:'reversed'}),record('a',from)],from,to)],['a']);
 });
 test('workbook retains student split amounts and matching numeric totals after serialization', () => {
-  const entries = [{studentDbId:'a',studentId:'SOWA001',firstName:'Ada',lastName:'Test',className:'JSS1',studentType:'new',totalPaid:3000,tuitionAssigned:10000,totalAssigned:10000,discount:0,balance:7000}];
+  const entries = [{studentDbId:'a',studentId:'SOWA001',firstName:'Ada',middleName:'Grace',lastName:'Test',className:'JSS1',studentType:'new',totalPaid:3000,tuitionAssigned:10000,totalAssigned:10000,discount:0,balance:7000}];
   const records = [record('a',from,{amount:'3000.00',isSplit:true,reference:'=1+1'}),record('b',from,{amount:'7000.00',isSplit:true})];
   const workbook = buildLedgerWorkbook(entries,records,{School:'Test'},true);
   const read = XLSX.read(XLSX.write(workbook,{type:'buffer',bookType:'xlsx'}),{type:'buffer'});
   assert.deepEqual(read.SheetNames,['Ledger summary','Payment records','Filters and totals']);
   const details = XLSX.utils.sheet_to_json<any>(read.Sheets['Payment records']);
+  assert.equal(details[0]['Student name'],'Test Ada Grace');
   assert.equal(details.length,1); assert.equal(details[0]['Student amount (NGN)'],3000);
   assert.equal(details[0]['Reference'],'=1+1');
   assert.equal(read.Sheets['Payment records']['J2'].f,undefined);
@@ -45,7 +46,7 @@ test('workbook retains student split amounts and matching numeric totals after s
   assert.equal(totals.find(row=>row.Filter==='Summary total (NGN)').Value,3000);
 });
 test('unpaid students can export with an empty, headed payment sheet', () => {
-  const entry = {studentDbId:'a',studentId:'SOWA001',firstName:'Ada',lastName:'Test',className:'JSS1',studentType:'returning',totalPaid:0,tuitionAssigned:10000,totalAssigned:10000,discount:0,balance:10000};
+  const entry = {studentDbId:'a',studentId:'SOWA001',firstName:'Ada',middleName:'Grace',lastName:'Test',className:'JSS1',studentType:'returning',totalPaid:0,tuitionAssigned:10000,totalAssigned:10000,discount:0,balance:10000};
   const wb = buildLedgerWorkbook([entry],[],{},false);
   assert.equal(wb.Sheets['Payment records'].A1.v,'Student ID');
   assert.equal(XLSX.utils.sheet_to_json<any>(wb.Sheets['Ledger summary'])[0]['Outstanding tuition (NGN)'],10000);

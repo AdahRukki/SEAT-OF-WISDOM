@@ -1,3 +1,4 @@
+import { formatStudentName } from "../shared/student-name";
 import { summarizeTuition } from "../shared/tuition-summary";
 import {
   schools,
@@ -237,7 +238,7 @@ export interface IStorage {
     entries: {
       studentDbId: string;
       studentId: string;
-      firstName: string;
+      firstName: string; middleName?: string | null;
       lastName: string;
       className: string;
       classId: string;
@@ -269,7 +270,7 @@ export interface IStorage {
       className: string;
       students: Array<{
         studentId: string;
-        firstName: string;
+        firstName: string; middleName?: string | null;
         lastName: string;
         sowaId: string;
         totalAssigned: number;
@@ -860,7 +861,7 @@ export class DatabaseStorage implements IStorage {
         id: users.id,
         email: users.email,
         password: users.password,
-        firstName: users.firstName,
+        firstName: users.firstName, middleName: users.middleName,
         lastName: users.lastName,
         role: users.role,
         schoolId: users.schoolId,
@@ -1647,7 +1648,7 @@ export class DatabaseStorage implements IStorage {
       const recordedByUsersData = await db
         .select({
           id: users.id,
-          firstName: users.firstName,
+          firstName: users.firstName, middleName: users.middleName,
           lastName: users.lastName,
           email: users.email,
           role: users.role,
@@ -1745,7 +1746,7 @@ export class DatabaseStorage implements IStorage {
         ) AS effective_class_id
         FROM students s
       )
-      SELECT s.id AS "studentDbId", s.student_id AS "studentId", u.first_name AS "firstName",
+      SELECT s.id AS "studentDbId", s.student_id AS "studentId", u.first_name AS "firstName", u.middle_name AS "middleName",
         u.last_name AS "lastName", c.name AS "className", s.effective_class_id AS "classId",
         s.parent_whatsapp AS "parentWhatsapp", s.discount,
         CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term || ''}
@@ -1921,7 +1922,7 @@ export class DatabaseStorage implements IStorage {
       className: string;
       students: Array<{
         studentId: string;
-        firstName: string;
+        firstName: string; middleName?: string | null;
         lastName: string;
         sowaId: string;
         totalAssigned: number;
@@ -1935,7 +1936,7 @@ export class DatabaseStorage implements IStorage {
   }> {
     const studentsRows = await db.execute(sql`
       SELECT s.id, s.student_id AS "sowaId", s.class_id AS "classId",
-             u.first_name AS "firstName", u.last_name AS "lastName",
+             u.first_name AS "firstName", u.middle_name AS "middleName", u.last_name AS "lastName",
              c.name AS "className", s.discount AS "discount",
              CASE WHEN s.student_type = 'returning'
                    AND s.student_type_flipped_term = ${term}
@@ -2000,7 +2001,7 @@ export class DatabaseStorage implements IStorage {
 
       classGroupMap.get(s.classId)!.students.push({
         studentId: s.id,
-        firstName: s.firstName,
+        firstName: s.firstName, middleName: s.middleName ?? null,
         lastName: s.lastName,
         sowaId: s.sowaId,
         totalAssigned,
@@ -3025,7 +3026,7 @@ export class DatabaseStorage implements IStorage {
           id: users.id,
           email: users.email,
           password: users.password,
-          firstName: users.firstName,
+          firstName: users.firstName, middleName: users.middleName,
           lastName: users.lastName,
           role: users.role,
           schoolId: users.schoolId,
@@ -3280,7 +3281,7 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
 
-    let classStudents: { id: string; firstName: string | null; lastName: string | null }[];
+    let classStudents: { id: string; firstName: string | null; middleName?: string | null; lastName: string | null }[];
     if (promoRow) {
       const ledgerIds = await db
         .selectDistinct({ studentId: promotionRecords.studentId })
@@ -3300,14 +3301,14 @@ export class DatabaseStorage implements IStorage {
       const historicalIds = Array.from(new Set([...ledgerIds, ...assessedIds].map(r => r.studentId)));
       classStudents = historicalIds.length
         ? await db
-            .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+            .select({ id: students.id, firstName: users.firstName, middleName: users.middleName, lastName: users.lastName })
             .from(students)
             .leftJoin(users, eq(students.userId, users.id))
             .where(inArray(students.id, historicalIds))
         : [];
     } else {
       classStudents = await db
-        .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+        .select({ id: students.id, firstName: users.firstName, middleName: users.middleName, lastName: users.lastName })
         .from(students)
         .leftJoin(users, eq(students.userId, users.id))
         .where(and(eq(students.classId, classId), eq(users.isActive, true)));
@@ -3416,13 +3417,13 @@ export class DatabaseStorage implements IStorage {
       const validatedIds = Object.keys(bulkResult.results);
       const classStudents = validatedIds.length
         ? await db
-            .select({ id: students.id, firstName: users.firstName, lastName: users.lastName })
+            .select({ id: students.id, firstName: users.firstName, middleName: users.middleName, lastName: users.lastName })
             .from(students)
             .leftJoin(users, eq(students.userId, users.id))
             .where(inArray(students.id, validatedIds))
         : [];
 
-      const studentNameMap = new Map(classStudents.map(s => [s.id, `${s.firstName} ${s.lastName}`]));
+      const studentNameMap = new Map(classStudents.map(s => [s.id, formatStudentName(s)]));
 
       for (const [studentId, result] of Object.entries(bulkResult.results)) {
         allStudentResults[studentId] = result;
@@ -3860,7 +3861,7 @@ export class DatabaseStorage implements IStorage {
         author: {
           id: users.id,
           email: users.email,
-          firstName: users.firstName,
+          firstName: users.firstName, middleName: users.middleName,
           lastName: users.lastName,
           role: users.role,
           schoolId: users.schoolId,
@@ -3894,7 +3895,7 @@ export class DatabaseStorage implements IStorage {
         author: {
           id: users.id,
           email: users.email,
-          firstName: users.firstName,
+          firstName: users.firstName, middleName: users.middleName,
           lastName: users.lastName,
           role: users.role,
           schoolId: users.schoolId,
@@ -4689,7 +4690,7 @@ export class DatabaseStorage implements IStorage {
           createdAt: feePaymentStudentSplits.createdAt,
           studentDbId: students.id,
           studentDisplayId: students.studentId,
-          firstName: users.firstName,
+          firstName: users.firstName, middleName: users.middleName,
           lastName: users.lastName,
         })
         .from(feePaymentStudentSplits)
@@ -4710,7 +4711,7 @@ export class DatabaseStorage implements IStorage {
             ? {
                 id: r.studentDbId,
                 studentId: r.studentDisplayId,
-                user: { firstName: r.firstName ?? '', lastName: r.lastName ?? '' },
+                user: { firstName: r.firstName ?? '', middleName: r.middleName ?? null, lastName: r.lastName ?? '' },
               }
             : undefined,
         });
@@ -5162,7 +5163,7 @@ export class DatabaseStorage implements IStorage {
     const rows = await db
       .select({
         log: paymentAuditLogs,
-        userFirstName: users.firstName,
+        userFirstName: users.firstName, userMiddleName: users.middleName,
         userLastName: users.lastName,
         userRole: users.role,
         schoolName: schools.name,
@@ -5423,7 +5424,7 @@ export class DatabaseStorage implements IStorage {
         paymentStatus: feePaymentRecords.status,
         studentId: students.id,
         studentDisplayId: students.studentId,
-        userFirstName: users.firstName,
+        userFirstName: users.firstName, userMiddleName: users.middleName,
         userLastName: users.lastName,
       })
       .from(paymentAllocations)
@@ -5441,7 +5442,7 @@ export class DatabaseStorage implements IStorage {
               id: r.studentId,
               studentId: r.studentDisplayId,
               user: {
-                firstName: r.userFirstName ?? '',
+                firstName: r.userFirstName ?? '', middleName: r.userMiddleName ?? null,
                 lastName: r.userLastName ?? '',
               },
             }
@@ -5485,7 +5486,7 @@ export class DatabaseStorage implements IStorage {
           purpose: feePaymentStudentSplits.purpose,
           studentDbId: students.id,
           studentDisplayId: students.studentId,
-          firstName: users.firstName,
+          firstName: users.firstName, middleName: users.middleName,
           lastName: users.lastName,
         })
         .from(feePaymentStudentSplits)
@@ -5501,7 +5502,7 @@ export class DatabaseStorage implements IStorage {
           amount: r.amount,
           purpose: r.purpose,
           user: {
-            firstName: r.firstName ?? '',
+            firstName: r.firstName ?? '', middleName: r.middleName ?? null,
             lastName: r.lastName ?? '',
           },
         });

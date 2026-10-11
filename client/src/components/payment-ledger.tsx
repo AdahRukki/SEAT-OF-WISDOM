@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { BulkPaymentReceipts, receiptCandidates, type ReceiptCandidate } from "./bulk-payment-receipts";
 import { PaymentDateFilters } from "./payment-date-filters";
 import { buildLedgerWorkbook } from "@/lib/ledger-workbook";
@@ -121,7 +122,7 @@ function formatLedgerDate(value: string | Date | null | undefined): string {
 interface LedgerEntry {
   studentDbId: string;
   studentId: string;
-  firstName: string;
+  firstName: string; middleName?: string | null;
   lastName: string;
   className: string;
   classId: string;
@@ -334,7 +335,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     const searchedLedger = nameSearch.trim()
       ? (Array.isArray(ledger) ? ledger : []).filter((e) => {
           const q = nameSearch.toLowerCase();
-          const name = `${e?.lastName ?? ""} ${e?.firstName ?? ""}`.toLowerCase();
+          const name = formatStudentName(e).toLowerCase();
           const sid = (e?.studentId ?? "").toLowerCase();
           return name.includes(q) || sid.includes(q);
         })
@@ -384,7 +385,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       const balance = e.balance || 0;
       // Order matches the on-screen table for predictability.
       const row: Record<string, string | number> = { "#": idx + 1 };
-      if (isCol("name")) row["Student Name"] = `${e.lastName ?? ""} ${e.firstName ?? ""}`.trim();
+      if (isCol("name")) row["Student Name"] = formatStudentName(e);
       if (isCol("className")) row["Class"] = e.className || "";
       if (isCol("studentId")) row["SOWA ID"] = e.studentId || "";
       if (isCol("studentType")) row["Student Type"] = e.studentType === "new" ? "New" : "Returning";
@@ -709,7 +710,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
           )}
           <div className="space-y-3 sm:hidden print:hidden" data-testid="mobile-ledger-cards">
             {filteredLedger.map(entry => <article key={entry.studentDbId} className="rounded-lg border p-3 space-y-3">
-              <div className="font-semibold break-words">{entry.lastName} {entry.firstName}{entry.studentType === "new" && <Badge variant="secondary" className="ml-2">New</Badge>}</div>
+              <div className="font-semibold break-words">{formatStudentName(entry)}{entry.studentType === "new" && <Badge variant="secondary" className="ml-2">New</Badge>}</div>
               <p className="text-sm text-muted-foreground">{entry.className} · {entry.studentId}</p>
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div><dt>{confirmationFiltered ? "Confirmed in range" : "Paid"}</dt><dd className="font-semibold text-green-600 break-words">₦{(entry.totalPaid || 0).toLocaleString()}</dd></div>
@@ -718,7 +719,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
               <p className="text-xs text-muted-foreground">Last confirmed: {formatRecordedAt(entry.lastConfirmedAt)}</p>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {!confirmationFiltered && <span className="text-sm">{getEntryStatus(entry)}</span>}
-                <Button variant="outline" className="min-h-11" onClick={() => setSelectedStudent(entry)} aria-label={`Payment details for ${entry.lastName} ${entry.firstName}`}>Details</Button>
+                <Button variant="outline" className="min-h-11" onClick={() => setSelectedStudent(entry)} aria-label={`Payment details for ${formatStudentName(entry)}`}>Details</Button>
               </div>
             </article>)}
             {userRole === "admin" && filteredLedger.length > 0 && <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
@@ -770,8 +771,8 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 <TableRow className={paid === 0 ? "text-muted-foreground" : ""}>
                   <TableCell className="text-center text-xs">{idx + 1}</TableCell>
                   {isCol("name") && (
-                    <TableCell className="font-medium">
-                      {entry.lastName} {entry.firstName}
+                    <TableCell className="font-medium whitespace-normal break-words">
+                      {formatStudentName(entry)}
                     </TableCell>
                   )}
                   {isCol("className") && <TableCell className="text-sm">{entry.className}</TableCell>}
@@ -906,7 +907,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         <DialogContent className="finance-dialog max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {selectedStudent ? `${selectedStudent.lastName} ${selectedStudent.firstName}` : ""} — Payment Details
+              {selectedStudent ? formatStudentName(selectedStudent) : ""} — Payment Details
             </DialogTitle>
           </DialogHeader>
           {selectedStudent && (

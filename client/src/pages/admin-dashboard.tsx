@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { PaymentDateFilters } from "@/components/payment-date-filters";
 import { confirmationRangeLabel } from "@/components/confirmation-date-filter";
 import { useState, useEffect, useRef, Fragment } from "react";
@@ -176,7 +177,7 @@ interface BroadsheetData {
     className: string;
     students: Array<{
       studentId: string;
-      firstName: string;
+      firstName: string; middleName?: string | null;
       lastName: string;
       sowaId: string;
       totalAssigned: number;
@@ -275,7 +276,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
           ...cls,
           students: cls.students.filter(
             (st) =>
-              `${st.lastName} ${st.firstName}`.toLowerCase().includes(bsSearch.toLowerCase()) ||
+              formatStudentName(st).toLowerCase().includes(bsSearch.toLowerCase()) ||
               st.sowaId?.toLowerCase().includes(bsSearch.toLowerCase())
           ),
         }))
@@ -330,7 +331,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
                 {cls.students.map((st, idx) => (
                   <TableRow key={st.studentId}>
                     <TableCell className="text-center text-xs">{idx + 1}</TableCell>
-                    <TableCell className="text-sm">{st.lastName}, {[st.firstName, st.middleName].filter(Boolean).join(' ')}</TableCell>
+                    <TableCell className="text-sm whitespace-normal break-words">{formatStudentName(st)}</TableCell>
                     <TableCell className="text-sm font-mono">{st.sowaId}</TableCell>
                     <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.totalAssigned.toLocaleString()}` : "—"}</TableCell>
                     <TableCell className="text-right text-sm font-medium text-green-600">{st.totalPaid > 0 ? `₦${st.totalPaid.toLocaleString()}` : "₦0"}</TableCell>
@@ -1342,6 +1343,7 @@ export default function AdminDashboard() {
             return {
               offlineId: `FAILED-${o.queueOperationId || o.clientRequestId || Date.now()}`,
               firstName: body.firstName || '',
+              middleName: body.middleName || '',
               lastName: body.lastName || '',
               classId: body.classId || '',
               __status: 'failed' as const,
@@ -1772,7 +1774,7 @@ export default function AdminDashboard() {
   // queued ("Pending Sync") state across reloads.
   const [extraPendingStudents, setExtraPendingStudents] = useState<Array<{
     offlineId: string;
-    firstName: string;
+    firstName: string; middleName?: string | null;
     lastName: string;
     classId: string;
     __status: 'saving' | 'failed';
@@ -1794,6 +1796,7 @@ export default function AdminDashboard() {
       setExtraPendingStudents(prev => [...prev, {
         offlineId: tempId,
         firstName: bodyData.firstName,
+        middleName: bodyData.middleName,
         lastName: bodyData.lastName,
         classId: bodyData.classId,
         __status: 'saving',
@@ -1914,7 +1917,7 @@ export default function AdminDashboard() {
   // User Management Mutations
   const createSubAdminMutation = useMutation({
     mutationFn: async (data: {
-      firstName: string;
+      firstName: string; middleName?: string | null;
       lastName: string;
       email: string;
       password: string;
@@ -1950,7 +1953,7 @@ export default function AdminDashboard() {
 
   const createMainAdminMutation = useMutation({
     mutationFn: async (data: {
-      firstName: string;
+      firstName: string; middleName?: string | null;
       lastName: string;
       email: string;
       password: string;
@@ -1985,7 +1988,7 @@ export default function AdminDashboard() {
   const updateUserMutation = useMutation({
     mutationFn: async (data: {
       id: string;
-      firstName: string;
+      firstName: string; middleName?: string | null;
       lastName: string;
       email: string;
       role: string;
@@ -2581,9 +2584,7 @@ export default function AdminDashboard() {
           const firstName = student.user?.firstName || student.firstName || '';
           const middleName = student.user?.middleName || student.middleName || '';
           const lastName = student.user?.lastName || student.lastName || '';
-          const fullName = [firstName, middleName, lastName]
-            .filter(name => name && name.trim())
-            .join(' ') || 'N/A';
+          const fullName = formatStudentName({ firstName, middleName, lastName }) || 'N/A';
 
           worksheetData.push([
             fullName,
@@ -2671,7 +2672,7 @@ export default function AdminDashboard() {
               <tbody>
                 ${currentSchoolStudents.map(student => {
                   const className = classes.find(c => c.id === student.classId)?.name || 'N/A';
-                  const fullName = `${student.firstName || ''} ${student.middleName || ''} ${student.lastName || ''}`.trim();
+                  const fullName = formatStudentName(student);
                   return `
                     <tr>
                       <td>${student.studentId || 'N/A'}</td>
@@ -3795,7 +3796,7 @@ export default function AdminDashboard() {
     const principalCommentText = getPrincipalComment(averagePercentage);
     const behavioralInterpretation = getBehavioralInterpretationText(behavioralRating);
 
-    const studentName = [student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ');
+    const studentName = formatStudentName(student.user);
 
     const ageDisplay = student.dateOfBirth ? (() => {
       const b = new Date(student.dateOfBirth);
@@ -4436,7 +4437,7 @@ export default function AdminDashboard() {
                               <div className="space-y-1">
                                 {studentsInClass.slice(0, 3).map((student) => (
                                   <div key={student.id} className="text-xs text-gray-700 dark:text-gray-300">
-                                    {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')} ({student.studentId})
+                                    {formatStudentName(student.user)} ({student.studentId})
                                   </div>
                                 ))}
                                 {studentsInClass.length > 3 && (
@@ -4692,8 +4693,8 @@ export default function AdminDashboard() {
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}
+                              <p className="text-sm font-medium text-gray-900 dark:text-white break-words whitespace-normal">
+                                {formatStudentName(student.user)}
                               </p>
                               {!isActive && <span className="text-[10px] bg-red-100 text-red-700 px-1 rounded shrink-0">Inactive</span>}
                             </div>
@@ -4746,8 +4747,8 @@ export default function AdminDashboard() {
                         <div key={student.offlineId} className="flex items-center justify-between px-3 py-2 gap-2 bg-amber-50 dark:bg-amber-900/20 border-l-2 border-l-amber-400" data-testid={`row-pending-student-${student.offlineId}`}>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                {[student.firstName, student.middleName, student.lastName].filter(Boolean).join(' ')}
+                              <p className="text-sm font-medium text-gray-900 dark:text-white break-words whitespace-normal">
+                                {formatStudentName(student)}
                               </p>
                               <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-200 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Pending Sync</span>
                             </div>
@@ -4763,8 +4764,8 @@ export default function AdminDashboard() {
                           <div key={student.offlineId} className={`flex items-center justify-between px-3 py-2 gap-2 border-l-2 ${isFailed ? 'bg-red-50 dark:bg-red-900/20 border-l-red-400' : 'bg-blue-50 dark:bg-blue-900/20 border-l-blue-400'}`} data-testid={`row-${student.__status}-student-${student.offlineId}`}>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
-                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                                  {[student.firstName, student.middleName, student.lastName].filter(Boolean).join(' ')}
+                                <p className="text-sm font-medium text-gray-900 dark:text-white break-words whitespace-normal">
+                                  {formatStudentName(student)}
                                 </p>
                                 {isFailed ? (
                                   <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200 px-1.5 py-0.5 rounded-full shrink-0 font-medium">Failed</span>
@@ -4968,7 +4969,7 @@ export default function AdminDashboard() {
                                         />
                                       </TableCell>
                                       <TableCell>
-                                        <p className="text-sm font-medium">{[s.lastName, s.firstName, s.middleName].filter(Boolean).join(' ')}</p>
+                                        <p className="text-sm font-medium">{formatStudentName(s)}</p>
                                         <p className="text-xs text-muted-foreground">{s.studentId}</p>
                                       </TableCell>
                                       <TableCell className="text-sm text-muted-foreground">{s.currentClassName}</TableCell>
@@ -5054,7 +5055,7 @@ export default function AdminDashboard() {
                                         />
                                       </TableCell>
                                       <TableCell>
-                                        <p className="text-sm font-medium">{[s.lastName, s.firstName, s.middleName].filter(Boolean).join(' ')}</p>
+                                        <p className="text-sm font-medium">{formatStudentName(s)}</p>
                                         <p className="text-xs text-muted-foreground">{s.studentId}</p>
                                       </TableCell>
                                       <TableCell className="text-sm text-muted-foreground">{s.currentClassName}</TableCell>
@@ -5115,7 +5116,7 @@ export default function AdminDashboard() {
                                           .filter(s => selectedRollbackIds.has(s.id))
                                           .map(s => (
                                             <div key={s.id} className="flex items-center justify-between px-2 py-1 gap-2">
-                                              <span className="font-medium truncate">{[s.lastName, s.firstName].filter(Boolean).join(', ')}</span>
+                                              <span className="font-medium break-words whitespace-normal">{formatStudentName(s)}</span>
                                               <span className="text-muted-foreground shrink-0">{s.currentClassName} → {s.resolvedClassName}</span>
                                             </div>
                                           ))}
@@ -5123,7 +5124,7 @@ export default function AdminDashboard() {
                                           .filter(s => selectedRollbackIds.has(s.id) && noHistoryTargets.get(s.id))
                                           .map(s => (
                                             <div key={s.id} className="flex items-center justify-between px-2 py-1 gap-2">
-                                              <span className="font-medium truncate">{[s.lastName, s.firstName].filter(Boolean).join(', ')}</span>
+                                              <span className="font-medium break-words whitespace-normal">{formatStudentName(s)}</span>
                                               <span className="text-muted-foreground shrink-0">{s.currentClassName} → {classes.find(c => c.id === noHistoryTargets.get(s.id))?.name ?? '?'}</span>
                                             </div>
                                           ))}
@@ -5387,7 +5388,7 @@ export default function AdminDashboard() {
                                   <tr key={student.id} className={`${idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'} hover:bg-primary/5 transition-colors ${hasDirtyInput ? 'border-l-2 border-l-amber-400' : ''}`}>
                                     <td className="px-3 py-2">
                                       <div className="font-medium text-sm text-foreground leading-tight flex items-center gap-1.5">
-                                        <span>{[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}</span>
+                                        <span>{formatStudentName(student.user)}</span>
                                         {student.user?.isActive === false && (
                                           <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 px-1 rounded shrink-0 font-medium">Inactive</span>
                                         )}
@@ -5462,7 +5463,7 @@ export default function AdminDashboard() {
                                           size="icon"
                                           className="h-6 w-6 text-muted-foreground hover:text-red-500"
                                           onClick={() => {
-                                            if (window.confirm(`Delete score for ${student.user.firstName} ${student.user.lastName}?`)) {
+                                            if (window.confirm(`Delete score for ${formatStudentName(student.user)}?`)) {
                                               deleteAssessmentMutation.mutate(assessment.id);
                                             }
                                           }}
@@ -6238,7 +6239,7 @@ export default function AdminDashboard() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label className="text-sm font-medium text-muted-foreground">Name</Label>
-                        <p className="text-base">{selectedUserForProfile.firstName} {selectedUserForProfile.lastName}</p>
+                        <p className="text-base">{formatStudentName(selectedUserForProfile)}</p>
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-muted-foreground">Email</Label>
@@ -6882,7 +6883,7 @@ export default function AdminDashboard() {
                           <TableRow key={student.id}>
                             <TableCell className="font-mono text-sm">{student.studentId}</TableCell>
                             <TableCell className="font-medium">
-                              {[student.user?.firstName, student.user?.middleName, student.user?.lastName].filter(Boolean).join(' ')}
+                              {formatStudentName(student.user)}
                             </TableCell>
                             <TableCell>{student.class?.name || '—'}</TableCell>
                             <TableCell>
@@ -7157,7 +7158,7 @@ export default function AdminDashboard() {
                             {student.studentId}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                            {[student.user.firstName, student.user.middleName, student.user.lastName].filter(Boolean).join(' ')}
+                            {formatStudentName(student.user)}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                             {student.user.email}
@@ -9000,7 +9001,7 @@ export default function AdminDashboard() {
                   <Avatar className="w-32 h-32 border-4 border-white shadow-lg">
                     <AvatarImage 
                       src={profileImagePreview || studentEditForm.profileImage || editingStudent?.profileImage || ''} 
-                      alt={`${studentEditForm.firstName} ${studentEditForm.lastName}`}
+                      alt={formatStudentName(studentEditForm)}
                     />
                     <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-blue-400 to-purple-500 text-white">
                       {studentEditForm.firstName?.charAt(0)}{studentEditForm.lastName?.charAt(0)}
@@ -9351,7 +9352,7 @@ export default function AdminDashboard() {
             <DialogHeader>
               <DialogTitle>Generate Report Card</DialogTitle>
               <DialogDescription>
-                Generate report card for {[selectedStudentForReport?.user?.firstName, selectedStudentForReport?.user?.middleName, selectedStudentForReport?.user?.lastName].filter(Boolean).join(' ')}
+                Generate report card for {formatStudentName(selectedStudentForReport?.user)}
               </DialogDescription>
             </DialogHeader>
             
@@ -9460,7 +9461,7 @@ export default function AdminDashboard() {
                       <UserCheck className="h-8 w-8 text-blue-600" />
                       <div>
                         <p className="font-medium">
-                          {[selectedStudentForReport.user.firstName, selectedStudentForReport.user.middleName, selectedStudentForReport.user.lastName].filter(Boolean).join(' ')}
+                          {formatStudentName(selectedStudentForReport.user)}
                         </p>
                         <p className="text-sm text-gray-600">
                           ID: {selectedStudentForReport.studentId}
@@ -9664,7 +9665,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center space-x-2 mb-2">
                     <User className="h-4 w-4 text-red-600" />
                     <span className="font-medium text-red-800">
-                      {[selectedStudentForDeletion.user.firstName, selectedStudentForDeletion.user.middleName, selectedStudentForDeletion.user.lastName].filter(Boolean).join(' ')}
+                      {formatStudentName(selectedStudentForDeletion.user)}
                     </span>
                   </div>
                   <p className="text-sm text-red-700">{selectedStudentForDeletion.user.email}</p>

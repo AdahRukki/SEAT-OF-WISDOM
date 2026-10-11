@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -118,7 +119,7 @@ export function DuplicateReviewSheet({ kind, id, open, onOpenChange }: Duplicate
     const status = side.status || "—";
     const ref = side.reference || null;
     const studentName = kind === "payment" && side.student
-      ? `${side.student.user?.lastName || ""} ${side.student.user?.firstName || ""}`.trim()
+      ? formatStudentName(side.student.user)
       : null;
     const studentId = kind === "payment" ? side.student?.studentId : null;
 

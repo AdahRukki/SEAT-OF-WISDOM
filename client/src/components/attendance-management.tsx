@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -289,7 +290,7 @@ export function AttendanceManagement({ selectedSchoolId }: AttendanceManagementP
                       <Card key={student.id} className="p-4">
                         <div className="flex items-center justify-between mb-4">
                           <div>
-                            <h4 className="font-medium">{student.user.firstName} {student.user.lastName}</h4>
+                            <h4 className="font-medium">{formatStudentName(student.user)}</h4>
                             <p className="text-sm text-muted-foreground">ID: {student.studentId}</p>
                           </div>
                           <div className="flex items-center gap-2">

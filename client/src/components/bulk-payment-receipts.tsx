@@ -1,17 +1,18 @@
+import { formatStudentName } from "@shared/student-name";
 import {useState} from 'react';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import {Button} from '@/components/ui/button';
 import {receiptKey,sortReceipts,type StudentReceipt} from '@shared/payment-receipts';
 import type {LedgerPayment} from '@shared/ledger-payments';
 export interface ReceiptCandidate {
-  paymentId:string;studentId:string;studentCode:string;firstName:string;lastName:string;className:string;paymentDate:string;amount:number;
+  paymentId:string;studentId:string;studentCode:string;firstName:string; middleName?: string | null;lastName:string;className:string;paymentDate:string;amount:number;
 }
-export function receiptCandidates(entries:{studentDbId:string;studentId:string;firstName:string;lastName:string;className:string}[],payments:LedgerPayment[]):ReceiptCandidate[] {
+export function receiptCandidates(entries:{studentDbId:string;studentId:string;firstName:string; middleName?: string | null;lastName:string;className:string}[],payments:LedgerPayment[]):ReceiptCandidate[] {
   const students=new Map(entries.map(e=>[e.studentDbId,e]));const groups=new Map<string,ReceiptCandidate>();
   for(const payment of payments){
     const student=students.get(payment.studentDbId);if(!student||payment.status!=='confirmed')continue;
     const key=receiptKey(payment.paymentRecordId,payment.studentDbId);
-    const group=groups.get(key)||{paymentId:payment.paymentRecordId,studentId:student.studentDbId,studentCode:student.studentId,firstName:student.firstName,lastName:student.lastName,className:student.className,paymentDate:payment.paymentDate||'',amount:0};
+    const group=groups.get(key)||{paymentId:payment.paymentRecordId,studentId:student.studentDbId,studentCode:student.studentId,firstName:student.firstName,middleName:student.middleName,lastName:student.lastName,className:student.className,paymentDate:payment.paymentDate||'',amount:0};
     group.amount=(Math.round(group.amount*100)+Math.round(Number(payment.amount)*100))/100;groups.set(key,group);
   }
   return sortReceipts(Array.from(groups.values()));
@@ -42,7 +43,7 @@ export function BulkPaymentReceipts({schoolId,candidates,onClose}:{schoolId:stri
     <p className="text-xs text-muted-foreground">Uses your ledger filters. Receipt details and class are saved when first issued; reprints retain them. Long breakdowns continue on another slip.</p>
     <label className="flex gap-2 items-center text-sm"><input type="checkbox" checked={selected.size===candidates.length&&!!candidates.length} disabled={busy} onChange={e=>setSelected(e.target.checked?new Set(candidates.map(c=>receiptKey(c.paymentId,c.studentId))):new Set())}/>Select all filtered payments ({candidates.length})</label>
     <div className="overflow-y-auto min-h-0 divide-y border rounded-md">
-      {candidates.map(c=>{const key=receiptKey(c.paymentId,c.studentId);return <label key={key} className="flex items-start gap-3 p-3 text-sm cursor-pointer"><input className="mt-1" type="checkbox" checked={selected.has(key)} disabled={busy} onChange={e=>setSelected(prev=>{const next=new Set(prev);e.target.checked?next.add(key):next.delete(key);return next;})}/><span className="flex-1 min-w-0"><strong>{c.lastName} {c.firstName}</strong><span className="block text-xs text-muted-foreground">{c.className||'Unassigned'} · {c.studentCode} · {c.paymentDate.slice(0,10)}</span></span><span>₦{c.amount.toLocaleString()}</span></label>;})}
+      {candidates.map(c=>{const key=receiptKey(c.paymentId,c.studentId);return <label key={key} className="flex items-start gap-3 p-3 text-sm cursor-pointer"><input className="mt-1" type="checkbox" checked={selected.has(key)} disabled={busy} onChange={e=>setSelected(prev=>{const next=new Set(prev);e.target.checked?next.add(key):next.delete(key);return next;})}/><span className="flex-1 min-w-0"><strong>{formatStudentName(c)}</strong><span className="block text-xs text-muted-foreground">{c.className||'Unassigned'} · {c.studentCode} · {c.paymentDate.slice(0,10)}</span></span><span>₦{c.amount.toLocaleString()}</span></label>;})}
     </div>
     {error&&<p role="alert" className="text-sm text-destructive">{error}</p>}
     <p className="text-sm">{selected.size} receipts selected{selected.size>2000?' — select up to 2,000 at a time':''}</p>

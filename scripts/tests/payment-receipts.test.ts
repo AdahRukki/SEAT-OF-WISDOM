@@ -14,9 +14,9 @@ async function fixture(){
   const config=getTableConfig(table);const columns=config.columns.map(c=>`"${c.name}" ${c.getSQLType()}${c.notNull?' NOT NULL':''}${c.primary?' PRIMARY KEY':''}${c.default!==undefined?' DEFAULT '+(c.default instanceof SQL?dialect.sqlToQuery(c.default).sql:typeof c.default==='string'?"'"+c.default+"'":String(c.default)):''}`);
   await pg.exec(`CREATE TABLE ${config.name} (${columns.join(',')})`);
  }
- await pg.exec(`CREATE TABLE users(id uuid PRIMARY KEY,first_name text,last_name text);CREATE TABLE classes(id text PRIMARY KEY,name text);CREATE TABLE students(id uuid PRIMARY KEY,student_id text,user_id uuid,class_id text);CREATE TABLE schools(id uuid PRIMARY KEY,name text,address text,logo_url text);
+ await pg.exec(`CREATE TABLE users(id uuid PRIMARY KEY,first_name text,last_name text,middle_name text);CREATE TABLE classes(id text PRIMARY KEY,name text);CREATE TABLE students(id uuid PRIMARY KEY,student_id text,user_id uuid,class_id text);CREATE TABLE schools(id uuid PRIMARY KEY,name text,address text,logo_url text);
  CREATE TABLE payment_student_receipts(id bigserial PRIMARY KEY,payment_record_id uuid,student_id uuid,school_id uuid,snapshot jsonb,issued_by uuid,UNIQUE(payment_record_id,student_id));
- INSERT INTO schools VALUES('${school}','Seat of Wisdom Academy','Asaba',null);INSERT INTO classes VALUES('c','Basic 2');INSERT INTO users VALUES('${actor.id}','Ada','Adah');INSERT INTO students VALUES('${student}','S001','${actor.id}','c'),('${second}','S002','${actor.id}','c');`);
+ INSERT INTO schools VALUES('${school}','Seat of Wisdom Academy','Asaba',null);INSERT INTO classes VALUES('c','Basic 2');INSERT INTO users VALUES('${actor.id}','Ada','Adah','Grace');INSERT INTO students VALUES('${student}','S001','${actor.id}','c'),('${second}','S002','${actor.id}','c');`);
  const db=drizzle(pg);const [payment]=await db.insert(feePaymentRecords).values({schoolId:school,studentId:null,amount:'100000',purpose:'Multiple purposes',paymentMethod:'transfer',paymentDate:new Date('2026-10-09'),confirmedAt:new Date('2026-10-09T10:00:00Z'),status:'confirmed',recordedBy:actor.id,depositorName:'Parent',term:'First Term',session:'2026/2027'}).returning();
  await db.insert(feePaymentStudentSplits).values([{paymentRecordId:payment.id,studentId:student,amount:'30000',purpose:'Tuition'},{paymentRecordId:payment.id,studentId:student,amount:'10000',purpose:'Books'},{paymentRecordId:payment.id,studentId:second,amount:'60000',purpose:'Tuition'}]);
  return {pg,db,payment,input:{schoolId:school,selections:[{paymentId:payment.id,studentId:student},{paymentId:payment.id,studentId:second}]}};
@@ -26,8 +26,12 @@ test('split receipts show only each student share, combine purposes and retain n
   const first=await issueStudentReceipts(db,input,actor);assert.equal(first.length,2);assert.deepEqual(first.map(r=>Number(r.total)),[40000,60000]);assert.equal(first[0].items.length,2);assert.notEqual(first[0].number,first[1].number);
   await pg.exec("UPDATE users SET last_name='Changed'; UPDATE classes SET name='Basic 3'");
   const replay=await issueStudentReceipts(db,{...input,selections:[...input.selections,input.selections[0]]},actor);
-  assert.deepEqual(replay,first);assert.equal((await pg.query('SELECT COUNT(*) n FROM payment_student_receipts')).rows[0].n,2);
-  assert.equal((await pg.query("SELECT COUNT(*) n FROM payment_audit_logs WHERE action='reprint_receipt'")).rows[0].n,2);
+  assert.deepEqual(replay,first.map(r=>({...r,lastName:'Changed'})));
+  assert.equal(replay[0].middleName,'Grace');
+  assert.equal((await pg.query("SELECT COUNT(*) n FROM payment_audit_logs WHERE action='correct_receipt_name'")).rows[0].n,2);
+  await issueStudentReceipts(db,input,actor);
+  assert.equal((await pg.query("SELECT COUNT(*) n FROM payment_audit_logs WHERE action='correct_receipt_name'")).rows[0].n,2);assert.equal((await pg.query('SELECT COUNT(*) n FROM payment_student_receipts')).rows[0].n,2);
+  assert.equal((await pg.query("SELECT COUNT(*) n FROM payment_audit_logs WHERE action='reprint_receipt'")).rows[0].n,4);
  }finally{await pg.close();}
 });
 test('reversed, foreign-school and unrelated-student selections cannot issue receipts',async()=>{

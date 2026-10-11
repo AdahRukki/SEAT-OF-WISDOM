@@ -1,3 +1,4 @@
+import { formatStudentName } from "../shared/student-name";
 import { issueStudentReceipts, ReceiptError } from "./payment-receipts";
 import { recordPaymentBatch, PaymentBatchError } from "./payment-batch";
 import { getLedgerPayments } from "./ledger-payments";
@@ -539,6 +540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: updatedUser.id,
         email: updatedUser.email,
         firstName: updatedUser.firstName,
+        middleName: updatedUser.middleName,
         lastName: updatedUser.lastName,
         role: updatedUser.role,
         schoolId: updatedUser.schoolId
@@ -2403,7 +2405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           results.successful.push({
             studentId: student.studentId,
-            name: `${firstName} ${lastName}`,
+            name: formatStudentName({ firstName, middleName, lastName }),
             email: emailInput || `${student.studentId.replace('/', '')}@student.local`
           });
 
@@ -3160,7 +3162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sheetResults.push({
               sheet: sheetName,
               studentId,
-              studentName: `${student.user.firstName} ${student.user.lastName}`,
+              studentName: formatStudentName(student.user),
               firstCA,
               secondCA,
               exam,
@@ -3241,7 +3243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create Excel template with student IDs
       const templateData = sortedStudents.map(student => ({
         'Student ID': student.studentId,
-        'Student Name': `${student.user.firstName} ${student.user.lastName}`,
+        'Student Name': formatStudentName(student.user),
         'First CA': '',
         'Second CA': '',
         'Exam': ''
@@ -3320,7 +3322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create Excel template with student IDs
       const templateData = sortedStudents.map(student => ({
         'Student ID': student.studentId,
-        'Student Name': `${student.user.firstName} ${student.user.lastName}`,
+        'Student Name': formatStudentName(student.user),
         'First CA': '',
         'Second CA': '',
         'Exam': ''
@@ -3409,7 +3411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const subject of uniqueSubjects) {
         const studentRows = sortedStudents.map(student => ({
           'Student ID': student.studentId,
-          'Student Name': `${student.user.firstName} ${student.user.lastName}`,
+          'Student Name': formatStudentName(student.user),
           'First CA': '',
           'Second CA': '',
           'Exam': ''

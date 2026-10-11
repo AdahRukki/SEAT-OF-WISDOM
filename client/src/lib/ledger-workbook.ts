@@ -1,8 +1,9 @@
+import { formatStudentName } from "@shared/student-name";
 import * as XLSX from 'xlsx';
 import type { LedgerPayment } from '@shared/ledger-payments';
 
 interface ExportStudent {
-  studentDbId: string; studentId: string; firstName: string; lastName: string;
+  studentDbId: string; studentId: string; firstName: string; middleName?: string | null; lastName: string;
   className: string; studentType: string; totalPaid: number; tuitionAssigned: number;
   tuitionPaid?: number; nonTuitionPaid?: number; tuitionKnown?: boolean; discountKnown?: boolean; tuitionSource?: string;
   totalAssigned: number; discount: number; balance: number;
@@ -14,7 +15,7 @@ export function buildLedgerWorkbook(entries: ExportStudent[], records: LedgerPay
   const paymentDate = (value: string | null) => value ? new Intl.DateTimeFormat('en-GB', {timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric'}).format(new Date(value)) : 'Not available';
   const paidColumn = dateFiltered ? 'Confirmed in range (NGN)' : 'Total confirmed (NGN)';
   const summaries = entries.map(entry => ({
-    'Student ID': entry.studentId, 'Student name': `${entry.lastName} ${entry.firstName}`.trim(), 'Class': entry.className,
+    'Student ID': entry.studentId, 'Student name': formatStudentName(entry), 'Class': entry.className,
     'Student type': entry.studentType === 'new' ? 'New' : 'Returning',
     ...(!dateFiltered ? {'Tuition charge (NGN)': entry.tuitionKnown === false ? 'Not verified' : entry.tuitionAssigned, 'Discount (NGN)': entry.discountKnown === false ? 'Not verified' : entry.discount, 'Charge source': entry.tuitionSource || ''} : {}),
     [paidColumn]: entry.totalPaid,
@@ -23,7 +24,7 @@ export function buildLedgerWorkbook(entries: ExportStudent[], records: LedgerPay
   }));
   const details = selectedRecords.map(record => {
     const student = names.get(record.studentDbId)!;
-    return {'Student ID': student.studentId, 'Student name': `${student.lastName} ${student.firstName}`.trim(), 'Class': student.className,
+    return {'Student ID': student.studentId, 'Student name': formatStudentName(student), 'Class': student.className,
       'Student amount (NGN)': Number(record.amount), 'Purpose': record.purpose || '', 'Payment date': paymentDate(record.paymentDate),
       'Recorded at (WAT)': formatTime(record.createdAt), 'Confirmed at (WAT)': formatTime(record.confirmedAt),
       'Method': record.paymentMethod || '', 'Reference': record.reference || '', 'Status': record.status,

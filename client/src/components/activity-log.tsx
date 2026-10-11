@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 // Task #215: Full activity audit log viewer (read-only).
 // Main admin sees all schools; sub-admins are scoped server-side to their school.
 import { useState, Fragment } from "react";
@@ -68,6 +69,9 @@ const ACTION_LABELS: Record<string, string> = {
   graduate_students: "Graduated students",
   rollback_student_classes: "Rolled back promotions",
   // Finance (legacy + current payment audit actions)
+  issue_receipt: "Issued receipt",
+  reprint_receipt: "Reprinted receipt",
+  correct_receipt_name: "Corrected receipt student name",
   record_payment: "Recorded payment",
   confirm_payment: "Confirmed payment",
   unconfirm_payment: "Un-confirmed payment",
@@ -276,7 +280,7 @@ export function ActivityLog() {
                   <SelectItem value="all">All users</SelectItem>
                   {staffUsers.map((u: any) => (
                     <SelectItem key={u.id} value={u.id}>
-                      {u.firstName} {u.lastName} ({u.role})
+                      {formatStudentName(u)} ({u.role})
                     </SelectItem>
                   ))}
                 </SelectContent>

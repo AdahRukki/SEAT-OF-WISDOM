@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -548,7 +549,7 @@ export function ReportCardManagement({
             const validation = validationResults[student.id];
             newSkippedStudents.push({
               studentId: student.id,
-              studentName: `${student.user.firstName} ${student.user.lastName}`,
+              studentName: formatStudentName(student.user),
               classId,
               className: classResult.className,
               missingSubjects: validation?.missingSubjects || [],
@@ -584,7 +585,7 @@ export function ReportCardManagement({
                   classId: classId,
                   term: currentTerm,
                   session: currentSession,
-                  studentName: `${student.user.firstName} ${student.user.lastName}`,
+                  studentName: formatStudentName(student.user),
                   className: classResult.className,
                   totalScore: "0",
                   averageScore: "0",
@@ -1113,7 +1114,7 @@ export function ReportCardManagement({
         <!DOCTYPE html>
         <html>
           <head>
-            <title>Report Card - ${student.user.firstName} ${student.user.lastName}</title>
+            <title>Report Card - ${formatStudentName(student.user)}</title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
             <style>
@@ -1203,7 +1204,7 @@ export function ReportCardManagement({
               </div>
 
               <div class="student-info">
-                <div><span class="info-label">Student Name</span><span class="info-name">${student.user.firstName} ${student.user.middleName ? student.user.middleName + ' ' : ''}${student.user.lastName}</span></div>
+                <div><span class="info-label">Student Name</span><span class="info-name">${formatStudentName(student.user)}</span></div>
                 <div><span class="info-label">Student ID</span><span class="info-value">${student.studentId}</span></div>
                 <div><span class="info-label">Class</span><span class="info-value">${report.className}</span></div>
                 <div><span class="info-label">Gender</span><span class="info-value">${student.gender || 'N/A'}</span></div>
@@ -1377,7 +1378,7 @@ export function ReportCardManagement({
       classId: selectedClass,
       term: selectedTerm,
       session: selectedSession,
-      studentName: `${student.user.firstName} ${student.user.lastName}`,
+      studentName: formatStudentName(student.user),
       className: classes.find((c) => c.id === selectedClass)?.name || "",
       totalScore: "0", // This would be calculated from actual scores
       averageScore: "0", // This would be calculated from actual scores
@@ -1409,7 +1410,7 @@ export function ReportCardManagement({
             classId: selectedClass,
             term: selectedTerm,
             session: selectedSession,
-            studentName: `${student.user.firstName} ${student.user.lastName}`,
+            studentName: formatStudentName(student.user),
             className: classes.find((c) => c.id === selectedClass)?.name || "",
             totalScore: "0", // This would be calculated from actual scores
             averageScore: "0", // This would be calculated from actual scores
@@ -1424,7 +1425,7 @@ export function ReportCardManagement({
               classId: selectedClass,
               term: selectedTerm,
               session: selectedSession,
-              studentName: `${student.user.firstName} ${student.user.lastName}`,
+              studentName: formatStudentName(student.user),
               className:
                 classes.find((c) => c.id === selectedClass)?.name || "",
               totalScore: "0",
@@ -1439,7 +1440,7 @@ export function ReportCardManagement({
           successCount++;
         } catch (error) {
           console.error(
-            `Failed to generate report for ${student.user.firstName} ${student.user.lastName}:`,
+            `Failed to generate report for ${formatStudentName(student.user)}:`,
             error,
           );
           failureCount++;
@@ -2032,7 +2033,7 @@ export function ReportCardManagement({
                         <div key={student.id} className={`flex items-center justify-between px-3 py-2 gap-3 ${isReady ? 'bg-background' : 'bg-red-50/30 dark:bg-red-900/10'}`}>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium truncate">{student.user.firstName} {student.user.lastName}</p>
+                              <p className="text-sm font-medium break-words whitespace-normal">{formatStudentName(student.user)}</p>
                               {status && (
                                 <Badge className={`text-[10px] px-1.5 py-0 shrink-0 ${status.color} text-white`}>{status.text}</Badge>
                               )}

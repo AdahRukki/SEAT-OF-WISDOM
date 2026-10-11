@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -135,7 +136,7 @@ export default function Profile() {
             <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mx-auto mb-4 flex items-center justify-center">
               <User className="h-10 w-10 text-white" />
             </div>
-            <CardTitle className="text-2xl">{user.firstName} {user.lastName}</CardTitle>
+            <CardTitle className="text-2xl">{formatStudentName(user)}</CardTitle>
             <CardDescription className="flex items-center justify-center gap-2">
               <Badge variant={getRoleBadgeVariant(user.role)}>
                 {getRoleDisplayName(user.role)}
@@ -234,7 +235,7 @@ export default function Profile() {
                   <User className="h-4 w-4 text-gray-500" />
                   <div>
                     <p className="text-sm text-gray-500">Full Name</p>
-                    <p className="font-medium">{user.firstName} {user.lastName}</p>
+                    <p className="font-medium">{formatStudentName(user)}</p>
                   </div>
                 </div>
 

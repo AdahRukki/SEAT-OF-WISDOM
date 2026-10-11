@@ -3,7 +3,7 @@ export interface StudentReceipt {
   paymentId: string;
   studentId: string;
   studentCode: string;
-  firstName: string;
+  firstName: string; middleName?: string | null;
   lastName: string;
   className: string;
   schoolName: string;

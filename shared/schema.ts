@@ -1512,7 +1512,7 @@ export type FeePaymentRecordWithDetails = FeePaymentRecord & {
     student?: {
       id: string;
       studentId: string;
-      user?: { firstName: string; lastName: string };
+      user?: { firstName: string; middleName?: string | null; lastName: string };
     };
   })[];
   splitCount?: number;
@@ -1552,7 +1552,7 @@ export type BankTransactionAllocationSummary = PaymentAllocation & {
       id: string;
       studentId: string;
       user: {
-        firstName: string;
+        firstName: string; middleName?: string | null;
         lastName: string;
       };
     } | null;
@@ -1566,7 +1566,7 @@ export type BankTransactionAllocationSummary = PaymentAllocation & {
     studentId: string;
     amount: string;
     purpose?: string | null;
-    user: { firstName: string; lastName: string };
+    user: { firstName: string; middleName?: string | null; lastName: string };
   }>;
 };
 

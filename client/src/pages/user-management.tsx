@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -562,7 +563,7 @@ export default function UserManagement() {
                     {users.map((user) => (
                       <TableRow key={user.id}>
                         <TableCell className="font-medium">
-                          {user.firstName} {user.lastName}
+                          {formatStudentName(user)}
                         </TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>
@@ -659,7 +660,7 @@ export default function UserManagement() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">Name</Label>
-                    <p className="text-base">{selectedUser.firstName} {selectedUser.lastName}</p>
+                    <p className="text-base">{formatStudentName(selectedUser)}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">Email</Label>
@@ -908,7 +909,7 @@ export default function UserManagement() {
             {selectedUserForDeletion && (
               <div className="py-4">
                 <p className="text-sm text-gray-600">
-                  <strong>Name:</strong> {selectedUserForDeletion.firstName} {selectedUserForDeletion.lastName}
+                  <strong>Name:</strong> {formatStudentName(selectedUserForDeletion)}
                 </p>
                 <p className="text-sm text-gray-600">
                   <strong>Email:</strong> {selectedUserForDeletion.email}

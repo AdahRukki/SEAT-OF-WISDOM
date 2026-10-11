@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { calculateGrade } from "@shared/schema";
 import {
   generateReportCardHtml,
@@ -94,7 +95,7 @@ export function InlineReportCard({
   const principalComment = getPrincipalComment(averagePercentage);
   const behavioralInterpretation = getBehavioralInterpretationText(behavioralRating);
   const ageDisplay = profile.dateOfBirth ? String(calculateAge(profile.dateOfBirth)) + ' yrs' : 'N/A';
-  const studentFullName = [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(' ');
+  const studentFullName = formatStudentName(user);
 
   const promotionText = selectedTerm === 'Third Term' && profile.classId
     ? buildPromotionText(profile.classId)

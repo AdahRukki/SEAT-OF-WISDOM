@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -779,7 +780,7 @@ export default function StudentDashboard() {
     const principalComment = getComment(averagePercentage);
     const behavioralInterpretation = getBehavioralInterpretationText(behavioralRating);
 
-    const studentFullName = [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(' ');
+    const studentFullName = formatStudentName(user);
     const ageDisplay = profile.dateOfBirth ? String(calculateAge(profile.dateOfBirth)) + ' yrs' : 'N/A';
 
     return generateReportCardHtml({
@@ -833,7 +834,7 @@ export default function StudentDashboard() {
     const yyyymmdd = `${paymentDateObj.getFullYear()}${String(paymentDateObj.getMonth() + 1).padStart(2, '0')}${String(paymentDateObj.getDate()).padStart(2, '0')}`;
     const shortId = String(record.id || '').replace(/-/g, '').slice(0, 6).toUpperCase() || 'XXXXXX';
     const receiptNumber = `RCPT-${yyyymmdd}-${shortId}`;
-    const studentName = `${user?.firstName || ''} ${user?.middleName ? user.middleName + ' ' : ''}${user?.lastName || ''}`.trim();
+    const studentName = formatStudentName(user);
     const amountFigures = `₦${Number(record.amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const amountWords = numberToNairaWords(record.amount);
     const generatedAt = new Date().toLocaleString('en-GB');
@@ -1073,7 +1074,7 @@ export default function StudentDashboard() {
     }
 
     // Generate PDF filename
-    const studentName = `${user?.firstName || ''}_${user?.lastName || ''}`.replace(/\s+/g, '_');
+    const studentName = formatStudentName(user).replace(/\s+/g, '_');
     const filename = `Report_Card_${studentName}_${selectedTerm}_${selectedSession}.pdf`;
 
     // Generate and download PDF
@@ -1122,7 +1123,7 @@ export default function StudentDashboard() {
                     href="/profile"
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
                   >
-                    {user?.firstName} {user?.middleName ? `${user.middleName} ` : ''}{user?.lastName}
+                    {formatStudentName(user)}
                   </a>
                 </p>
               </div>
@@ -1809,7 +1810,7 @@ export default function StudentDashboard() {
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium text-gray-500">Full Name</label>
-                      <p className="text-lg font-semibold">{user?.firstName} {user?.middleName ? `${user.middleName} ` : ''}{user?.lastName}</p>
+                      <p className="text-lg font-semibold">{formatStudentName(user)}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-500">Email</label>

@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import "@/components/finance-mobile.css";
 
 function formatRecordedAt(value: string | Date | null | undefined): string {
@@ -107,12 +108,12 @@ function formatPaymentDate(dateStr: string | Date | null | undefined): string {
 interface Student {
   id: string;
   studentId: string;
-  firstName?: string;
+  firstName?: string; middleName?: string | null;
   lastName?: string;
   className?: string;
   classId?: string;
   user?: {
-    firstName: string;
+    firstName: string; middleName?: string | null;
     lastName: string;
   };
 }
@@ -489,7 +490,7 @@ export function PaymentRecording({
     const requested=paymentRows.filter(row=>row.studentId===student.id&&feeTypesData.some(ft=>ft.isTuition&&ft.name===row.purpose)).reduce((sum,row)=>sum+Math.round(row.amount*100),0)/100;
     if(!requested) return [];
     const bal=tuitionBalanceMap.get(student.id);
-    const name=[student.user?.firstName || student.firstName,student.user?.lastName || student.lastName].filter(Boolean).join(' ');
+    const name=formatStudentName(student.user || student);
     if(balancesLoading) return [`Checking tuition for ${name}…`];
     if(balancesError || !bal?.known) return [`Tuition for ${name} is not verified. Check the term and tuition settings.`];
     return requested > bal.due ? [`${name}: ₦${(requested-bal.due).toLocaleString()} above available tuition. Pending payments are included. Reduce tuition and add another purpose.`] : [];
@@ -619,10 +620,9 @@ export function PaymentRecording({
     if (classFilter !== "all" && s.classId !== classFilter && !historicalClassStudentIds.has(s.id)) return false;
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
-    const firstName = (s.user?.firstName || s.firstName || '').toLowerCase();
-    const lastName = (s.user?.lastName || s.lastName || '').toLowerCase();
+    const fullName = formatStudentName(s.user || s).toLowerCase();
     const studentId = (s.studentId || '').toLowerCase();
-    return firstName.includes(query) || lastName.includes(query) || studentId.includes(query);
+    return fullName.includes(query) || studentId.includes(query);
   });
 
   const toggleClassSort = () => {
@@ -642,15 +642,13 @@ export function PaymentRecording({
     ? sortedRecords.filter((r) => {
         const q = nameSearch.toLowerCase();
         if (
-          r.student?.user?.lastName?.toLowerCase().includes(q) ||
-          r.student?.user?.firstName?.toLowerCase().includes(q) ||
+          formatStudentName(r.student?.user).toLowerCase().includes(q) ||
           r.student?.studentId?.toLowerCase().includes(q)
         ) return true;
         // Multi-student records: match against any child split's student.
         for (const sp of r.splits ?? []) {
           if (
-            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
-            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
+            formatStudentName(sp.student?.user).toLowerCase().includes(q) ||
             sp.student?.studentId?.toLowerCase().includes(q)
           ) return true;
         }
@@ -870,7 +868,7 @@ export function PaymentRecording({
                               >
                                 <div>
                                   <div className="font-medium text-sm">
-                                    {student.user?.lastName || student.lastName} {student.user?.firstName || student.firstName}
+                                    {formatStudentName(student.user || student)}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
                                     ID: {student.studentId} | {student.className || "N/A"}
@@ -894,7 +892,7 @@ export function PaymentRecording({
                         <div className="flex items-center gap-2">
                           <label className="min-w-0 flex-1 text-xs">Student
                             <select aria-label={`Student for allocation ${index+1}`} className="mt-1 min-h-11 w-full rounded-md border bg-background p-2 text-sm" value={row.studentId} onChange={e=>setAdditionalPayments(prev=>prev.map(p=>p.id===row.id?{...p,studentId:e.target.value}:p))}>
-                              {selectedEntries.map(({student})=><option key={student.id} value={student.id}>{student.user?.lastName||student.lastName} {student.user?.firstName||student.firstName} ({student.studentId})</option>)}
+                              {selectedEntries.map(({student})=><option key={student.id} value={student.id}>{formatStudentName(student.user || student)} ({student.studentId})</option>)}
                             </select>
                           </label>
                           <Button type="button" variant="ghost" size="icon" className="mt-4 shrink-0" aria-label={`Remove allocation ${index+1}`} onClick={()=>setAdditionalPayments(prev=>prev.filter(p=>p.id!==row.id))}><X className="h-4 w-4"/></Button>
@@ -1161,7 +1159,7 @@ export function PaymentRecording({
                         {p.student ? (
                           <>
                             <div className="font-medium text-sm">
-                              {p.student.user?.lastName || p.student.lastName} {p.student.user?.firstName || p.student.firstName}
+                              {formatStudentName(p.student.user || p.student)}
                             </div>
                             <div className="text-xs text-muted-foreground">{p.student.studentId}</div>
                           </>
@@ -1225,7 +1223,7 @@ export function PaymentRecording({
                         {record.student ? (
                           <>
                             <div className="font-medium text-sm">
-                              {record.student.user?.lastName} {record.student.user?.firstName}
+                              {formatStudentName(record.student.user)}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {record.student.studentId}
@@ -1419,7 +1417,7 @@ function PaymentDetailsDialog({
 
   const { data: splits, isLoading: splitsLoading } = useQuery<
     (FeePaymentStudentSplit & {
-      student?: { studentId: string; user?: { firstName: string; lastName: string }; class?: { name: string } };
+      student?: { studentId: string; user?: { firstName: string; middleName?: string | null; lastName: string }; class?: { name: string } };
     })[]
   >({
     queryKey: ["/api/payments/records", record?.id, "splits"],
@@ -1518,7 +1516,7 @@ function PaymentDetailsDialog({
               <div className="text-xs uppercase text-muted-foreground tracking-wide">Student</div>
               <div className="border rounded-md p-3">
                 <div className="font-medium">
-                  {record.student.user?.lastName} {record.student.user?.firstName}
+                  {formatStudentName(record.student.user)}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   ID: {record.student.studentId} · {record.student.class?.name || "No class"}
@@ -1542,8 +1540,8 @@ function PaymentDetailsDialog({
                   {splits.map((s) => (
                     <div key={s.id} className="p-3 flex items-center justify-between">
                       <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">
-                          {s.student?.user ? `${s.student.user.lastName} ${s.student.user.firstName}` : "—"}
+                        <div className="font-medium text-sm break-words whitespace-normal">
+                          {s.student?.user ? formatStudentName(s.student.user) : "—"}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {s.student?.studentId || "—"} · {s.purpose || record.purpose || "—"}

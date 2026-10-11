@@ -57,8 +57,9 @@ test('actual ledger SQL separates purposes, counts only student split share, and
     assert.equal(e.totalPaid,100000);assert.equal(e.tuitionPaid,80000);assert.equal(e.nonTuitionPaid,20000);
     assert.equal(e.tuitionAssigned,100000);assert.equal(e.balance,20000);assert.equal(e.paymentCount,3);
     assert.equal(e.tuitionKnown,true);
-    await pg.exec("UPDATE users SET last_name='Newname' WHERE id='u'");
+    await pg.exec("UPDATE users SET last_name='Newname', middle_name='Grace' WHERE id='u'");
     assert.equal((await store.getStudentPaymentLedger('school',undefined,'First Term','2026/2027')).entries[0].lastName,'Newname');
+    assert.equal((await store.getStudentPaymentLedger('school',undefined,'First Term','2026/2027')).entries[0].middleName,'Grace');
   }finally{await pg.close();}
 });
 test('historical class filtering uses promotion history; old fee settings and current discount are never substituted',async()=>{

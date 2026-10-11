@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import "@/components/finance-mobile.css";
 import { useState, useMemo, useEffect } from "react";
 import { useNetworkStatus } from "@/hooks/use-network-status";
@@ -174,7 +175,7 @@ interface BankTransactionAllocation {
     student?: {
       studentId: string;
       user?: {
-        firstName: string;
+        firstName: string; middleName?: string | null;
         lastName: string;
       };
     } | null;
@@ -185,7 +186,7 @@ interface BankTransactionAllocation {
     studentId: string;
     amount: string;
     purpose?: string | null;
-    user: { firstName: string; lastName: string };
+    user: { firstName: string; middleName?: string | null; lastName: string };
   }>;
 }
 
@@ -194,7 +195,7 @@ interface BankTransactionWithAllocations extends BankTransaction {
 }
 
 function paymentStudentLabel(payment: FeePaymentRecordWithDetails): string {
-  if (payment.student) return `${payment.student.user?.lastName || ''} ${payment.student.user?.firstName || ''}`.trim();
+  if (payment.student) return formatStudentName(payment.student.user);
   return payment.depositorName || 'Allocated payment';
 }
 
@@ -204,7 +205,7 @@ function PaymentAllocationDetails({payment}: {payment: FeePaymentRecordWithDetai
     <summary className="cursor-pointer font-medium">View {payment.splits.length} allocations</summary>
     <div className="mt-2 space-y-2">
       {payment.splits.map(split=><div key={split.id} className="flex justify-between gap-2 border-b pb-1">
-        <span>{split.student?.user?.lastName} {split.student?.user?.firstName}<span className="block text-muted-foreground">{split.student?.studentId} · {split.purpose || payment.purpose}</span></span>
+        <span>{formatStudentName(split.student?.user)}<span className="block text-muted-foreground">{split.student?.studentId} · {split.purpose || payment.purpose}</span></span>
         <span className="shrink-0">₦{Number(split.amount).toLocaleString()}</span>
       </div>)}
     </div>
@@ -973,7 +974,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     }
 
     // Student name in description (20 points)
-    const studentName = `${payment.student?.user?.lastName || ''} ${payment.student?.user?.firstName || ''}`.toLowerCase().trim();
+    const studentName = formatStudentName(payment.student?.user).toLowerCase().trim();
     if (studentName && tx.rawDescription?.toLowerCase().includes(studentName.split(' ')[0])) {
       score += 20;
       reasons.push("Name match");
@@ -1400,14 +1401,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                       if (!q) return filteredPayments.length;
                       return filteredPayments.filter((p) => {
                         if (
-                          p.student?.user?.firstName?.toLowerCase().includes(q) ||
-                          p.student?.user?.lastName?.toLowerCase().includes(q) ||
+                          formatStudentName(p.student?.user).toLowerCase().includes(q) ||
                           p.student?.studentId?.toLowerCase().includes(q)
                         ) return true;
                         for (const sp of p.splits ?? []) {
                           if (
-                            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
-                            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
+                            formatStudentName(sp.student?.user).toLowerCase().includes(q) ||
                             sp.student?.studentId?.toLowerCase().includes(q)
                           ) return true;
                         }
@@ -1454,15 +1453,13 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   const visiblePayments = q
                     ? filteredPayments.filter((p) => {
                         if (
-                          p.student?.user?.firstName?.toLowerCase().includes(q) ||
-                          p.student?.user?.lastName?.toLowerCase().includes(q) ||
+                          formatStudentName(p.student?.user).toLowerCase().includes(q) ||
                           p.student?.studentId?.toLowerCase().includes(q)
                         ) return true;
                         // Multi-student split records carry per-child rows in `splits`.
                         for (const sp of p.splits ?? []) {
                           if (
-                            sp.student?.user?.firstName?.toLowerCase().includes(q) ||
-                            sp.student?.user?.lastName?.toLowerCase().includes(q) ||
+                            formatStudentName(sp.student?.user).toLowerCase().includes(q) ||
                             sp.student?.studentId?.toLowerCase().includes(q)
                           ) return true;
                         }
@@ -1794,15 +1791,13 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                           const stu = a.paymentRecord?.student;
                           if (stu) {
                             if (
-                              stu.user?.firstName?.toLowerCase().includes(q) ||
-                              stu.user?.lastName?.toLowerCase().includes(q) ||
+                              formatStudentName(stu.user).toLowerCase().includes(q) ||
                               stu.studentId?.toLowerCase().includes(q)
                             ) return true;
                           }
                           for (const sp of a.splitStudents ?? []) {
                             if (
-                              sp.user?.firstName?.toLowerCase().includes(q) ||
-                              sp.user?.lastName?.toLowerCase().includes(q) ||
+                              formatStudentName(sp.user).toLowerCase().includes(q) ||
                               sp.studentId?.toLowerCase().includes(q)
                             ) return true;
                           }
@@ -1999,7 +1994,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                               <ul className="mt-1 space-y-0.5">
                                                 {splitStudents.map((sp) => (
                                                   <li key={sp.studentDbId} className="text-[11px] flex items-center gap-1">
-                                                    <span className="font-medium">{sp.user.lastName} {sp.user.firstName}</span>
+                                                    <span className="font-medium">{formatStudentName(sp.user)}</span>
                                                     <span className="text-muted-foreground">({sp.studentId})</span>
                                                     <span className="text-muted-foreground">{sp.purpose ? `${sp.purpose} · ` : ""}₦{parseFloat(sp.amount).toLocaleString()}</span>
                                                   </li>
@@ -2009,7 +2004,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                           ) : (
                                             <>
                                               <span className="font-medium">
-                                                {stu?.user ? `${stu.user.lastName} ${stu.user.firstName}`.trim() : "Unassigned"}
+                                                {stu?.user ? formatStudentName(stu.user) : "Unassigned"}
                                               </span>
                                               {stu?.studentId && (
                                                 <span className="text-muted-foreground ml-1">({stu.studentId})</span>

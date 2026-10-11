@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import {jsPDF} from 'jspdf';
 import {sortReceipts,type StudentReceipt} from '@shared/payment-receipts';
 const money=(value:string)=>`NGN ${Number(value).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -33,7 +34,7 @@ export function buildReceiptPdf(receipts:StudentReceipt[], logos:Map<string,stri
       pdf.setFont('helvetica','normal');pdf.setFontSize(8);
       pdf.text(`PAYMENT RECEIPT  ${receipt.number}${parts>1?`  (${part+1}/${parts})`:''}`,logo?29:12,y+15);
       pdf.line(12,y+18,198,y+18);
-      pdf.setFont('helvetica','bold');fit(`${receipt.lastName} ${receipt.firstName} | ${receipt.studentCode}`,12,y+23,184,10);
+      pdf.setFont('helvetica','bold');fit(`${formatStudentName(receipt)} | ${receipt.studentCode}`,12,y+23,184,10);
       pdf.setFont('helvetica','normal');fit(`Class: ${receipt.className} | ${receipt.term} | ${receipt.session}`,12,y+32,184,8);
       fit(`Paid: ${day(receipt.paymentDate)} | Confirmed: ${day(receipt.confirmedAt,true)}`,12,y+40,184,8);
       fit(`Method: ${receipt.method} | Depositor: ${receipt.depositor}`,12,y+47,184,8);

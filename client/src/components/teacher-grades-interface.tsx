@@ -1,3 +1,4 @@
+import { formatStudentName } from "@shared/student-name";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -311,7 +312,7 @@ export function TeacherGradesInterface({
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 <User className="h-4 w-4" />
-                                {student.user.firstName} {student.user.lastName}
+                                {formatStudentName(student.user)}
                               </div>
                             </TableCell>
                             <TableCell className="text-center">
@@ -369,7 +370,7 @@ export function TeacherGradesInterface({
           <DialogHeader>
             <DialogTitle>Non-Academic Ratings</DialogTitle>
             <DialogDescription>
-              Rate {selectedStudent?.user.firstName} {selectedStudent?.user.lastName} on behavioral aspects (1-5 scale)
+              Rate {formatStudentName(selectedStudent?.user)} on behavioral aspects (1-5 scale)
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
