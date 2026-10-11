@@ -108,6 +108,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 
 export interface IStorage {
+  buildTuitionResolver(allRows: any[], term?: string | null, session?: string | null): (classId: string, studentType: string | null) => number;
   // Authentication
   authenticateUser(email: string, password: string): Promise<User | null>;
   authenticateUserByStudentId(studentId: string, password: string): Promise<User | null>;
@@ -1460,7 +1461,7 @@ export class DatabaseStorage implements IStorage {
    * tuition_class_amounts rows (fetched once per query).
    * Priority: scoped+typed > scoped+universal > global+typed > global+universal
    */
-  private buildTuitionResolver(
+  buildTuitionResolver(
     allRows: any[],
     term?: string | null,
     session?: string | null,

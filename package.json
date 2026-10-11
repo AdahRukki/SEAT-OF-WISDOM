@@ -11,7 +11,8 @@
     "db:push": "drizzle-kit push",
     "test:history": "node --import tsx --test scripts/tests/student-history.test.ts scripts/tests/student-history-client.test.ts",
     "test:navigation": "node --import tsx --test scripts/tests/admin-navigation.test.ts",
-    "test:navigation:browser": "node --test scripts/tests/admin-navigation.browser.mjs"
+    "test:navigation:browser": "node --test scripts/tests/admin-navigation.browser.mjs",
+    "test:analytics": "node --import tsx --test scripts/tests/general-school-analytics.test.ts scripts/tests/general-school-analytics-routes.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",

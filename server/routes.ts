@@ -1,4 +1,6 @@
 import { historyContextSchema, promoteWithHistory, studentImportKey, StudentHistoryError, type HistoryContext } from './student-history';
+import { GeneralSchoolAnalytics } from './general-school-analytics';
+import { registerAnalyticsRoutes } from './analytics-routes';
 import { studentStatusEvents, studentPopulationSnapshots } from '@shared/schema';
 import { formatStudentName } from "../shared/student-name";
 import { issueStudentReceipts, ReceiptError } from "./payment-receipts";
@@ -283,6 +285,8 @@ const requirePermission = (permissionKey: string) => (req: Request, res: Respons
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerAnalyticsRoutes(app, authenticate, requireMainAdmin,
+    new GeneralSchoolAnalytics(db, (rows, term, session) => storage.buildTuitionResolver(rows, term, session)));
   // Serve static assets first (before other routes)
   app.use('/assets', express.static(path.join(process.cwd(), 'client/src/assets')));
 
