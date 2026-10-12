@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {recoveryEligible,assertRecoveryIdentity} from '../../server/email-recovery-guard.ts';
+const row={uid:12,outcome:'unparsed',review_status:'open',linked_transaction_id:null,from_address:'no_reply@accessbankplc.com',subject:'Access credit',received_at:new Date('2026-10-12T11:00:00Z')};
+const msg={uid:12,source:Buffer.from('mail'),envelope:{from:[{address:row.from_address}],subject:row.subject,date:row.received_at}};
+const state={uid_validity:'44',last_processed_uid:20};
+test('only unresolved unparsed/error rows qualify',()=>{assert.equal(recoveryEligible(row),true);assert.equal(recoveryEligible({...row,outcome:'error'}),true);for(const outcome of ['auto_ingested','duplicate','unverified'])assert.equal(recoveryEligible({...row,outcome}),false);for(const review_status of ['approved','dismissed'])assert.equal(recoveryEligible({...row,review_status}),false);assert.equal(recoveryEligible({...row,linked_transaction_id:'saved'}),false);});
+test('matching mailbox and exact saved message pass',()=>assert.doesNotThrow(()=>assertRecoveryIdentity(state,{uidValidity:44n},row,msg,'access')));
+test('UID reset, future UID and wrong bank are blocked',()=>{assert.throws(()=>assertRecoveryIdentity(state,{uidValidity:45n},row,msg,'access'));assert.throws(()=>assertRecoveryIdentity({...state,last_processed_uid:11},{uidValidity:44n},row,msg,'access'));assert.throws(()=>assertRecoveryIdentity(state,{uidValidity:44n},row,msg,'fidelity'));});
+test('changed email, date, missing source and missing state are blocked',()=>{for(const modified of [{...msg,uid:13},{...msg,source:undefined},{...msg,envelope:{...msg.envelope,subject:'other'}},{...msg,envelope:{...msg.envelope,date:new Date('2026-10-11')}}])assert.throws(()=>assertRecoveryIdentity(state,{uidValidity:44n},row,modified,'access'));assert.throws(()=>assertRecoveryIdentity(null,{uidValidity:44n},row,msg,'access'));});

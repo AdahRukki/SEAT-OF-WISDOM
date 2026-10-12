@@ -359,7 +359,7 @@ function cursorResultFor(outcome: ReviewOutcome): ProcessResult {
   return outcome === "error" ? "retry" : outcome === "auto_ingested" ? "ingested" : "skipped";
 }
 
-async function processMessage(mailbox: string, message: {
+export async function processMessage(mailbox: string, message: {
   uid: number;
   envelope?: any;
   source?: Buffer;
