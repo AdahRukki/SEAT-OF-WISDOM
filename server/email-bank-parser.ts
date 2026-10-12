@@ -52,86 +52,51 @@ function decodeQP(s: string): string {
 }
 
 export function extractBodyFromRfc2822(source: Buffer): { html: string; text: string } {
-  const raw = source.toString("binary");
-
-  let html = "";
-  let text = "";
-
-  const extractPart = (mimeType: "text/html" | "text/plain"): string => {
-    const re = new RegExp(
-      `Content-Type:\\s*${mimeType.replace("/", "\\/")}[^\\r\\n]*\\r?\\n` +
-        `(?:[^\\r\\n]+\\r?\\n)*\\r?\\n` +
-        `([\\s\\S]+?)(?=\\r?\\n--|$)`,
-      "i"
-    );
-    const m = raw.match(re);
-    if (!m) return "";
-
-    const blockStart = m.index ?? 0;
-    // Content-Transfer-Encoding can appear either before or after
-    // Content-Type within a MIME part's header block — RFC 2822 doesn't
-    // mandate an order, and it's a real-world case: Fidelity's sender
-    // (NetcoreCloud/pepipost) writes Content-Disposition, then
-    // Content-Transfer-Encoding, then Content-Type. The old headerBlock only
-    // looked at lines *after* Content-Type, so on Fidelity mail the encoding
-    // was never found, quoted-printable was never decoded, and stray "="
-    // soft-line-break markers survived into the parsed text — silently
-    // breaking every amount extraction. Widen the search back to the
-    // preceding MIME boundary line so header order can't hide it.
-    const precedingBoundary = raw.lastIndexOf("\r\n--", blockStart);
-    const headerSearchStart = precedingBoundary === -1 ? 0 : precedingBoundary;
-    const headerBlock = raw.substring(headerSearchStart, blockStart + m[0].length - m[1].length);
-    const encMatch = headerBlock.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
-    const enc = encMatch?.[1]?.toLowerCase().trim() ?? "7bit";
-
-    let content = m[1];
-    if (enc === "base64") {
-      try {
-        content = Buffer.from(content.replace(/\s/g, ""), "base64").toString("utf8");
-      } catch { /* leave as-is */ }
-    } else if (enc === "quoted-printable") {
-      content = decodeQP(content);
-    } else {
-      // Fall back to content-shape detection when the header-based encoding
-      // wasn't identified as quoted-printable (wrong/missing header, a
-      // header variant this parser doesn't recognize, a folded header,
-      // etc. — chasing each sender's exact header quirk one at a time as
-      // it's found live isn't sustainable; this is the second bank found
-      // with this class of bug in one session). A soft-wrap ("=" as the
-      // last character of a line, immediately followed by a line break) is
-      // an almost unmistakable quoted-printable signature that essentially
-      // never occurs in genuine unencoded text — seeing it more than once
-      // or twice is a reliable enough signal to decode regardless of what
-      // the header claimed (or didn't claim).
-      const softWrapCount = (content.match(/=\r?\n/g) || []).length;
-      if (softWrapCount >= 2) {
-        content = decodeQP(content);
+  const result = { html: "", text: "" };
+  // Keep bytes lossless until each part's transfer encoding and charset are known.
+  const visit = (raw: string, depth: number): void => {
+    if (depth > 20) throw new Error("Email MIME nesting exceeds limit");
+    const separator = /\r?\n\r?\n/.exec(raw);
+    const headerBlock = separator ? raw.slice(0, separator.index).replace(/\r?\n[ \t]+/g, " ") : "";
+    const headers = new Map<string, string>();
+    for (const line of headerBlock.split(/\r?\n/)) {
+      const colon = line.indexOf(":");
+      if (colon > 0) headers.set(line.slice(0, colon).toLowerCase(), line.slice(colon + 1).trim());
+    }
+    const hasHeaders = headers.has("content-type") || headers.has("mime-version") || headers.has("from");
+    const body = separator && hasHeaders ? raw.slice(separator.index + separator[0].length) : raw;
+    const contentType = headers.get("content-type") || (/^\s*<(?:!doctype|html|body|div|p\b)/i.test(body) ? "text/html" : "text/plain");
+    if (/^attachment\b/i.test(headers.get("content-disposition") || "")) return;
+    if (/^multipart\//i.test(contentType)) {
+      const boundaryMatch = /boundary\s*=\s*(?:"([^"\r\n]+)"|([^;\s]+))/i.exec(contentType);
+      const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
+      if (!boundary) return;
+      let part: string[] | null = null;
+      for (const line of body.split(/\r?\n/)) {
+        const marker = line.replace(/[ \t]+$/, "");
+        // Only the declared MIME delimiter ends a part. HTML '-->' is ordinary text.
+        if (marker === `--${boundary}` || marker === `--${boundary}--`) {
+          if (part) visit(part.join("\r\n"), depth + 1);
+          part = marker === `--${boundary}--` ? null : [];
+          if (marker === `--${boundary}--`) break;
+        } else if (part) part.push(line);
       }
+      if (part?.length) visit(part.join("\r\n"), depth + 1);
+      return;
     }
-    // Transfer decoding produces bytes; decode their declared character set too.
-    if (enc !== "base64") {
-      const charset = headerBlock.match(/charset\s*=\s*["']?([^\s;"'\r\n]+)/i)?.[1] || "utf-8";
-      try { content = new TextDecoder(charset).decode(Buffer.from(content, "binary")); }
-      catch { content = Buffer.from(content, "binary").toString("utf8"); }
-    }
-    return content;
+    const kind = /^text\/html(?:;|$)/i.test(contentType) ? "html"
+      : /^text\/plain(?:;|$)/i.test(contentType) ? "text" : null;
+    if (!kind || result[kind]) return;
+    const encoding = (headers.get("content-transfer-encoding") || "7bit").toLowerCase();
+    const bytes = encoding === "base64" ? Buffer.from(body.replace(/\s/g, ""), "base64")
+      : Buffer.from(encoding === "quoted-printable" || (body.match(/=\r?\n/g) || []).length >= 2
+        ? decodeQP(body) : body, "binary");
+    const charset = /charset\s*=\s*["']?([^\s;"']+)/i.exec(contentType)?.[1] || "utf-8";
+    try { result[kind] = new TextDecoder(charset).decode(bytes); }
+    catch { result[kind] = bytes.toString("utf8"); }
   };
-
-  html = extractPart("text/html");
-  text = extractPart("text/plain");
-
-  if (!html && !text) {
-    const sep = raw.indexOf("\r\n\r\n");
-    const bodyRaw = sep !== -1 ? raw.substring(sep + 4) : raw;
-    const bodyUtf = Buffer.from(bodyRaw, "binary").toString("utf8");
-    if (/<html|<body|<div|<p\b/i.test(bodyUtf)) {
-      html = bodyUtf;
-    } else {
-      text = bodyUtf;
-    }
-  }
-
-  return { html, text };
+  visit(source.toString("binary"), 0);
+  return result;
 }
 
 // ── HTML → tab-structured plain text ─────────────────────────────────────────
@@ -151,6 +116,8 @@ export function htmlToTabText(html: string): string {
   // pass further down. Collapsing to a single \n convention here means every
   // later step only has one line-ending character to reason about.
   let s = html.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  s = s.replace(/<!--[\s\S]*?-->/g, "");
 
   // Styles are source metadata, not bank-alert text.
   s = s.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
@@ -482,6 +449,62 @@ function parseZenithEmail(
   return buildResult("Zenith", amount, transactionDate, rawDescription, maskedAccount, balanceKey, reference);
 }
 
+// Access alerts use a credit heading and a labelled transaction summary.
+function parseAccessEmail(tabText: string, subject: string): EmailParseResult {
+  const key = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const labels = new Set(["a c number", "account number", "account name", "description",
+    "reference number", "transaction reference", "transaction branch", "transaction date",
+    "value date", "available balance", "transaction type", "amount", "amount credited", "transaction amount"]);
+  const lines = tabText.split("\n").map(line => line.trim()).filter(Boolean);
+  const fields = new Map<string, string>();
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split("\t").map(part => part.trim()).filter(Boolean);
+    const label = key(parts[0] || "");
+    if (!labels.has(label)) continue;
+    const value = parts.length > 1 ? parts.slice(1).join(" ")
+      : lines[i + 1] && !labels.has(key(lines[i + 1].split("\t")[0])) ? lines[i + 1] : "";
+    if (value) {
+      if (fields.has(label) && fields.get(label) !== value)
+        return { ok: false, reason: "Access: conflicting transaction fields" };
+      fields.set(label, value);
+    }
+  }
+  const get = (...names: string[]) => names.map(name => fields.get(name)).find(Boolean) || "";
+  const type = get("transaction type").toLowerCase();
+  const credited = /\b(?:your|the)\s+account\s+has\s+been\s*credited\b/i.test(tabText) || /^(credit|cr)$/.test(type);
+  const debited = /\b(?:your|the)\s+account\s+has\s+been\s*debited\b/i.test(tabText) || /^(debit|dr)$/.test(type) || /\[\s*Debit\s*:/i.test(subject);
+  if (debited) return { ok: false, reason: "Access: debit or conflicting signals — skipped" };
+  if (!credited) return { ok: false, reason: "Access: credit confirmation missing from extracted body" };
+  // Search above the summary so a balance on its own line cannot become the amount.
+  const summaryStart = lines.findIndex(line => /transaction summary/i.test(line) || labels.has(key(line.split("\t")[0])));
+  const heading = lines.slice(0, summaryStart < 0 ? lines.length : summaryStart).join("\n");
+  const candidates = Array.from(heading.matchAll(/^(?:NGN|₦)[ \t]*([\d,]+(?:\.\d{2})?)[ \t]*$/gim)).map(m => m[1]);
+  const labelled = get("amount", "amount credited", "transaction amount");
+  if (labelled) candidates.push(labelled);
+  const amounts = candidates.map(raw => {
+    const clean = raw.replace(/^(?:NGN|₦)\s*/i, "").trim();
+    return /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?$/.test(clean) ? Number(clean.replace(/,/g, "")) : NaN;
+  });
+  const amount = amounts[0];
+  if (!amount || !Number.isFinite(amount) || amount >= 1e10 || amounts.some(n => n !== amount))
+    return { ok: false, reason: "Access: missing, ambiguous or invalid transaction amount" };
+  const subjectAmount = /\[\s*Credit:\s*([\d,]+(?:\.\d{2})?)\s+NGN\s*\]/i.exec(subject);
+  if (subjectAmount && Number(subjectAmount[1].replace(/,/g, "")) !== amount)
+    return { ok: false, reason: "Access: subject and body amounts disagree" };
+  const transactionDate = normalizeDate(get("transaction date"));
+  const maskedAccount = normalizeAccount(get("a c number", "account number"));
+  const description = get("description");
+  const reference = get("reference number", "transaction reference");
+  if (!transactionDate || !maskedAccount || !description || !reference)
+    return { ok: false, reason: "Access: missing date, account, description or reference" };
+  const [day, month, year] = transactionDate.split("/").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day)
+    return { ok: false, reason: "Access: invalid transaction date" };
+  return buildResult("Access", amount, transactionDate, description, maskedAccount,
+    extractBalance(get("available balance")), reference);
+}
+
 // ── Generic credit-alert fallback ────────────────────────────────────────────
 //
 // Last-resort parser for senders whose bank-specific format is not yet
@@ -580,8 +603,7 @@ export function parseEmailAlert(input: {
     return parseZenithEmail(fields, tabText);
   }
   if (hay.includes("accessbankplc.com") || hay.includes("accessbank.com") || hay.includes("access bank")) {
-    // Access Bank format not yet confirmed — fall through to generic parser.
-    return parseGenericEmail(fields, tabText);
+    return parseAccessEmail(tabText, subject);
   }
 
   // Body-content bank detection fallback (when sender domain is generic).
