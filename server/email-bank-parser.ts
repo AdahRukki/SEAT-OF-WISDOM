@@ -108,6 +108,12 @@ export function extractBodyFromRfc2822(source: Buffer): { html: string; text: st
         content = decodeQP(content);
       }
     }
+    // Transfer decoding produces bytes; decode their declared character set too.
+    if (enc !== "base64") {
+      const charset = headerBlock.match(/charset\s*=\s*["']?([^\s;"'\r\n]+)/i)?.[1] || "utf-8";
+      try { content = new TextDecoder(charset).decode(Buffer.from(content, "binary")); }
+      catch { content = Buffer.from(content, "binary").toString("utf8"); }
+    }
     return content;
   };
 
@@ -145,6 +151,9 @@ export function htmlToTabText(html: string): string {
   // pass further down. Collapsing to a single \n convention here means every
   // later step only has one line-ending character to reason about.
   let s = html.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // Styles are source metadata, not bank-alert text.
+  s = s.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
 
   // Join adjacent table cells with a tab (before any other tag stripping).
   s = s.replace(/<\/td\s*>\s*<td[^>]*>/gi, "\t");
@@ -346,8 +355,24 @@ function parseFidelityEmail(
   fields: Map<string, string>,
   tabText: string
 ): EmailParseResult {
-  // Credit/debit detection from the "₦AMOUNT CR/DR" line at the top.
-  const creditLine = tabText.match(/^\s*[₦]?\s*([\d,]+\.?\d*)\s+(CR|DR)\b/m);
+  // Fidelity's newer template places labels and values on separate lines.
+  // Recover only known fields; never use the available balance as the payment.
+  fields = new Map(fields);
+  const labels = new Set(["account", "account name", "narration", "description",
+    "transaction reference", "reference code", "date/time", "date",
+    "transaction date", "available balance"]);
+  const lines = tabText.split("\n").map(line => line.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split("\t").map(part => part.trim()).filter(Boolean);
+    const label = parts[0]?.toLowerCase();
+    if (!labels.has(label)) continue;
+    if (parts.length > 1) fields.set(label, parts.slice(1).join(" "));
+    else if (lines[i + 1] && !labels.has(lines[i + 1].split("\t")[0].toLowerCase()))
+      fields.set(label, lines[i + 1]);
+  }
+  // Search the heading only, before account/details/balance fields.
+  const heading = tabText.split(/^[ \t]*(?:Account(?: Name)?|Available Balance|Narration|Date\/Time)[ \t]*(?:\t|$)/im)[0];
+  const creditLine = heading.match(/^[ \t]*₦?[ \t]*((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?)[ \t]*(CR|DR)[ \t]*$/im);
   if (!creditLine) {
     return { ok: false, reason: "Fidelity: no CR/DR amount line found" };
   }
@@ -377,7 +402,10 @@ function parseFidelityEmail(
     fields.get("date") ??
     fields.get("transaction date") ??
     "";
-  const transactionDate = normalizeDate(dateRaw) ?? todayDate();
+  const transactionDate = normalizeDate(dateRaw);
+  if (!transactionDate || !maskedAccount || rawDescription === "Fidelity credit alert") {
+    return { ok: false, reason: "Fidelity: missing transaction date, account or narration" };
+  }
 
   // Balance — strip ₦, commas, and trailing "CR".
   const balanceRaw = fields.get("available balance") ?? "";
