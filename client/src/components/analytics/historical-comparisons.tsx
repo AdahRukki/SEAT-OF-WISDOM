@@ -8,6 +8,7 @@ import type { AnalyticsComparison, AnalyticsPeriods } from '@shared/general-scho
 import { Coverage, Note, ReportChart, ReportPanel, ReportTable } from './report-elements';
 import { ExportControls } from './export-controls';
 import { buildComparisonExport } from '@shared/analytics-export';
+import { ReportFailure } from './report-failure';
 
 export function HistoricalComparisons({ metadata, scope, userId }: { metadata: AnalyticsPeriods; scope: AnalyticsFilters; userId: string }) {
   const sessions = Array.from(new Set(metadata.periods.map(p => p.session))).sort().reverse();
@@ -46,7 +47,7 @@ export function HistoricalComparisons({ metadata, scope, userId }: { metadata: A
     <p className="text-sm text-muted-foreground">Uses the applied school and class filters and pass threshold. Date ranges do not apply to historical comparisons.</p>
     {!sessions.length && <Note>No recorded academic periods are available to compare.</Note>}
     {controlsChanged && <p role="status" className="text-sm text-amber-800 dark:text-amber-200">Comparison settings changed. Select Compare periods to update the results.</p>}
-    {query.isError && <div role="alert" className="space-y-3"><p>Historical comparison could not be loaded. Please try again.</p><Button variant="outline" onClick={() => void query.refetch()}>Retry comparison</Button></div>}
+    {query.isError && <ReportFailure error={query.error} label="Historical comparison" button="Retry comparison" retry={() => void query.refetch()} />}
     {query.isFetching && <p role="status">Loading historical comparison…</p>}
     {result && !query.isError && !query.isFetching && <div className="space-y-5" aria-label="Comparison results"><p className="font-medium">{originalLabel} → {comparedLabel}</p>
       <ExportControls disabled={controlsChanged} makeDocument={() => buildComparisonExport(result, metadata)} />

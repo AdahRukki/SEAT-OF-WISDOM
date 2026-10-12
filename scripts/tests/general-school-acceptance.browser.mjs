@@ -137,3 +137,30 @@ test('real JWT middleware rejects non-main roles, disabled accounts, revoked tok
   assert.equal((await http.request(`overview?schoolId=${ids[1]}&classId=p0`, 'admin')).status, 404);
   assert.equal((await fetch(`${http.origin}/api/admin/analytics/overview`, { method: 'POST', headers: { Authorization: `Bearer ${http.tokens.admin}` } })).status, 404);
 });
+
+test('database setup errors identify the missing migration and Retry reports also reloads period filters after setup', async () => {
+  const pending = await createAnalyticsFixture(false);
+  const server = await createAnalyticsHttpFixture(pending);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  context.setDefaultTimeout(15000);
+  await context.addInitScript(token => { localStorage.clear(); localStorage.setItem('auth_token', token); }, server.tokens.admin);
+  await context.route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    await route.fulfill({ response: await route.fetch({ url: `${server.origin}${url.pathname}${url.search}` }) });
+  });
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(`${baseURL}/portal/admin/general`);
+    await page.getByRole('heading', { name: 'History setup required', exact: true }).first().waitFor();
+    assert.equal(await page.getByRole('heading', { name: 'Executive Overview', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Download Excel', exact: true }).count(), 0);
+    await pending.pg.exec(fs.readFileSync(new URL('../migrations/20261011_student_history.sql', import.meta.url), 'utf8'));
+    await page.getByRole('button', { name: 'Retry reports', exact: true }).click();
+    await page.getByRole('heading', { name: 'Executive Overview', exact: true }).waitFor();
+    await page.getByRole('checkbox', { name: 'Ikpoto', exact: true }).waitFor();
+    assert.ok((await page.getByLabel('Academic session', { exact: true }).locator('option').allTextContents()).includes('2026/2027'));
+    assert.deepEqual(errors, []);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  } finally { await context.close(); await server.close(); await pending.pg.close(); }
+});

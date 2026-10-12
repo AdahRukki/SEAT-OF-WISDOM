@@ -1,5 +1,6 @@
 import type { Express, RequestHandler } from 'express';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { AnalyticsError } from './analytics-repository';
 import type { GeneralSchoolAnalytics, GeneralSchoolReport } from './general-school-analytics';
 
@@ -25,8 +26,10 @@ export function registerAnalyticsRoutes(app: Express, authenticate: RequestHandl
 }
 
 function respondError(res: Parameters<RequestHandler>[1], error: unknown) {
-  if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid reporting filters', issues: error.issues });
-  if (error instanceof AnalyticsError) return res.status(error.status).json({ error: error.message });
-  console.error('General School reporting failed:', error);
-  return res.status(500).json({ error: 'The management report could not be generated' });
+  res.setHeader('Cache-Control', 'private, no-store');
+  if (error instanceof z.ZodError) return res.status(400).json({ error: 'Invalid reporting filters', code: 'INVALID_REPORT_FILTERS', issues: error.issues });
+  if (error instanceof AnalyticsError) return res.status(error.status).json({ error: error.message, code: error.code || (error.status === 404 ? 'INVALID_REPORT_SCOPE' : 'REPORT_UNAVAILABLE'), ...(error.details ? { details: error.details } : {}) });
+  const reference = randomUUID();
+  console.error(`General School reporting failed [${reference}]:`, error);
+  return res.status(500).json({ error: 'The management report could not be generated', code: 'REPORT_GENERATION_FAILED', reference });
 }
