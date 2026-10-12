@@ -12,12 +12,16 @@ let browser;
 before(async () => { browser = await chromium.launch({ headless: true }); });
 after(async () => { await browser?.close(); });
 
-async function setup(role = 'admin', viewport = { width: 1440, height: 1000 }, schoolResponse = schools) {
+async function setup(role = 'admin', viewport = { width: 1440, height: 1000 }, schoolResponse = schools, loginRole = role) {
   const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
+  context.setDefaultTimeout(15000);
+  context.setDefaultNavigationTimeout(30000);
   await context.addInitScript(() => { localStorage.clear(); localStorage.setItem('auth_token', 'navigation-test-only'); });
   const page = await context.newPage();
   const requests = [];
   const errors = [];
+  let authenticatedRole = role;
+  const authUser = () => authenticatedRole === null ? null : { id: `test-${authenticatedRole}`, role: authenticatedRole, schoolId: schools[0].id, firstName: 'Test', lastName: 'Admin', permissions: null };
   page.on('pageerror', error => errors.push(error.message));
   await context.route('**/api/**', async route => {
     const req = route.request();
@@ -25,7 +29,11 @@ async function setup(role = 'admin', viewport = { width: 1440, height: 1000 }, s
     requests.push({ pathname: url.pathname, schoolId: url.searchParams.get('schoolId'), method: req.method() });
     let body = [];
     if (url.pathname.startsWith('/api/admin/analytics/')) return route.fulfill({ status: 503, json: { error: 'Reporting unavailable in navigation fixture' } });
-    if (url.pathname === '/api/auth/me') body = role === null ? null : { id: `test-${role}`, role, schoolId: schools[0].id, firstName: 'Test', lastName: 'Admin', permissions: null };
+    if (url.pathname === '/api/auth/login' && req.method() === 'POST') {
+      authenticatedRole = loginRole;
+      body = { token: 'navigation-login-test-only', user: authUser() };
+    }
+    if (url.pathname === '/api/auth/me') body = authUser();
     if (url.pathname === '/api/admin/schools') {
       if (schoolResponse === 'error') return route.fulfill({ status: 500, json: { error: 'Test failure' } });
       body = schoolResponse;
@@ -92,6 +100,44 @@ test('sub-admin keeps their dashboard and cannot open General School or another 
     assert.equal(requests.some(req => req.pathname === '/api/admin/schools'), false);
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
+});
+
+test('legacy doubled portal links redirect to the canonical portal with role access preserved', async () => {
+  for (const role of ['admin', 'sub-admin', 'student', null]) {
+    const { context, page, requests, errors } = await setup(role);
+    try {
+      await page.goto(`${baseURL}/portal/portal`);
+      await page.waitForURL(`${baseURL}/portal`);
+      if (role === null) await page.getByRole('button', { name: /sign in/i }).waitFor();
+      else await page.getByRole('heading', { name: role === 'admin' ? 'General School' : 'Seat of Wisdom Academy', exact: true }).waitFor();
+      await page.reload();
+      if (role === null) await page.getByRole('button', { name: /sign in/i }).waitFor();
+      else await page.getByRole('heading', { name: role === 'admin' ? 'General School' : 'Seat of Wisdom Academy', exact: true }).waitFor();
+      assert.equal(new URL(page.url()).pathname, '/portal');
+      if (role === 'student' || role === null) {
+        assert.equal(await page.getByRole('heading', { name: 'General School', exact: true }).count(), 0);
+        assert.equal(requests.some(req => req.pathname === '/api/admin/schools' || req.pathname.startsWith('/api/admin/analytics/')), false);
+      }
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  }
+});
+
+test('successful sign-in opens the canonical portal without doubling its prefix', async () => {
+  for (const role of ['admin', 'sub-admin', 'student']) {
+    const { context, page, errors } = await setup(null, undefined, schools, role);
+    try {
+      await page.goto(`${baseURL}/portal/login`);
+      await page.getByLabel('Email or Student ID', { exact: true }).fill('routing-test@example.com');
+      await page.getByLabel('Password', { exact: true }).fill('routing-fixture-only');
+      await page.getByRole('button', { name: /sign in/i }).click();
+      await page.waitForURL(`${baseURL}/portal`);
+      await page.getByRole('heading', { name: role === 'admin' ? 'General School' : 'Seat of Wisdom Academy', exact: true }).waitFor();
+      await page.reload();
+      await page.getByRole('heading', { name: role === 'admin' ? 'General School' : 'Seat of Wisdom Academy', exact: true }).waitFor();
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  }
 });
 
 test('unknown school URL does not mount the operational dashboard', async () => {

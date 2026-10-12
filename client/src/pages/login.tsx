@@ -100,7 +100,8 @@ export default function Login() {
         title: isOffline ? "Offline Login Successful" : "Login Successful",
         description: isOffline ? "Using cached data. Some features may be limited." : "Welcome back!",
       });
-      navigate("/portal");
+      // Escape the nested /portal router so its base is not added twice.
+      navigate("~/portal", { replace: true });
     } catch (error) {
       toast({
         title: "Login Failed",
