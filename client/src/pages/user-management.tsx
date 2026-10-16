@@ -1,4 +1,5 @@
 import { formatStudentName } from "@shared/student-name";
+import { AdminMenuButton } from "@/components/admin-sidebar";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -301,6 +302,7 @@ export default function UserManagement() {
             <div className="flex justify-between items-center h-16">
               {/* Left side - Logo and Brand */}
               <div className="flex items-center space-x-4">
+                <AdminMenuButton />
                 <a href="/" className="flex items-center space-x-3">
                   <img src={logoImage} alt="Seat of Wisdom Academy" className="h-10 w-10 rounded-full" />
                   <div className="hidden sm:block">

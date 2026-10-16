@@ -2,7 +2,11 @@ import { formatStudentName } from "@shared/student-name";
 import { PaymentDateFilters } from "@/components/payment-date-filters";
 import { confirmationRangeLabel } from "@/components/confirmation-date-filter";
 import { useState, useEffect, useRef, Fragment } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
+import { AdminMenuButton } from "@/components/admin-sidebar";
+import { AdminPagePanel } from "@/components/admin-page-panel";
+import { useAdminPage } from "@/hooks/use-admin-page";
+import { ADMIN_PAGES, preserveAdminPage } from "@/lib/admin-pages";
 import { SchoolSelection } from "@/pages/general-school";
 import { GENERAL_SCHOOL_OPTION, schoolSelectionPath } from "@/lib/admin-navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -24,7 +28,7 @@ import {
   CardHeader, 
   CardTitle 
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -825,38 +829,13 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   const [selectedSchoolId, setSelectedSchoolId] = useState(user?.role === 'admin' ? schoolId || '' : user?.schoolId || '');
   const selectManagementView = (selection: string) => {
     const destination = schoolSelectionPath(selection, schools);
-    if (user?.role === 'admin' && destination) navigate(destination);
+    if (user?.role === 'admin' && destination) navigate(preserveAdminPage(destination, pageSearch));
   };
 
-  // Active tab state — pick the first tab the user has permission to see
-  const getDefaultTab = () => {
-    if (user?.role !== 'sub-admin') return 'overview';
-    const order: Array<[string, string]> = [
-      ['tab_overview', 'overview'],
-      ['tab_students', 'students'],
-      ['tab_scores', 'scores'],
-      ['tab_grading', 'grading'],
-      ['tab_finance', 'finance'],
-      ['tab_reports', 'reports'],
-      ['tab_users', 'users'],
-      ['tab_news', 'news'],
-      ['tab_inquiries', 'inquiries'],
-    ];
-    const permitted = order.find(([key]) => checkPermission(user?.role, user?.permissions, key));
-    return permitted ? permitted[1] : 'students';
-  };
-  const [activeTab, setActiveTab] = useState(getDefaultTab());
-
-  // Re-align the active tab if permissions load/change after mount and the
-  // current tab is no longer permitted (e.g. admin revokes access while the
-  // sub-admin has that tab open, or permissions arrive after initial render).
-  useEffect(() => {
-    if (user?.role !== 'sub-admin') return;
-    if (!checkPermission(user?.role, user?.permissions, `tab_${activeTab}` as any)) {
-      setActiveTab(getDefaultTab());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.role, user?.permissions]);
+  // URL-backed pages preserve direct links, refresh and browser history.
+  const pageSearch = useSearch();
+  const { activePage: activeTab, selectPage: setActiveTab } = useAdminPage();
+  const activePageLabel = ADMIN_PAGES.find(page => page.id === activeTab)?.label || 'Dashboard';
 
   // Student editing states
   const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
@@ -3861,10 +3840,11 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         {/* Header */}
         <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+        <div className="mx-auto w-full px-2 sm:px-4 lg:px-6">
           <div className="flex justify-between items-center h-16">
-            {/* Left side - Logo and School Info */}
+            {/* Left side - Page title and school info */}
             <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+              <AdminMenuButton />
               <div className="flex items-center space-x-2 min-w-0">
                 <div className="min-w-0">
                   <div className="flex items-center space-x-2">
@@ -3873,8 +3853,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                       alt="Seat of Wisdom Academy Logo" 
                       className="h-6 w-6 sm:h-8 sm:w-8 object-contain rounded-md flex-shrink-0 bg-white p-1" 
                     />
-                    <h1 className="text-sm sm:text-xl font-bold text-gray-900 dark:text-white truncate">
-                      Seat of Wisdom Academy
+                    <h1 id="admin-page-title" className="text-sm sm:text-xl font-bold text-gray-900 dark:text-white truncate">
+                      {activePageLabel}
                     </h1>
                   </div>
                   <div className="hidden sm:block ml-8 sm:ml-10">
@@ -3900,7 +3880,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               {user.role === 'admin' && selectedSchoolId && (
                 <div className="hidden lg:flex items-center space-x-2">
                   <Select value={selectedSchoolId} onValueChange={selectManagementView}>
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-48" aria-label="School">
                       <div className="flex items-center space-x-2">
                         <Building className="h-4 w-4" />
                         <SelectValue />
@@ -3957,7 +3937,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   size="sm"
                   onClick={() => firebaseSync.forcSync()}
                   disabled={!syncStatus.isOnline || syncStatus.syncInProgress}
-                  className="h-8 w-8 p-0"
+                  className="h-11 w-11 p-0"
+                  aria-label="Sync offline changes"
                 >
                   <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${syncStatus.syncInProgress ? 'animate-spin' : ''}`} />
                 </Button>
@@ -3965,28 +3946,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               
 
 
-              {/* Navigation to User Management - Icon only on mobile */}
-              {user.role === 'admin' && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <a
-                      href="/portal/users"
-                      className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm"
-                    >
-                      <Users className="w-4 h-4" />
-                      <span className="hidden sm:inline">Users</span>
-                    </a>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Manage users, create sub-admins, and configure school settings</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-
               {/* User Info - Clickable Profile Link */}
               <a 
                 href="/portal/profile"
-                className="flex items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                className="flex min-h-11 items-center space-x-1 sm:space-x-2 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
               >
                 <User className="h-4 w-4" />
                 <span className="hidden md:inline">{user.firstName} {user.lastName}</span>
@@ -4010,6 +3973,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         }
                       }}
                       className="px-2 sm:px-4"
+                      aria-label="Install app"
                       data-testid="button-install-app"
                     >
                       <Download className="h-4 w-4" />
@@ -4029,7 +3993,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                     variant="outline" 
                     size="sm"
                     onClick={logout}
-                    className="px-2 sm:px-4"
+                    aria-label="Logout"
+                    className="min-h-11 px-2 sm:px-4"
                   >
                     <LogOut className="h-4 w-4" />
                     <span className="hidden sm:inline sm:ml-2">Logout</span>
@@ -4046,7 +4011,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
           {user.role === 'admin' && selectedSchoolId && (
             <div className="lg:hidden pb-3 border-t border-gray-200 dark:border-gray-700 pt-3">
               <Select value={selectedSchoolId} onValueChange={selectManagementView}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" aria-label="School">
                   <div className="flex items-center space-x-2">
                     <Building className="h-4 w-4" />
                     <SelectValue />
@@ -4113,78 +4078,12 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-          <TabsList className={`grid w-full gap-0.5 h-auto p-1 bg-muted/60 ${user?.role === 'sub-admin' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-4 sm:grid-cols-5 md:grid-cols-10'}`}>
-            {perm('tab_overview') && (
-              <TabsTrigger value="overview" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <LayoutDashboard className="h-4 w-4 shrink-0" />
-                <span>Overview</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_students') && (
-              <TabsTrigger value="students" className="relative flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <Users className="h-4 w-4 shrink-0" />
-                <span>Students</span>
-                {user?.role === 'admin' && pendingNameChangeCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white leading-none">
-                    {pendingNameChangeCount > 9 ? '9+' : pendingNameChangeCount}
-                  </span>
-                )}
-              </TabsTrigger>
-            )}
-            {perm('tab_scores') && (
-              <TabsTrigger value="scores" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <BookOpen className="h-4 w-4 shrink-0" />
-                <span>Scores</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_grading') && (
-              <TabsTrigger value="grading" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <ClipboardCheck className="h-4 w-4 shrink-0" />
-                <span>Ratings</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_finance') && (
-              <TabsTrigger value="finance" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <Wallet className="h-4 w-4 shrink-0" />
-                <span>Finance</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_reports') && (
-              <TabsTrigger value="reports" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <FileText className="h-4 w-4 shrink-0" />
-                <span>Reports</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_users') && (
-              <TabsTrigger value="users" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <Shield className="h-4 w-4 shrink-0" />
-                <span>Settings</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_news') && (
-              <TabsTrigger value="news" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <Bell className="h-4 w-4 shrink-0" />
-                <span>News</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_inquiries') && (
-              <TabsTrigger value="inquiries" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md">
-                <Inbox className="h-4 w-4 shrink-0" />
-                <span>Inquiries</span>
-              </TabsTrigger>
-            )}
-            {perm('tab_activity') && (
-              <TabsTrigger value="activity" className="flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-1 py-2 sm:py-1.5 h-auto text-[10px] sm:text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-activity">
-                <History className="h-4 w-4 shrink-0" />
-                <span>Activity</span>
-              </TabsTrigger>
-            )}
-          </TabsList>
+      <main className="mx-auto w-full min-w-0 px-2 py-4 sm:px-4 sm:py-6 lg:px-6">
+        <div className="min-w-0 space-y-4 sm:space-y-6">
+
 
           {/* Overview Tab */}
-          {perm('tab_overview') && <TabsContent value="overview" className="space-y-4 sm:space-y-6">
+          {perm('tab_overview') && <AdminPagePanel activePage={activeTab} value="overview" className="space-y-4 sm:space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -4404,10 +4303,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
             </Card>
 
 
-          </TabsContent>}
+          </AdminPagePanel>}
 
           {/* Students Tab - Class-based viewing */}
-          <TabsContent value="students" className="space-y-6 table-container">
+          <AdminPagePanel activePage={activeTab} value="students" className="space-y-6 table-container">
 
             {/* ── Pending Name-Change Requests (Main Admin only) ─────────────── */}
             {user?.role === 'admin' && pendingNameChangeCount > 0 && (
@@ -5151,10 +5050,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
+          </AdminPagePanel>
 
           {/* Scores Management Tab */}
-          <TabsContent value="scores" className="space-y-4 table-container">
+          <AdminPagePanel activePage={activeTab} value="scores" className="space-y-4 table-container">
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
@@ -5467,10 +5366,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </AdminPagePanel>
 
           {/* Teacher Grading Interface Tab */}
-          <TabsContent value="grading" className="space-y-6 table-container">
+          <AdminPagePanel activePage={activeTab} value="grading" className="space-y-6 table-container">
             <TeacherGradesInterface 
               currentTerm="First Term"
               currentSession="2024/2025"
@@ -5491,10 +5390,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 <AttendanceManagement selectedSchoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId} />
               </CardContent>
             </Card>
-          </TabsContent>
+          </AdminPagePanel>
 
           {/* Finance Tab */}
-          <TabsContent value="finance" className="finance-mobile min-w-0 space-y-6 table-container">
+          <AdminPagePanel activePage={activeTab} value="finance" className="finance-mobile min-w-0 space-y-6 table-container">
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium whitespace-nowrap">Term:</Label>
@@ -5840,22 +5739,22 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
+          </AdminPagePanel>
 
           {/* Report Cards Tab */}
           {perm('tab_reports') && (
-            <TabsContent value="reports" className="space-y-6 table-container">
+            <AdminPagePanel activePage={activeTab} value="reports" className="space-y-6 table-container">
               <ReportCardManagement 
                 classes={classes}
                 user={user}
                 selectedSchoolId={selectedSchoolId}
                 schools={schools}
               />
-            </TabsContent>
+            </AdminPagePanel>
           )}
 
           {/* User Management Tab - Admin Only */}
-          {perm('tab_users') && <TabsContent value="users" className="space-y-6 table-container">
+          {perm('tab_users') && <AdminPagePanel activePage={activeTab} value="users" className="space-y-6 table-container">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -6856,32 +6755,32 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 )}
               </CardContent>
             </Card>
-          </TabsContent>}
+          </AdminPagePanel>}
 
           {/* News & Notifications Tab */}
           {perm('tab_news') && (
-            <TabsContent value="news" className="space-y-6">
+            <AdminPagePanel activePage={activeTab} value="news" className="space-y-6">
               <NewsManagement />
               <Separator />
               <NotificationsManagement />
-            </TabsContent>
+            </AdminPagePanel>
           )}
 
           {/* Inquiries Tab */}
           {perm('tab_inquiries') && (
-            <TabsContent value="inquiries" className="space-y-6">
+            <AdminPagePanel activePage={activeTab} value="inquiries" className="space-y-6">
               <InquiriesManagement />
-            </TabsContent>
+            </AdminPagePanel>
           )}
 
           {/* Activity Log Tab (Task #215) */}
           {perm('tab_activity') && (
-            <TabsContent value="activity" className="space-y-6">
+            <AdminPagePanel activePage={activeTab} value="activity" className="space-y-6">
               <ActivityLog />
-            </TabsContent>
+            </AdminPagePanel>
           )}
 
-        </Tabs>
+        </div>
       </main>
 
       {/* Class Details Dialog */}

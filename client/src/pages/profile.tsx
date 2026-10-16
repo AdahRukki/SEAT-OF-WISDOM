@@ -1,4 +1,5 @@
 import { formatStudentName } from "@shared/student-name";
+import { AdminMenuButton } from "@/components/admin-sidebar";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -119,6 +120,7 @@ export default function Profile() {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
+          <AdminMenuButton />
           <Button
             variant="ghost"
             size="sm"

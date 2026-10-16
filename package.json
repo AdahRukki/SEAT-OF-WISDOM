@@ -17,7 +17,9 @@
     "test:analytics:exports": "node --import tsx --test scripts/tests/analytics-export.test.ts",
     "test:analytics:acceptance": "node --import tsx --test scripts/tests/general-school-acceptance.browser.mjs",
     "test:regression": "node --import tsx --test scripts/tests/*.test.ts",
-    "analytics:status": "node --import tsx scripts/check-general-school-data.ts"
+    "analytics:status": "node --import tsx scripts/check-general-school-data.ts",
+    "test:sidebar": "node --import tsx --test scripts/tests/admin-pages.test.ts",
+    "test:sidebar:browser": "node --test scripts/tests/admin-sidebar.browser.mjs"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",

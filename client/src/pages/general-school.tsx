@@ -1,4 +1,8 @@
-import { Link } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
+import { AdminMenuButton } from '@/components/admin-sidebar';
+import { preserveAdminPage } from '@/lib/admin-pages';
+import { GENERAL_SCHOOL_OPTION, schoolSelectionPath } from '@/lib/admin-navigation';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuery } from '@tanstack/react-query';
 import { Building2, ArrowRight, LogOut, Users, User, Globe2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -30,6 +34,8 @@ export function SchoolSelection() {
 }
 
 function ManagementHome({ selectionOnly }: { selectionOnly: boolean }) {
+  const [, navigate] = useLocation();
+  const pageSearch = useSearch();
   const { user, logout } = useAuth();
   const { logoUrl } = useLogo();
   const { data: schools = [], isPending, isError, refetch } = useQuery<School[]>({
@@ -40,9 +46,11 @@ function ManagementHome({ selectionOnly }: { selectionOnly: boolean }) {
     <header className="border-b bg-white dark:bg-gray-800">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
+          <AdminMenuButton />
           <img src={logoUrl} alt="Seat of Wisdom Academy" className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain p-1" />
           <div><p className="text-base font-bold sm:text-lg">Seat of Wisdom Academy</p><p className="text-sm text-muted-foreground">Main Administrator</p></div>
         </div>
+        <div className="min-w-0 w-full sm:w-56"><Select value={GENERAL_SCHOOL_OPTION} onValueChange={value => { const destination = schoolSelectionPath(value, schools); if (destination) navigate(preserveAdminPage(destination, pageSearch)); }}><SelectTrigger aria-label="School" className="min-h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={GENERAL_SCHOOL_OPTION}>General School — All Schools</SelectItem>{schools.map(school => <SelectItem key={school.id} value={school.id}>{school.name}</SelectItem>)}</SelectContent></Select></div>
         <nav aria-label="Administrator account" className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm"><Link href="/users"><Users className="mr-2 h-4 w-4" />Users</Link></Button>
           <Button asChild variant="ghost" size="sm"><Link href="/profile"><User className="mr-2 h-4 w-4" />{user?.firstName}</Link></Button>
@@ -51,10 +59,7 @@ function ManagementHome({ selectionOnly }: { selectionOnly: boolean }) {
       </div>
     </header>
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      <nav aria-label="Management view" className="flex flex-wrap gap-2">
-        <Button asChild variant={selectionOnly ? 'outline' : 'default'}><Link href={GENERAL_SCHOOL_PATH} aria-current={!selectionOnly ? 'page' : undefined}><Globe2 className="mr-2 h-4 w-4" />General School — All Schools</Link></Button>
-        <Button asChild variant={selectionOnly ? 'default' : 'outline'}><Link href={SCHOOL_SELECTION_PATH} aria-current={selectionOnly ? 'page' : undefined}>Choose a school</Link></Button>
-      </nav>
+
       <section className="rounded-2xl bg-blue-950 p-6 text-white sm:p-8" aria-labelledby="management-heading">
         <p className="mb-2 text-sm font-medium text-blue-200">Academy management</p>
         <h1 id="management-heading" className="text-3xl font-bold sm:text-4xl">{selectionOnly ? 'Choose your school' : 'General School'}</h1>
@@ -74,7 +79,7 @@ function ManagementHome({ selectionOnly }: { selectionOnly: boolean }) {
             <CardHeader><Building2 className="mb-2 h-7 w-7 text-blue-600" /><CardTitle className="text-lg"><h3>{school.name}</h3></CardTitle></CardHeader>
             <CardContent className="flex flex-1 flex-col gap-4">
               <dl className="space-y-2 text-sm"><div><dt className="text-muted-foreground">Academic session</dt><dd className="font-medium">{school.currentSession || 'Not recorded'}</dd></div><div><dt className="text-muted-foreground">Current term</dt><dd className="font-medium">{school.currentTerm || 'Not recorded'}</dd></div></dl>
-              <Button asChild variant="outline" className="mt-auto w-full"><Link href={schoolManagementPath(school.id)} aria-label={`Manage ${school.name}`}>Manage branch<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+              <Button asChild variant="outline" className="mt-auto w-full"><Link href={preserveAdminPage(schoolManagementPath(school.id), pageSearch)} aria-label={`Manage ${school.name}`}>Manage branch<ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
             </CardContent>
           </Card>)}</div>}
       </section>

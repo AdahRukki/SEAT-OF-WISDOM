@@ -1,0 +1,48 @@
+name: Admin sidebar checks
+on:
+  push:
+    branches: [claude/email-ingest-realtime]
+  pull_request:
+    branches: [claude/email-ingest-realtime]
+permissions:
+  contents: read
+concurrency:
+  group: admin-sidebar-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Resolve legacy Replit mirror URLs for this runner
+        run: node -e 'const fs = require("fs"); const p = "package-lock.json"; fs.writeFileSync(p, fs.readFileSync(p, "utf8").replaceAll("http://package-firewall.replit.local/npm/", "https://registry.npmjs.org/"));'
+      - run: npm ci
+      - name: Compare TypeScript diagnostics with the previous commit
+        shell: bash
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/sidebar-baseline" HEAD^
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/sidebar-baseline/node_modules"
+          (cd "$RUNNER_TEMP/sidebar-baseline" && npm run check > "$RUNNER_TEMP/sidebar-types-before.log" 2>&1) || true
+          npm run check > "$RUNNER_TEMP/sidebar-types-after.log" 2>&1 || true
+          node scripts/compare-sidebar-types.mjs "$RUNNER_TEMP/sidebar-types-before.log" "$RUNNER_TEMP/sidebar-types-after.log"
+      - run: npm run test:regression
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Browser navigation and sidebar checks
+        shell: bash
+        run: |
+          npx vite --host 127.0.0.1 --port 5173 > "$RUNNER_TEMP/sidebar-vite.log" 2>&1 &
+          VITE_PID=$!
+          trap 'kill "$VITE_PID"' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:5173 > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:sidebar:browser

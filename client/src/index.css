@@ -424,3 +424,18 @@
     overflow-x: hidden;
   }
 }
+
+
+/* Sidebar layout: wide tables scroll inside their own wrappers, while the page
+   retains the full remaining width. Below 1024px the drawer reserves no space. */
+.admin-portal-content,
+.admin-portal-content main,
+.admin-portal-content .table-container,
+.admin-portal-content .finance-mobile > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-portal-content .finance-mobile [class*="overflow-x-auto"],
+.admin-portal-content .finance-mobile .relative.w-full.overflow-auto {
+  max-width: 100%;
+}
