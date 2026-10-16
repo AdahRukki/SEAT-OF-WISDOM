@@ -49,7 +49,7 @@ for (const width of [390, 820]) {
       await trigger.click();
       await drawer.getByRole('link', { name: 'Finance', exact: true }).click();
       await page.getByRole('heading', { name: 'Finance', exact: true }).waitFor();
-      await page.getByText('Fixture Ikpoto', { exact: true }).first().waitFor();
+      await page.getByText('Fixture Ikpoto', { exact: true }).filter({ visible: true }).first().waitFor();
       await drawer.waitFor({ state: 'hidden' });
       assert.equal(await page.locator('#admin-content').evaluate(element => element === document.activeElement), true);
       await noOverflow(page);
@@ -71,7 +71,7 @@ test('school changes retain the page and remount school-scoped content; General 
     await page.waitForURL(`**/portal/admin/school/${schools[1].id}?tab=finance`);
     await page.getByRole('heading', { name: 'Finance', exact: true }).waitFor();
     assert.match(await page.getByRole('combobox', { name: 'School', exact: true }).innerText(), /Bonsaac/);
-    await page.getByText('Fixture Bonsaac', { exact: true }).first().waitFor();
+    await page.getByText('Fixture Bonsaac', { exact: true }).filter({ visible: true }).first().waitFor();
     assert.equal(await page.getByText('Fixture Ikpoto', { exact: true }).count(), 0);
     assert.ok(requests.some(req => req.pathname === '/api/admin/students' && req.schoolId === schools[1].id));
     await page.goBack();
@@ -119,6 +119,23 @@ test('student, score, ratings, report cards, payment ledger and reconciliation r
     await page.getByText('Bank Statement Reconciliation', { exact: true }).waitFor();
     await page.getByText('Payment Ledger & Broadsheet', { exact: true }).waitFor();
     await noOverflow(page);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+
+test('student notification badges retain school-scoped pending-name-change alerts', async () => {
+  const { context, page, errors } = await setup();
+  try {
+    await context.route('**/api/admin/name-change-requests?**', route => route.fulfill({
+      json: new URL(route.request().url()).searchParams.get('schoolId') === schools[0].id ? [{ id: 'pending-name-fixture' }] : [],
+    }));
+    await page.goto(schoolURL(schools[0].id));
+    await side(page).getByTestId('sidebar-student-notifications').waitFor();
+    assert.equal(await side(page).getByTestId('sidebar-student-notifications').innerText(), '1');
+    await chooseView(page, schools[1].name);
+    await page.getByRole('heading', { name: 'School overview', exact: true }).waitFor();
+    assert.equal(await side(page).getByTestId('sidebar-student-notifications').count(), 0);
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });

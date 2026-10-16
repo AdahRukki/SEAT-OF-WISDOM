@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { BookOpen, Building2, ChevronDown, ClipboardCheck, FileText, Globe2, History, Inbox, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Users, Wallet, Bell } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { ADMIN_GROUPS, ADMIN_PAGES, adminPageHref, permittedAdminPages, selectedAdminPage } from '@/lib/admin-pages';
@@ -51,6 +52,14 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
   const activeKey = `${path}?${search}`;
   const pages = permittedAdminPages(user.role, user.permissions);
   const schoolPath = branch ? path : user.role === 'admin' ? SCHOOL_SELECTION_PATH : '/admin';
+  // Observe the dashboard's existing request cache; do not issue an additional
+  // request or expose a different school's pending student notifications.
+  const schoolId = branch ? path.slice('/admin/school/'.length) : user.schoolId || '';
+  const { data: nameChanges = [] } = useQuery<unknown[]>({
+    queryKey: ['/api/admin/name-change-requests', 'pending', schoolId],
+    enabled: false,
+  });
+  const pendingNames = user.role === 'admin' && dashboard && Array.isArray(nameChanges) ? nameChanges.length : 0;
 
   useEffect(() => {
     setPreferences(previous => previous.groups[activeGroup] !== false ? previous : { ...previous, groups: { ...previous.groups, [activeGroup]: true } });
@@ -79,7 +88,7 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
     const link = <Link href={href} onClick={selected} aria-current={active ? 'page' : undefined}
       aria-label={collapsed ? label : undefined}
       className={cn('flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2', active ? 'bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-100' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground', collapsed && 'justify-center px-2')}>
-      <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />{!collapsed && <span>{label}</span>}
+      <span className="relative shrink-0"><Icon className="h-5 w-5" aria-hidden="true" />{collapsed && label === 'Students' && pendingNames > 0 && <span aria-hidden="true" className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-500" />}</span>{!collapsed && <span className="flex min-w-0 flex-1 items-center justify-between gap-2"><span>{label}</span>{label === 'Students' && pendingNames > 0 && <span data-testid="sidebar-student-notifications" aria-label={`${pendingNames} pending name change requests`} className="rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">{pendingNames > 9 ? '9+' : pendingNames}</span>}</span>}
     </Link>;
     return collapsed ? <Tooltip key={label}><TooltipTrigger asChild>{link}</TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip> : <div key={label}>{link}</div>;
   }

@@ -39,6 +39,7 @@ export async function setup(role = 'admin', viewport = { width: 1440, height: 10
       body = schoolResponse;
     }
     if (url.pathname === '/api/current-academic-info') body = { currentTerm: 'First Term', currentSession: '2026/2027' };
+    if (url.pathname === '/api/admin/activity-logs') body = { logs: [], total: 0, page: 1, pageSize: 25 };
     if (url.pathname === '/api/logo') body = { logoUrl: '/favicon.png' };
     if (url.pathname.includes('financial-summary')) body = { totalCollected: 0, totalExpected: 0, totalOutstanding: 0, confirmedPayments: 0 };
     if (url.pathname.includes('ledger')) {
