@@ -1,3 +1,4 @@
+import { findPossibleBankDuplicate, insertBankCreditWithDuplicateCheck } from "./bank-duplicate-storage";
 import { formatStudentName } from "../shared/student-name";
 import { setHistoryContext, authorizeStudentMutation, lockHistorySchools, claimHistoryCommand, type HistoryContext, StudentHistoryError } from './student-history';
 import { summarizeTuition } from "../shared/tuition-summary";
@@ -4186,55 +4187,21 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // Task #128: scan a freshly-uploaded batch of bank transactions and flag any
-  // that share school + calendar day + amount + normalized depositor with an
-  // EARLIER same-school transaction. Returns count flagged. Comparison pool
-  // includes ALL prior transactions (matched/unmatched/confirmed).
+  // Shared comparison for explicit rechecks; preserves administrator decisions.
   async flagBankTransactionDuplicates(transactionIds: string[]): Promise<number> {
-    if (transactionIds.length === 0) return 0;
-    const { extractDepositor } = await import('./pdf-parser');
-    const newRows = await db
-      .select()
-      .from(bankTransactions)
-      .where(inArray(bankTransactions.id, transactionIds));
-
-    // Process in deterministic chronological order so peers inserted in the
-    // same batch resolve duplicate-of pointers to the strictly earlier row.
-    const orderedRows = [...newRows].sort((a, b) => {
-      const at = (a.createdAt ?? new Date(0)).getTime();
-      const bt = (b.createdAt ?? new Date(0)).getTime();
-      if (at !== bt) return at - bt;
-      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-    });
-
+    if (!transactionIds.length) return 0;
+    const rows = await db.select().from(bankTransactions)
+      .where(inArray(bankTransactions.id, transactionIds))
+      .orderBy(asc(bankTransactions.createdAt), asc(bankTransactions.id));
     let flagged = 0;
-    for (const row of orderedRows) {
-      if (!row.schoolId) continue;
-      const depKey = extractDepositor(row.rawDescription);
-      if (!depKey) continue;
-      // Strictly-earlier predicate: createdAt < row.createdAt, or equal
-      // createdAt with lexicographically smaller id (stable tiebreaker).
-      const rowCreatedAt = row.createdAt ?? new Date(0);
-      const candidates = await db
-        .select()
-        .from(bankTransactions)
-        .where(and(
-          eq(bankTransactions.schoolId, row.schoolId),
-          ne(bankTransactions.id, row.id),
-          sql`${bankTransactions.amount}::numeric = ${row.amount}::numeric`,
-          sql`DATE(${bankTransactions.transactionDate}) = DATE(${row.transactionDate})`,
-          sql`(${bankTransactions.createdAt} < ${rowCreatedAt} OR (${bankTransactions.createdAt} = ${rowCreatedAt} AND ${bankTransactions.id} < ${row.id}))`,
-        ))
-        .orderBy(asc(bankTransactions.createdAt), asc(bankTransactions.id));
-
-      const match = candidates.find((c) => extractDepositor(c.rawDescription) === depKey);
-      if (match) {
-        await db
-          .update(bankTransactions)
-          .set({ possibleDuplicate: true, duplicateOfTransactionId: match.id })
-          .where(eq(bankTransactions.id, row.id));
-        flagged++;
-      }
+    for (const row of rows) {
+      if (row.possibleDuplicate) continue;
+      const match = await findPossibleBankDuplicate(db, row);
+      if (!match) continue;
+      await db.update(bankTransactions)
+        .set({ possibleDuplicate: true, duplicateOfTransactionId: match.id })
+        .where(eq(bankTransactions.id, row.id));
+      flagged++;
     }
     return flagged;
   }
@@ -4384,8 +4351,8 @@ export class DatabaseStorage implements IStorage {
 
   // Task #128 phase 2: re-scan an existing statement for similar duplicates.
   // - Compares each transaction in the statement against the entire school's
-  //   transaction history (same school, same calendar day, same amount, same
-  //   normalized depositor).
+  //   transaction history (same school, same calendar day, same amount,
+  //   similar sender/narration, with compatible bank/account evidence).
   // - Skips pairs already in `cleared_duplicate_pairs`.
   // - Never overwrites an existing duplicateOfTransactionId — only newly
   //   detected matches are flagged.
@@ -4395,7 +4362,6 @@ export class DatabaseStorage implements IStorage {
     unchanged: number;
     flaggedTransactionIds: string[];
   }> {
-    const { extractDepositor } = await import('./pdf-parser');
     // Only credit transactions can be duplicate deposits; debit rows are never flagged.
     const stmtRows = await db
       .select()
@@ -4411,32 +4377,7 @@ export class DatabaseStorage implements IStorage {
     for (const row of stmtRows) {
       if (row.possibleDuplicate) { unchanged++; continue; }
       if (!row.schoolId) { unchanged++; continue; }
-      const depKey = extractDepositor(row.rawDescription);
-      if (!depKey) { unchanged++; continue; }
-      // Strictly-earlier predicate so a newer row never gets pointed at a
-      // newer row (avoids "A is duplicate of B" while "B is duplicate of A"):
-      // require candidate.createdAt < row.createdAt, or equal createdAt with
-      // smaller id as a tiebreaker. Also filter out the row itself.
-      const candidates = await db
-        .select()
-        .from(bankTransactions)
-        .where(and(
-          eq(bankTransactions.schoolId, row.schoolId),
-          eq(bankTransactions.transactionType, 'credit'),
-          ne(bankTransactions.id, row.id),
-          sql`${bankTransactions.amount}::numeric = ${row.amount}::numeric`,
-          sql`DATE(${bankTransactions.transactionDate}) = DATE(${row.transactionDate})`,
-          sql`(${bankTransactions.createdAt} < ${row.createdAt} OR (${bankTransactions.createdAt} = ${row.createdAt} AND ${bankTransactions.id} < ${row.id}))`,
-        ))
-        .orderBy(asc(bankTransactions.createdAt), asc(bankTransactions.id));
-
-      let chosen: typeof candidates[number] | null = null;
-      for (const c of candidates) {
-        if (extractDepositor(c.rawDescription) !== depKey) continue;
-        if (await this.isClearedDuplicatePair('transaction', row.id, c.id)) continue;
-        chosen = c;
-        break;
-      }
+      const chosen = await findPossibleBankDuplicate(db, row);
       if (chosen) {
         await db
           .update(bankTransactions)
@@ -5301,10 +5242,7 @@ export class DatabaseStorage implements IStorage {
   async createBankTransaction(data: InsertBankTransaction): Promise<BankTransaction> {
     console.log('[createBankTransaction] Creating transaction with fingerprint:', data.fingerprint);
     
-    const [transaction] = await db
-      .insert(bankTransactions)
-      .values(data)
-      .returning();
+    const transaction = await db.transaction(tx => insertBankCreditWithDuplicateCheck(tx, data));
 
     console.log('[createBankTransaction] Transaction created:', transaction.id);
     return transaction;
@@ -5735,9 +5673,7 @@ export class DatabaseStorage implements IStorage {
       const [dd = "01", mm = "01", yyyy = "2000"] = item.transactionDate.split("/");
       const transactionDate = new Date(`${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`);
 
-      const [transaction] = await tx
-        .insert(bankTransactions)
-        .values({
+      const transaction = await insertBankCreditWithDuplicateCheck(tx, {
           statementId: null,
           schoolId: schoolId ?? null,
           transactionDate,
@@ -5754,8 +5690,7 @@ export class DatabaseStorage implements IStorage {
           emailFrom: item.fromAddress ?? null,
           emailSubject: item.subject ?? null,
           emailReceivedAt: item.receivedAt ?? null,
-        })
-        .returning();
+        });
 
       const [updated] = await tx
         .update(emailReviewQueue)
