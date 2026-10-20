@@ -6,6 +6,41 @@ const schoolURL = id => `${baseURL}/portal/admin/school/${id}`;
 const side = page => page.locator('aside[data-testid="admin-sidebar"]');
 const noOverflow = async page => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 
+for (const width of [1440, 390]) {
+  test(`tuition payment status uses tuition paid, including other-fee-only payments, at ${width}px`, async () => {
+    const { context, page, errors } = await setup('admin', { width, height: 1000 });
+    const students = [
+      { firstName: 'Unpaid', tuitionPaid: 0, nonTuitionPaid: 0 },
+      { firstName: 'BooksOnly', tuitionPaid: 0, nonTuitionPaid: 1000 },
+      { firstName: 'Partial', tuitionPaid: 500, nonTuitionPaid: 500 },
+      { firstName: 'Full', tuitionPaid: 1000, nonTuitionPaid: 0 },
+    ];
+    try {
+      await context.route('**/api/payments/ledger?**', route => route.fulfill({ json: {
+        entries: students.map(student => ({ ...student, studentDbId: student.firstName, studentId: `SOWA/${student.firstName}`, lastName: 'Filter', className: 'Primary 1', classId: 'fixture-class', parentWhatsapp: null, studentType: 'returning', totalPaid: student.tuitionPaid + student.nonTuitionPaid, tuitionKnown: true, discountKnown: true, tuitionSource: 'scoped', totalAssigned: 1000, tuitionAssigned: 1000, discount: 0, balance: 1000 - student.tuitionPaid, paymentCount: student.firstName === 'Unpaid' ? 0 : 1, lastPaymentDate: null })),
+        meta: { hasTuitionFeeType: true, hasGlobalTuition: false, hasScopedTuition: true },
+      } }));
+      await page.goto(`${schoolURL(schools[0].id)}?tab=finance`);
+      await page.getByText('Filter Unpaid', { exact: true }).filter({ visible: true }).waitFor();
+      const status = page.getByRole('combobox', { name: 'Payment Status', exact: true });
+      for (const [option, included] of [
+        ['No Payment (₦0 paid)', ['Unpaid', 'BooksOnly']],
+        ['Partially Paid', ['Partial']],
+        ['Fully Paid', ['Full']],
+        ['All Students', students.map(student => student.firstName)],
+      ]) {
+        await status.click();
+        await page.getByRole('option', { name: option, exact: true }).click();
+        for (const student of students) {
+          assert.equal(await page.getByText(`Filter ${student.firstName}`, { exact: true }).filter({ visible: true }).count(), included.includes(student.firstName) ? 1 : 0);
+        }
+      }
+      await noOverflow(page);
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  });
+}
+
 test('desktop groups, active links, browser history, tooltips and saved preferences', async () => {
   const { context, page, errors } = await setup();
   try {

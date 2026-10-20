@@ -141,9 +141,26 @@ test('tuition status and ledger filters do not count books as tuition or guess u
   const code=ts.transpileModule('const filter='+filter!.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
   const factory=new Function('nameSearch','confirmationFiltered','paymentStatusFilter','studentTypeFilter',code+';return filter;');
   assert.equal(factory('',false,'fully-paid','all')([entry]).length,0);
-  assert.equal(factory('',false,'outstanding','all')([entry]).length,1);
-  assert.equal(factory('',false,'paid','all')([entry]).length,1);
-  assert.equal(factory('',false,'outstanding','all')([{...entry,tuitionKnown:false}]).length,0);
+  assert.equal(factory('',false,'partial','all')([entry]).length,1);
+  assert.equal(factory('',false,'no-payment','all')([entry]).length,0);
+  assert.equal(factory('',false,'partial','all')([{...entry,tuitionKnown:false}]).length,0);
+  const unpaid={...entry,studentDbId:'unpaid',tuitionPaid:0,totalPaid:0,paymentCount:0};
+  const booksOnly={...entry,studentDbId:'books-only',tuitionPaid:0,totalPaid:20000,nonTuitionPaid:20000,paymentCount:1};
+  const fullyPaid={...entry,studentDbId:'fully-paid',tuitionPaid:100000};
+  const overpaid={...entry,studentDbId:'overpaid',tuitionPaid:100001};
+  const rows=[unpaid,booksOnly,entry,fullyPaid,overpaid];
+  assert.deepEqual(factory('',false,'all','all')(rows),rows);
+  assert.deepEqual(factory('',false,'no-payment','all')(rows),[unpaid,booksOnly]);
+  assert.deepEqual(factory('',false,'partial','all')(rows),[entry]);
+  assert.deepEqual(factory('',false,'fully-paid','all')(rows),[fullyPaid,overpaid]);
+  // Missing values are not actual zero payments; unknown charges cannot prove
+  // partial/full payment. No new tuition amount is calculated by the filter.
+  assert.equal(factory('',false,'no-payment','all')([{...unpaid,tuitionPaid:undefined},{...unpaid,tuitionPaid:null}]).length,0);
+  assert.equal(factory('',false,'no-payment','all')([{...unpaid,tuitionKnown:false}]).length,1);
+  assert.equal(factory('',false,'fully-paid','all')([{...fullyPaid,tuitionKnown:false},{...unpaid,tuitionAssigned:0}]).length,0);
+  assert.equal(factory('',false,'partial','all')([{...entry,tuitionPaid:0.01}]).length,1);
+  assert.equal(factory('',false,'no-payment','new')([{...unpaid,studentType:'new'},booksOnly]).length,1);
+  assert.equal(factory('',true,'no-payment','all')(rows).includes(unpaid),false);
 });
 test('mixed-purpose allocations use their own purposes and count one transfer per student; reversal removes all shares',async()=>{
   const {pg,store}=await fixture();try{

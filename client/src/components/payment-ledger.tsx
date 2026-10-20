@@ -202,7 +202,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
   const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
   const [tuitionBannerDismissed, setTuitionBannerDismissed] = useState<string>("");
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "outstanding" | "paid" | "fully-paid">("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "no-payment" | "partial" | "fully-paid">("all");
   const [studentTypeFilter, setStudentTypeFilter] = useState<string>("all");
   const [visibleColumns, setVisibleColumns] = useState<Set<ColKey>>(() => loadVisibleColumns(userId));
 
@@ -341,18 +341,17 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         })
       : (Array.isArray(ledger) ? ledger : []);
 
-    // Payment status narrows the search results using confirmed payments and tuition
-    // (balance > 0). Type filter narrows to new or returning students.
+    // Payment status uses the existing tuition-paid values, independent of
+    // payments for other items. Type filter narrows to new or returning students.
     // Both flow through to the table, count, Excel export, Print view, and
     // admin grand total because they all read from filteredLedger.
     return (() => {
       let result = searchedLedger.filter((e) => {
         if (confirmationFiltered) return e.paymentCount > 0;
-        const hasPaid = e.paymentCount > 0 && e.totalPaid > 0;
-        const assigned = Math.round((e.tuitionAssigned || 0) * 100);
-        const paid = Math.round((e.tuitionPaid || 0) * 100);
-        if (paymentStatusFilter === "outstanding") return e.tuitionKnown && assigned > paid;
-        if (paymentStatusFilter === "paid") return hasPaid;
+        const assigned = e.tuitionAssigned;
+        const paid = e.tuitionPaid;
+        if (paymentStatusFilter === "no-payment") return paid === 0;
+        if (paymentStatusFilter === "partial") return e.tuitionKnown && paid > 0 && paid < assigned;
         if (paymentStatusFilter === "fully-paid") return e.tuitionKnown && assigned > 0 && paid >= assigned;
         return true;
       });
@@ -528,15 +527,15 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       {confirmationFiltered && <p className="text-sm text-muted-foreground" role="status">Confirmed collections · {confirmationRangeLabel(confirmedFrom, confirmedTo)} · Nigerian time. Only amounts confirmed in this range are shown; full-term balances and payment status are hidden.</p>}
       <div className="flex flex-wrap items-end gap-3 print:hidden">
         <div className="flex-1 min-w-[180px] sm:flex-none sm:w-56 space-y-1">
-          <label className="text-sm font-medium" htmlFor="ledger-payment-status">Payment status</label>
+          <label className="text-sm font-medium" htmlFor="ledger-payment-status">Payment Status</label>
           <Select value={confirmationFiltered ? "all" : paymentStatusFilter}
             onValueChange={value => setPaymentStatusFilter(value as typeof paymentStatusFilter)} disabled={confirmationFiltered}>
             <SelectTrigger id="ledger-payment-status" className="min-h-11" aria-describedby={confirmationFiltered ? "ledger-status-help" : undefined}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Students</SelectItem>
-              <SelectItem value="outstanding">Outstanding</SelectItem>
-              <SelectItem value="paid">Has Paid</SelectItem>
-              <SelectItem value="fully-paid">Tuition Fully Paid</SelectItem>
+              <SelectItem value="no-payment">No Payment (₦0 paid)</SelectItem>
+              <SelectItem value="partial">Partially Paid</SelectItem>
+              <SelectItem value="fully-paid">Fully Paid</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -559,7 +558,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             </DropdownMenuSub>
           </DropdownMenuContent>
         </DropdownMenu>
-        {confirmationFiltered && <p id="ledger-status-help" className="w-full text-xs text-muted-foreground">Clear confirmation dates to filter by outstanding or fully paid status.</p>}
+        {confirmationFiltered && <p id="ledger-status-help" className="w-full text-xs text-muted-foreground">Clear confirmation dates to filter by tuition payment status.</p>}
       </div>
       <p className="text-sm text-muted-foreground sm:hidden print:hidden">{selectedTerm} · {selectedSession} · {printClassName}</p>
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-start sm:items-end print:hidden">
