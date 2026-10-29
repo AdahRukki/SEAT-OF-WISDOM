@@ -5085,6 +5085,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const firstPaymentOnly = req.query.firstPaymentOnly === 'true';
       if (firstPaymentOnly && (!term || !session || (!from && !to))) return res.status(400).json({ error: "Choose a term, session and confirmation dates for first payments" });
       const ledger = await storage.getStudentPaymentLedger(schoolId, classId || undefined, term || undefined, session || undefined, from, to);
+      // The operational ledger lists active accounts. Keep historical financial
+      // records in storage for historical reporting, without displaying inactive
+      // students in the ledger or its detailed exports.
+      ledger.entries = ledger.entries.filter(entry => entry.accountActive !== false);
       const includeRecords = req.query.includeRecords === 'true';
       if (firstPaymentOnly || includeRecords) {
         const allRecords = await getLedgerPayments(schoolId, term, session);

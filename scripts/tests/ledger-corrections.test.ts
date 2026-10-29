@@ -172,6 +172,8 @@ test('tuition status and ledger filters do not count books as tuition or guess u
   assert.equal(factory('',false,'partial','all')([{...entry,tuitionPaid:0.01}]).length,1);
   assert.equal(factory('',false,'no-payment','new')([{...unpaid,studentType:'new'},booksOnly]).length,1);
   assert.equal(factory('',true,'no-payment','all')(rows).includes(unpaid),false);
+  assert.deepEqual(factory('',false,'all','all')([{...entry,accountActive:false},{...unpaid,accountActive:true}]),[{...unpaid,accountActive:true}]);
+  assert.equal(factory('',true,'all','all')([{...entry,accountActive:false}]).length,0);
 });
 test('mixed-purpose allocations use their own purposes and count one transfer per student; reversal removes all shares',async()=>{
   const {pg,store}=await fixture();try{
@@ -248,6 +250,7 @@ test('existing snapshots preserve disabled/transferred historical students, clas
       INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session,student_type) VALUES ('tuition','old',55000,'Third Term','2025/2026','returning');
       UPDATE users SET is_active=false,school_id='other'; UPDATE students SET class_id='foreign',discount=99999; DELETE FROM promotion_records;`);
     const entry=(await store.getStudentPaymentLedger('school','old','Third Term','2025/2026')).entries[0];
+    assert.equal(entry.accountActive,false);
     assert.equal(entry.tuitionAssigned,50000);assert.equal(entry.discount,5000);assert.equal(entry.discountKnown,true);assert.equal(entry.className,'JSS1');assert.equal(entry.tuitionPaid,30000);
     assert.equal((await store.getPaymentBroadsheet('school','Third Term','2025/2026')).grandTotal.balance,20000);
   }finally{await pg.close();}

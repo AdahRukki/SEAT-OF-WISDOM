@@ -91,3 +91,23 @@ test('ledger API rejects first-payment filtering without a date range before que
   await handler({user:{role:'admin'},query:{schoolId:'a',term:'First Term',session:'2026/2027',firstPaymentOnly:'true'}},res);
   assert.equal(status,400);
 });
+
+test('ledger API excludes inactive accounts and their exported records for current and historical periods', async () => {
+  const savedEntries = [
+    {studentDbId:'active',accountActive:true,tuitionAssigned:10000,tuitionKnown:true},
+    {studentDbId:'disabled',accountActive:false,tuitionAssigned:20000,tuitionKnown:true},
+  ];
+  const savedPayments = [record('active',from,{amount:'3000',isTuition:true}),record('disabled',from,{amount:'5000',isTuition:true})];
+  const handler = ledgerHandler({getStudentPaymentLedger:async()=>({entries:savedEntries.map(row=>({...row})),meta:{}})},async()=>savedPayments);
+  for (const [term,session] of [['First Term','2026/2027'],['Third Term','2025/2026']]) {
+    for (const includeRecords of ['false','true']) {
+      let body:any;
+      await handler({user:{role:'admin'},query:{schoolId:'school',term,session,includeRecords}},
+        {json:(value:any)=>body=value,status:()=>{throw Error('Unexpected status');}});
+      assert.deepEqual(body.entries.map((row:any)=>row.studentDbId),['active']);
+      if(includeRecords==='true') assert.deepEqual(body.paymentRecords.map((row:any)=>row.studentDbId),['active']);
+    }
+  }
+  assert.equal(savedEntries.length,2);
+  assert.equal(savedPayments.length,2);
+});

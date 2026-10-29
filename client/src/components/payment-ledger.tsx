@@ -138,6 +138,7 @@ interface LedgerEntry {
   tuitionSource: string;
   tuitionReason?: string | null;
   historicalDiscountNote?: string | null;
+  accountActive?: boolean;
   totalAssigned: number;
   tuitionAssigned: number;
   discount: number;
@@ -357,6 +358,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     // admin grand total because they all read from filteredLedger.
     return (() => {
       let result = searchedLedger.filter((e) => {
+        if (e.accountActive === false) return false;
         if (confirmationFiltered) return e.paymentCount > 0;
         const assigned = e.tuitionAssigned;
         const paid = e.tuitionPaid;

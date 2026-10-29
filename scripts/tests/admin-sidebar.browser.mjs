@@ -63,6 +63,7 @@ for (const width of [1440, 390]) {
       { firstName: 'BooksOnly', tuitionPaid: 0, nonTuitionPaid: 1000 },
       { firstName: 'Partial', tuitionPaid: 500, nonTuitionPaid: 500 },
       { firstName: 'Full', tuitionPaid: 1000, nonTuitionPaid: 0 },
+      { firstName: 'Disabled', tuitionPaid: 0, nonTuitionPaid: 0, accountActive: false },
     ];
     try {
       await context.route('**/api/payments/ledger?**', route => route.fulfill({ json: {
@@ -76,7 +77,7 @@ for (const width of [1440, 390]) {
         ['No Payment (₦0 paid)', ['Unpaid', 'BooksOnly']],
         ['Partially Paid', ['Partial']],
         ['Fully Paid', ['Full']],
-        ['All Students', students.map(student => student.firstName)],
+        ['All Students', students.filter(student => student.accountActive !== false).map(student => student.firstName)],
       ]) {
         await status.click();
         await page.getByRole('option', { name: option, exact: true }).click();

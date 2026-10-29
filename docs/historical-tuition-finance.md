@@ -23,6 +23,8 @@ The Finance term/session selection controls Ledger, Recording, entry balances, f
 
 Finance keeps verification explanations inside the **Data details** and **Ledger details** popups. They open only when requested and close with the close button, an outside tap or Escape. Tuition table cells show the amount or `Not verified`; the source, reason and historical discount note are available in each student's Payment Details window. Downloaded verification notes and all calculation rules remain unchanged.
 
+The operational Payment Ledger now lists active student accounts only, including when viewing an earlier term/session. Inactive accounts are excluded from the visible count, ledger totals, printouts and ledger workbooks (including payment-detail exports). Their saved charges, payments and historical reporting records are retained. Account activity is separate from Payment Status (paid/unpaid); no payment or tuition calculations are changed by this display scope.
+
 ## Historical limitations and reviewed corrections
 
 Old snapshots did not retain discount or student type. Existing events may establish these facts, but missing evidence cannot be recovered automatically. If no historical discount is recorded, the exact saved class rate is shown without today's discount, with an explicit note; it is not evidence that a past concession never existed. Where type-specific prices require an unknown historical type, tuition remains unverified. Existing saved individual charges are not discounted again.

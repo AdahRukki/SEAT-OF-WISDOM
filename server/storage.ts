@@ -259,6 +259,7 @@ export interface IStorage {
       tuitionSource: string;
       tuitionReason?: string | null;
       historicalDiscountNote?: string | null;
+      accountActive?: boolean;
       totalAssigned: number;
       tuitionAssigned: number;
       balance: number;
@@ -1776,7 +1777,7 @@ export class DatabaseStorage implements IStorage {
           GROUP BY sf.student_id
         )
         SELECT s.id AS "studentDbId",s.student_id AS "studentId",u.first_name AS "firstName",u.middle_name AS "middleName",u.last_name AS "lastName",
-          s.class_id AS "classId",c.name AS "className",u.school_id AS "schoolId",s.parent_whatsapp AS "parentWhatsapp",s.discount,
+          s.class_id AS "classId",c.name AS "className",u.school_id AS "schoolId",s.parent_whatsapp AS "parentWhatsapp",s.discount,u.is_active AS "accountActive",
           s.student_type AS "studentType",s.student_type_flipped_term AS "flippedTerm",s.student_type_flipped_session AS "flippedSession",
           to_jsonb(s)->>'status' AS status,charges.amount AS "savedTuition",
           COALESCE(t.paid,0) AS "totalPaid",COALESCE(t.tuition_paid,0) AS "tuitionPaid",COALESCE(t.other_paid,0) AS "nonTuitionPaid",
@@ -1804,7 +1805,7 @@ export class DatabaseStorage implements IStorage {
           rates,events: history.eventsByStudent.get(row.studentDbId),snapshots: history.snapshotsByStudent.get(row.studentDbId),classNames: history.classNames });
         if (!facts.included || classId && facts.classId !== classId) return [];
         const tuitionPaid = Number(row.tuitionPaid) || 0;
-        return [{ ...row,...facts,totalAssigned: facts.tuitionAssigned,
+        return [{ ...row,...facts,accountActive: row.accountActive === true,totalAssigned: facts.tuitionAssigned,
           tuitionPaid,nonTuitionPaid: Number(row.nonTuitionPaid) || 0,totalPaid: Number(row.totalPaid) || 0,
           balance: facts.tuitionKnown ? Math.max(0,Math.round((facts.tuitionAssigned-tuitionPaid)*100)/100) : 0,
           paymentCount: Number(row.paymentCount) || 0,
