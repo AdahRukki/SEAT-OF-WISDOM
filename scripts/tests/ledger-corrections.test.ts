@@ -3,14 +3,19 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
-import {sql} from 'drizzle-orm';
+import {sql,and,eq} from 'drizzle-orm';
+import {drizzle} from 'drizzle-orm/pglite';
+import {feePaymentRecords,schools,classes,tuitionClassAmounts,paymentAuditLogs} from '../../shared/schema';
 import {PgDialect} from 'drizzle-orm/pg-core';
 import {buildLedgerWorkbook} from '../../client/src/lib/ledger-workbook';
 import * as XLSX from 'xlsx';
+import { resolveHistoricalTuition } from '../../shared/historical-tuition';
+import { loadFinanceHistory, loadFinancePeriods } from '../../server/finance-history';
+import { summarizeTuition } from '../../shared/tuition-summary';
 const source=fs.readFileSync(new URL('../../server/storage.ts',import.meta.url),'utf8');
 const ast=ts.createSourceFile('storage.ts',source,ts.ScriptTarget.Latest,true);
 const cls=ast.statements.find(n=>ts.isClassDeclaration(n)&&n.name?.text==='DatabaseStorage') as ts.ClassDeclaration;
-const methods=cls.members.filter(n=>ts.isMethodDeclaration(n)&&['getStudentPaymentLedger','buildTuitionResolver','reviewNameChangeRequest'].includes(n.name.getText(ast))).map(n=>n.getText(ast)).join('\n');
+const methods=cls.members.filter(n=>ts.isMethodDeclaration(n)&&['getStudentPaymentLedger','getStudentTuitionBalances','getPaymentBroadsheet','getFinancialSummary','getTuitionCollectionByClass','upsertTuitionClassAmounts','buildTuitionResolver','reviewNameChangeRequest'].includes(n.name.getText(ast))).map(n=>n.getText(ast)).join('\n');
 const dates=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='confirmedDateClause')!;
 const compiled=ts.transpileModule(dates.getText(ast)+'\nclass Storage {'+methods+'}',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
 async function fixture(){
@@ -18,15 +23,22 @@ async function fixture(){
   const pg=new PGlite();
   await pg.exec(`
     CREATE TABLE users (id text PRIMARY KEY,first_name text NOT NULL,last_name text NOT NULL,is_active boolean,school_id text,middle_name text,updated_at timestamp);
+    CREATE TABLE schools (id text PRIMARY KEY,current_term text,current_session text);
+    INSERT INTO schools VALUES ('school','First Term','2026/2027'),('other','First Term','2026/2027');
     CREATE TABLE students (id text PRIMARY KEY,user_id text,student_id text,class_id text,parent_whatsapp text,discount numeric,student_type text,student_type_flipped_term text,student_type_flipped_session text);
     CREATE TABLE classes (id text PRIMARY KEY,name text,school_id text);
     CREATE TABLE fee_types (id text PRIMARY KEY,name text,school_id text,is_tuition boolean,is_active boolean,created_at timestamp);
+    CREATE TABLE tuition_class_amounts (fee_type_id text,class_id text,amount numeric,term text,session text,student_type text,id uuid DEFAULT gen_random_uuid(),created_at timestamp DEFAULT now());
+    INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session,student_type) VALUES ('tuition','new',105000,NULL,NULL,NULL),('tuition','old',55000,NULL,NULL,NULL);
     CREATE TABLE student_fees (student_id text,fee_type_id text,amount numeric,term text,session text);
     CREATE TABLE fee_payment_records (id text PRIMARY KEY,student_id text,school_id text,status text,amount numeric,purpose text,term text,session text,payment_date timestamp,confirmed_at timestamp);
     CREATE TABLE fee_payment_student_splits (student_id text,payment_record_id text,amount numeric,purpose text);
     CREATE TABLE promotion_records (student_id text,school_id text,session text,from_class_id text,is_bulk boolean);
     CREATE TABLE student_name_change_requests (id text PRIMARY KEY,status text,reviewed_by text,reviewer_notes text,reviewed_at timestamp);
     INSERT INTO student_name_change_requests VALUES ('request','pending',null,null,null);
+    CREATE TABLE payment_allocations (bank_transaction_id text,payment_record_id text,allocated_amount numeric);
+    CREATE TABLE bank_transactions (id text,statement_id text,amount numeric);
+    CREATE TABLE bank_statements (id text,bank_format text);
     CREATE TABLE assessments (student_id text,class_id text,term text,session text);
     INSERT INTO classes VALUES ('old','JSS1','school'),('new','JSS2','school'),('foreign','Other','other');
     INSERT INTO users VALUES ('u','Ada','Oldname',true,'school',null,NOW());
@@ -43,13 +55,12 @@ async function fixture(){
     INSERT INTO fee_payment_student_splits VALUES ('s','split',10000,NULL);
     INSERT INTO promotion_records VALUES ('s','school','2025/2026','old',true);
   `);
-  const adapter=(connection:any):any=>({execute: async(query:any)=>{const q=new PgDialect().sqlToQuery(query); return connection.query(q.sql,q.params);},transaction:async(fn:any)=>connection.transaction((tx:any)=>fn(adapter(tx)))});
-  const db=adapter(pg);
-  const Storage=new Function('db','sql',compiled+'; return Storage;')(db,sql);
+  const db=drizzle(pg);
+  const Storage=new Function('db','sql','resolveHistoricalTuition','loadFinanceHistory','summarizeTuition','feePaymentRecords','schools','classes','tuitionClassAmounts','paymentAuditLogs','eq','and',compiled+'; return Storage;')(db,sql,resolveHistoricalTuition,loadFinanceHistory,summarizeTuition,feePaymentRecords,schools,classes,tuitionClassAmounts,paymentAuditLogs,eq,and);
   const store=new Storage();
   store.getCurrentAcademicInfo=async()=>({currentTerm:'First Term',currentSession:'2026/2027'});
   store.getTuitionClassAmounts=async()=>[{classId:'new',studentType:null,term:null,session:null,amount:'105000'},{classId:'old',studentType:null,term:null,session:null,amount:'55000'}];
-  return {pg,store};
+  return {pg,store,db};
 }
 test('actual ledger SQL separates purposes, counts only student split share, and preserves school/status scope',async()=>{
   const {pg,store}=await fixture();try{
@@ -172,5 +183,139 @@ test('mixed-purpose allocations use their own purposes and count one transfer pe
     await pg.exec("UPDATE fee_payment_records SET status='reversed' WHERE id='split'");
     e=(await store.getStudentPaymentLedger('school',undefined,'First Term','2026/2027')).entries[0];
     assert.equal(e.totalPaid,90000);assert.equal(e.tuitionPaid,70000);assert.equal(e.nonTuitionPaid,20000);assert.equal(e.paymentCount,2);
+  }finally{await pg.close();}
+});
+
+test('an exact historical class rate supplies tuition without an individual charge; every Finance view agrees',async()=>{
+  const {pg,store}=await fixture();try{
+    await pg.exec("INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session) VALUES ('tuition','old',55000,'Third Term','2025/2026')");
+    const {entries:[entry]}=await store.getStudentPaymentLedger('school','old','Third Term','2025/2026');
+    assert.equal(entry.tuitionKnown,true);assert.equal(entry.tuitionAssigned,55000);assert.equal(entry.balance,25000);
+    assert.equal(entry.tuitionSource,'Period-specific class rate');assert.equal(entry.className,'JSS1');
+    assert.equal(entry.discountKnown,false);assert.match(entry.historicalDiscountNote,/today’s discount has not/);
+    const balances=await store.getStudentTuitionBalances('school','Third Term','2025/2026');
+    const sheet=await store.getPaymentBroadsheet('school','Third Term','2025/2026');
+    const summary=await store.getFinancialSummary('school','Third Term','2025/2026');
+    const byClass=await store.getTuitionCollectionByClass('school','Third Term','2025/2026');
+    assert.equal(balances[0].tuitionAssigned,entry.tuitionAssigned);assert.equal(balances[0].tuitionKnown,true);
+    assert.equal(sheet.grandTotal.totalAssigned,entry.tuitionAssigned);assert.equal(sheet.grandTotal.totalPaid,entry.tuitionPaid);assert.equal(sheet.grandTotal.balance,entry.balance);
+    assert.equal(summary.totalFees,entry.tuitionAssigned);assert.equal(summary.totalPaid,entry.tuitionPaid);assert.equal(summary.totalOutstanding,entry.balance);
+    assert.equal(byClass.find((row:any)=>row.classId==='old').expectedTuition,entry.tuitionAssigned);
+    const exported=XLSX.utils.sheet_to_json<any>(buildLedgerWorkbook([entry],[],{},false).Sheets['Ledger summary'])[0];
+    assert.equal(exported['Tuition charge (NGN)'],entry.tuitionAssigned);assert.equal(exported['Charge source'],entry.tuitionSource);
+    await pg.exec("UPDATE students SET discount=99999,class_id='foreign'; UPDATE tuition_class_amounts SET amount=999999 WHERE term IS NULL; UPDATE fee_types SET is_active=false WHERE id='tuition'");
+    const later=(await store.getStudentPaymentLedger('school','old','Third Term','2025/2026')).entries[0];
+    assert.equal(later.tuitionAssigned,55000);assert.equal(later.balance,25000);assert.equal(later.classId,'old');
+  }finally{await pg.close();}
+});
+
+test('individual charges, including zero, override a class rate once and never deduct the current discount',async()=>{
+  const {pg,store}=await fixture();try{
+    await pg.exec("INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session) VALUES ('tuition','old',100000,'Third Term','2025/2026'); INSERT INTO student_fees VALUES ('s','tuition',45000,'Third Term','2025/2026')");
+    let entry=(await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0];
+    assert.equal(entry.tuitionAssigned,45000);assert.equal(entry.discount,0);assert.equal(entry.tuitionSource,'Saved term charge');
+    assert.equal((await store.getPaymentBroadsheet('school','Third Term','2025/2026')).grandTotal.totalAssigned,45000);
+    await pg.exec('UPDATE student_fees SET amount=0');
+    entry=(await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0];
+    assert.equal(entry.tuitionKnown,true);assert.equal(entry.tuitionAssigned,0);assert.equal(entry.balance,0);
+    assert.equal((await store.getFinancialSummary('school','Third Term','2025/2026')).totalFees,0);
+  }finally{await pg.close();}
+});
+
+test('historical new/returning selection uses the recorded flip period, never the mutable current type',async()=>{
+  const {pg,store}=await fixture();try{
+    await pg.exec("INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session,student_type) VALUES ('tuition','old',100000,'Third Term','2025/2026','new'),('tuition','old',60000,'Third Term','2025/2026','returning'); UPDATE students SET student_type_flipped_term='Third Term',student_type_flipped_session='2025/2026'");
+    let entry=(await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0];
+    assert.equal(entry.studentType,'new');assert.equal(entry.tuitionAssigned,100000);
+    await pg.exec("UPDATE students SET student_type='new',student_type_flipped_term='Second Term'");
+    entry=(await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0];
+    assert.equal(entry.studentType,'returning');assert.equal(entry.tuitionAssigned,60000);
+    await pg.exec('UPDATE students SET student_type_flipped_term=NULL,student_type_flipped_session=NULL');
+    entry=(await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0];
+    assert.equal(entry.studentType,'unknown');assert.equal(entry.tuitionKnown,false);assert.match(entry.tuitionReason,/student type/);
+  }finally{await pg.close();}
+});
+
+async function addHistory(pg:any){
+  await pg.exec(`CREATE TABLE student_status_events(student_id text,school_id text,class_id text,class_name text,event_type text,term text,session text,period_verified boolean,class_verified boolean,admission_category text,sequence bigint,previous_data jsonb,new_data jsonb);
+    CREATE TABLE student_population_snapshots(school_id text,term text,session text,snapshot_kind text,students jsonb);`);
+}
+
+test('existing snapshots preserve disabled/transferred historical students, class and recorded discount',async()=>{
+  const {pg,store}=await fixture();try{
+    await addHistory(pg);
+    await pg.exec(`INSERT INTO student_population_snapshots VALUES ('school','Third Term','2025/2026','term_end','[{"studentId":"s","classId":"old","className":"JSS1","historicalClassVerified":true,"status":"active","discount":5000,"studentType":"returning"}]');
+      INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session,student_type) VALUES ('tuition','old',55000,'Third Term','2025/2026','returning');
+      UPDATE users SET is_active=false,school_id='other'; UPDATE students SET class_id='foreign',discount=99999; DELETE FROM promotion_records;`);
+    const entry=(await store.getStudentPaymentLedger('school','old','Third Term','2025/2026')).entries[0];
+    assert.equal(entry.tuitionAssigned,50000);assert.equal(entry.discount,5000);assert.equal(entry.discountKnown,true);assert.equal(entry.className,'JSS1');assert.equal(entry.tuitionPaid,30000);
+    assert.equal((await store.getPaymentBroadsheet('school','Third Term','2025/2026')).grandTotal.balance,20000);
+  }finally{await pg.close();}
+});
+
+test('verified later admissions do not create debts in earlier periods',async()=>{
+  const {pg,store}=await fixture();try{
+    await addHistory(pg);
+    await pg.exec(`DELETE FROM fee_payment_records WHERE id='historic'; DELETE FROM promotion_records;
+      INSERT INTO student_status_events VALUES ('s','school','new','JSS2','admission','First Term','2026/2027',true,true,'new',1,NULL,'{}');
+      INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session) VALUES ('tuition','new',55000,'Third Term','2025/2026');`);
+    assert.equal((await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries.length,0);
+    assert.equal((await store.getFinancialSummary('school','Third Term','2025/2026')).totalOutstanding,0);
+    assert.equal((await store.getPaymentBroadsheet('school','Third Term','2025/2026')).classes.length,0);
+  }finally{await pg.close();}
+});
+
+test('ambiguous class histories and conflicting exact rates remain unverified across all views',async()=>{
+  const {pg,store}=await fixture();try{
+    await pg.exec("INSERT INTO assessments VALUES ('s','new','Third Term','2025/2026'),('s','old','Third Term','2025/2026'); INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session) VALUES ('tuition','old',55000,'Third Term','2025/2026')");
+    let entry=(await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0];
+    assert.equal(entry.tuitionKnown,false);assert.match(entry.tuitionReason,/Conflicting historical classes/);
+    const summary=await store.getFinancialSummary('school','Third Term','2025/2026');
+    assert.equal(summary.tuitionUnverifiedCount,1);assert.equal(summary.collectionRate,null);
+    assert.equal((await store.getPaymentBroadsheet('school','Third Term','2025/2026')).classes[0].students[0].status,'unverified');
+    await pg.exec("DELETE FROM assessments; INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session) VALUES ('tuition','old',60000,'Third Term','2025/2026')");
+    entry=(await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0];
+    assert.equal(entry.tuitionKnown,false);assert.match(entry.tuitionReason,/Conflicting or invalid tuition rates/);
+  }finally{await pg.close();}
+});
+
+test('saving current scoped or general rates preserves old scopes and explicit zero rates',async()=>{
+  const {pg,store}=await fixture();try{
+    await store.upsertTuitionClassAmounts('tuition',[{classId:'old',amount:'55000'}],'Third Term','2025/2026');
+    await store.upsertTuitionClassAmounts('tuition',[{classId:'new',amount:'0'}],'First Term','2026/2027');
+    await store.upsertTuitionClassAmounts('tuition',[{classId:'new',amount:'999999'}]);
+    assert.equal((await pg.query("SELECT amount FROM tuition_class_amounts WHERE term='Third Term'")).rows[0].amount,'55000');
+    assert.equal((await store.getStudentPaymentLedger('school',undefined,'First Term','2026/2027')).entries[0].tuitionAssigned,0);
+    assert.equal((await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0].tuitionAssigned,55000);
+    await assert.rejects(store.upsertTuitionClassAmounts('tuition',[{classId:'old',amount:'1'}],'Third Term'));
+    await assert.rejects(store.upsertTuitionClassAmounts('tuition',[{classId:'old',amount:'1'},{classId:'old',amount:'2'}],'Third Term','2025/2026'));
+    await assert.rejects(store.upsertTuitionClassAmounts('tuition',[{classId:'old',amount:'not-money'}],'Third Term','2025/2026'));
+    assert.equal((await pg.query("SELECT amount FROM tuition_class_amounts WHERE term='Third Term'")).rows[0].amount,'55000');
+  }finally{await pg.close();}
+});
+
+test('saved rates expose historical Finance periods even without academic-calendar rows',async()=>{
+  const {pg,db}=await fixture();try{
+    await pg.exec("INSERT INTO tuition_class_amounts(fee_type_id,class_id,amount,term,session) VALUES ('tuition','old',55000,'Second Term','2018/2019')");
+    const periods=await loadFinancePeriods(db,'school');
+    assert.ok(periods.some(period=>period.term==='Second Term'&&period.session==='2018/2019'));
+    assert.ok(periods.some(period=>period.term==='First Term'&&period.session==='2026/2027'));
+    assert.equal((await loadFinancePeriods(db,'other')).some(period=>period.session==='2018/2019'),false);
+  }finally{await pg.close();}
+});
+
+test('reviewed historical rate writes and audit records commit atomically',async()=>{
+  const {pg,store}=await fixture();try{
+    await store.upsertTuitionClassAmounts('tuition',[{classId:'old',amount:'55000'}],'Third Term','2025/2026');
+    const audit={userId:'u',schoolId:'school',reason:'Verified approved historical fee schedule',actorRole:'admin',actorName:'Test Ada'};
+    // A missing audit destination must roll the rate replacement back.
+    await assert.rejects(store.upsertTuitionClassAmounts('tuition',[{classId:'old',amount:'60000'}],'Third Term','2025/2026',audit));
+    assert.equal(Number((await pg.query("SELECT amount FROM tuition_class_amounts WHERE term='Third Term'")).rows[0].amount),55000);
+    await pg.exec('CREATE TABLE payment_audit_logs(id uuid DEFAULT gen_random_uuid(),action text,entity_type text,entity_id text,actor_role text,actor_name text,user_id text,school_id text,previous_data jsonb,new_data jsonb,ip_address text,created_at timestamp DEFAULT now())');
+    await store.upsertTuitionClassAmounts('tuition',[{classId:'old',amount:'60000'}],'Third Term','2025/2026',audit);
+    const record=(await pg.query('SELECT * FROM payment_audit_logs')).rows[0];
+    assert.equal(record.user_id,'u');assert.equal(record.new_data.verificationReason,audit.reason);
+    assert.equal(Number(record.previous_data.amounts[0].amount),55000);assert.equal(Number(record.new_data.amounts[0].amount),60000);
+    assert.equal((await store.getStudentPaymentLedger('school',undefined,'Third Term','2025/2026')).entries[0].tuitionAssigned,60000);
   }finally{await pg.close();}
 });

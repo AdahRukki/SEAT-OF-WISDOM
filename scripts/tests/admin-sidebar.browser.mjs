@@ -174,3 +174,85 @@ test('student notification badges retain school-scoped pending-name-change alert
     assert.deepEqual(errors, []);
   } finally { await context.close(); }
 });
+
+for (const width of [1440, 390]) {
+  test(`Finance, Ledger and Payment Recording share one saved historical period at ${width}px`, async () => {
+    const { context, page, errors } = await setup('admin', { width, height: 1000 });
+    const scopes = [];
+    try {
+      await context.route('**/api/payments/finance-periods?**', route => route.fulfill({json:[
+        {term:'First Term',session:'2026/2027'},{term:'Third Term',session:'2025/2026'},{term:'Second Term',session:'2018/2019'},
+      ]}));
+      for (const endpoint of ['ledger','records','entry-balances']) {
+        await context.route(`**/api/payments/${endpoint}?**`, route => {
+          const url = new URL(route.request().url());
+          scopes.push({endpoint,term:url.searchParams.get('term'),session:url.searchParams.get('session')});
+          if (endpoint !== 'ledger') return route.fulfill({json:[]});
+          const historical = url.searchParams.get('session') === '2025/2026';
+          return route.fulfill({json:{entries:[{studentDbId:'period-student',studentId:'SOWA/PERIOD',firstName:'Scope',lastName:historical?'Historical':'Current',classId:'period-class',className:'JSS 1',studentType:'returning',totalPaid:30000,tuitionPaid:30000,nonTuitionPaid:0,tuitionAssigned:historical?55000:105000,totalAssigned:historical?55000:105000,balance:historical?25000:75000,discount:0,discountKnown:false,tuitionKnown:true,tuitionSource:historical?'Period-specific class rate':'Current fee settings',paymentCount:1,lastPaymentDate:null}],meta:{hasTuitionFeeType:true,hasGlobalTuition:true,hasScopedTuition:historical,historical}}});
+        });
+      }
+      await context.route('**/api/admin/financial-summary?**', route => {
+        const url = new URL(route.request().url());
+        scopes.push({endpoint:'summary',term:url.searchParams.get('term'),session:url.searchParams.get('session')});
+        return route.fulfill({json:{totalFees:55000,totalPaid:30000,totalOutstanding:25000,actualTuitionCollected:30000,collectionRate:55,studentsOwing:1,totalRevenue:30000,totalPosFees:0,tuitionUnverifiedCount:0}});
+      });
+      await page.goto(`${schoolURL(schools[0].id)}?tab=finance`);
+      await page.getByRole('heading',{name:'Finance',exact:true}).waitFor();
+      if (width < 640) await page.getByRole('button',{name:'Filters',exact:true}).click();
+      await page.getByRole('combobox',{name:'Ledger term',exact:true}).click();
+      await page.getByRole('option',{name:'Third Term',exact:true}).click();
+      assert.match(await page.getByRole('combobox',{name:'Finance term',exact:true}).innerText(),/Third Term/);
+      assert.match(await page.getByRole('combobox',{name:'Payment records term',exact:true}).innerText(),/Third Term/);
+      await page.getByRole('combobox',{name:'Payment records session',exact:true}).click();
+      await page.getByRole('option',{name:'2018/2019',exact:true}).waitFor();
+      await page.getByRole('option',{name:'2025/2026',exact:true}).click();
+      await page.getByText('Historical Scope',{exact:true}).filter({visible:true}).waitFor();
+      assert.match(await page.getByRole('combobox',{name:'Finance session',exact:true}).innerText(),/2025\/2026/);
+      assert.match(await page.getByRole('combobox',{name:'Ledger session',exact:true}).innerText(),/2025\/2026/);
+      for(const endpoint of ['ledger','records','summary']) assert.ok(scopes.some(scope=>scope.endpoint===endpoint&&scope.term==='Third Term'&&scope.session==='2025/2026'));
+      const entryResponse=page.waitForResponse(response=>response.url().includes('/api/payments/entry-balances?')&&new URL(response.url()).searchParams.get('session')==='2025/2026');
+      await page.getByRole('button',{name:'Record Payment',exact:true}).click();
+      await page.getByRole('dialog').getByText('Third Term · 2025/2026',{exact:true}).waitFor();
+      await page.waitForFunction(() => document.querySelector('[role="dialog"]') !== null);
+      await entryResponse;
+      assert.ok(scopes.some(scope=>scope.endpoint==='entry-balances'&&scope.term==='Third Term'&&scope.session==='2025/2026'));
+      await page.keyboard.press('Escape');
+      await noOverflow(page);
+      assert.deepEqual(errors,[]);
+    } finally { await context.close(); }
+  });
+}
+
+test('historical class rates require explicit review and do not inherit current general rates', async () => {
+  const { context,page,errors } = await setup();
+  const writes=[];
+  try {
+    await context.route('**/api/payments/finance-periods?**',route=>route.fulfill({json:[{term:'First Term',session:'2026/2027'},{term:'Third Term',session:'2025/2026'}]}));
+    await context.route('**/api/admin/fee-types?**',route=>route.fulfill({json:[{id:'tuition-fixture',name:'Tuition',amount:'0',schoolId:schools[0].id,category:'tuition',isTuition:true,isActive:true}]}));
+    await context.route('**/api/admin/classes?**',route=>route.fulfill({json:[{id:'old-class',name:'JSS 1',schoolId:schools[0].id,sortOrder:1}]}));
+    await context.route('**/api/admin/tuition-amounts/tuition-fixture',route=>{
+      if(route.request().method()==='PUT'){writes.push(route.request().postDataJSON());return route.fulfill({json:[]});}
+      return route.fulfill({json:[{classId:'old-class',amount:'999999',term:null,session:null,studentType:null}]});
+    });
+    await page.goto(`${schoolURL(schools[0].id)}?tab=finance`);
+    await page.getByRole('combobox',{name:'Finance term',exact:true}).click();
+    await page.getByRole('option',{name:'Third Term',exact:true}).click();
+    await page.getByRole('combobox',{name:'Finance session',exact:true}).click();
+    await page.getByRole('option',{name:'2025/2026',exact:true}).click();
+    await page.getByRole('button',{name:'Edit tuition rates',exact:true}).click();
+    const editor=page.getByRole('dialog');
+    await editor.getByText(/Current defaults are not copied/).waitFor();
+    await page.waitForFunction(()=>document.querySelector('[role="dialog"] input[type="number"]')?.value==='');
+    assert.equal(await editor.getByRole('button',{name:'Save Changes',exact:true}).isEnabled(),false);
+    await editor.getByRole('spinbutton').fill('55000');
+    await editor.getByRole('checkbox').check();
+    await editor.getByLabel('Verification reason / source',{exact:true}).fill('Reviewed approved Third Term fee schedule for 2025/2026');
+    await editor.getByRole('button',{name:'Save Changes',exact:true}).click();
+    await page.getByText('Historical tuition rates saved',{exact:true}).waitFor();
+    assert.equal(writes.length,1);assert.equal(writes[0].term,'Third Term');assert.equal(writes[0].session,'2025/2026');
+    assert.deepEqual(writes[0].amounts,[{classId:'old-class',amount:'55000',studentType:null}]);
+    assert.equal(writes[0].verifiedHistoricalRate,true);assert.match(writes[0].verificationReason,/approved Third Term fee schedule/);
+    assert.deepEqual(errors,[]);
+  } finally { await context.close(); }
+});

@@ -5,7 +5,7 @@ import type { LedgerPayment } from '@shared/ledger-payments';
 interface ExportStudent {
   studentDbId: string; studentId: string; firstName: string; middleName?: string | null; lastName: string;
   className: string; studentType: string; totalPaid: number; tuitionAssigned: number;
-  tuitionPaid?: number; nonTuitionPaid?: number; tuitionKnown?: boolean; discountKnown?: boolean; tuitionSource?: string;
+  tuitionPaid?: number; nonTuitionPaid?: number; tuitionKnown?: boolean; discountKnown?: boolean; tuitionSource?: string; tuitionReason?: string | null; historicalDiscountNote?: string | null;
   totalAssigned: number; discount: number; balance: number;
 }
 export function buildLedgerWorkbook(entries: ExportStudent[], records: LedgerPayment[], filters: Record<string, string>, dateFiltered: boolean) {
@@ -16,8 +16,8 @@ export function buildLedgerWorkbook(entries: ExportStudent[], records: LedgerPay
   const paidColumn = dateFiltered ? 'Confirmed in range (NGN)' : 'Total confirmed (NGN)';
   const summaries = entries.map(entry => ({
     'Student ID': entry.studentId, 'Student name': formatStudentName(entry), 'Class': entry.className,
-    'Student type': entry.studentType === 'new' ? 'New' : 'Returning',
-    ...(!dateFiltered ? {'Tuition charge (NGN)': entry.tuitionKnown === false ? 'Not verified' : entry.tuitionAssigned, 'Discount (NGN)': entry.discountKnown === false ? 'Not verified' : entry.discount, 'Charge source': entry.tuitionSource || ''} : {}),
+    'Student type': entry.studentType === 'new' ? 'New' : entry.studentType === 'returning' ? 'Returning' : 'Not verified',
+    ...(!dateFiltered ? {'Tuition charge (NGN)': entry.tuitionKnown === false ? 'Not verified' : entry.tuitionAssigned, 'Discount (NGN)': entry.discountKnown === false ? 'Not verified' : entry.discount, 'Charge source': entry.tuitionSource || '', 'Verification notes': entry.tuitionReason || entry.historicalDiscountNote || ''} : {}),
     [paidColumn]: entry.totalPaid,
     'Tuition paid (NGN)': entry.tuitionPaid ?? 0, 'Other payments (NGN)': entry.nonTuitionPaid ?? 0,
     ...(!dateFiltered ? {'Outstanding tuition (NGN)': entry.tuitionKnown === false ? 'Not verified' : entry.balance} : {}),

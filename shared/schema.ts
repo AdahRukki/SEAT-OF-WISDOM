@@ -198,6 +198,7 @@ export type PopulationSnapshotStudent = {
   classId: string | null; className: string | null;
   historicalClassVerified: boolean;
   status: string | null; accountActive: boolean | null;
+  studentType?: string | null; discount?: string | number | null;
 };
 export const studentPopulationSnapshots = pgTable("student_population_snapshots", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

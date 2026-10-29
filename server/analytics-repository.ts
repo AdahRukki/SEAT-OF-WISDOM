@@ -18,7 +18,7 @@ export type ReportingEvent = {
   schoolId: string; classId: string | null; className: string | null; eventType: string; admissionCategory: string | null;
   occurredAt: string | null; recordedAt: string; term: string | null; session: string | null;
   dateVerified: boolean; periodVerified: boolean; classVerified: boolean; reason: string | null;
-  actorId: string | null; source: string;
+  actorId: string | null; source: string; previousData?: Record<string, any> | null; newData?: Record<string, any> | null;
 };
 export type ReportingSnapshot = AcademicPeriod & { id: string; schoolId: string; schoolName: string; snapshotKind: string; capturedAt: string; students: PopulationSnapshotStudent[] };
 export type ReportingPayment = { id: string; schoolId: string; studentId: string | null; amount: string; purpose: string | null; term: string | null; session: string | null; receivedAt: string };
@@ -75,7 +75,7 @@ export async function loadAnalyticsData(tx: ReportingConnection, filters: Analyt
       FROM students s JOIN users u ON u.id=s.user_id JOIN classes c ON c.id=s.class_id JOIN schools sc ON sc.id=c.school_id WHERE c.school_id IN (${scope})`,
     sql`SELECT id,sequence::text,student_id AS "studentId",student_number AS "studentNumber",student_name AS "studentName",school_id AS "schoolId",
       class_id AS "classId",class_name AS "className",event_type AS "eventType",admission_category AS "admissionCategory",occurred_at::text AS "occurredAt",
-      recorded_at::text AS "recordedAt",term,session,date_verified AS "dateVerified",period_verified AS "periodVerified",class_verified AS "classVerified",reason,actor_id AS "actorId",source
+      recorded_at::text AS "recordedAt",term,session,date_verified AS "dateVerified",period_verified AS "periodVerified",class_verified AS "classVerified",reason,actor_id AS "actorId",source,previous_data AS "previousData",new_data AS "newData"
       FROM student_status_events WHERE school_id IN (${scope}) ORDER BY sequence`,
     sql`SELECT id,school_id AS "schoolId",school_name AS "schoolName",term,session,snapshot_kind AS "snapshotKind",captured_at::text AS "capturedAt",students
       FROM student_population_snapshots WHERE school_id IN (${scope}) AND (snapshot_kind='baseline' OR session IN (${censusScope})) ORDER BY captured_at,id`,

@@ -1,6 +1,8 @@
 import { formatStudentName } from "../shared/student-name";
 import { setHistoryContext, authorizeStudentMutation, lockHistorySchools, claimHistoryCommand, type HistoryContext, StudentHistoryError } from './student-history';
 import { summarizeTuition } from "../shared/tuition-summary";
+import { resolveHistoricalTuition } from "../shared/historical-tuition";
+import { loadFinanceHistory } from "./finance-history";
 import {
   schools,
   users,
@@ -107,6 +109,8 @@ import { alias } from "drizzle-orm/pg-core";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 
+export type TuitionRateAudit = { userId: string; schoolId: string; reason: string; actorRole?: string; actorName?: string };
+
 export interface IStorage {
   buildTuitionResolver(allRows: any[], term?: string | null, session?: string | null): (classId: string, studentType: string | null) => number;
   // Authentication
@@ -205,7 +209,7 @@ export interface IStorage {
   updateFeeType(id: string, data: Partial<InsertFeeType>): Promise<FeeType>;
   deleteFeeType(id: string): Promise<void>;
   getTuitionClassAmounts(feeTypeId: string, term?: string, session?: string): Promise<TuitionClassAmount[]>;
-  upsertTuitionClassAmounts(feeTypeId: string, amounts: { classId: string; amount: string; studentType?: string | null }[], term?: string, session?: string): Promise<TuitionClassAmount[]>;
+  upsertTuitionClassAmounts(feeTypeId: string, amounts: { classId: string; amount: string; studentType?: string | null }[], term?: string, session?: string, audit?: TuitionRateAudit): Promise<TuitionClassAmount[]>;
   
   assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee>;
   assignFeeToClass(classId: string, feeTypeId: string, term: string, session: string, dueDate: string, notes?: string): Promise<StudentFee[]>;
@@ -253,6 +257,8 @@ export interface IStorage {
       tuitionKnown: boolean;
       discountKnown: boolean;
       tuitionSource: string;
+      tuitionReason?: string | null;
+      historicalDiscountNote?: string | null;
       totalAssigned: number;
       tuitionAssigned: number;
       balance: number;
@@ -278,7 +284,8 @@ export interface IStorage {
         totalAssigned: number;
         totalPaid: number;
         balance: number;
-        status: 'paid' | 'partial' | 'unpaid';
+        status: 'paid' | 'partial' | 'unpaid' | 'unverified';
+        tuitionKnown?: boolean; tuitionSource?: string; tuitionReason?: string | null;
       }>;
       classTotals: { totalAssigned: number; totalPaid: number; balance: number };
     }>;
@@ -297,7 +304,7 @@ export interface IStorage {
     totalRevenue: number;
     actualTuitionCollected: number;
     totalOutstanding: number;
-    collectionRate: number;
+    collectionRate: number | null;
     studentsOwing: number;
     totalPosFees: number;
     /** Per-type tuition breakdown — new vs returning students */
@@ -1431,29 +1438,28 @@ export class DatabaseStorage implements IStorage {
     feeTypeId: string,
     amounts: { classId: string; amount: string; studentType?: string | null }[],
     term?: string,
-    session?: string
+    session?: string,
+    audit?: TuitionRateAudit
   ): Promise<TuitionClassAmount[]> {
-    // Delete all rows matching this exact scope (term/session pair) so that the
-    // incoming payload always represents the full picture for that scope.
-    //   - global save (no term, no session) -> delete only (term IS NULL AND session IS NULL)
-    //   - scoped save (term & session present) -> delete only (term=? AND session=?)
-    await db.delete(tuitionClassAmounts).where(
-      and(
-        eq(tuitionClassAmounts.feeTypeId, feeTypeId),
-        term ? eq(tuitionClassAmounts.term, term) : sql`${tuitionClassAmounts.term} IS NULL`,
-        session ? eq(tuitionClassAmounts.session, session) : sql`${tuitionClassAmounts.session} IS NULL`,
-      )
-    );
-    if (amounts.length === 0) return [];
-    const rows = amounts.map(a => ({
-      feeTypeId,
-      classId: a.classId,
-      amount: a.amount,
-      term: term || null,
-      session: session || null,
-      studentType: a.studentType ?? null,
-    }));
-    return await db.insert(tuitionClassAmounts).values(rows as any).returning();
+    if (!!term !== !!session) throw new Error('Tuition rates require both term and session or neither.');
+    const keys = amounts.map(row => `${row.classId}:${row.studentType || ''}`);
+    if (new Set(keys).size !== keys.length) throw new Error('Duplicate class/student-type tuition rate.');
+    return db.transaction(async tx => {
+      // Match the school's period-closing lock before changing configured rates.
+      await tx.execute(sql`SELECT sc.id FROM schools sc JOIN fee_types ft ON ft.school_id=sc.id WHERE ft.id=${feeTypeId} FOR UPDATE OF sc`);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${feeTypeId + ':' + (term || '') + ':' + (session || '')},0))`);
+      const scope = and(eq(tuitionClassAmounts.feeTypeId,feeTypeId),
+        term ? eq(tuitionClassAmounts.term,term) : sql`${tuitionClassAmounts.term} IS NULL`,
+        session ? eq(tuitionClassAmounts.session,session) : sql`${tuitionClassAmounts.session} IS NULL`);
+      const before = audit ? await tx.select().from(tuitionClassAmounts).where(scope) : [];
+      await tx.delete(tuitionClassAmounts).where(scope);
+      const result = amounts.length ? await tx.insert(tuitionClassAmounts).values(amounts.map(row => ({feeTypeId,classId:row.classId,amount:row.amount,
+        term:term || null,session:session || null,studentType:row.studentType ?? null}))).returning() : [];
+      if (audit) await tx.insert(paymentAuditLogs).values({action:'update_tuition_amounts',entityType:'fee_type',entityId:feeTypeId,
+        userId:audit.userId,schoolId:audit.schoolId,actorRole:audit.actorRole,actorName:audit.actorName?.slice(0,200),
+        previousData:{amounts:before},newData:{amounts,term:term || null,session:session || null,verifiedHistoricalRate:true,verificationReason:audit.reason}});
+      return result;
+    });
   }
 
   /**
@@ -1497,7 +1503,13 @@ export class DatabaseStorage implements IStorage {
   async assignFeesToStudent(studentId: string, feeTypeId: string, term: string, session: string, amount?: number): Promise<StudentFee> {
     // Get the fee type to determine amount if not provided
     const feeType = await this.getFeeTypeById(feeTypeId);
-    const finalAmount = amount || (feeType ? Number(feeType.amount) : 0);
+    let finalAmount = amount ?? (feeType ? Number(feeType.amount) : 0);
+    if (amount === undefined && feeType?.isTuition) {
+      if (!feeType.schoolId) throw new Error('Tuition must belong to a school.');
+      const entry = (await this.getStudentPaymentLedger(feeType.schoolId,undefined,term,session)).entries.find(row => row.studentDbId===studentId);
+      if (!entry?.tuitionKnown) throw new Error(entry?.tuitionReason || 'Verify historical tuition before assigning an individual charge.');
+      finalAmount = entry.tuitionAssigned;
+    }
 
     const [studentFee] = await db
       .insert(studentFees)
@@ -1515,14 +1527,15 @@ export class DatabaseStorage implements IStorage {
 
   async assignFeeToClass(classId: string, feeTypeId: string, term: string, session: string, dueDate: string, notes?: string): Promise<StudentFee[]> {
     // Get all students in the class
-    const classStudents = await this.getStudentsByClass(classId);
-    
     // Get the fee type to determine amount
     const feeType = await this.getFeeTypeById(feeTypeId);
     if (!feeType) {
       throw new Error('Fee type not found');
     }
 
+    const tuitionLedger = feeType.isTuition && feeType.schoolId ? await this.getStudentPaymentLedger(feeType.schoolId,classId,term,session) : null;
+    if (tuitionLedger?.entries.some(entry => !entry.tuitionKnown)) throw new Error('Some tuition charges are not verified. Review historical class rates before assigning fees.');
+    const classStudents = tuitionLedger ? tuitionLedger.entries.map(entry => ({id:entry.studentDbId})) : await this.getStudentsByClass(classId);
     const studentFeePromises = classStudents.map(async (student) => {
       // Check if student already has this fee for this term and session
       const existingFees = await this.getStudentFees(student.id, term, session);
@@ -1536,7 +1549,7 @@ export class DatabaseStorage implements IStorage {
             feeTypeId,
             term,
             session,
-            amount: feeType.amount,
+            amount: tuitionLedger ? String(tuitionLedger.entries.find(entry => entry.studentDbId===student.id)!.tuitionAssigned) : feeType.amount,
             status: 'pending',
             dueDate: new Date(dueDate),
             notes
@@ -1731,170 +1744,84 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudentPaymentLedger(schoolId: string, classId?: string, term?: string, session?: string, confirmedFrom?: string, confirmedTo?: string) {
-    const academic = await this.getCurrentAcademicInfo(schoolId);
-    const currentPeriod = !!(term && session && term === academic.currentTerm && session === academic.currentSession);
-    const scoped = !!(term && session);
-    const rows = await db.execute(sql`
-      WITH allocated AS (
-        SELECT fpr.student_id, fpr.amount, fpr.purpose, fpr.payment_date, fpr.confirmed_at, fpr.id AS payment_id
-        FROM fee_payment_records fpr
-        WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed' AND fpr.student_id IS NOT NULL
-          ${term ? sql`AND fpr.term = ${term}` : sql``}
-          ${session ? sql`AND fpr.session = ${session}` : sql``}
-          ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
-        UNION ALL
-        SELECT fpss.student_id, fpss.amount, COALESCE(fpss.purpose, fpr.purpose) AS purpose, fpr.payment_date, fpr.confirmed_at, fpr.id AS payment_id
-        FROM fee_payment_student_splits fpss
-        JOIN fee_payment_records fpr ON fpr.id = fpss.payment_record_id
-        WHERE fpr.school_id = ${schoolId} AND fpr.status = 'confirmed'
-          ${term ? sql`AND fpr.term = ${term}` : sql``}
-          ${session ? sql`AND fpr.session = ${session}` : sql``}
-          ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
-      ), classified AS (
-        SELECT a.*, EXISTS (
-          SELECT 1 FROM fee_types ft WHERE ft.school_id = ${schoolId}
-            AND ft.is_tuition = true AND ft.name = a.purpose
-        ) AS is_tuition FROM allocated a
-      ), totals AS (
-        SELECT student_id, SUM(amount) AS paid,
-          COALESCE(SUM(amount) FILTER (WHERE is_tuition), 0) AS tuition_paid,
-          COALESCE(SUM(amount) FILTER (WHERE NOT is_tuition), 0) AS other_paid,
-          COUNT(DISTINCT payment_id) AS payment_count, MAX(payment_date) AS last_payment,
-          MAX(confirmed_at AT TIME ZONE 'UTC') AS last_confirmed
-        FROM classified GROUP BY student_id
-      ), roster AS (
-        SELECT s.*, COALESCE(
-          (SELECT CASE WHEN COUNT(DISTINCT pr.from_class_id) = 1 THEN MIN(pr.from_class_id) END
-           FROM promotion_records pr WHERE pr.student_id = s.id AND pr.school_id = ${schoolId}
-             AND pr.session = ${session || ''} AND pr.is_bulk = true),
-          CASE WHEN ${currentPeriod || !scoped} THEN s.class_id ELSE (SELECT CASE WHEN COUNT(DISTINCT a.class_id) = 1 THEN MIN(a.class_id) END
-           FROM assessments a JOIN classes ac ON ac.id = a.class_id
-           WHERE a.student_id = s.id AND a.session = ${session || ''}
-             AND a.term = ${term || ''} AND ac.school_id = ${schoolId}) END
-        ) AS effective_class_id
-        FROM students s
-      )
-      SELECT s.id AS "studentDbId", s.student_id AS "studentId", u.first_name AS "firstName", u.middle_name AS "middleName",
-        u.last_name AS "lastName", c.name AS "className", s.effective_class_id AS "classId",
-        s.parent_whatsapp AS "parentWhatsapp", s.discount,
-        CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term || ''}
-          AND s.student_type_flipped_session = ${session || ''} THEN 'new'
-          ELSE COALESCE(s.student_type, 'returning') END AS "studentType",
-        COALESCE(t.paid, 0) AS "totalPaid", COALESCE(t.tuition_paid, 0) AS "tuitionPaid",
-        COALESCE(t.other_paid, 0) AS "nonTuitionPaid", COALESCE(t.payment_count, 0) AS "paymentCount",
-        t.last_payment AS "lastPaymentDate", t.last_confirmed AS "lastConfirmedAt",
-        (SELECT SUM(sf.amount) FROM student_fees sf JOIN fee_types ft ON ft.id = sf.fee_type_id
-         WHERE sf.student_id = s.id AND sf.term = ${term || ''} AND sf.session = ${session || ''}
-           AND ft.school_id = ${schoolId} AND ft.is_tuition = true) AS "savedTuition"
-      FROM roster s JOIN users u ON u.id = s.user_id
-      LEFT JOIN classes c ON c.id = s.effective_class_id AND c.school_id = ${schoolId}
-      LEFT JOIN totals t ON t.student_id = s.id
-      WHERE u.is_active = true AND u.school_id = ${schoolId}
-        ${classId ? sql`AND s.effective_class_id = ${classId}` : sql``}
-      ORDER BY c.name ASC NULLS LAST, u.last_name, u.first_name
-    `);
-    const feeRows = await db.execute(sql`
-      SELECT id FROM fee_types WHERE school_id = ${schoolId} AND is_tuition = true AND is_active = true
-      ORDER BY created_at, id
-    `);
-    const tuitionFees = ((feeRows as any).rows || feeRows) as any[];
-    // Multiple active tuition types are ambiguous; do not arbitrarily pick one.
-    const rates = tuitionFees.length === 1 ? await this.getTuitionClassAmounts(tuitionFees[0].id) : [];
-    const resolve = this.buildTuitionResolver(rates, term, session);
-    const entries = (((rows as any).rows || rows) as any[]).map(r => {
-      const applicable = rates.some(rate => rate.classId === r.classId
-        && (!rate.studentType || rate.studentType === r.studentType)
-        && ((!rate.term && !rate.session) || (rate.term === term && rate.session === session)));
-      const saved = scoped && r.savedTuition !== null && r.savedTuition !== undefined;
-      const tuitionKnown = saved || (currentPeriod && !!r.classId && applicable);
-      // Explicit term assessments are authoritative amounts; never subtract today's discount again.
-      const discount = !saved && currentPeriod ? Number(r.discount) || 0 : 0;
-      const tuitionAssigned = saved ? Number(r.savedTuition) : tuitionKnown ? Math.max(0, resolve(r.classId, r.studentType) - discount) : 0;
-      const tuitionPaid = Number(r.tuitionPaid) || 0;
-      return { ...r, classId: r.classId || '', className: r.className || 'Historical class not verified',
-        discount, discountKnown: !saved && currentPeriod, tuitionKnown,
-        tuitionSource: saved ? 'Saved term charge' : tuitionKnown ? 'Current fee settings' : 'Not verified',
-        tuitionAssigned, totalAssigned: tuitionAssigned,
-        tuitionPaid, nonTuitionPaid: Number(r.nonTuitionPaid) || 0, totalPaid: Number(r.totalPaid) || 0,
-        balance: tuitionKnown ? Math.max(0, Math.round((tuitionAssigned - tuitionPaid) * 100) / 100) : 0,
-        paymentCount: Number(r.paymentCount) || 0,
-        lastPaymentDate: r.lastPaymentDate ? new Date(r.lastPaymentDate).toISOString() : null,
-        lastConfirmedAt: r.lastConfirmedAt ? new Date(r.lastConfirmedAt).toISOString() : null,
-      };
-    });
-    return { entries: confirmedFrom || confirmedTo ? entries.filter(e => e.paymentCount > 0) : entries,
-      meta: { hasTuitionFeeType: tuitionFees.length > 0,
-        hasGlobalTuition: rates.some(r => !r.term && !r.session),
-        hasScopedTuition: rates.some(r => r.term === term && r.session === session),
-      } };
+    return db.transaction(async tx => {
+      const academicRows = await tx.execute(sql`SELECT current_term AS "currentTerm",current_session AS "currentSession" FROM schools WHERE id=${schoolId}`);
+      const academic = academicRows.rows[0] as { currentTerm: string; currentSession: string } | undefined;
+      const history = await loadFinanceHistory(tx, schoolId);
+      const historyIds = history.studentIds.length ? sql.join(history.studentIds.map(id => sql`${id}`), sql`,`) : sql`NULL`;
+      const rows = await tx.execute(sql`
+        WITH allocated AS (
+          SELECT fpr.student_id,fpr.amount,fpr.purpose,fpr.payment_date,fpr.confirmed_at,fpr.id AS payment_id
+          FROM fee_payment_records fpr
+          WHERE fpr.school_id=${schoolId} AND fpr.status='confirmed' AND fpr.student_id IS NOT NULL
+            ${term ? sql`AND fpr.term=${term}` : sql``} ${session ? sql`AND fpr.session=${session}` : sql``}
+            ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
+          UNION ALL
+          SELECT fpss.student_id,fpss.amount,COALESCE(fpss.purpose,fpr.purpose),fpr.payment_date,fpr.confirmed_at,fpr.id
+          FROM fee_payment_student_splits fpss JOIN fee_payment_records fpr ON fpr.id=fpss.payment_record_id
+          WHERE fpr.school_id=${schoolId} AND fpr.status='confirmed'
+            ${term ? sql`AND fpr.term=${term}` : sql``} ${session ? sql`AND fpr.session=${session}` : sql``}
+            ${confirmedDateClause('fpr', confirmedFrom, confirmedTo)}
+        ), classified AS (
+          SELECT a.*,EXISTS(SELECT 1 FROM fee_types ft WHERE ft.school_id=${schoolId} AND ft.is_tuition=true AND ft.name=a.purpose) AS is_tuition
+          FROM allocated a
+        ), totals AS (
+          SELECT student_id,SUM(amount) AS paid,COALESCE(SUM(amount) FILTER(WHERE is_tuition),0) AS tuition_paid,
+            COALESCE(SUM(amount) FILTER(WHERE NOT is_tuition),0) AS other_paid,COUNT(DISTINCT payment_id) AS payment_count,
+            MAX(payment_date) AS last_payment,MAX(confirmed_at AT TIME ZONE 'UTC') AS last_confirmed
+          FROM classified GROUP BY student_id
+        ), charges AS (
+          SELECT sf.student_id,SUM(sf.amount) AS amount FROM student_fees sf JOIN fee_types ft ON ft.id=sf.fee_type_id
+          WHERE sf.term=${term || ''} AND sf.session=${session || ''} AND ft.school_id=${schoolId} AND ft.is_tuition=true
+          GROUP BY sf.student_id
+        )
+        SELECT s.id AS "studentDbId",s.student_id AS "studentId",u.first_name AS "firstName",u.middle_name AS "middleName",u.last_name AS "lastName",
+          s.class_id AS "classId",c.name AS "className",u.school_id AS "schoolId",s.parent_whatsapp AS "parentWhatsapp",s.discount,
+          s.student_type AS "studentType",s.student_type_flipped_term AS "flippedTerm",s.student_type_flipped_session AS "flippedSession",
+          to_jsonb(s)->>'status' AS status,charges.amount AS "savedTuition",
+          COALESCE(t.paid,0) AS "totalPaid",COALESCE(t.tuition_paid,0) AS "tuitionPaid",COALESCE(t.other_paid,0) AS "nonTuitionPaid",
+          COALESCE(t.payment_count,0) AS "paymentCount",t.last_payment AS "lastPaymentDate",t.last_confirmed AS "lastConfirmedAt",
+          COALESCE((SELECT jsonb_agg(proof) FROM (
+            SELECT DISTINCT a.class_id AS "classId",ac.name AS "className",'assessment' AS kind
+            FROM assessments a JOIN classes ac ON ac.id=a.class_id WHERE a.student_id=s.id AND a.term=${term || ''} AND a.session=${session || ''} AND ac.school_id=${schoolId}
+            UNION SELECT DISTINCT pr.from_class_id,pc.name,'promotion' FROM promotion_records pr LEFT JOIN classes pc ON pc.id=pr.from_class_id
+            WHERE pr.student_id=s.id AND pr.school_id=${schoolId} AND pr.session=${session || ''} AND pr.is_bulk=true
+          ) proof),'[]'::jsonb) AS "legacyClasses"
+        FROM students s JOIN users u ON u.id=s.user_id LEFT JOIN classes c ON c.id=s.class_id
+        LEFT JOIN totals t ON t.student_id=s.id LEFT JOIN charges ON charges.student_id=s.id
+        WHERE u.school_id=${schoolId} OR t.student_id IS NOT NULL OR charges.student_id IS NOT NULL OR s.id IN (${historyIds})
+        ORDER BY u.last_name,u.first_name,s.id`);
+      // Historical exact-scope rates survive fee-type deactivation. General
+      // defaults are considered only for the current period and active types.
+      const feeRows = await tx.execute(sql`SELECT id,is_active AS active FROM fee_types WHERE school_id=${schoolId} AND is_tuition=true`);
+      const rateRows = await tx.execute(sql`SELECT r.class_id AS "classId",r.amount,r.term,r.session,r.student_type AS "studentType",r.fee_type_id AS "feeTypeId",ft.is_active AS active
+        FROM tuition_class_amounts r JOIN fee_types ft ON ft.id=r.fee_type_id WHERE ft.school_id=${schoolId} AND ft.is_tuition=true`);
+      const rates = rateRows.rows as any[];
+      const entries = (rows.rows as any[]).flatMap(row => {
+        const facts = resolveHistoricalTuition({ student: { ...row, paymentCount: Number(row.paymentCount) || 0 },schoolId,
+          period: term && session ? { term,session } : undefined,
+          currentPeriod: academic?.currentTerm && academic?.currentSession ? { term: academic.currentTerm,session: academic.currentSession } : undefined,
+          rates,events: history.eventsByStudent.get(row.studentDbId),snapshots: history.snapshotsByStudent.get(row.studentDbId),classNames: history.classNames });
+        if (!facts.included || classId && facts.classId !== classId) return [];
+        const tuitionPaid = Number(row.tuitionPaid) || 0;
+        return [{ ...row,...facts,totalAssigned: facts.tuitionAssigned,
+          tuitionPaid,nonTuitionPaid: Number(row.nonTuitionPaid) || 0,totalPaid: Number(row.totalPaid) || 0,
+          balance: facts.tuitionKnown ? Math.max(0,Math.round((facts.tuitionAssigned-tuitionPaid)*100)/100) : 0,
+          paymentCount: Number(row.paymentCount) || 0,
+          lastPaymentDate: row.lastPaymentDate ? new Date(row.lastPaymentDate).toISOString() : null,
+          lastConfirmedAt: row.lastConfirmedAt ? new Date(row.lastConfirmedAt).toISOString() : null }];
+      }).sort((a,b) => a.className.localeCompare(b.className) || a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+      return { entries: confirmedFrom || confirmedTo ? entries.filter(entry => entry.paymentCount > 0) : entries,
+        meta: { hasTuitionFeeType: feeRows.rows.length > 0,hasGlobalTuition: rates.some(rate => !rate.term && !rate.session && rate.active !== false),
+          hasScopedTuition: rates.some(rate => rate.term===term && rate.session===session),
+          historical: !!term && !!session && (term!==academic?.currentTerm || session!==academic?.currentSession) } };
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
   }
 
-  async getStudentTuitionBalances(schoolId: string, term: string, session: string): Promise<{
-    studentDbId: string;
-    tuitionAssigned: number;
-    tuitionPaid: number;
-  }[]> {
-    // Find the active tuition fee type for the school.
-    const tuitionFeeRows = await db.execute(sql`
-      SELECT ft.id, ft.name FROM fee_types ft
-      WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.is_active = true
-      LIMIT 1
-    `);
-    const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
-    if (!tuitionFee) return [];
-
-    // Build per-class assigned amount map: scoped (term+session) overrides global.
-    const allTuitionRows = await this.getTuitionClassAmounts(tuitionFee.id);
-    const tuitionResolver = this.buildTuitionResolver(allTuitionRows, term, session);
-
-    // Per-student tuition paid (confirmed only, scoped to term+session and
-    // matched by purpose = tuition fee type name). Includes split allocations.
-    const paidRows = await db.execute(sql`
-      SELECT s.id AS "studentDbId",
-             s.class_id AS "classId",
-             CASE WHEN s.student_type = 'returning'
-                   AND s.student_type_flipped_term = ${term}
-                   AND s.student_type_flipped_session = ${session}
-                  THEN 'new'
-                  ELSE COALESCE(s.student_type, 'returning')
-             END AS "studentType",
-             s.discount AS "discount",
-             (
-               COALESCE((
-                 SELECT SUM(fpr.amount) FROM fee_payment_records fpr
-                 WHERE fpr.student_id = s.id
-                   AND fpr.school_id = ${schoolId}
-                   AND fpr.status = 'confirmed'
-                   AND fpr.term = ${term}
-                   AND fpr.session = ${session}
-                   AND fpr.purpose = ${tuitionFee.name}
-               ), 0)
-               +
-               COALESCE((
-                 SELECT SUM(fpss.amount) FROM fee_payment_student_splits fpss
-                 JOIN fee_payment_records fpr2 ON fpr2.id = fpss.payment_record_id
-                 WHERE fpss.student_id = s.id
-                   AND fpr2.school_id = ${schoolId}
-                   AND fpr2.status = 'confirmed'
-                   AND fpr2.term = ${term}
-                   AND fpr2.session = ${session}
-                   AND COALESCE(fpss.purpose, fpr2.purpose) = ${tuitionFee.name}
-               ), 0)
-             )::numeric AS "tuitionPaid"
-      FROM students s
-      JOIN users u ON s.user_id = u.id
-      WHERE u.is_active = true AND u.school_id = ${schoolId}
-    `);
-
-    return ((paidRows as any).rows || paidRows).map((r: any) => {
-      const rawAssigned = r.classId ? tuitionResolver(r.classId, r.studentType ?? null) : 0;
-      const discount = Number(r.discount) || 0;
-      return {
-        studentDbId: r.studentDbId,
-        tuitionAssigned: Math.max(0, rawAssigned - discount),
-        tuitionPaid: Number(r.tuitionPaid) || 0,
-      };
-    });
+  async getStudentTuitionBalances(schoolId: string, term: string, session: string) {
+    const ledger = await this.getStudentPaymentLedger(schoolId, undefined, term, session);
+    return ledger.entries.map(entry => ({ studentDbId: entry.studentDbId,tuitionAssigned: entry.tuitionAssigned,
+      tuitionPaid: entry.tuitionPaid,tuitionKnown: entry.tuitionKnown,tuitionSource: entry.tuitionSource,tuitionReason: entry.tuitionReason }));
   }
 
   // Per-student confirmed-payment totals using the same UNION the Payment
@@ -1944,117 +1871,22 @@ export class DatabaseStorage implements IStorage {
     return out;
   }
 
-  async getPaymentBroadsheet(schoolId: string, term: string, session: string, confirmedFrom?: string, confirmedTo?: string): Promise<{
-    classes: Array<{
-      classId: string;
-      className: string;
-      students: Array<{
-        studentId: string;
-        firstName: string; middleName?: string | null;
-        lastName: string;
-        sowaId: string;
-        totalAssigned: number;
-        totalPaid: number;
-        balance: number;
-        status: 'paid' | 'partial' | 'unpaid';
-      }>;
-      classTotals: { totalAssigned: number; totalPaid: number; balance: number };
-    }>;
-    grandTotal: { totalAssigned: number; totalPaid: number; balance: number };
-  }> {
-    const studentsRows = await db.execute(sql`
-      SELECT s.id, s.student_id AS "sowaId", s.class_id AS "classId",
-             u.first_name AS "firstName", u.middle_name AS "middleName", u.last_name AS "lastName",
-             c.name AS "className", s.discount AS "discount",
-             CASE WHEN s.student_type = 'returning'
-                   AND s.student_type_flipped_term = ${term}
-                   AND s.student_type_flipped_session = ${session}
-                  THEN 'new'
-                  ELSE COALESCE(s.student_type, 'returning')
-             END AS "studentType"
-      FROM students s
-      JOIN users u ON s.user_id = u.id
-      LEFT JOIN classes c ON s.class_id = c.id
-      WHERE u.is_active = true AND u.school_id = ${schoolId}
-      ORDER BY c.name ASC, u.last_name ASC, u.first_name ASC
-    `);
-
-    const feesRows = await db.execute(sql`
-      SELECT sf.student_id AS "studentId", COALESCE(SUM(sf.amount), 0)::numeric AS "totalAssigned"
-      FROM student_fees sf
-      JOIN students s ON sf.student_id = s.id
-      JOIN users u ON s.user_id = u.id
-      WHERE u.school_id = ${schoolId} AND sf.term = ${term} AND sf.session = ${session}
-      GROUP BY sf.student_id
-    `);
-
-    // Per-student paid totals — same UNION used everywhere tuition collection
-    // is computed (see getConfirmedPaymentTotalsByStudent).
-    const paymentsMapShared = await this.getConfirmedPaymentTotalsByStudent(schoolId, term, session, undefined, confirmedFrom, confirmedTo);
-    const paymentsRows = { rows: Array.from(paymentsMapShared, ([studentId, totalPaid]) => ({ studentId, totalPaid })) };
-
-    const tuitionFeeRows = await db.execute(sql`
-      SELECT ft.id, ft.name FROM fee_types ft
-      WHERE ft.school_id = ${schoolId} AND ft.is_tuition = true AND ft.is_active = true
-      LIMIT 1
-    `);
-    const tuitionFee = ((tuitionFeeRows as any).rows || tuitionFeeRows)[0];
-
-    let broadsheetTuitionResolver: (classId: string, studentType: string | null) => number = () => 0;
-    if (tuitionFee) {
-      const allRows = await this.getTuitionClassAmounts(tuitionFee.id);
-      broadsheetTuitionResolver = this.buildTuitionResolver(allRows, term, session);
+  async getPaymentBroadsheet(schoolId: string, term: string, session: string, confirmedFrom?: string, confirmedTo?: string) {
+    const { entries } = await this.getStudentPaymentLedger(schoolId, undefined, term, session, confirmedFrom, confirmedTo);
+    const groups = new Map<string, { classId: string; className: string; students: any[] }>();
+    for (const entry of entries) {
+      const classId = entry.classId || 'unverified';
+      if (!groups.has(classId)) groups.set(classId, { classId,className: entry.className,students: [] });
+      groups.get(classId)!.students.push({ studentId: entry.studentDbId,firstName: entry.firstName,middleName: entry.middleName,lastName: entry.lastName,
+        sowaId: entry.studentId,totalAssigned: entry.tuitionAssigned,totalPaid: entry.tuitionPaid,balance: entry.balance,
+        tuitionKnown: entry.tuitionKnown,tuitionSource: entry.tuitionSource,tuitionReason: entry.tuitionReason,
+        nonTuitionPaid: entry.nonTuitionPaid,status: (!entry.tuitionKnown ? 'unverified' : entry.balance===0 ? 'paid' : entry.tuitionPaid>0 ? 'partial' : 'unpaid') as 'unverified' | 'paid' | 'partial' | 'unpaid' });
     }
-
-    const allStudents = ((studentsRows as any).rows || studentsRows) as any[];
-    const feesMap = new Map(((feesRows as any).rows || feesRows).map((r: any) => [r.studentId, Number(r.totalAssigned)]));
-    const paymentsMap = new Map(((paymentsRows as any).rows || paymentsRows).map((r: any) => [r.studentId, Number(r.totalPaid)]));
-
-    const classGroupMap = new Map<string, { classId: string; className: string; students: any[] }>();
-
-    for (const s of allStudents) {
-      if ((confirmedFrom || confirmedTo) && !paymentsMap.has(s.id)) continue;
-      if (!classGroupMap.has(s.classId)) {
-        classGroupMap.set(s.classId, { classId: s.classId, className: s.className || s.classId, students: [] });
-      }
-      const sfAssigned = feesMap.get(s.id) || 0;
-      const discount = Number(s.discount) || 0;
-      const tuitionAssigned = Math.max(0, broadsheetTuitionResolver(s.classId, s.studentType ?? null) - discount);
-      const totalAssigned = sfAssigned + tuitionAssigned;
-      const totalPaid = paymentsMap.get(s.id) || 0;
-      const balance = totalAssigned - totalPaid;
-      let status: 'paid' | 'partial' | 'unpaid' = 'unpaid';
-      if (totalAssigned > 0 && balance <= 0) status = 'paid';
-      else if (totalPaid > 0) status = 'partial';
-
-      classGroupMap.get(s.classId)!.students.push({
-        studentId: s.id,
-        firstName: s.firstName, middleName: s.middleName ?? null,
-        lastName: s.lastName,
-        sowaId: s.sowaId,
-        totalAssigned,
-        totalPaid,
-        balance: Math.max(0, balance),
-        status,
-      });
-    }
-
-    const classesArr = Array.from(classGroupMap.values()).map(cls => ({
-      ...cls,
-      classTotals: {
-        totalAssigned: cls.students.reduce((sum: number, st: any) => sum + st.totalAssigned, 0),
-        totalPaid: cls.students.reduce((sum: number, st: any) => sum + st.totalPaid, 0),
-        balance: cls.students.reduce((sum: number, st: any) => sum + st.balance, 0),
-      },
-    }));
-
-    const grandTotal = {
-      totalAssigned: classesArr.reduce((sum, c) => sum + c.classTotals.totalAssigned, 0),
-      totalPaid: classesArr.reduce((sum, c) => sum + c.classTotals.totalPaid, 0),
-      balance: classesArr.reduce((sum, c) => sum + c.classTotals.balance, 0),
-    };
-
-    return { classes: classesArr, grandTotal };
+    const totals = (students: any[]) => students.reduce((sum,entry) => ({totalAssigned: sum.totalAssigned+(entry.tuitionKnown ? entry.totalAssigned : 0),
+      totalPaid: sum.totalPaid+entry.totalPaid,balance: sum.balance+(entry.tuitionKnown ? entry.balance : 0),
+      unverifiedCount: sum.unverifiedCount+(entry.tuitionKnown ? 0 : 1)}),{totalAssigned:0,totalPaid:0,balance:0,unverifiedCount:0});
+    const classes = Array.from(groups.values()).map(group => ({ ...group,classTotals: totals(group.students) }));
+    return { classes,grandTotal: totals(classes.flatMap(group => group.students)) };
   }
 
   async getFinancialSummary(schoolId?: string, term?: string, session?: string): Promise<{
@@ -2065,7 +1897,7 @@ export class DatabaseStorage implements IStorage {
     totalRevenue: number;
     actualTuitionCollected: number;
     totalOutstanding: number;
-    collectionRate: number;
+    collectionRate: number | null;
     studentsOwing: number;
     totalPosFees: number;
     tuitionUnverifiedCount: number;
@@ -2108,98 +1940,21 @@ export class DatabaseStorage implements IStorage {
     return { ...summary, totalPending:0, totalOverdue:0, totalRevenue, totalPosFees };
   }
 
-  async getTuitionCollectionByClass(schoolId: string, term?: string, session?: string): Promise<Array<{
-    classId: string;
-    className: string;
-    activeStudentCount: number;
-    expectedTuition: number;
-    tuitionCollected: number;
-    collectionRate: number | null;
-  }>> {
-    // All classes for the school (so empty classes still appear).
-    const schoolClasses = await db
-      .select({ id: classes.id, name: classes.name })
-      .from(classes)
-      .where(eq(classes.schoolId, schoolId));
-
-    // Active students in the school — include effective student_type and discount so we
-    // can resolve the correct per-type tuition rate for each student.
-    // Effective type: if the student was flipped to 'returning' during THIS term/session,
-    // treat them as 'new' for this term's calculations to avoid retroactive rate changes.
-    const activeStudentsRows = await db.execute(sql`
-      SELECT s.id, s.class_id AS "classId",
-             ${term && session
-               ? sql`CASE WHEN s.student_type = 'returning' AND s.student_type_flipped_term = ${term} AND s.student_type_flipped_session = ${session} THEN 'new' ELSE COALESCE(s.student_type, 'returning') END`
-               : sql`COALESCE(s.student_type, 'returning')`} AS "studentType",
-             s.discount AS "discount"
-      FROM students s
-      JOIN users u ON s.user_id = u.id
-      WHERE u.is_active = true
-        AND u.school_id = ${schoolId}
-    `);
-    const allActiveStudents = ((activeStudentsRows as any).rows || activeStudentsRows) as {
-      id: string; classId: string; studentType: string | null; discount: string | number | null;
-    }[];
-
-    // Active tuition fee type for this school.
-    const tuitionFeeConditions: any[] = [
-      eq(feeTypes.isTuition, true),
-      eq(feeTypes.isActive, true),
-      eq(feeTypes.schoolId, schoolId),
-    ];
-    const [tuitionFeeType] = await db.select().from(feeTypes).where(and(...tuitionFeeConditions)).limit(1);
-
-    // Build a typed resolver from ALL rows (global + scoped) so the priority
-    // fallback (scoped+typed > scoped+universal > global+typed > global+universal)
-    // works correctly for every student type / class combination.
-    let tuitionResolver: (classId: string, studentType: string | null) => number = () => 0;
-    if (tuitionFeeType) {
-      const tuitionAmounts = await this.getTuitionClassAmounts(tuitionFeeType.id);
-      tuitionResolver = this.buildTuitionResolver(tuitionAmounts, term, session);
+  async getTuitionCollectionByClass(schoolId: string, term?: string, session?: string) {
+    const { entries } = await this.getStudentPaymentLedger(schoolId, undefined, term, session);
+    const schoolClasses = await db.select({ id: classes.id,name: classes.name }).from(classes).where(eq(classes.schoolId,schoolId));
+    const groups = new Map<string, { className: string; entries: typeof entries }>(schoolClasses.map(cls => [cls.id,{className:cls.name,entries:[]} ]));
+    for (const entry of entries) {
+      const id = entry.classId || 'unverified';
+      if (!groups.has(id)) groups.set(id,{className:entry.className,entries:[]});
+      groups.get(id)!.entries.push(entry);
     }
-
-    // Per-student paid TUITION totals. Same UNION the Payment Broadsheet uses
-    // (records + splits) but scoped to the tuition fee purpose so the popup
-    // shows tuition collected per class; overpayments are never reassigned
-    // to another purpose automatically. Apply the
-    // safety min(paid, owed) below.
-    const studentPaidMap = tuitionFeeType
-      ? await this.getConfirmedPaymentTotalsByStudent(
-          schoolId, term, session, tuitionFeeType.name,
-        )
-      : new Map<string, number>();
-
-    // Aggregate per class.
-    const perClass = new Map<string, { activeStudentCount: number; expectedTuition: number; tuitionCollected: number }>();
-    for (const cls of schoolClasses) {
-      perClass.set(cls.id, { activeStudentCount: 0, expectedTuition: 0, tuitionCollected: 0 });
-    }
-    for (const student of allActiveStudents) {
-      if (!student.classId) continue;
-      const bucket = perClass.get(student.classId);
-      if (!bucket) continue;
-      bucket.activeStudentCount += 1;
-      const rawOwed = tuitionResolver(student.classId, student.studentType ?? null);
-      const discount = Number(student.discount) || 0;
-      const owed = Math.max(0, rawOwed - discount);
-      const paid = studentPaidMap.get(student.id) || 0;
-      bucket.expectedTuition += owed;
-      bucket.tuitionCollected += Math.min(paid, owed);
-    }
-
-    return schoolClasses.map(cls => {
-      const b = perClass.get(cls.id)!;
-      const rate = b.expectedTuition > 0
-        ? Math.round((b.tuitionCollected / b.expectedTuition) * 100)
-        : null;
-      return {
-        classId: cls.id,
-        className: cls.name,
-        activeStudentCount: b.activeStudentCount,
-        expectedTuition: b.expectedTuition,
-        tuitionCollected: b.tuitionCollected,
-        collectionRate: rate,
-      };
+    return Array.from(groups).map(([classId,group]) => {
+      const summary = summarizeTuition(group.entries);
+      return { classId,className: group.className,activeStudentCount: group.entries.length,
+        expectedTuition: summary.totalFees,tuitionCollected: summary.actualTuitionCollected,
+        tuitionConfirmed: summary.totalPaid,tuitionUnverifiedCount: summary.tuitionUnverifiedCount,
+        collectionRate: summary.tuitionUnverifiedCount>0 || summary.totalFees===0 ? null : summary.collectionRate };
     });
   }
 

@@ -1,3 +1,4 @@
+import { tuitionPeriodOrder } from "@shared/historical-tuition";
 import { formatStudentName } from "@shared/student-name";
 import { PaymentDateFilters } from "@/components/payment-date-filters";
 import { confirmationRangeLabel } from "@/components/confirmation-date-filter";
@@ -190,11 +191,12 @@ interface BroadsheetData {
       totalAssigned: number;
       totalPaid: number;
       balance: number;
-      status: 'paid' | 'partial' | 'unpaid';
+      status: 'paid' | 'partial' | 'unpaid' | 'unverified';
+      tuitionKnown?: boolean; tuitionSource?: string; tuitionReason?: string | null;
     }>;
     classTotals: { totalAssigned: number; totalPaid: number; balance: number };
   }>;
-  grandTotal: { totalAssigned: number; totalPaid: number; balance: number };
+  grandTotal: { totalAssigned: number; totalPaid: number; balance: number; unverifiedCount?: number };
 }
 
 function BroadsheetTable({ schoolId, term, session, schoolName }: {
@@ -271,6 +273,7 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   }
 
   const statusBadge = (status: string, totalAssigned: number) => {
+    if (status === 'unverified') return <Badge variant="outline">Not verified</Badge>;
     if (totalAssigned === 0) return <Badge variant="outline" className="text-gray-500 text-[10px]">No Fees</Badge>;
     if (status === 'paid') return <Badge className="bg-green-100 text-green-800 text-[10px]">Paid</Badge>;
     if (status === 'partial') return <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">Partial</Badge>;
@@ -293,6 +296,8 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   return (
     <div className="broadsheet-print-content">
       {dateFilters}
+      <p className="text-xs text-muted-foreground">Tuition only. Other payments remain in the ledger. Totals include verified charges only.</p>
+      {!!data.grandTotal.unverifiedCount && <p className="text-sm text-amber-700">{data.grandTotal.unverifiedCount} tuition charges are not verified.</p>}
       <div className="hidden print:block text-center mb-4">
         <h2 className="text-lg font-bold">{schoolName}</h2>
         <p className="text-sm">Payment Broadsheet — {term}, {session}</p>
@@ -340,9 +345,9 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
                     <TableCell className="text-center text-xs">{idx + 1}</TableCell>
                     <TableCell className="text-sm whitespace-normal break-words">{formatStudentName(st)}</TableCell>
                     <TableCell className="text-sm font-mono">{st.sowaId}</TableCell>
-                    <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.totalAssigned.toLocaleString()}` : "—"}</TableCell>
+                    <TableCell className="text-right text-sm">{st.tuitionKnown === false ? "Not verified" : `₦${st.totalAssigned.toLocaleString()}`}<p className="max-w-48 whitespace-normal text-xs text-muted-foreground">{st.tuitionReason || st.tuitionSource}</p></TableCell>
                     <TableCell className="text-right text-sm font-medium text-green-600">{st.totalPaid > 0 ? `₦${st.totalPaid.toLocaleString()}` : "₦0"}</TableCell>
-                    {!confirmationFiltered && <TableCell className="text-right text-sm">{st.totalAssigned > 0 ? `₦${st.balance.toLocaleString()}` : "—"}</TableCell>}
+                    {!confirmationFiltered && <TableCell className="text-right text-sm">{st.tuitionKnown === false ? "Not verified" : `₦${st.balance.toLocaleString()}`}</TableCell>}
                     {!confirmationFiltered && <TableCell className="text-center">{statusBadge(st.status, st.totalAssigned)}</TableCell>}
                   </TableRow>
                 ))}
@@ -377,6 +382,7 @@ type ClassTuitionRow = {
   activeStudentCount: number;
   expectedTuition: number;
   tuitionCollected: number;
+  tuitionUnverifiedCount?: number;
   collectionRate: number | null;
 };
 
@@ -397,47 +403,12 @@ function ClassTuitionBreakdownDialog({
   session: string;
   sortClassesByOrder: <T extends { name: string }>(c: T[]) => T[];
 }) {
-  const { data: ledgerResp, isLoading } = useQuery<{ entries: Array<{ classId: string; className: string; tuitionAssigned: number; tuitionPaid: number; tuitionKnown: boolean; totalPaid: number }> }>({
-    queryKey: ['/api/payments/ledger', schoolId, 'all', term, session],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (schoolId) params.set('schoolId', schoolId);
-      if (term) params.set('term', term);
-      if (session) params.set('session', session);
-      return apiRequest(`/api/payments/ledger?${params.toString()}`);
-    },
-    enabled: open && !!schoolId,
+  const { data: rows = [], isLoading, isError } = useQuery<ClassTuitionRow[]>({
+    queryKey: ['/api/admin/financial-summary/by-class',schoolId,term,session],
+    queryFn: () => apiRequest(`/api/admin/financial-summary/by-class?${new URLSearchParams({schoolId,term,session})}`),
+    enabled: open && !!schoolId && !!term && !!session,
     staleTime: 0,
   });
-
-  const rows: ClassTuitionRow[] = (() => {
-    const entries = ledgerResp?.entries ?? [];
-    const byClass = new Map<string, ClassTuitionRow>();
-    for (const e of entries) {
-      const tuition = e.tuitionKnown ? e.tuitionAssigned || 0 : 0;
-      const paid = e.tuitionPaid || 0;
-      const tuitionPaid = Math.min(paid, tuition);
-      const cur = byClass.get(e.classId) ?? {
-        classId: e.classId,
-        className: e.className,
-        activeStudentCount: 0,
-        expectedTuition: 0,
-        tuitionCollected: 0,
-        collectionRate: null as number | null,
-      };
-      cur.activeStudentCount += 1;
-      cur.expectedTuition += tuition;
-      cur.tuitionCollected += tuitionPaid;
-      byClass.set(e.classId, cur);
-    }
-    return Array.from(byClass.values()).map(r => ({
-      ...r,
-      collectionRate: r.expectedTuition > 0
-        ? Math.round((r.tuitionCollected / r.expectedTuition) * 100)
-        : null,
-    }));
-  })();
-
   const sortedRows = sortClassesByOrder(
     rows.map(r => ({ ...r, name: r.className }))
   );
@@ -451,7 +422,7 @@ function ClassTuitionBreakdownDialog({
     },
     { activeStudentCount: 0, expectedTuition: 0, tuitionCollected: 0 }
   );
-  const totalRate = totals.expectedTuition > 0
+  const totalRate = !rows.some(row => !!row.tuitionUnverifiedCount) && totals.expectedTuition > 0
     ? Math.round((totals.tuitionCollected / totals.expectedTuition) * 100)
     : null;
 
@@ -468,7 +439,7 @@ function ClassTuitionBreakdownDialog({
             {[schoolName, term, session].filter(Boolean).join(' · ')}
           </DialogDescription>
         </DialogHeader>
-        {isLoading ? (
+        {isError ? <p role="alert">Class tuition could not be loaded. Please reopen this report to retry.</p> : isLoading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
         ) : sortedRows.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
@@ -480,7 +451,7 @@ function ClassTuitionBreakdownDialog({
               <TableHeader>
                 <TableRow>
                   <TableHead>Class</TableHead>
-                  <TableHead className="text-right">Active Students</TableHead>
+                  <TableHead className="text-right">Students in period</TableHead>
                   <TableHead className="text-right">Expected Tuition</TableHead>
                   <TableHead className="text-right">Tuition Collected</TableHead>
                   <TableHead className="text-right">Collection %</TableHead>
@@ -489,7 +460,7 @@ function ClassTuitionBreakdownDialog({
               <TableBody>
                 {sortedRows.map(r => (
                   <TableRow key={r.classId} data-testid={`row-class-tuition-${r.classId}`}>
-                    <TableCell className="font-medium">{r.className}</TableCell>
+                    <TableCell className="font-medium">{r.className}{!!r.tuitionUnverifiedCount && <p className="text-xs text-amber-700">{r.tuitionUnverifiedCount} unverified charges; totals include verified charges only.</p>}</TableCell>
                     <TableCell className="text-right">{r.activeStudentCount}</TableCell>
                     <TableCell className="text-right">{fmt(r.expectedTuition)}</TableCell>
                     <TableCell className="text-right">{fmt(r.tuitionCollected)}</TableCell>
@@ -758,7 +729,7 @@ function FeeTypeCard({ feeType, classes, sortClassesByOrder, onAssign, onEdit, o
               <span className="hidden sm:inline">Assign</span>
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-8" onClick={() => onEdit(feeType.isTuition ? tuitionAmounts : undefined)}>
+          <Button aria-label={feeType.isTuition ? "Edit tuition rates" : `Edit ${feeType.name}`} size="sm" variant="outline" className="h-8" onClick={() => onEdit(feeType.isTuition ? tuitionAmounts : undefined)}>
             <Edit className="h-3 w-3" />
           </Button>
           <Button size="sm" variant="ghost" className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={onDelete}>
@@ -974,6 +945,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   const [tuitionScopeSession, setTuitionScopeSession] = useState<string>("");
   const [editTuitionScopeTerm, setEditTuitionScopeTerm] = useState<string>("");
   const [editTuitionScopeSession, setEditTuitionScopeSession] = useState<string>("");
+  const [historicalRateVerified, setHistoricalRateVerified] = useState(false);
+  const [historicalRateReason, setHistoricalRateReason] = useState('');
+  const [loadedRateScope, setLoadedRateScope] = useState<string | null>(null);
+  const [rateScopeError, setRateScopeError] = useState('');
   const [assignFeeClassIds, setAssignFeeClassIds] = useState<string[]>([]);
   const [isClassTuitionDialogOpen, setIsClassTuitionDialogOpen] = useState(false);
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
@@ -1062,10 +1037,25 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
     }
   }, [academicInfo]);
 
+  const editScopeOrder = tuitionPeriodOrder({term:editTuitionScopeTerm,session:editTuitionScopeSession});
+  const currentScopeOrder = tuitionPeriodOrder({term:academicInfo?.currentTerm,session:academicInfo?.currentSession});
+  const editingHistoricalRate = editScopeOrder !== null && (currentScopeOrder === null || editScopeOrder < currentScopeOrder);
+  const rateScopeKey = `${editingFeeType?.id}:${editTuitionScopeTerm}:${editTuitionScopeSession}`;
+  useEffect(() => { setHistoricalRateVerified(false); setHistoricalRateReason(''); }, [isEditFeeTypeDialogOpen,editTuitionScopeTerm,editTuitionScopeSession]);
+
+  const { data: financePeriods = [] } = useQuery<{term:string;session:string}[]>({
+    queryKey:['/api/payments/finance-periods',selectedSchoolId],
+    queryFn:() => apiRequest(`/api/payments/finance-periods?schoolId=${selectedSchoolId}`),
+    enabled:!!selectedSchoolId && perm('tab_finance'),
+  });
+  const financeSessions = Array.from(new Set([...academicSessions.map(row => row.sessionYear),...financePeriods.map(row => row.session),...(academicInfo?.currentSession ? [academicInfo.currentSession] : [])])).sort().reverse();
+
   // When the tuition edit dialog's scope changes, refetch amounts for that
   // scope and prefill the editor (falling back to globals if the scope is empty).
   useEffect(() => {
-    if (!isEditFeeTypeDialogOpen || !editingFeeType?.isTuition) return;
+    if (!isEditFeeTypeDialogOpen || !editingFeeType?.isTuition) { setLoadedRateScope(null); return; }
+    setRateScopeError('');
+    setLoadedRateScope(null);
     let cancelled = false;
     (async () => {
       try {
@@ -1078,7 +1068,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
         // Always fetch all rows for this fee type and partition locally so
         // we can correctly distinguish global rows from scoped ones.
         const allRes = await fetch(`/api/admin/tuition-amounts/${editingFeeType.id}`, { credentials: 'include', headers });
-        const allRows: any[] = allRes.ok ? await allRes.json() : [];
+        if (!allRes.ok) throw new Error("Could not load saved tuition rates");
+        const allRows: any[] = await allRes.json();
         const globals = allRows.filter((r: any) => r.term === null && r.session === null);
         const bothPicked = !!(editTuitionScopeTerm && editTuitionScopeSession);
         let rows: any[];
@@ -1089,8 +1080,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
         } else {
           const scoped = allRows.filter((r: any) => r.term === editTuitionScopeTerm && r.session === editTuitionScopeSession);
           // Prefill from globals when no scoped rows exist yet.
-          inherited = scoped.length === 0 && globals.length > 0;
-          rows = scoped.length > 0 ? scoped : globals;
+          inherited = !editingHistoricalRate && scoped.length === 0 && globals.length > 0;
+          rows = scoped.length > 0 ? scoped : editingHistoricalRate ? [] : globals;
         }
         if (cancelled) return;
         // Determine if this scope has typed (per student-type) rows
@@ -1117,14 +1108,15 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
           setEditTuitionReturningAmountsMap({});
         }
 
+        setLoadedRateScope(rateScopeKey);
         setEditScopeIsInherited(inherited);
         setEditInheritedClassIds(inherited ? new Set(Object.keys(map)) : new Set());
       } catch {
-        // ignore — leave existing map untouched
+        if (!cancelled) setRateScopeError('Saved tuition rates could not be loaded. Close and reopen this editor to retry.');
       }
     })();
     return () => { cancelled = true; };
-  }, [isEditFeeTypeDialogOpen, editingFeeType?.id, editingFeeType?.isTuition, editTuitionScopeTerm, editTuitionScopeSession]);
+  }, [isEditFeeTypeDialogOpen, editingFeeType?.id, editingFeeType?.isTuition, editTuitionScopeTerm, editTuitionScopeSession, editingHistoricalRate]);
 
   // Scores management states
   const [scoresClassId, setScoresClassId] = useState("");
@@ -1613,37 +1605,11 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
       return apiRequest(url);
     },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin',
+    enabled: (!!selectedSchoolId || user?.role === 'sub-admin') && !!selectedFinanceTerm && !!selectedFinanceSession,
     staleTime: 0
   });
 
-  const { data: financeLedgerResp } = useQuery<{ entries: Array<{ tuitionAssigned: number; tuitionPaid: number; tuitionKnown: boolean; totalPaid: number }> }>({
-    queryKey: ['/api/payments/ledger', selectedSchoolId, 'all', selectedFinanceTerm, selectedFinanceSession],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (user?.role === 'admin' && selectedSchoolId) params.set('schoolId', selectedSchoolId);
-      if (selectedFinanceTerm) params.set('term', selectedFinanceTerm);
-      if (selectedFinanceSession) params.set('session', selectedFinanceSession);
-      return apiRequest(`/api/payments/ledger?${params.toString()}`);
-    },
-    enabled: !!selectedSchoolId || user?.role === 'sub-admin',
-    staleTime: 0
-  });
-
-  const ledgerCollectionRate: number | null = (() => {
-    const entries = financeLedgerResp?.entries ?? [];
-    if (entries.length === 0) return null;
-    let expected = 0;
-    let collected = 0;
-    for (const e of entries) {
-      const tuition = e.tuitionKnown ? e.tuitionAssigned || 0 : 0;
-      const paid = e.tuitionPaid || 0;
-      expected += tuition;
-      collected += Math.min(paid, tuition);
-    }
-    return expected > 0 ? Math.round((collected / expected) * 100) : null;
-  })();
-
+  const ledgerCollectionRate: number | null = financialSummary?.collectionRate ?? null;
 
   // Mutations
   const createClassMutation = useMutation({
@@ -2941,7 +2907,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
     mutationFn: async (feeTypeData: FeeTypeForm) => {
       const classAmounts = isTuitionMode
         ? Object.entries(tuitionClassAmountsMap)
-            .filter(([_, amt]) => amt && parseFloat(amt) > 0)
+            .filter(([_, amt]) => amt.trim() !== "" && Number.isFinite(Number(amt)) && Number(amt) >= 0)
             .map(([classId, amount]) => ({ classId, amount }))
         : undefined;
 
@@ -3130,6 +3096,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
     setIsAssignFeeDialogOpen(false);
     queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/payments/tuition-balances'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary/by-class'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/admin/payment-broadsheet'] });
   };
 
   // Logo upload functions
@@ -5398,7 +5368,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium whitespace-nowrap">Term:</Label>
                 <Select value={selectedFinanceTerm} onValueChange={setSelectedFinanceTerm}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger aria-label="Finance term" className="w-[150px]">
                     <SelectValue placeholder="Select term" />
                   </SelectTrigger>
                   <SelectContent>
@@ -5414,12 +5384,12 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               <div className="flex items-center gap-2">
                 <Label className="text-sm font-medium whitespace-nowrap">Session:</Label>
                 <Select value={selectedFinanceSession} onValueChange={setSelectedFinanceSession}>
-                  <SelectTrigger className="w-[150px]">
+                  <SelectTrigger aria-label="Finance session" className="w-[150px]">
                     <SelectValue placeholder="Select session" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(academicSessions.length > 0
-                      ? academicSessions.map((s) => s.sessionYear)
+                    {(financeSessions.length > 0
+                      ? financeSessions
                       : (() => {
                           const baseYear = selectedFinanceSession
                             ? parseInt(selectedFinanceSession.split('/')[0])
@@ -5479,7 +5449,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
                     <div className="text-lg sm:text-2xl font-bold truncate">
-                      {financialSummary?.totalFees ? `₦${(financialSummary.totalOutstanding ?? 0).toLocaleString()}` : "N/A"}
+                      {!financialSummary || financialSummary.tuitionUnverifiedCount > 0 && financialSummary.tuitionVerifiedCount === 0 ? "Not verified" : `₦${(financialSummary.totalOutstanding ?? 0).toLocaleString()}`}
                     </div>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">
                       {financialSummary?.totalFees ? "Assigned tuition minus actual collected" : "No fees assigned"}
@@ -5554,12 +5524,13 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
               {(perm('finance_outstanding_fees') || perm('finance_total_revenue')) && <Card>
                 <CardHeader className="p-3 sm:p-6 pb-1 sm:pb-2"><CardTitle className="text-xs sm:text-sm font-medium">Tuition Expected</CardTitle></CardHeader>
-                <CardContent className="p-3 sm:p-6 pt-0"><div className="text-lg sm:text-2xl font-bold">₦{(financialSummary?.totalFees ?? 0).toLocaleString()}</div><p className="text-[10px] sm:text-xs text-muted-foreground">Assigned tuition after applicable discounts</p></CardContent>
+                <CardContent className="p-3 sm:p-6 pt-0"><div className="text-lg sm:text-2xl font-bold">{!financialSummary || financialSummary.tuitionUnverifiedCount > 0 && financialSummary.tuitionVerifiedCount === 0 ? "Not verified" : `₦${(financialSummary.totalFees ?? 0).toLocaleString()}`}</div><p className="text-[10px] sm:text-xs text-muted-foreground">Assigned tuition after applicable discounts</p></CardContent>
               </Card>}
 
             </div>
 
             <p className="text-xs text-muted-foreground">These cards show tuition only. Other payment purposes remain in payment records and the ledger. Pending payments do not count as confirmed collections.</p>
+            {!!financialSummary?.studentTypeUnverifiedCount && <p className="text-xs text-amber-700">{financialSummary.studentTypeUnverifiedCount} student types are not historically verified. Their amounts are not classified as New or Returning.</p>}
             {!!financialSummary?.tuitionUnverifiedCount && <p className="text-sm text-amber-700">{financialSummary.tuitionUnverifiedCount} students have unverified tuition charges. Expected, outstanding and collection-rate figures cover verified charges only.</p>}
 
             {perm('finance_class_tuition_breakdown') && (
@@ -5619,8 +5590,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         feeType={feeType}
                         classes={classes}
                         sortClassesByOrder={sortClassesByOrder}
-                        currentTerm={academicInfo?.currentTerm || undefined}
-                        currentSession={academicInfo?.currentSession || undefined}
+                        currentTerm={selectedFinanceTerm || undefined}
+                        currentSession={selectedFinanceSession || undefined}
                         onAssign={() => {
                           assignFeeForm.setValue('feeTypeId', feeType.id);
                           setIsAssignFeeDialogOpen(true);
@@ -5633,8 +5604,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                           setEditFeeTypeDescription(feeType.description || "");
                           if (feeType.isTuition) {
                             // Default scope to school's current term/session, fall back to global.
-                            setEditTuitionScopeTerm(academicInfo?.currentTerm || "");
-                            setEditTuitionScopeSession(academicInfo?.currentSession || "");
+                            setEditTuitionScopeTerm(selectedFinanceTerm || academicInfo?.currentTerm || "");
+                            setEditTuitionScopeSession(selectedFinanceSession || academicInfo?.currentSession || "");
                             // Pre-populate map with global amounts (refetch effect will refine for scope).
                             if (tuitionAmounts) {
                               const map: Record<string, string> = {};
@@ -5670,6 +5641,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   schoolId={user?.role === 'admin' ? selectedSchoolId : user?.schoolId}
                   currentTerm={selectedFinanceTerm}
                   currentSession={selectedFinanceSession}
+                  availableSessions={financeSessions}
+                  onPeriodChange={(term, session) => { setSelectedFinanceTerm(term); setSelectedFinanceSession(session); }}
                   userRole={user?.role as "admin" | "sub-admin" | "bursar"}
                 />
               </CardContent>
@@ -5701,6 +5674,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                     schoolName={getSchoolName(user?.role === 'admin' ? selectedSchoolId : (user?.schoolId || ''))}
                     currentTerm={selectedFinanceTerm}
                     currentSession={selectedFinanceSession}
+                  availableSessions={financeSessions}
+                  onPeriodChange={(term, session) => { setSelectedFinanceTerm(term); setSelectedFinanceSession(session); }}
                     userRole={user?.role}
                     onOpenTuitionSetup={() => {
                       const tuitionFt = (feeTypes as FeeType[]).find((ft) => ft.isTuition);
@@ -8137,7 +8112,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         </div>
                       ))}
                     </div>
-                    <p className="text-xs text-muted-foreground">Set the tuition amount for each class. Leave empty or 0 for classes that don't apply.</p>
+                    <p className="text-xs text-muted-foreground">Set the tuition amount for each class. Leave empty for an unset rate. Enter 0 to save an explicit zero rate.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -8387,12 +8362,20 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 <Input
                   id="edit-fee-description"
                   value={editFeeTypeDescription}
+                  disabled={editingHistoricalRate && !!editingFeeType?.isTuition}
                   onChange={(e) => setEditFeeTypeDescription(e.target.value)}
                   placeholder="Optional description"
                 />
               </div>
               {editingFeeType?.isTuition && (
                 <>
+                  {rateScopeError && <p role="alert" className="text-sm text-red-700">{rateScopeError}</p>}
+                  {editingHistoricalRate && <div className="space-y-3 rounded-md border border-amber-300 p-3 text-sm">
+                    <p>Enter only the historical class rates verified against school records. Current defaults are not copied into this period. Only these historical rates will be saved; general fee details stay unchanged.</p>
+                    <label className="flex items-start gap-2"><input type="checkbox" checked={historicalRateVerified} onChange={event => setHistoricalRateVerified(event.target.checked)} className="mt-1 h-4 w-4" />I have verified these historical rates against school records.</label>
+                    <Label htmlFor="historical-rate-reason">Verification reason / source</Label>
+                    <Input id="historical-rate-reason" value={historicalRateReason} onChange={event => setHistoricalRateReason(event.target.value)} placeholder="For example: approved fee schedule for this period" />
+                  </div>}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <Label className="text-xs">Term</Label>
@@ -8412,8 +8395,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__all__">All sessions (global)</SelectItem>
-                          {(academicSessions || []).map((s: any) => (
-                            <SelectItem key={s.id} value={s.sessionYear}>{s.sessionYear}</SelectItem>
+                          {financeSessions.map(session => (
+                            <SelectItem key={session} value={session}>{session}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -8422,7 +8405,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                       {(!editTuitionScopeTerm || !editTuitionScopeSession) ? (
                         <>
                           Saving with <strong>All terms / All sessions</strong> updates the{" "}
-                          <strong>global default</strong> used whenever no term-specific amount is set.
+                          <strong>global default</strong> used only for the current period when no period-specific amount is set. Historical periods require saved period-specific rates.
                         </>
                       ) : (
                         <>
@@ -8467,7 +8450,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                                 const ret = editTuitionReturningAmountsMap[classId];
                                 const nw  = editTuitionNewAmountsMap[classId];
                                 const chosen = ret || nw;
-                                if (chosen && parseFloat(chosen) > 0) merged[classId] = chosen;
+                                if (chosen !== undefined && chosen.trim() !== '' && Number(chosen) >= 0) merged[classId] = chosen;
                               });
                               return merged;
                             });
@@ -8570,7 +8553,46 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   onClick={async () => {
                     if (!editingFeeType || !editFeeTypeName.trim()) return;
                     if (!editingFeeType.isTuition && !editFeeTypeAmount.trim()) return;
-                    updateFeeTypeMutation.mutate({
+                    try {
+                    if (editingFeeType.isTuition) {
+                      let classAmounts: { classId: string; amount: string; studentType?: string | null }[];
+                      if (editTuitionUseTypedRates) {
+                        // Collect new-student and returning-student rows separately
+                        const newRows = Object.entries(editTuitionNewAmountsMap)
+                          .filter(([_, amt]) => amt.trim() !== "" && Number.isFinite(Number(amt)) && Number(amt) >= 0)
+                          .map(([classId, amount]) => ({ classId, amount, studentType: 'new' }));
+                        const returningRows = Object.entries(editTuitionReturningAmountsMap)
+                          .filter(([_, amt]) => amt.trim() !== "" && Number.isFinite(Number(amt)) && Number(amt) >= 0)
+                          .map(([classId, amount]) => ({ classId, amount, studentType: 'returning' }));
+                        classAmounts = [...newRows, ...returningRows];
+                      } else {
+                        classAmounts = Object.entries(editTuitionClassAmountsMap)
+                          .filter(([_, amt]) => amt.trim() !== "" && Number.isFinite(Number(amt)) && Number(amt) >= 0)
+                          .map(([classId, amount]) => ({ classId, amount, studentType: null }));
+                      }
+                      await apiRequest(`/api/admin/tuition-amounts/${editingFeeType.id}`, {
+                        method: 'PUT',
+                        body: {
+                          amounts: classAmounts,
+                          verifiedHistoricalRate: historicalRateVerified,
+                          verificationReason: historicalRateReason.trim(),
+                          ...(editTuitionScopeTerm ? { term: editTuitionScopeTerm } : {}),
+                          ...(editTuitionScopeSession ? { session: editTuitionScopeSession } : {}),
+                        },
+                      });
+                      queryClient.invalidateQueries({ queryKey: ['/api/admin/tuition-amounts', editingFeeType.id] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/payments/tuition-balances'] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/admin/payment-broadsheet'] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary/by-class'] });
+                      queryClient.invalidateQueries({ queryKey: ['/api/payments/finance-periods'] });
+                    }
+                    if (editingHistoricalRate && editingFeeType.isTuition) {
+                      setIsEditFeeTypeDialogOpen(false);
+                      toast({title:'Historical tuition rates saved',description:'The selected period was updated and the verification reason recorded.'});
+                    } else {
+                    await updateFeeTypeMutation.mutateAsync({
                       id: editingFeeType.id,
                       data: {
                         name: editFeeTypeName,
@@ -8579,36 +8601,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         description: editFeeTypeDescription,
                       }
                     });
-                    if (editingFeeType.isTuition) {
-                      let classAmounts: { classId: string; amount: string; studentType?: string | null }[];
-                      if (editTuitionUseTypedRates) {
-                        // Collect new-student and returning-student rows separately
-                        const newRows = Object.entries(editTuitionNewAmountsMap)
-                          .filter(([_, amt]) => amt && parseFloat(amt) > 0)
-                          .map(([classId, amount]) => ({ classId, amount, studentType: 'new' }));
-                        const returningRows = Object.entries(editTuitionReturningAmountsMap)
-                          .filter(([_, amt]) => amt && parseFloat(amt) > 0)
-                          .map(([classId, amount]) => ({ classId, amount, studentType: 'returning' }));
-                        classAmounts = [...newRows, ...returningRows];
-                      } else {
-                        classAmounts = Object.entries(editTuitionClassAmountsMap)
-                          .filter(([_, amt]) => amt && parseFloat(amt) > 0)
-                          .map(([classId, amount]) => ({ classId, amount, studentType: null }));
-                      }
-                      await apiRequest(`/api/admin/tuition-amounts/${editingFeeType.id}`, {
-                        method: 'PUT',
-                        body: {
-                          amounts: classAmounts,
-                          ...(editTuitionScopeTerm ? { term: editTuitionScopeTerm } : {}),
-                          ...(editTuitionScopeSession ? { session: editTuitionScopeSession } : {}),
-                        },
-                      });
-                      queryClient.invalidateQueries({ queryKey: ['/api/admin/tuition-amounts', editingFeeType.id] });
-                      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
-                      queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
                     }
+                    } catch (error) { toast({title:'Tuition rates were not saved',description:error instanceof Error ? error.message : 'Please try again.',variant:'destructive'}); }
                   }}
-                  disabled={updateFeeTypeMutation.isPending || !editFeeTypeName.trim() || (!editingFeeType?.isTuition && !editFeeTypeAmount.trim())}
+                  disabled={updateFeeTypeMutation.isPending || !editFeeTypeName.trim() || (!editingFeeType?.isTuition && !editFeeTypeAmount.trim()) || (!!editingFeeType?.isTuition && (loadedRateScope !== rateScopeKey || !!rateScopeError || !!editTuitionScopeTerm !== !!editTuitionScopeSession || (editingHistoricalRate && (!historicalRateVerified || historicalRateReason.trim().length < 10))))}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
                   {updateFeeTypeMutation.isPending ? (

@@ -1,3 +1,4 @@
+import { resolveHistoricalTuition } from '../shared/historical-tuition';
 import { summarizeTuition } from '../shared/tuition-summary';
 import { ANALYTICS_TERMS, previousPeriod, metricChange, analyticsFiltersSchema, analyticsComparisonSchema, analyticsSessionSchema, type AnalyticsFilters, type AnalyticsComparisonFilters, type AcademicPeriod } from '../shared/general-school-analytics';
 import { AnalyticsError, loadAnalyticsData, loadAvailablePeriods, type AnalyticsData, type ReportingDatabase, type ReportingSchool, type ReportingEvent, type ReportingRate } from './analytics-repository';
@@ -277,25 +278,26 @@ function buildFinance(data: AnalyticsData, schools: ReportingSchool[], filters: 
     };
     for (const roster of rosters) {
       const period = roster.period!;
-      const current = school.currentSession === period.session && school.currentTerm === period.term && roster.source === 'live';
-      const fees = data.tuitionFees.filter(fee => fee.schoolId === school.id && fee.isActive);
-      const rates = fees.length === 1 ? data.rates.filter(rate => rate.feeTypeId === fees[0].id) : [];
-      const resolver = resolveTuition(rates, period.term, period.session);
-      const ids = new Set(roster.students.filter(student => active(student) && (!filters.classId || classFor(student.studentId, period) === filters.classId)).map(student => student.studentId));
+      const fees = data.tuitionFees.filter(fee => fee.schoolId === school.id);
+      const rates = data.rates.filter(rate => fees.some(fee => fee.id === rate.feeTypeId)).map(rate => ({...rate,active:fees.find(fee => fee.id === rate.feeTypeId)?.isActive}));
+      const ids = new Set(roster.students.filter(student => !filters.classId || classFor(student.studentId, period) === filters.classId).map(student => student.studentId));
       data.charges.filter(charge => charge.schoolId === school.id && key(charge) === key(period) && (!filters.classId || classFor(charge.studentId, period) === filters.classId)).forEach(charge => ids.add(charge.studentId));
+      allocations.filter(allocation => key(allocation as AcademicPeriod)===key(period) && (!filters.classId || classFor(allocation.studentId,period)===filters.classId)).forEach(allocation => ids.add(allocation.studentId));
       for (const studentId of Array.from(ids)) {
         const saved = data.charges.filter(charge => charge.schoolId === school.id && charge.studentId === studentId && key(charge) === key(period));
         const student = data.students.find(row => row.studentId === studentId);
         const classId = classFor(studentId, period);
-        const effectiveType = student?.studentType === 'returning' && student.flippedTerm === period.term && student.flippedSession === period.session ? 'new' : student?.studentType || 'returning';
-        const applicable = rates.some(rate => cents(rate.amount) !== null && rate.classId === classId && (!rate.studentType || rate.studentType === effectiveType)
-          && ((!rate.term && !rate.session) || rate.term === period.term && rate.session === period.session));
-        const savedValid = saved.length > 0 && saved.every(charge => charge.status !== 'waived' && cents(charge.amount) !== null);
-        const tuitionKnown = savedValid || saved.length === 0 && current && !!student && cents(student.discount || '0') !== null && !!classId && applicable && cents(resolver(classId, effectiveType)) !== null;
-        const tuitionAssigned = savedValid ? sumCents(saved.map(charge => cents(charge.amount)!)) / 100
-          : tuitionKnown ? Math.max(0, resolver(classId!, effectiveType) - Number(student!.discount || 0)) : 0;
         const tuitionPaid = sumCents(allocations.filter(allocation => allocation.studentId === studentId && key(allocation as AcademicPeriod) === key(period) && allocation.isTuition).map(allocation => allocation.amount)) / 100;
-        entries.push({ studentId, tuitionAssigned, tuitionPaid, tuitionKnown, studentType: effectiveType });
+        const savedAmount = saved.length ? saved.every(charge => cents(charge.amount) !== null) ? sumCents(saved.map(charge => cents(charge.amount)!)) / 100 : NaN : null;
+        const facts = resolveHistoricalTuition({schoolId:school.id,period,
+          currentPeriod:school.currentTerm && school.currentSession ? {term:school.currentTerm,session:school.currentSession} : undefined,
+          student:{studentDbId:studentId,classId:classId || null,className:student?.className,schoolId:student?.schoolId || school.id,
+            status:student?.status,studentType:student?.studentType || null,discount:student?.discount || null,
+            flippedTerm:student?.flippedTerm,flippedSession:student?.flippedSession,savedTuition:savedAmount,
+            paymentCount:allocations.filter(allocation => allocation.studentId===studentId && key(allocation as AcademicPeriod)===key(period)).length},
+          events:data.events,snapshots:data.snapshots.filter(snapshot => snapshot.schoolId===school.id),rates,
+          classNames:Object.fromEntries(data.classes.filter(cls => cls.schoolId===school.id).map(cls => [cls.id,cls.name]))});
+        if (facts.included) entries.push({ studentId,tuitionAssigned:facts.tuitionAssigned,tuitionPaid,tuitionKnown:facts.tuitionKnown,studentType:facts.studentType });
       }
     }
     const summary = summarizeTuition(entries);

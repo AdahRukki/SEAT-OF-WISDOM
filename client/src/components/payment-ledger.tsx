@@ -135,6 +135,8 @@ interface LedgerEntry {
   tuitionKnown: boolean;
   discountKnown: boolean;
   tuitionSource: string;
+  tuitionReason?: string | null;
+  historicalDiscountNote?: string | null;
   totalAssigned: number;
   tuitionAssigned: number;
   discount: number;
@@ -166,7 +168,7 @@ interface PaymentRecord {
 interface LedgerMeta {
   hasTuitionFeeType: boolean;
   hasGlobalTuition: boolean;
-  hasScopedTuition: boolean;
+  hasScopedTuition: boolean; historical?: boolean;
 }
 
 interface LedgerResponse {
@@ -181,13 +183,17 @@ interface PaymentLedgerProps {
   currentSession?: string;
   userRole?: string;
   onOpenTuitionSetup?: () => void;
+  onPeriodChange?: (term: string, session: string) => void;
+  availableSessions?: string[];
 }
 
-export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSession, userRole, onOpenTuitionSetup }: PaymentLedgerProps) {
+export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSession, userRole, onOpenTuitionSetup, onPeriodChange, availableSessions }: PaymentLedgerProps) {
   const { user } = useAuth();
   const userId = user?.id;
   const [selectedClassId, setSelectedClassId] = useState<string>("all");
-  const [selectedTerm, setSelectedTerm] = useState<string>(currentTerm || "");
+  const [localTerm, setLocalTerm] = useState<string>(currentTerm || "");
+  const selectedTerm = onPeriodChange ? currentTerm || "" : localTerm;
+  const setSelectedTerm = (term: string) => onPeriodChange ? onPeriodChange(term, currentSession || "") : setLocalTerm(term);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [firstPaymentOnly, setFirstPaymentOnly] = useState(false);
   const [exportingRecords, setExportingRecords] = useState(false);
@@ -197,7 +203,9 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [confirmedTo, setConfirmedTo] = useState("");
   const confirmationFiltered = !!(confirmedFrom || confirmedTo);
   const invalidConfirmationRange = !!(confirmedFrom && confirmedTo && confirmedFrom > confirmedTo);
-  const [selectedSession, setSelectedSession] = useState<string>(currentSession || "");
+  const [localSession, setLocalSession] = useState<string>(currentSession || "");
+  const selectedSession = onPeriodChange ? currentSession || "" : localSession;
+  const setSelectedSession = (session: string) => onPeriodChange ? onPeriodChange(currentTerm || "", session) : setLocalSession(session);
   const [nameSearch, setNameSearch] = useState<string>("");
   const [selectedStudent, setSelectedStudent] = useState<LedgerEntry | null>(null);
   const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
@@ -230,10 +238,10 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const isCol = (k: ColKey) => visibleColumns.has(k) && !(confirmationFiltered && ["balance", "status", "misc"].includes(k));
 
   useEffect(() => {
-    if (currentTerm) setSelectedTerm(currentTerm);
+    if (currentTerm) setLocalTerm(currentTerm);
   }, [currentTerm]);
   useEffect(() => {
-    if (currentSession) setSelectedSession(currentSession);
+    if (currentSession) setLocalSession(currentSession);
   }, [currentSession]);
 
   const { data: sessions = [] } = useQuery<{ id: string; sessionYear: string }[]>({
@@ -248,7 +256,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     },
   });
 
-  const sessionOptions: string[] = sessions.length > 0
+  const sessionOptions: string[] = availableSessions?.length ? availableSessions : sessions.length > 0
     ? sessions.map((s) => s.sessionYear)
     : (() => {
         const base = currentSession
@@ -267,7 +275,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!schoolId && !invalidConfirmationRange,
+    enabled: !!schoolId && !invalidConfirmationRange && (!onPeriodChange || !!selectedTerm && !!selectedSession),
   });
 
   const firstPaymentActive = firstPaymentOnly && !!selectedTerm && !!selectedSession && confirmationFiltered;
@@ -305,6 +313,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       ? ledgerResponse?.entries.find(entry => entry.studentDbId === previous.studentDbId) ?? null
       : null);
   }, [ledgerResponse]);
+  const classOptions = Array.from(new Map([...schoolClasses.map(cls => [cls.id,cls] as const),...ledger.filter(entry => !!entry.classId).map(entry => [entry.classId,{id:entry.classId,name:entry.className}] as const)]).values());
   const ledgerMeta: LedgerMeta = ledgerResponse?.meta ?? { hasTuitionFeeType: false, hasGlobalTuition: false, hasScopedTuition: false };
 
   const { data: allStudentRecords = [], isLoading: recordsLoading } = useQuery<PaymentRecord[]>({
@@ -390,6 +399,8 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       if (isCol("studentType")) row["Student Type"] = e.studentType === "new" ? "New" : "Returning";
       if (isCol("parentWhatsapp")) row["Parent WhatsApp"] = e.parentWhatsapp || "";
       if (isCol("tuition")) row["Tuition Fee (NGN)"] = e.tuitionKnown ? tuition : "Not verified";
+      row["Charge source"] = e.tuitionSource;
+      row["Verification notes"] = e.tuitionReason || e.historicalDiscountNote || "";
       if (isCol("discount")) row["Discount (NGN)"] = e.discountKnown ? e.discount || 0 : "Not verified";
       if (isCol("paid")) row[confirmationFiltered ? "Confirmed in range (NGN)" : "Total Paid (NGN)"] = paid;
       if (isCol("misc")) row["Other payments (NGN)"] = misc;
@@ -405,7 +416,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     if (rows.length === 0) return;
     const className = selectedClassId === "all"
       ? "all-classes"
-      : (schoolClasses.find((c) => c.id === selectedClassId)?.name || "class");
+      : (classOptions.find((c) => c.id === selectedClassId)?.name || "class");
 
     // Append a Grand Total row mirroring the on-screen totals (admin-only).
     if (userRole === "admin" && filteredLedger.length > 0) {
@@ -492,7 +503,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
 
   const printClassName = selectedClassId === "all"
     ? "All Classes"
-    : (schoolClasses.find((c) => c.id === selectedClassId)?.name || "—");
+    : (classOptions.find((c) => c.id === selectedClassId)?.name || "—");
 
   const getStatusBadge = (status: string) => {
     if (status === "confirmed") return <Badge className="bg-green-100 text-green-800 text-[10px]">Confirmed</Badge>;
@@ -566,7 +577,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         <div className="space-y-1 w-full sm:w-auto">
           <label className="text-xs text-muted-foreground font-medium">Term</label>
           <Select value={selectedTerm} onValueChange={setSelectedTerm}>
-            <SelectTrigger className="h-8 text-sm w-full sm:w-[140px]">
+            <SelectTrigger aria-label="Ledger term" className="h-8 text-sm w-full sm:w-[140px]">
               <SelectValue placeholder="All terms" />
             </SelectTrigger>
             <SelectContent>
@@ -579,7 +590,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         <div className="space-y-1 w-full sm:w-auto">
           <label className="text-xs text-muted-foreground font-medium">Session</label>
           <Select value={selectedSession} onValueChange={setSelectedSession}>
-            <SelectTrigger className="h-8 text-sm w-full sm:w-[140px]">
+            <SelectTrigger aria-label="Ledger session" className="h-8 text-sm w-full sm:w-[140px]">
               <SelectValue placeholder="Select session" />
             </SelectTrigger>
             <SelectContent>
@@ -597,7 +608,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Classes</SelectItem>
-              {schoolClasses.map((cls) => (
+              {classOptions.map((cls) => (
                 <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
               ))}
             </SelectContent>
@@ -700,7 +711,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
               </div>
             );
           })()}
-          {ledgerMeta.hasTuitionFeeType && ledgerMeta.hasGlobalTuition && !ledgerMeta.hasScopedTuition && selectedTerm && selectedSession && (
+          {ledgerMeta.hasTuitionFeeType && ledgerMeta.hasGlobalTuition && !ledgerMeta.hasScopedTuition && !ledgerMeta.historical && selectedTerm && selectedSession && (
             <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground print:hidden" data-testid="text-tuition-using-global">
               Using <strong>global tuition defaults</strong> for{" "}
               <strong>{selectedTerm}</strong> · <strong>{selectedSession}</strong>{" "}
@@ -711,6 +722,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             {filteredLedger.map(entry => <article key={entry.studentDbId} className="rounded-lg border p-3 space-y-3">
               <div className="font-semibold break-words">{formatStudentName(entry)}{entry.studentType === "new" && <Badge variant="secondary" className="ml-2">New</Badge>}</div>
               <p className="text-sm text-muted-foreground">{entry.className} · {entry.studentId}</p>
+              {!confirmationFiltered && <p className="text-xs text-muted-foreground">{entry.tuitionSource}{entry.tuitionReason ? ` · ${entry.tuitionReason}` : ''}{entry.historicalDiscountNote ? ` · ${entry.historicalDiscountNote}` : ''}</p>}
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div><dt>{confirmationFiltered ? "Confirmed in range" : "Paid"}</dt><dd className="font-semibold text-green-600 break-words">₦{(entry.totalPaid || 0).toLocaleString()}</dd></div>
                 {!confirmationFiltered && <div><dt>Outstanding tuition</dt><dd className="font-semibold">{entry.tuitionKnown ? `₦${entry.balance.toLocaleString()}` : "Not verified"}</dd></div>}
@@ -785,7 +797,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                             : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
                         }`}
                       >
-                        {(entry.studentType ?? "returning") === "new" ? "New" : "Returning"}
+                        {entry.studentType === "new" ? "New" : entry.studentType === "returning" ? "Returning" : "Not verified"}
                       </span>
                     </TableCell>
                   )}
@@ -795,6 +807,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   {isCol("tuition") && (
                     <TableCell className="text-right font-semibold">
                       {entry.tuitionKnown ? `₦${tuition.toLocaleString()}` : "Not verified"}
+                      <p className="max-w-52 whitespace-normal text-xs font-normal text-muted-foreground">{entry.tuitionReason || entry.tuitionSource}{entry.historicalDiscountNote ? ` · ${entry.historicalDiscountNote}` : ''}</p>
                       {(entry.discount || 0) > 0 && (
                         <div className="text-[10px] font-normal text-emerald-600">
                           -₦{(entry.discount || 0).toLocaleString()} discount applied

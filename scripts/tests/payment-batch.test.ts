@@ -76,7 +76,7 @@ test('row validation uses cents, requires a purpose and rejects duplicate studen
 });
 test('tuition cards exclude other purposes, distinguish unverified charges, and cap collection rate',()=>{
   const summary=summarizeTuition([{tuitionAssigned:100000,tuitionPaid:80000,tuitionKnown:true,studentType:'new',totalPaid:100000} as any,{tuitionAssigned:10000,tuitionPaid:12000,tuitionKnown:true},{tuitionAssigned:0,tuitionPaid:5000,tuitionKnown:false}]);
-  assert.equal(summary.totalPaid,97000);assert.equal(summary.totalFees,110000);assert.equal(summary.totalOutstanding,20000);assert.equal(summary.actualTuitionCollected,90000);assert.equal(summary.collectionRate,82);assert.equal(summary.studentsOwing,1);assert.equal(summary.tuitionUnverifiedCount,1);
+  assert.equal(summary.totalPaid,97000);assert.equal(summary.totalFees,110000);assert.equal(summary.totalOutstanding,20000);assert.equal(summary.actualTuitionCollected,90000);assert.equal(summary.collectionRate,null);assert.equal(summary.studentsOwing,1);assert.equal(summary.tuitionUnverifiedCount,1);
 });
 test('a transfer across two students still creates only one confirmation record',async()=>{
   const {pg,db}=await fixture();try{

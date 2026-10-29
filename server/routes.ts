@@ -1,3 +1,5 @@
+import { parseTuitionRateUpdate } from './tuition-rate-updates';
+import { loadFinancePeriods } from './finance-history';
 import { historyContextSchema, promoteWithHistory, studentImportKey, StudentHistoryError, type HistoryContext } from './student-history';
 import { GeneralSchoolAnalytics } from './general-school-analytics';
 import { registerAnalyticsRoutes } from './analytics-routes';
@@ -3696,21 +3698,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      let tuitionUpdate;
+      if (feeTypeData.isTuition) {
+        try {
+          const school = feeTypeData.schoolId ? await storage.getSchoolById(feeTypeData.schoolId) : undefined;
+          tuitionUpdate = parseTuitionRateUpdate({amounts:classAmounts || [],term:tuitionTerm || undefined,session:tuitionSession || undefined,
+            verifiedHistoricalRate:req.body.verifiedHistoricalRate,verificationReason:req.body.verificationReason},
+            {currentTerm:school?.currentTerm || null,currentSession:school?.currentSession || null});
+          const allowed = await storage.getAllClasses(feeTypeData.schoolId || undefined);
+          if (tuitionUpdate.amounts.some(row => !allowed.some(cls => cls.id === row.classId))) return res.status(400).json({error:'Every tuition class must belong to this school.'});
+        } catch (error) { return res.status(400).json({error:error instanceof z.ZodError ? error.issues.map(issue => issue.message).join('; ') : (error as Error).message}); }
+      }
       const feeType = await storage.createFeeType(feeTypeData);
 
-      if (feeTypeData.isTuition && Array.isArray(classAmounts) && classAmounts.length > 0) {
-        // Enforce scope consistency: term and session must be supplied together.
-        // Otherwise treat as global (NULL,NULL) so the ledger can resolve them.
-        const t = typeof tuitionTerm === 'string' && tuitionTerm ? tuitionTerm : undefined;
-        const s = typeof tuitionSession === 'string' && tuitionSession ? tuitionSession : undefined;
-        const bothOrNone = t && s ? { t, s } : { t: undefined, s: undefined };
-        await storage.upsertTuitionClassAmounts(
-          feeType.id,
-          classAmounts,
-          bothOrNone.t,
-          bothOrNone.s,
-        );
-      }
+      if (tuitionUpdate) await storage.upsertTuitionClassAmounts(feeType.id,tuitionUpdate.amounts,tuitionUpdate.term,tuitionUpdate.session,tuitionUpdate.historical ? {userId:user.id,schoolId:feeType.schoolId!,reason:tuitionUpdate.verificationReason!,actorRole:user.role,actorName:[user.lastName,user.firstName,user.middleName].filter(Boolean).join(' ')} : undefined);
 
       await logActivity(req, { action: 'create_fee_type', entityType: 'fee_type', entityId: (feeType as any)?.id, schoolId: feeTypeData.schoolId ?? undefined, newData: feeType as any });
       res.json(feeType);
@@ -3805,23 +3806,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user.role === 'sub-admin' && feeType.schoolId !== user.schoolId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const { amounts, term, session } = req.body;
-      if (!Array.isArray(amounts)) {
-        return res.status(400).json({ error: "amounts must be an array" });
+      let update;
+      try {
+        const school = feeType.schoolId ? await storage.getSchoolById(feeType.schoolId) : undefined;
+        update = parseTuitionRateUpdate(req.body, {currentTerm:school?.currentTerm || null,currentSession:school?.currentSession || null});
+      } catch (error) {
+        return res.status(400).json({error:error instanceof z.ZodError ? error.issues.map(issue => issue.message).join('; ') : (error as Error).message});
       }
-      // Enforce scope consistency (see POST /api/admin/fee-types).
-      const t = typeof term === 'string' && term ? term : undefined;
-      const s = typeof session === 'string' && session ? session : undefined;
-      const scopedT = t && s ? t : undefined;
-      const scopedS = t && s ? s : undefined;
-      // Each amount item may include an optional studentType ('new'|'returning'|null).
-      const typedAmounts = amounts.map((a: any) => ({
-        classId: a.classId,
-        amount: String(a.amount),
-        studentType: a.studentType ?? null,
-      }));
-      const result = await storage.upsertTuitionClassAmounts(feeTypeId, typedAmounts, scopedT, scopedS);
-      await logActivity(req, { action: 'update_tuition_amounts', entityType: 'fee_type', entityId: feeTypeId, schoolId: feeType.schoolId ?? undefined, newData: { amounts, term: scopedT ?? null, session: scopedS ?? null } });
+      const allowedClasses = await storage.getAllClasses(feeType.schoolId || undefined);
+      if (update.amounts.some(row => !allowedClasses.some(cls => cls.id === row.classId))) return res.status(400).json({error:'Every tuition class must belong to this school.'});
+      const before = (await storage.getTuitionClassAmounts(feeTypeId)).filter(row => (row.term || undefined) === update.term && (row.session || undefined) === update.session);
+      const result = await storage.upsertTuitionClassAmounts(feeTypeId,update.amounts,update.term,update.session,update.historical ? {userId:user.id,schoolId:feeType.schoolId!,reason:update.verificationReason!,actorRole:user.role,actorName:[user.lastName,user.firstName,user.middleName].filter(Boolean).join(' ')} : undefined);
+      if (!update.historical) await logActivity(req, {action:'update_tuition_amounts',entityType:'fee_type',entityId:feeTypeId,schoolId:feeType.schoolId ?? undefined,
+        previousData:{amounts:before},newData:{amounts:update.amounts,term:update.term || null,session:update.session || null,
+          verifiedHistoricalRate:update.verifiedHistoricalRate || false,verificationReason:update.verificationReason || null}});
       res.json(result);
     } catch (error) {
       console.error("Upsert tuition amounts error:", error);
@@ -5019,6 +5017,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("[GET /api/payments/student-history] Error:", error);
       res.status(500).json({ error: "Failed to fetch student payment history" });
     }
+  });
+
+  app.get('/api/payments/finance-periods', authenticate, requireBursarOrAdmin, async (req, res) => {
+    const user = (req as any).user;
+    const schoolId = user.role === 'admin' ? String(req.query.schoolId || '') : user.schoolId;
+    if (!schoolId) return res.status(400).json({error:'schoolId is required'});
+    try {
+      res.setHeader('Cache-Control','private, no-store');
+      res.json(await loadFinancePeriods(db,schoolId));
+    } catch (error) { console.error('Finance periods failed',error);res.status(500).json({error:'Could not load saved financial periods'}); }
   });
 
   app.get("/api/payments/tuition-balances", authenticate, requireBursarOrAdmin, async (req: Request, res: Response) => {

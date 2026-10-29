@@ -133,6 +133,8 @@ interface PaymentRecordingProps {
   currentTerm?: string;
   currentSession?: string;
   userRole: "admin" | "sub-admin" | "bursar";
+  onPeriodChange?: (term: string, session: string) => void;
+  availableSessions?: string[];
 }
 
 export function PaymentRecording({
@@ -140,6 +142,8 @@ export function PaymentRecording({
   currentTerm,
   currentSession,
   userRole,
+  onPeriodChange,
+  availableSessions,
 }: PaymentRecordingProps) {
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [reviewPair, setReviewPair] = useState<{ kind: 'transaction' | 'payment'; id: string } | null>(null);
@@ -159,8 +163,12 @@ export function PaymentRecording({
   const [dateTo, setDateTo] = useState("");
   const [nameSearch, setNameSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [filterTerm, setFilterTerm] = useState<string>(currentTerm || "");
-  const [filterSession, setFilterSession] = useState<string>(currentSession || "");
+  const [localTerm, setLocalTerm] = useState<string>(currentTerm || "");
+  const filterTerm = onPeriodChange ? currentTerm || "" : localTerm;
+  const setFilterTerm = (term: string) => onPeriodChange ? onPeriodChange(term, currentSession || "") : setLocalTerm(term);
+  const [localSession, setLocalSession] = useState<string>(currentSession || "");
+  const filterSession = onPeriodChange ? currentSession || "" : localSession;
+  const setFilterSession = (session: string) => onPeriodChange ? onPeriodChange(currentTerm || "", session) : setLocalSession(session);
   const [viewingRecord, setViewingRecord] = useState<FeePaymentRecordWithDetails | null>(null);
   const PAGE_SIZE = 25;
 
@@ -168,11 +176,11 @@ export function PaymentRecording({
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (currentTerm) setFilterTerm(currentTerm);
+    if (currentTerm) setLocalTerm(currentTerm);
   }, [currentTerm]);
 
   useEffect(() => {
-    if (currentSession) setFilterSession(currentSession);
+    if (currentSession) setLocalSession(currentSession);
   }, [currentSession]);
 
   // Snapshot of pendingPayments restored from localStorage on mount. The
@@ -329,7 +337,7 @@ export function PaymentRecording({
     queryKey: ["/api/admin/academic-sessions"],
   });
 
-  const sessionOptions: string[] = academicSessions.length > 0
+  const sessionOptions: string[] = availableSessions?.length ? availableSessions : academicSessions.length > 0
     ? academicSessions.map((s) => s.sessionYear)
     : (() => {
         const base = currentSession
@@ -396,14 +404,22 @@ export function PaymentRecording({
     },
   });
 
-  const entryTerm = form.watch("term");
-  const entrySession = form.watch("session");
+  useEffect(() => {
+    if (!onPeriodChange) return;
+    form.setValue("term", currentTerm || "");
+    form.setValue("session", currentSession || "");
+    setCurrentPage(1);
+  }, [currentTerm, currentSession]);
+
+  const watchedTerm = form.watch("term"), watchedSession = form.watch("session");
+  const entryTerm = onPeriodChange ? currentTerm || "" : watchedTerm;
+  const entrySession = onPeriodChange ? currentSession || "" : watchedSession;
   const tuitionFeeType = feeTypesData.find(ft => ft.isTuition && ft.isActive);
 
   // Fresh confirmed and pending tuition balances for the form period, fetched only
   // when the dialog is open so we don't ping the server unnecessarily.
   const { data: tuitionBalancesData = [], isFetching: balancesLoading, isError: balancesError } = useQuery<{
-    studentDbId: string; tuitionAssigned: number; tuitionPaid: number; tuitionPending: number; tuitionKnown: boolean;
+    studentDbId: string; tuitionAssigned: number; tuitionPaid: number; tuitionPending: number; tuitionKnown: boolean; tuitionReason?: string | null;
   }[]>({
     queryKey: ["/api/payments/tuition-balances", "entry", schoolId, entryTerm, entrySession],
     queryFn: async () => apiRequest(`/api/payments/entry-balances?${new URLSearchParams({schoolId:schoolId || '',term:entryTerm,session:entrySession})}`),
@@ -412,7 +428,7 @@ export function PaymentRecording({
     refetchOnMount: 'always',
   });
   const tuitionBalanceMap = useMemo(() => new Map(tuitionBalancesData.map(r => [r.studentDbId, {
-    assigned:r.tuitionAssigned,paid:r.tuitionPaid,pending:r.tuitionPending,known:r.tuitionKnown,
+    assigned:r.tuitionAssigned,paid:r.tuitionPaid,pending:r.tuitionPending,known:r.tuitionKnown,reason:r.tuitionReason,
     due:Math.max(0,Math.round((r.tuitionAssigned-r.tuitionPaid-r.tuitionPending)*100)/100),
   }])), [tuitionBalancesData]);
 
@@ -435,6 +451,7 @@ export function PaymentRecording({
       if (!res.ok) throw new Error("Failed to fetch payment records");
       return res.json();
     },
+    enabled: !!schoolId && (!onPeriodChange || !!filterTerm && !!filterSession),
   });
 
 
@@ -492,7 +509,7 @@ export function PaymentRecording({
     const bal=tuitionBalanceMap.get(student.id);
     const name=formatStudentName(student.user || student);
     if(balancesLoading) return [`Checking tuition for ${name}…`];
-    if(balancesError || !bal?.known) return [`Tuition for ${name} is not verified. Check the term and tuition settings.`];
+    if(balancesError || !bal?.known) return [`Tuition for ${name} is not verified. ${bal?.reason || "Check the term and tuition settings."}`];
     return requested > bal.due ? [`${name}: ₦${(requested-bal.due).toLocaleString()} above available tuition. Pending payments are included. Reduce tuition and add another purpose.`] : [];
   });
 
@@ -518,6 +535,8 @@ export function PaymentRecording({
         queryClient.invalidateQueries({queryKey:['/api/payments/records']});
         queryClient.invalidateQueries({queryKey:['/api/payments/tuition-balances']});
         queryClient.invalidateQueries({queryKey:['/api/admin/financial-summary']});
+        queryClient.invalidateQueries({queryKey:['/api/admin/financial-summary/by-class']});
+        queryClient.invalidateQueries({queryKey:['/api/admin/payment-broadsheet']});
         toast({title:'Payment recorded',description:`One payment of ₦${paymentTotal.toLocaleString()} with ${paymentRows.length} allocations is awaiting confirmation.`});
       }
       closeAndReset();
@@ -989,11 +1008,11 @@ export function PaymentRecording({
           <div className="flex items-center gap-2">
             <Label className="whitespace-nowrap text-sm">Term:</Label>
             <Select value={filterTerm || "__all__"} onValueChange={(v) => { setFilterTerm(v === "__all__" ? "" : v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger aria-label="Payment records term" className="w-[140px]">
                 <SelectValue placeholder="All Terms" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All Terms</SelectItem>
+                {!onPeriodChange && <SelectItem value="__all__">All Terms</SelectItem>}
                 <SelectItem value="First Term">First Term</SelectItem>
                 <SelectItem value="Second Term">Second Term</SelectItem>
                 <SelectItem value="Third Term">Third Term</SelectItem>
@@ -1003,11 +1022,11 @@ export function PaymentRecording({
           <div className="flex items-center gap-2">
             <Label className="whitespace-nowrap text-sm">Session:</Label>
             <Select value={filterSession || "__all__"} onValueChange={(v) => { setFilterSession(v === "__all__" ? "" : v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger aria-label="Payment records session" className="w-[140px]">
                 <SelectValue placeholder="All Sessions" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">All Sessions</SelectItem>
+                {!onPeriodChange && <SelectItem value="__all__">All Sessions</SelectItem>}
                 {sessionOptions.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
