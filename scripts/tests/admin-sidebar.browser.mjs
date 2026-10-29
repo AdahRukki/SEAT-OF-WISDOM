@@ -7,6 +7,55 @@ const side = page => page.locator('aside[data-testid="admin-sidebar"]');
 const noOverflow = async page => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 
 for (const width of [1440, 390]) {
+  test(`finance explanations stay in dismissible popups and student details at ${width}px`, async () => {
+    const { context, page, errors } = await setup('admin', { width, height: 1000 });
+    const discountNote = 'No historical discount is recorded; today’s discount has not been deducted from the saved class rate.';
+    try {
+      await context.route('**/api/admin/financial-summary?**', route => route.fulfill({json:{
+        totalFees:33000,totalPaid:42000,totalOutstanding:0,actualTuitionCollected:33000,
+        collectionRate:null,studentsOwing:0,totalRevenue:42000,totalPosFees:0,
+        tuitionUnverifiedCount:91,tuitionVerifiedCount:310,studentTypeUnverifiedCount:401,
+      }}));
+      await context.route('**/api/payments/ledger?**', route => route.fulfill({json:{
+        entries:[{studentDbId:'details-fixture',studentId:'SOWA/1175',firstName:'James',lastName:'Details',
+          className:'BASIC 1',classId:'basic-1',studentType:'unknown',tuitionKnown:true,
+          tuitionAssigned:33000,totalAssigned:33000,tuitionPaid:42000,totalPaid:42000,nonTuitionPaid:0,
+          balance:0,discount:0,discountKnown:false,tuitionSource:'Period-specific class rate',
+          historicalDiscountNote:discountNote,paymentCount:1}],
+        meta:{hasTuitionFeeType:true,hasGlobalTuition:false,hasScopedTuition:true,historical:true},
+      }}));
+      await page.goto(`${schoolURL(schools[0].id)}?tab=finance`);
+      await page.getByText('Details James',{exact:true}).filter({visible:true}).waitFor();
+      assert.equal(await page.getByText(/401 student types/).count(),0);
+      assert.equal(await page.getByText(/91 students have unverified/).count(),0);
+      assert.equal(await page.getByText(discountNote,{exact:true}).count(),0);
+      const details=page.getByRole('button',{name:'Data details',exact:true});
+      await details.click();
+      await page.getByText(/401 student types/).waitFor();
+      await page.getByText(/91 students have unverified/).waitFor();
+      await page.getByRole('button',{name:'Close data details',exact:true}).click();
+      await page.getByText(/401 student types/).waitFor({state:'hidden'});
+      assert.equal(await details.evaluate(el=>el===document.activeElement),true);
+      await details.click();
+      await page.getByRole('button',{name:'Close data details',exact:true}).press('Escape');
+      await page.getByText(/91 students have unverified/).waitFor({state:'hidden'});
+      await page.getByRole('button',{name:'Ledger details',exact:true}).click();
+      await page.getByText(/Open a student’s payment details/).waitFor();
+      await page.getByRole('heading',{name:'Finance',exact:true}).click();
+      await page.getByText(/Open a student’s payment details/).waitFor({state:'hidden'});
+      if(width<640) await page.getByRole('button',{name:'Payment details for Details James',exact:true}).click();
+      else await page.getByRole('row').filter({hasText:'Details James'}).getByRole('button',{name:'Payment details for Details James',exact:true}).click();
+      await page.getByRole('dialog').getByText(discountNote,{exact:true}).waitFor();
+      await page.getByRole('dialog').getByText('Tuition source: Period-specific class rate',{exact:true}).waitFor();
+      await page.keyboard.press('Escape');
+      await page.getByText(discountNote,{exact:true}).waitFor({state:'hidden'});
+      await noOverflow(page);
+      assert.deepEqual(errors,[]);
+    } finally { await context.close(); }
+  });
+}
+
+for (const width of [1440, 390]) {
   test(`tuition payment status uses tuition paid, including other-fee-only payments, at ${width}px`, async () => {
     const { context, page, errors } = await setup('admin', { width, height: 1000 });
     const students = [

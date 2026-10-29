@@ -1,4 +1,5 @@
 import { tuitionPeriodOrder } from "@shared/historical-tuition";
+import { FinanceDataDetails } from "@/components/finance-data-details";
 import { formatStudentName } from "@shared/student-name";
 import { PaymentDateFilters } from "@/components/payment-date-filters";
 import { confirmationRangeLabel } from "@/components/confirmation-date-filter";
@@ -5529,9 +5530,11 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
             </div>
 
-            <p className="text-xs text-muted-foreground">These cards show tuition only. Other payment purposes remain in payment records and the ledger. Pending payments do not count as confirmed collections.</p>
-            {!!financialSummary?.studentTypeUnverifiedCount && <p className="text-xs text-amber-700">{financialSummary.studentTypeUnverifiedCount} student types are not historically verified. Their amounts are not classified as New or Returning.</p>}
-            {!!financialSummary?.tuitionUnverifiedCount && <p className="text-sm text-amber-700">{financialSummary.tuitionUnverifiedCount} students have unverified tuition charges. Expected, outstanding and collection-rate figures cover verified charges only.</p>}
+            <FinanceDataDetails>
+              <p>These cards show tuition only. Other payment purposes remain in payment records and the ledger. Pending payments do not count as confirmed collections.</p>
+              {!!financialSummary?.studentTypeUnverifiedCount && <p>{financialSummary.studentTypeUnverifiedCount} student types are not historically verified. Their amounts are not classified as New or Returning.</p>}
+              {!!financialSummary?.tuitionUnverifiedCount && <p>{financialSummary.tuitionUnverifiedCount} students have unverified tuition charges. Expected and outstanding figures include verified charges only; the overall collection rate is unavailable.</p>}
+            </FinanceDataDetails>
 
             {perm('finance_class_tuition_breakdown') && (
               <div className="mb-4">

@@ -1,4 +1,5 @@
 import { formatStudentName } from "@shared/student-name";
+import { FinanceDataDetails } from "./finance-data-details";
 import { BulkPaymentReceipts, receiptCandidates, type ReceiptCandidate } from "./bulk-payment-receipts";
 import { PaymentDateFilters } from "./payment-date-filters";
 import { buildLedgerWorkbook } from "@/lib/ledger-workbook";
@@ -646,10 +647,13 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         </div>
       </div>
 
-      {!confirmationFiltered && ledger.some(e => !e.tuitionKnown) && <p className="rounded-md border p-3 text-sm text-muted-foreground" role="status">
-        Some tuition charges are not verified for this period. Their balances and paid status are not calculated; tuition totals include verified charges only. Past discounts and current fee settings are not used to guess old charges.
-      </p>}
-      <p className="text-xs text-muted-foreground">Tuition balances use tuition payments only. Other payments are grouped by their recorded purpose. For past periods, students without recorded class history appear under All classes as “Historical class not verified”.</p>
+      <FinanceDataDetails label="Ledger details">
+        {!confirmationFiltered && ledger.some(e => !e.tuitionKnown) && <p>
+          Some tuition charges are not verified for this period. Their balances and paid status are not calculated; tuition totals include verified charges only. Past discounts and current fee settings are not used to guess old charges.
+        </p>}
+        <p>Tuition balances use tuition payments only. Other payments are grouped by their recorded purpose. For past periods, students without recorded class history appear under All classes as “Historical class not verified”.</p>
+        <p>Open a student’s payment details to see the tuition source and verification notes.</p>
+      </FinanceDataDetails>
       {ledgerError ? (<p role="alert" className="text-destructive">Could not load confirmed collections. Please refresh to try again.</p>) : isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -722,7 +726,6 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             {filteredLedger.map(entry => <article key={entry.studentDbId} className="rounded-lg border p-3 space-y-3">
               <div className="font-semibold break-words">{formatStudentName(entry)}{entry.studentType === "new" && <Badge variant="secondary" className="ml-2">New</Badge>}</div>
               <p className="text-sm text-muted-foreground">{entry.className} · {entry.studentId}</p>
-              {!confirmationFiltered && <p className="text-xs text-muted-foreground">{entry.tuitionSource}{entry.tuitionReason ? ` · ${entry.tuitionReason}` : ''}{entry.historicalDiscountNote ? ` · ${entry.historicalDiscountNote}` : ''}</p>}
               <dl className="grid grid-cols-2 gap-3 text-sm">
                 <div><dt>{confirmationFiltered ? "Confirmed in range" : "Paid"}</dt><dd className="font-semibold text-green-600 break-words">₦{(entry.totalPaid || 0).toLocaleString()}</dd></div>
                 {!confirmationFiltered && <div><dt>Outstanding tuition</dt><dd className="font-semibold">{entry.tuitionKnown ? `₦${entry.balance.toLocaleString()}` : "Not verified"}</dd></div>}
@@ -807,12 +810,6 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                   {isCol("tuition") && (
                     <TableCell className="text-right font-semibold">
                       {entry.tuitionKnown ? `₦${tuition.toLocaleString()}` : "Not verified"}
-                      <p className="max-w-52 whitespace-normal text-xs font-normal text-muted-foreground">{entry.tuitionReason || entry.tuitionSource}{entry.historicalDiscountNote ? ` · ${entry.historicalDiscountNote}` : ''}</p>
-                      {(entry.discount || 0) > 0 && (
-                        <div className="text-[10px] font-normal text-emerald-600">
-                          -₦{(entry.discount || 0).toLocaleString()} discount applied
-                        </div>
-                      )}
                     </TableCell>
                   )}
                   {isCol("discount") && (
@@ -848,6 +845,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                       className="h-7 w-7 p-0"
                       onClick={() => setSelectedStudent(entry)}
                       title="View payment details"
+                      aria-label={`Payment details for ${formatStudentName(entry)}`}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -931,6 +929,11 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
                 <span>Session: <strong className="text-foreground">{selectedSession || "All"}</strong></span>
               </div>
               {!selectedStudent.tuitionKnown && <p className="text-sm text-muted-foreground">Tuition charge and outstanding balance are not verified for this period.</p>}
+              {!confirmationFiltered && <div className="space-y-1 text-sm text-muted-foreground">
+                <p>Tuition source: {selectedStudent.tuitionSource}</p>
+                {selectedStudent.tuitionReason && <p>{selectedStudent.tuitionReason}</p>}
+                {selectedStudent.historicalDiscountNote && <p>{selectedStudent.historicalDiscountNote}</p>}
+              </div>}
               {(() => {
                 const totalPaid = selectedStudent.totalPaid || 0;
                 if (confirmationFiltered) return <p className="text-sm font-semibold">Confirmed in selected range: ₦{totalPaid.toLocaleString()}</p>;

@@ -21,6 +21,8 @@ Confirmed tuition and other purposes remain separate. Existing split allocations
 
 The Finance term/session selection controls Ledger, Recording, entry balances, fee-rate editing and reports. Saved financial periods are available even if absent from the general calendar. Query keys include school and period.
 
+Finance keeps verification explanations inside the **Data details** and **Ledger details** popups. They open only when requested and close with the close button, an outside tap or Escape. Tuition table cells show the amount or `Not verified`; the source, reason and historical discount note are available in each student's Payment Details window. Downloaded verification notes and all calculation rules remain unchanged.
+
 ## Historical limitations and reviewed corrections
 
 Old snapshots did not retain discount or student type. Existing events may establish these facts, but missing evidence cannot be recovered automatically. If no historical discount is recorded, the exact saved class rate is shown without today's discount, with an explicit note; it is not evidence that a past concession never existed. Where type-specific prices require an unknown historical type, tuition remains unverified. Existing saved individual charges are not discounted again.
