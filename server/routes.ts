@@ -5540,7 +5540,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Insert transactions with duplicate detection
       let newCount = 0;
       let duplicateCount = 0;
-      const insertedTxIds: string[] = [];
+      let possibleDuplicateCount = 0;
+      let failedCount = 0;
 
       for (const tx of transactions) {
         try {
@@ -5560,7 +5561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: "unmatched",
             classification: tx.rawDescription.length < 20 ? "code_only" : "named",
           });
-          insertedTxIds.push(created.id);
+          if (created.possibleDuplicate) possibleDuplicateCount++;
           newCount++;
         } catch (insertError: any) {
           // Duplicate fingerprint - skip
@@ -5568,6 +5569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             duplicateCount++;
             console.log('[Upload] Duplicate transaction skipped:', tx.fingerprint.substring(0, 8));
           } else {
+            failedCount++;
             console.error('[Upload] Transaction insert error:', insertError);
           }
         }
@@ -5581,14 +5583,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         duplicateCount
       );
 
-      // Task #128: flag similar (not exact-fingerprint) duplicates among the
-      // freshly inserted rows. Same school, same calendar day, same amount,
-      // same normalized depositor as an EARLIER existing transaction.
-      let possibleDuplicateCount = 0;
-      try {
-        possibleDuplicateCount = await storage.flagBankTransactionDuplicates(insertedTxIds);
-      } catch (flagErr) {
-        console.warn('[Upload] flagBankTransactionDuplicates failed (non-fatal):', flagErr);
+      // Similarity checks are part of each insert's transaction. If checking
+      // fails, that row was rolled back; expose the partial upload for retry.
+      if (failedCount > 0) {
+        return res.status(500).json({
+          error: `${failedCount} transactions could not be checked or saved. ${newCount} entries were saved. Retry this statement; exact duplicates will be skipped.`,
+          statementId: statement.id,
+          summary: { totalTransactions: transactions.length, newTransactions: newCount, duplicatesSkipped: duplicateCount, possibleDuplicatesFlagged: possibleDuplicateCount, failedTransactions: failedCount },
+        });
       }
 
       // Create audit log
