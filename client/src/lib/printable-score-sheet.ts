@@ -3,7 +3,7 @@
  * Student order is supplied by the Score Tab and must never be sorted here.
  * A4 landscape; up to 40 pupils per page, repeated for each subject group.
  *
- * Uses PDF's built-in Helvetica (WinAnsi). Names containing characters outside
+ * Uses PDF's built-in Helvetica. Names containing characters outside
  * WinAnsi should use an embedded Unicode font in a future renderer upgrade.
  */
 export type ScoreSheetStudent = { name: string; studentId: string };
@@ -19,12 +19,12 @@ export type ScoreSheetInput = {
 const PAGE_W = 841.89, PAGE_H = 595.28;
 const MAX_ROWS = 40;
 const enc = new TextEncoder();
-const pdfText = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e\xa0-\xff]/g, "?").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+const pdfText = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "?").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 const cmdText = (s: string, x: number, y: number, size = 8, bold = false) =>
   `BT /${bold ? "F2" : "F1"} ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${pdfText(s)}) Tj ET\n`;
 const line = (x: number, y: number, x2: number, y2: number) =>
   `${x.toFixed(2)} ${y.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S\n`;
-const fit = (s: string, chars: number) => s.length > chars ? s.slice(0, Math.max(0, chars - 1)) + "…" : s;
+const fit = (s: string, chars: number) => s.length > chars ? s.slice(0, Math.max(0, chars - 1)) + "." : s;
 function page(input: ScoreSheetInput, students: ScoreSheetStudent[], start: number, subjects: string[], index: number, total: number): string {
   const left = 20, right = PAGE_W - 20, width = right - left;
   const nameW = 178, idW = 96, serialW = 23, baseW = serialW + nameW + idW;
