@@ -5295,9 +5295,7 @@ export default function AdminDashboard() {
                           session: scoresSession,
                           term: scoresTerm,
                           level: secondary ? "secondary" : "primary",
-                          subjects: secondary && scoresSubjectId
-                            ? classSubjects.filter(s => s.id === scoresSubjectId).map(s => s.name)
-                            : classSubjects.map(s => s.name),
+                          subjects: classSubjects.map(s => s.name),
                           students: roster.map(student => ({
                             name: [student.user?.firstName, student.user?.middleName, student.user?.lastName]
                               .filter(Boolean).join(" "),
