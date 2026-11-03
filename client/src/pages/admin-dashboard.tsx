@@ -5284,7 +5284,7 @@ export default function AdminDashboard() {
                       const selected = classes.find(c => c.id === scoresClassId);
                       if (!selected) return;
                       const className = selected.name || "";
-                      const secondary = /^(JSS|JS|SSS|SS)[\s-]*[1-3]\b/i.test(className);
+                      const secondary = /^(?:JSS|JS|SSS|SS|Junior Secondary|Senior Secondary|Secondary)[\s-]*[1-6]\b/i.test(className.trim());
                       const roster = [...studentsForScores].sort((a, b) => a.studentId.localeCompare(b.studentId));
                       const selectedSchool = schools.find(s => s.id === selected.schoolId);
                       const schoolName = selectedSchool?.name || "Seat of Wisdom Academy";
