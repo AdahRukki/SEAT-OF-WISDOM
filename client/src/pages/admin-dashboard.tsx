@@ -1594,6 +1594,12 @@ export default function AdminDashboard() {
       .sort((a, b) => a.studentId.localeCompare(b.studentId))
     : [];
   const displayedClassStudents = selectedClassStudents.filter(matchesStudentSearch);
+  // Global search uses the already loaded, school-scoped roster. Do not issue a
+  // network request on every keystroke (or sort/mutate the source student array).
+  const globalStudentSearchResults = !selectedClassForStudents && studentSearchQuery.trim()
+    ? studentsForClassTab.filter(matchesStudentSearch)
+        .sort((a, b) => a.studentId.localeCompare(b.studentId))
+    : [];
 
   // Avoid silently dropping unsaved score edits on hidden inactive rows:
   // reset the scores "show inactive" toggle whenever the roster context changes.
@@ -4629,7 +4635,6 @@ export default function AdminDashboard() {
                     onValueChange={(classId) => {
                       setSelectedClassForStudents(classId);
                       setSelectedStudentsForClassChange(new Set());
-                      setStudentSearchQuery("");
                     }}
                   >
                     <SelectTrigger className="w-full">
@@ -4645,20 +4650,54 @@ export default function AdminDashboard() {
                   </Select>
                 </div>
 
-                {selectedClassForStudents && (
-                  <div className="mb-4">
-                    <Label htmlFor="student-search">Search students</Label>
+                <div className="mb-4">
+                    <Label htmlFor="student-search">Search students {selectedClassForStudents ? "in this class" : "across all classes"}</Label>
                     <div className="relative mt-1">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         id="student-search"
                         value={studentSearchQuery}
                         onChange={(event) => setStudentSearchQuery(event.target.value)}
-                        placeholder="Search by student name or Student ID"
-                        className="pl-9"
+                        placeholder="Search by student name or SOWA ID"
+                        className="pl-9 pr-9"
                         data-testid="input-search-students"
                       />
+                      {studentSearchQuery && (
+                        <button type="button" aria-label="Clear student search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setStudentSearchQuery("")}>
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
+                  </div>
+
+                {/* Cross-class search: show matches without changing the class filter. */}
+                {!selectedClassForStudents && studentSearchQuery.trim() && (
+                  <div className="mb-4 rounded-lg border divide-y" data-testid="global-student-search-results">
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      {globalStudentSearchResults.length} matching students
+                    </div>
+                    {globalStudentSearchResults.map(student => {
+                      const studentClass = classes.find(c => c.id === student.classId);
+                      const studentSchool = schools.find(s => s.id === studentClass?.schoolId);
+                      return (
+                        <div key={student.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {[student.user?.firstName, student.user?.middleName, student.user?.lastName].filter(Boolean).join(" ")}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {student.studentId} · {studentClass?.name || "Class unknown"}{studentSchool ? ` · ${studentSchool.name}` : ""}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={() => openEditStudent(student)}>
+                            <Edit className="mr-1 h-3 w-3" /> Edit
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {globalStudentSearchResults.length === 0 && (
+                      <p className="px-3 py-4 text-sm text-muted-foreground">No matching students. Try a different name or SOWA ID.</p>
+                    )}
                   </div>
                 )}
 
