@@ -7,6 +7,7 @@ import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue
 import type { OfflineStudent } from "@/lib/offline-queue";
 import { onPrefetchStart, onPrefetchDone, isPrefetchRunning } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
+import { downloadPrintableScoreSheet } from "@/lib/printable-score-sheet";
 import { useAuth } from "@/hooks/use-auth";
 import { hasPermission as checkPermission, TAB_PERMISSIONS, FEATURE_PERMISSIONS, DEFAULT_SUB_ADMIN_PERMISSIONS } from "@shared/permissions";
 import { useLogo } from "@/hooks/use-logo";
@@ -1593,6 +1594,12 @@ export default function AdminDashboard() {
       .sort((a, b) => a.studentId.localeCompare(b.studentId))
     : [];
   const displayedClassStudents = selectedClassStudents.filter(matchesStudentSearch);
+  // Global search uses the already loaded, school-scoped roster. Do not issue a
+  // network request on every keystroke (or sort/mutate the source student array).
+  const globalStudentSearchResults = !selectedClassForStudents && studentSearchQuery.trim()
+    ? studentsForClassTab.filter(matchesStudentSearch)
+        .sort((a, b) => a.studentId.localeCompare(b.studentId))
+    : [];
 
   // Avoid silently dropping unsaved score edits on hidden inactive rows:
   // reset the scores "show inactive" toggle whenever the roster context changes.
@@ -4628,7 +4635,6 @@ export default function AdminDashboard() {
                     onValueChange={(classId) => {
                       setSelectedClassForStudents(classId);
                       setSelectedStudentsForClassChange(new Set());
-                      setStudentSearchQuery("");
                     }}
                   >
                     <SelectTrigger className="w-full">
@@ -4644,20 +4650,54 @@ export default function AdminDashboard() {
                   </Select>
                 </div>
 
-                {selectedClassForStudents && (
-                  <div className="mb-4">
-                    <Label htmlFor="student-search">Search students</Label>
+                <div className="mb-4">
+                    <Label htmlFor="student-search">Search students {selectedClassForStudents ? "in this class" : "across all classes"}</Label>
                     <div className="relative mt-1">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         id="student-search"
                         value={studentSearchQuery}
                         onChange={(event) => setStudentSearchQuery(event.target.value)}
-                        placeholder="Search by student name or Student ID"
-                        className="pl-9"
+                        placeholder="Search by student name or SOWA ID"
+                        className="pl-9 pr-9"
                         data-testid="input-search-students"
                       />
+                      {studentSearchQuery && (
+                        <button type="button" aria-label="Clear student search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setStudentSearchQuery("")}>
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
+                  </div>
+
+                {/* Cross-class search: show matches without changing the class filter. */}
+                {!selectedClassForStudents && studentSearchQuery.trim() && (
+                  <div className="mb-4 rounded-lg border divide-y" data-testid="global-student-search-results">
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      {globalStudentSearchResults.length} matching students
+                    </div>
+                    {globalStudentSearchResults.map(student => {
+                      const studentClass = classes.find(c => c.id === student.classId);
+                      const studentSchool = schools.find(s => s.id === studentClass?.schoolId);
+                      return (
+                        <div key={student.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {[student.user?.firstName, student.user?.middleName, student.user?.lastName].filter(Boolean).join(" ")}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {student.studentId} · {studentClass?.name || "Class unknown"}{studentSchool ? ` · ${studentSchool.name}` : ""}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={() => openEditStudent(student)}>
+                            <Edit className="mr-1 h-3 w-3" /> Edit
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {globalStudentSearchResults.length === 0 && (
+                      <p className="px-3 py-4 text-sm text-muted-foreground">No matching students. Try a different name or SOWA ID.</p>
+                    )}
                   </div>
                 )}
 
@@ -5272,6 +5312,52 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent className="px-3 sm:px-6 pt-0 pb-4">
+                {/* Printable score sheets use the same class roster and student-ID order as Score Entry. */}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!scoresClassId || !scoresSession || !classSubjects.length || !studentsForScores.length}
+                    onClick={() => {
+                      const selected = classes.find(c => c.id === scoresClassId);
+                      if (!selected) return;
+                      const className = selected.name || "";
+                      const secondary = /^(?:JSS|JS|SSS|SS|Junior Secondary|Senior Secondary|Secondary)[\s-]*[1-6]\b/i.test(className.trim());
+                      const roster = [...studentsForScores].sort((a, b) => a.studentId.localeCompare(b.studentId));
+                      const selectedSchool = schools.find(s => s.id === selected.schoolId);
+                      const schoolName = selectedSchool?.name || "Seat of Wisdom Academy";
+                      try {
+                        downloadPrintableScoreSheet({
+                          school: schoolName,
+                          className,
+                          session: scoresSession,
+                          term: scoresTerm,
+                          level: secondary ? "secondary" : "primary",
+                          subjects: classSubjects.map(s => s.name),
+                          students: roster.map(student => ({
+                            name: [student.user?.firstName, student.user?.middleName, student.user?.lastName]
+                              .filter(Boolean).join(" "),
+                            studentId: student.studentId,
+                          })),
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Unable to download score sheet",
+                          description: error instanceof Error ? error.message : "Please try again",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <Printer className="mr-2 h-4 w-4" />
+                    Download Printable Score Sheet (PDF)
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {scoresClassId ? "A4 landscape · up to 40 students per page" : "Select a class to download"}
+                  </span>
+                </div>
+
                 {/* Filters */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
                   <div className="space-y-1">

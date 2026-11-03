@@ -1,0 +1,26 @@
+name: Printable score sheet checks
+
+on:
+  push:
+    branches:
+      - feature/printable-score-sheets
+  pull_request:
+    paths:
+      - 'client/src/lib/printable-score-sheet.ts'
+      - 'client/src/pages/admin-dashboard.tsx'
+      - 'scripts/test-printable-score-sheets.ts'
+      - '.github/workflows/printable-score-sheets.yml'
+  workflow_dispatch:
+
+jobs:
+  pdf-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx tsx scripts/test-printable-score-sheets.ts
+      - run: npm run build
