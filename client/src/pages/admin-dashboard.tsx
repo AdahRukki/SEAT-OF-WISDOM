@@ -7,6 +7,7 @@ import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue
 import type { OfflineStudent } from "@/lib/offline-queue";
 import { onPrefetchStart, onPrefetchDone, isPrefetchRunning } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
+import { downloadPrintableScoreSheet } from "@/lib/printable-score-sheet";
 import { useAuth } from "@/hooks/use-auth";
 import { hasPermission as checkPermission, TAB_PERMISSIONS, FEATURE_PERMISSIONS, DEFAULT_SUB_ADMIN_PERMISSIONS } from "@shared/permissions";
 import { useLogo } from "@/hooks/use-logo";
@@ -5272,6 +5273,54 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent className="px-3 sm:px-6 pt-0 pb-4">
+                {/* Printable score sheets use the same class roster and student-ID order as Score Entry. */}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!scoresClassId || !scoresSession || !classSubjects.length || !studentsForScores.length}
+                    onClick={() => {
+                      const selected = classes.find(c => c.id === scoresClassId);
+                      if (!selected) return;
+                      const className = selected.name || "";
+                      const secondary = /^(JSS|JS|SSS|SS)[\s-]*[1-3]\b/i.test(className);
+                      const roster = [...studentsForScores].sort((a, b) => a.studentId.localeCompare(b.studentId));
+                      const selectedSchool = schools.find(s => s.id === selected.schoolId);
+                      const schoolName = selectedSchool?.name || "Seat of Wisdom Academy";
+                      try {
+                        downloadPrintableScoreSheet({
+                          school: schoolName,
+                          className,
+                          session: scoresSession,
+                          term: scoresTerm,
+                          level: secondary ? "secondary" : "primary",
+                          subjects: secondary && scoresSubjectId
+                            ? classSubjects.filter(s => s.id === scoresSubjectId).map(s => s.name)
+                            : classSubjects.map(s => s.name),
+                          students: roster.map(student => ({
+                            name: [student.user?.firstName, student.user?.middleName, student.user?.lastName]
+                              .filter(Boolean).join(" "),
+                            studentId: student.studentId,
+                          })),
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Unable to download score sheet",
+                          description: error instanceof Error ? error.message : "Please try again",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <Printer className="mr-2 h-4 w-4" />
+                    Download Printable Score Sheet (PDF)
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {scoresClassId ? "A4 landscape · up to 40 students per page" : "Select a class to download"}
+                  </span>
+                </div>
+
                 {/* Filters */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
                   <div className="space-y-1">
