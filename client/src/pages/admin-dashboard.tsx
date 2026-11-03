@@ -19,6 +19,7 @@ import { queuedApiRequest, addSyncListener, getPendingCount, processOfflineQueue
 import type { OfflineStudent } from "@/lib/offline-queue";
 import { onPrefetchStart, onPrefetchDone, isPrefetchRunning } from "@/lib/prefetch-data";
 import { useToast } from "@/hooks/use-toast";
+import { downloadPrintableScoreSheet } from "@/lib/printable-score-sheet";
 import { useAuth } from "@/hooks/use-auth";
 import { hasPermission as checkPermission, TAB_PERMISSIONS, FEATURE_PERMISSIONS, DEFAULT_SUB_ADMIN_PERMISSIONS } from "@shared/permissions";
 import { useLogo } from "@/hooks/use-logo";
@@ -873,6 +874,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
   const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
   const [selectedStudentsForClassChange, setSelectedStudentsForClassChange] = useState<Set<string>>(new Set());
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [showInactiveStudents, setShowInactiveStudents] = useState(false);
   const [showInactiveInScores, setShowInactiveInScores] = useState(false);
   const [isChangeClassDialogOpen, setIsChangeClassDialogOpen] = useState(false);
@@ -1561,6 +1563,39 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   const studentsForClassTab: StudentWithDetails[] = showInactiveStudents
     ? Array.from(new Map([...allStudents, ...inactiveStudents].map(s => [s.id, s])).values())
     : allStudents;
+
+  const matchesStudentSearch = (student: StudentWithDetails) => {
+    const search = studentSearchQuery.trim().toLowerCase();
+    if (!search) return true;
+    const fullName = [student.user?.firstName, student.user?.middleName, student.user?.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return fullName.includes(search) || student.studentId.toLowerCase().includes(search);
+  };
+
+  const matchesPendingStudentSearch = (student: { firstName: string; middleName?: string | null; lastName: string }) => {
+    const search = studentSearchQuery.trim().toLowerCase();
+    if (!search) return true;
+    return [student.firstName, student.middleName, student.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(search);
+  };
+
+  const selectedClassStudents = selectedClassForStudents
+    ? studentsForClassTab
+      .filter(student => student.classId === selectedClassForStudents)
+      .sort((a, b) => a.studentId.localeCompare(b.studentId))
+    : [];
+  const displayedClassStudents = selectedClassStudents.filter(matchesStudentSearch);
+  // Global search uses the already loaded, school-scoped roster. Do not issue a
+  // network request on every keystroke (or sort/mutate the source student array).
+  const globalStudentSearchResults = !selectedClassForStudents && studentSearchQuery.trim()
+    ? studentsForClassTab.filter(matchesStudentSearch)
+        .sort((a, b) => a.studentId.localeCompare(b.studentId))
+    : [];
 
   // Avoid silently dropping unsaved score edits on hidden inactive rows:
   // reset the scores "show inactive" toggle whenever the roster context changes.
@@ -4423,7 +4458,13 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 {/* Class Selection */}
                 <div className="mb-6">
                   <Label htmlFor="class-select">Select Class to View Students</Label>
-                  <Select value={selectedClassForStudents} onValueChange={setSelectedClassForStudents}>
+                  <Select
+                    value={selectedClassForStudents}
+                    onValueChange={(classId) => {
+                      setSelectedClassForStudents(classId);
+                      setSelectedStudentsForClassChange(new Set());
+                    }}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Choose a class to view students..." />
                     </SelectTrigger>
@@ -4437,12 +4478,63 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   </Select>
                 </div>
 
+                <div className="mb-4">
+                    <Label htmlFor="student-search">Search students {selectedClassForStudents ? "in this class" : "across all classes"}</Label>
+                    <div className="relative mt-1">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="student-search"
+                        value={studentSearchQuery}
+                        onChange={(event) => setStudentSearchQuery(event.target.value)}
+                        placeholder="Search by student name or SOWA ID"
+                        className="pl-9 pr-9"
+                        data-testid="input-search-students"
+                      />
+                      {studentSearchQuery && (
+                        <button type="button" aria-label="Clear student search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setStudentSearchQuery("")}>
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                {/* Cross-class search: show matches without changing the class filter. */}
+                {!selectedClassForStudents && studentSearchQuery.trim() && (
+                  <div className="mb-4 rounded-lg border divide-y" data-testid="global-student-search-results">
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      {globalStudentSearchResults.length} matching students
+                    </div>
+                    {globalStudentSearchResults.map(student => {
+                      const studentClass = classes.find(c => c.id === student.classId);
+                      const studentSchool = schools.find(s => s.id === studentClass?.schoolId);
+                      return (
+                        <div key={student.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {[student.user?.firstName, student.user?.middleName, student.user?.lastName].filter(Boolean).join(" ")}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {student.studentId} · {studentClass?.name || "Class unknown"}{studentSchool ? ` · ${studentSchool.name}` : ""}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="outline" onClick={() => openEditStudent(student)}>
+                            <Edit className="mr-1 h-3 w-3" /> Edit
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    {globalStudentSearchResults.length === 0 && (
+                      <p className="px-3 py-4 text-sm text-muted-foreground">No matching students. Try a different name or SOWA ID.</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Students List - Compact mobile-friendly */}
                 {selectedClassForStudents ? (
                   <>
                   {/* Select-all bar + Change Class action */}
                   {(() => {
-                    const classStudentsList = studentsForClassTab.filter(s => s.classId === selectedClassForStudents);
+                    const classStudentsList = displayedClassStudents;
                     const allSelected = classStudentsList.length > 0 && classStudentsList.every(s => selectedStudentsForClassChange.has(s.id));
                     return (
                       <div className="flex items-center gap-3 mb-2">
@@ -4490,9 +4582,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                     );
                   })()}
                   <div className="border rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
-                    {studentsForClassTab
-                      .filter(student => student.classId === selectedClassForStudents)
-                      .sort((a, b) => a.studentId.localeCompare(b.studentId))
+                    {displayedClassStudents
                       .map((student) => {
                         const isActive = student.user?.isActive ?? true;
                         const isChecked = selectedStudentsForClassChange.has(student.id);
@@ -4559,7 +4649,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         );
                       })}
                     {offlineStudents
-                      .filter(s => s.classId === selectedClassForStudents)
+                      .filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s))
                       .map((student) => (
                         <div key={student.offlineId} className="flex items-center justify-between px-3 py-2 gap-2 bg-amber-50 dark:bg-amber-900/20 border-l-2 border-l-amber-400" data-testid={`row-pending-student-${student.offlineId}`}>
                           <div className="min-w-0 flex-1">
@@ -4574,7 +4664,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         </div>
                       ))}
                     {extraPendingStudents
-                      .filter(s => s.classId === selectedClassForStudents)
+                      .filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s))
                       .map((student) => {
                         const isFailed = student.__status === 'failed';
                         return (
@@ -4601,11 +4691,11 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                           </div>
                         );
                       })}
-                    {studentsForClassTab.filter(s => s.classId === selectedClassForStudents).length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && extraPendingStudents.filter(s => s.classId === selectedClassForStudents).length === 0 && (
+                    {displayedClassStudents.length === 0 && offlineStudents.filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s)).length === 0 && extraPendingStudents.filter(s => s.classId === selectedClassForStudents && matchesPendingStudentSearch(s)).length === 0 && (
                       <div className="text-center py-8">
                         <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No students in this class</h3>
-                        <p className="text-gray-500">Click "Add Student" to create the first student</p>
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{studentSearchQuery.trim() ? "No matching students" : "No students in this class"}</h3>
+                        <p className="text-gray-500">{studentSearchQuery.trim() ? "Try a different name or SOWA ID." : 'Click "Add Student" to create the first student'}</p>
                       </div>
                     )}
                   </div>
@@ -5046,6 +5136,52 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 </div>
               </CardHeader>
               <CardContent className="px-3 sm:px-6 pt-0 pb-4">
+                {/* Printable score sheets use the same class roster and student-ID order as Score Entry. */}
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!scoresClassId || !scoresSession || !classSubjects.length || !studentsForScores.length}
+                    onClick={() => {
+                      const selected = classes.find(c => c.id === scoresClassId);
+                      if (!selected) return;
+                      const className = selected.name || "";
+                      const secondary = /^(?:JSS|JS|SSS|SS|Junior Secondary|Senior Secondary|Secondary)[\s-]*[1-6]\b/i.test(className.trim());
+                      const roster = [...studentsForScores].sort((a, b) => a.studentId.localeCompare(b.studentId));
+                      const selectedSchool = schools.find(s => s.id === selected.schoolId);
+                      const schoolName = selectedSchool?.name || "Seat of Wisdom Academy";
+                      try {
+                        downloadPrintableScoreSheet({
+                          school: schoolName,
+                          className,
+                          session: scoresSession,
+                          term: scoresTerm,
+                          level: secondary ? "secondary" : "primary",
+                          subjects: classSubjects.map(s => s.name),
+                          students: roster.map(student => ({
+                            name: [student.user?.firstName, student.user?.middleName, student.user?.lastName]
+                              .filter(Boolean).join(" "),
+                            studentId: student.studentId,
+                          })),
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Unable to download score sheet",
+                          description: error instanceof Error ? error.message : "Please try again",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <Printer className="mr-2 h-4 w-4" />
+                    Download Printable Score Sheet (PDF)
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {scoresClassId ? "A4 landscape · up to 40 students per page" : "Select a class to download"}
+                  </span>
+                </div>
+
                 {/* Filters */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
                   <div className="space-y-1">
