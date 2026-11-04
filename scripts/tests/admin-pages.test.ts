@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ADMIN_PAGES, ADMIN_GROUPS, permittedAdminPages, selectedAdminPage, adminPageHref, preserveAdminPage } from '../../client/src/lib/admin-pages';
+import { ADMIN_PAGES, ADMIN_GROUPS, mobileAdminPages, permittedAdminPages, selectedAdminPage, adminPageHref, preserveAdminPage } from '../../client/src/lib/admin-pages';
 import { TAB_PERMISSIONS } from '../../shared/permissions';
 
 test('all existing pages retain their permissions and logical groups', () => {
@@ -22,4 +22,11 @@ test('school changes retain only the valid page, without stale class/student fil
   assert.equal(adminPageHref('/admin', 'finance', '?existing=yes'), '/admin?existing=yes&tab=finance');
   assert.equal(preserveAdminPage('/admin/school/new-school', '?tab=finance&classId=old&studentId=old'), '/admin/school/new-school?tab=finance');
   assert.equal(preserveAdminPage('/admin/school/new-school', '?tab=unknown'), '/admin/school/new-school');
+});
+
+test('mobile shortcuts stay in a predictable order and respect restricted accounts', () => {
+  assert.deepEqual(mobileAdminPages('admin', []).map(page => page.id), ['students', 'finance', 'scores']);
+  assert.deepEqual(mobileAdminPages('sub-admin', ['tab_finance']).map(page => page.id), ['finance']);
+  assert.deepEqual(mobileAdminPages('sub-admin', ['tab_activity']), []);
+  assert.deepEqual(mobileAdminPages('student', null), []);
 });

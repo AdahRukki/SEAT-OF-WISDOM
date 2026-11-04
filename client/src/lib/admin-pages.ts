@@ -37,3 +37,9 @@ export function preserveAdminPage(path: string, search: string) {
   const requested = new URLSearchParams(search).get('tab');
   return ADMIN_PAGES.some(page => page.id === requested) ? `${path}?tab=${requested}` : path;
 }
+
+// Stable order and the same permission rules as the full navigation.
+export function mobileAdminPages(role: string | undefined, permissions: string[] | null | undefined) {
+  const allowed = permittedAdminPages(role, permissions);
+  return ['students', 'finance', 'scores'].flatMap(id => allowed.filter(page => page.id === id));
+}

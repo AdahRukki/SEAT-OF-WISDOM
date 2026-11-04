@@ -1,18 +1,18 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useSearch } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
-import { BookOpen, Building2, ChevronDown, ClipboardCheck, FileText, Globe2, History, Inbox, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, Users, Wallet, Bell } from 'lucide-react';
+import { BookOpen, Building2, ChevronDown, ClipboardCheck, FileText, Globe2, History, Inbox, LayoutDashboard, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Settings, Users, Wallet, Bell } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { ADMIN_GROUPS, ADMIN_PAGES, adminPageHref, permittedAdminPages, selectedAdminPage } from '@/lib/admin-pages';
+import { ADMIN_GROUPS, ADMIN_PAGES, adminPageHref, mobileAdminPages, permittedAdminPages, selectedAdminPage } from '@/lib/admin-pages';
 import { GENERAL_SCHOOL_PATH, SCHOOL_SELECTION_PATH } from '@/lib/admin-navigation';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 const icons = { overview: LayoutDashboard, students: Users, scores: BookOpen, grading: ClipboardCheck, finance: Wallet, reports: FileText, users: Settings, news: Bell, inquiries: Inbox, activity: History };
 type Preferences = { collapsed: boolean; groups: Record<string, boolean> };
-const NavigationContext = createContext(false);
+const NavigationContext = createContext<((trigger: HTMLButtonElement) => void) | null>(null);
 
 function readPreferences(key: string): Preferences {
   try {
@@ -24,8 +24,10 @@ function readPreferences(key: string): Preferences {
 }
 
 export function AdminMenuButton() {
-  if (!useContext(NavigationContext)) return null;
-  return <SheetTrigger asChild><Button variant="outline" size="icon" className="h-11 w-11 shrink-0 lg:hidden" aria-label="Open navigation"><Menu className="h-5 w-5" /></Button></SheetTrigger>;
+  const openNavigation = useContext(NavigationContext);
+  if (!openNavigation) return null;
+  return <Button variant="outline" className="h-11 shrink-0 gap-1.5 px-2 lg:hidden" aria-label="Open navigation" aria-haspopup="dialog"
+    onClick={event => openNavigation(event.currentTarget)}><Menu className="h-5 w-5" aria-hidden="true" /><span>Menu</span></Button>;
 }
 
 // Keep the shell mounted across routes so drawer focus and preferences survive
@@ -44,6 +46,8 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
   const [preferences, setPreferences] = useState(() => readPreferences(key));
   const [open, setOpen] = useState(false);
   const navigationClose = useRef(false);
+  const menuTrigger = useRef<HTMLButtonElement | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const content = useRef<HTMLDivElement>(null);
   const branch = path.startsWith('/admin/school/');
   const dashboard = branch || user.role === 'sub-admin' && (path === '/' || path === '/admin');
@@ -51,6 +55,8 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
   const activeGroup = ADMIN_PAGES.find(page => page.id === activePage)?.group ?? (path === '/users' || path === '/profile' ? 'Administration' : 'Overview');
   const activeKey = `${path}?${search}`;
   const pages = permittedAdminPages(user.role, user.permissions);
+  const quickPages = mobileAdminPages(user.role, user.permissions);
+  const moreActive = !quickPages.some(page => page.id === activePage);
   const schoolPath = branch ? path : user.role === 'admin' ? SCHOOL_SELECTION_PATH : '/admin';
   // Observe the dashboard's existing request cache; do not issue an additional
   // request or expose a different school's pending student notifications.
@@ -82,7 +88,36 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
     return () => media.removeEventListener('change', close);
   }, []);
 
-  function selected() { navigationClose.current = open; setOpen(false); }
+  // Hide shortcuts while a phone keyboard is taking up the screen. Keep the
+  // page's Save/Record action reachable, and avoid extra work while typing.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    let fullHeight = viewport?.height ?? window.innerHeight;
+    const update = () => {
+      const height = viewport?.height ?? window.innerHeight;
+      const target = document.activeElement;
+      const editing = target instanceof HTMLElement && (target.matches('input:not([type="checkbox"]):not([type="radio"]), textarea') || target.isContentEditable);
+      if (!editing) fullHeight = height;
+      setKeyboardOpen(!!editing && fullHeight - height > 120);
+    };
+    viewport?.addEventListener('resize', update);
+    window.addEventListener('resize', update);
+    document.addEventListener('focusin', update);
+    document.addEventListener('focusout', update);
+    return () => {
+      viewport?.removeEventListener('resize', update);
+      window.removeEventListener('resize', update);
+      document.removeEventListener('focusin', update);
+      document.removeEventListener('focusout', update);
+    };
+  }, []);
+
+  function openNavigation(trigger: HTMLButtonElement) {
+    menuTrigger.current = trigger;
+    navigationClose.current = false;
+    setOpen(true);
+  }
+  function selected() { navigationClose.current = open; setOpen(false); window.scrollTo(0, 0); }
 
   function item(label: string, href: string, Icon: typeof Users, active: boolean, collapsed: boolean) {
     const link = <Link href={href} onClick={selected} aria-current={active ? 'page' : undefined}
@@ -93,16 +128,16 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
     return collapsed ? <Tooltip key={label}><TooltipTrigger asChild>{link}</TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip> : <div key={label}>{link}</div>;
   }
 
-  function navigation(collapsed: boolean) {
+  function navigation(collapsed: boolean, mobile = false) {
     return <nav aria-label="Admin navigation" className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
       {ADMIN_GROUPS.map(group => {
         const entries = pages.filter(page => page.group === group);
         const overview = group === 'Overview' && user.role === 'admin';
         const administration = group === 'Administration' && user.role === 'admin';
         if (!entries.length && !overview && !administration) return null;
-        const expanded = preferences.groups[group] !== false;
+        const expanded = mobile || preferences.groups[group] !== false;
         return <section key={group} aria-label={group} className="space-y-1">
-          {collapsed ? <div className="mx-2 border-t first:mt-0" /> : <button type="button"
+          {mobile ? <h3 className="px-3 pt-2 text-xs font-semibold text-muted-foreground">{group}</h3> : collapsed ? <div className="mx-2 border-t first:mt-0" /> : <button type="button"
             className="flex min-h-11 w-full items-center justify-between rounded-md px-3 text-xs font-semibold tracking-wide text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
             aria-expanded={expanded} aria-controls={`admin-group-${group}${open ? '-drawer' : ''}`}
             onClick={() => setPreferences(previous => ({ ...previous, groups: { ...previous.groups, [group]: !expanded } }))}>
@@ -121,7 +156,7 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
     </nav>;
   }
 
-  return <NavigationContext.Provider value={true}><Sheet open={open} onOpenChange={setOpen}>
+  return <NavigationContext.Provider value={openNavigation}><Sheet open={open} onOpenChange={setOpen}>
     <div className="admin-portal flex min-h-screen min-w-0 bg-gray-50 dark:bg-gray-900 print:block">
       <a href="#admin-content" className="sr-only fixed left-4 top-4 z-[60] rounded-md bg-background p-3 focus:not-sr-only">Skip to page content</a>
       <aside data-testid="admin-sidebar" data-collapsed={preferences.collapsed} aria-label="Desktop navigation"
@@ -137,14 +172,35 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
         </div>
         {!open && navigation(preferences.collapsed)}
       </aside>
-      <div id="admin-content" ref={content} tabIndex={-1} className="admin-portal-content min-w-0 flex-1 outline-none">{children}</div>
+      <div id="admin-content" ref={content} tabIndex={-1} className="admin-portal-content min-w-0 flex-1 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0 print:pb-0 outline-none">{children}</div>
     </div>
+    <nav aria-label="Quick navigation" data-testid="mobile-navigation"
+      className={cn('fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200 bg-background px-2 pt-1 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] lg:hidden print:hidden', keyboardOpen && 'hidden')}
+      style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom, 0px))' }}>
+      {quickPages.map(page => {
+        const Icon = icons[page.icon];
+        const active = activePage === page.id;
+        return <Link key={page.id} href={adminPageHref(schoolPath, page.id)} onClick={selected}
+          aria-current={active ? 'page' : undefined}
+          className={cn('flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg border-t-4 px-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', active ? 'border-blue-700 bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-100' : 'border-transparent text-muted-foreground hover:bg-accent')}>
+          <span className="relative"><Icon className="h-5 w-5" aria-hidden="true" />{page.id === 'students' && pendingNames > 0 && <span className="absolute -right-3 -top-2 rounded-full bg-amber-600 px-1 text-[10px] text-white" aria-label={`${pendingNames} pending name change requests`}>{pendingNames > 9 ? '9+' : pendingNames}</span>}</span>
+          <span>{page.label}</span>
+        </Link>;
+      })}
+      <button type="button" aria-haspopup="dialog" aria-expanded={open} onClick={event => openNavigation(event.currentTarget)}
+        className={cn('flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg border-t-4 px-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', moreActive || open ? 'border-blue-700 bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-100' : 'border-transparent text-muted-foreground hover:bg-accent')}>
+        <MoreHorizontal className="h-5 w-5" aria-hidden="true" /><span>More</span>
+      </button>
+    </nav>
     <SheetContent side="left" className="flex w-[min(20rem,90vw)] max-w-full flex-col gap-0 p-0 [&>button]:inline-flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
       onCloseAutoFocus={event => {
-        if (navigationClose.current) { event.preventDefault(); content.current?.focus(); navigationClose.current = false; }
+        event.preventDefault();
+        if (navigationClose.current) content.current?.focus();
+        else menuTrigger.current?.focus();
+        navigationClose.current = false;
       }}>
-      <SheetHeader className="border-b px-6 py-5 pr-16 text-left"><SheetTitle>Seat of Wisdom</SheetTitle><SheetDescription>Administrator navigation</SheetDescription></SheetHeader>
-      {navigation(false)}
+      <SheetHeader className="border-b px-6 py-5 pr-16 text-left"><SheetTitle>All sections</SheetTitle><SheetDescription>Choose where you want to go</SheetDescription></SheetHeader>
+      {navigation(false, true)}
     </SheetContent>
   </Sheet></NavigationContext.Provider>;
 }

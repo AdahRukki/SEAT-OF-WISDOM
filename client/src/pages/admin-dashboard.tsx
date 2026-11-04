@@ -4020,6 +4020,12 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
             </div>
           </div>
           
+          {user.role === 'sub-admin' && (
+            <p className="lg:hidden border-t py-2 text-sm font-medium text-blue-800 dark:text-blue-100">
+              {getSchoolName(user.schoolId || '')}
+            </p>
+          )}
+
           {/* Mobile School Selector - Shown below header on mobile for admin */}
           {user.role === 'admin' && selectedSchoolId && (
             <div className="lg:hidden pb-3 border-t border-gray-200 dark:border-gray-700 pt-3">

@@ -37,3 +37,24 @@ npm run build
 ```
 
 After checks pass, restart only the application's existing PM2 or systemd service using its actual configured name. This change requires no database migration. For installed web apps, reconnect, reopen and accept Update now when offered.
+
+
+## Mobile shortcuts
+
+Below 1024px, Students, Finance and Scores are always visible in a bottom bar
+when the account has the corresponding permission. More opens all permitted
+sections, with groups expanded so users do not need a second tap to find a page.
+The active section is highlighted; pages outside the three shortcuts highlight More.
+The top Menu button remains labelled. Both triggers return focus on dismissal;
+selecting a page closes the drawer, scrolls to the top and focuses page content.
+Main admins without a school selected still choose a school before editing.
+
+The bar reserves bottom space, includes device safe-area padding, hides for print
+and yields when the viewport shrinks for a text-entry keyboard. Desktop sidebar
+preferences are unchanged. Branch administrators can see their school below the
+mobile page header. No payment, score, account or permission logic is changed.
+
+Validation: production build and four admin-page permission/routing tests passed.
+The isolated navigation component was inspected at 360px and 820px with sample
+data; Finance shortcut and More-to-report-cards selection were exercised. Physical
+Tecno keyboard behavior and the live VPS were not tested.
