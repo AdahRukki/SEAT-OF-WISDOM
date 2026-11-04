@@ -813,6 +813,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   // Student editing states
   const [isEditStudentDialogOpen, setIsEditStudentDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentWithDetails | null>(null);
+  const [markStudentReturning, setMarkStudentReturning] = useState(false);
   
   // Class deletion states
   const [isDeleteClassDialogOpen, setIsDeleteClassDialogOpen] = useState(false);
@@ -2830,6 +2831,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       });
       setIsEditStudentDialogOpen(false);
       setEditingStudent(null);
+      setMarkStudentReturning(false);
       setStudentEditForm({
         firstName: "",
         lastName: "",
@@ -2853,6 +2855,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       }
       queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/payments/tuition-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary/by-class'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/payment-broadsheet'] });
+
     },
     onError: (error: any) => {
       toast({
@@ -2899,6 +2905,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   // Function to open edit dialog
   const openEditStudent = (student: StudentWithDetails) => {
     setEditingStudent(student);
+    setMarkStudentReturning(false);
     setStudentEditForm({
       firstName: student.user?.firstName || "",
       lastName: student.user?.lastName || "",
@@ -9262,6 +9269,25 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {user?.role === 'admin' && (
+                    <div className="mb-5 space-y-2">
+                      <p className="text-sm font-medium">Student type: {editingStudent?.studentType === 'new' ? 'New Student' : 'Returning (Old Student)'}</p>
+                      {editingStudent?.studentType === 'new' && (
+                        <>
+                          <label className="flex min-h-11 items-center gap-3 rounded-md border p-3 cursor-pointer">
+                            <input type="checkbox" className="h-5 w-5 shrink-0" checked={markStudentReturning}
+                              onChange={event => setMarkStudentReturning(event.target.checked)}
+                              data-testid="checkbox-mark-student-returning" />
+                            <span className="text-sm">Change to Returning (Old Student)</span>
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            Applies when you save. Current tuition will use the returning-student rate unless an individual charge is already saved. Recorded payments and saved past-term charges are unchanged.
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-2 max-w-xs">
                     <Label htmlFor="discount" className="text-sm font-medium text-gray-700 dark:text-gray-300">Tuition Discount (₦)</Label>
                     <Input
@@ -9303,6 +9329,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                     updateStudentMutation.mutate({
                       id: editingStudent.id,
                       ...studentEditForm,
+                      ...(user?.role === 'admin' && markStudentReturning && editingStudent.studentType === 'new'
+                        ? { studentType: 'returning', reason: 'Main Admin changed New Student to Returning (Old Student)' } : {}),
                       discount: studentEditForm.discount === "" ? 0 : parseFloat(studentEditForm.discount)
                     });
                   }

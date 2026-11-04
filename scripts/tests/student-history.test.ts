@@ -228,3 +228,24 @@ test('reliable existing bulk promotion records recover Third Term class history;
     assert.equal(snapshot.find(s=>s.studentId===manual.id).historicalClassVerified,false);
   } finally { await f.pg.close(); }
 });
+
+test('only Main Admin can manually change New to Returning; unrelated edits remain allowed', async () => {
+  const f = await fixture(); try {
+    const s = await f.create();
+    for (const actorRole of ['sub-admin', 'bursar', undefined]) {
+      await assert.rejects(f.store.updateStudent(s.id, { studentType: 'returning', address: 'must not save' }, { ...context, actorRole }), /Only the Main Admin/);
+    }
+    await assert.rejects(f.store.updateStudent(s.id, { studentType: 'invalid' }, context), /only changes/);
+    let row = (await f.pg.query('SELECT * FROM students WHERE id=$1', [s.id])).rows[0] as any;
+    assert.equal(row.student_type, 'new'); assert.notEqual(row.address, 'must not save');
+    const admissionBefore = (await f.events(s.id, 'admission'))[0];
+    await f.store.updateStudent(s.id, { address: 'updated contact' }, { ...context, actorRole: 'sub-admin' });
+    const updated = await f.store.updateStudent(s.id, { studentType: 'returning' }, context);
+    assert.equal(updated.studentType, 'returning');
+    assert.equal(updated.address, 'updated contact');
+    assert.equal(updated.classId, s.classId);
+    assert.equal(updated.studentTypeFlippedTerm, null);
+    assert.deepEqual((await f.events(s.id, 'admission'))[0], admissionBefore);
+    await assert.rejects(f.store.updateStudent(s.id, { studentType: 'new' }, context), /only changes/);
+  } finally { await f.pg.close(); }
+});

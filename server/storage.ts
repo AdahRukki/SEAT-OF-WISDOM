@@ -716,6 +716,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateStudent(studentId: string, updateData: Partial<InsertStudent>, history: HistoryContext = {}, accountActive?: boolean): Promise<Student> {
+    if (updateData.studentType !== undefined) {
+      if (history.actorRole !== 'admin') throw new StudentHistoryError('Only the Main Admin can change student type.', 403);
+      if (updateData.studentType !== 'returning') throw new StudentHistoryError('This action only changes a student to Returning (Old Student).');
+    }
+
     return db.transaction(async (tx) => {
       await setHistoryContext(tx, { ...history, action: history.action ?? 'edit' });
       const scope = await authorizeStudentMutation(tx, studentId, updateData.classId, history);

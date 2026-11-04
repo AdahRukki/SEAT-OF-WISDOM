@@ -1954,6 +1954,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const updateData = req.body;
       const mutationHistory = studentHistoryContext(req);
+      if (Object.prototype.hasOwnProperty.call(updateData, 'studentType')) {
+        if ((req as any).user.role !== 'admin') return res.status(403).json({ error: 'Only the Main Admin can change student type.' });
+        if (updateData.studentType !== 'returning') return res.status(400).json({ error: 'This action only changes a student to Returning (Old Student).' });
+      }
+
       if (updateData.isActive !== undefined && typeof updateData.isActive !== 'boolean') return res.status(400).json({ error: 'isActive must be a boolean' });
       if (updateData.status !== undefined && !['active','withdrawn','graduated'].includes(updateData.status)) return res.status(400).json({ error: 'Invalid student status' });
       const user = (req as any).user;

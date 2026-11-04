@@ -22,3 +22,14 @@ test('invalid recorded historical discounts cannot silently become a verified ze
     snapshots:[{...snapshot,snapshotKind:'term_end',students:[{...snapshot.students[0],discount:-10}]}],rates:[{classId:'class',amount:100,...period}]});
   assert.equal(result.tuitionKnown,false);assert.match(result.tuitionReason!,/historical discount is invalid/);
 });
+
+test('manual returning classification changes open tuition but preserves saved charges and closed-period type',()=>{
+  const changed={...student,studentType:'returning',flippedTerm:null,flippedSession:null,discount:0};
+  const rates=[{classId:'class',amount:100,studentType:'new',...period},{classId:'class',amount:80,studentType:'returning',...period}];
+  const input={student:changed,schoolId:'school',period,currentPeriod:period,rates};
+  assert.equal(resolveHistoricalTuition(input).tuitionAssigned,80);
+  assert.equal(resolveHistoricalTuition({...input,student:{...changed,savedTuition:100}}).tuitionAssigned,100);
+  const closed={...snapshot,snapshotKind:'term_end',students:[{...snapshot.students[0],studentType:'new',discount:0}]};
+  const old=resolveHistoricalTuition({...input,currentPeriod:{term:'Second Term',session:'2026/2027'},snapshots:[closed]});
+  assert.equal(old.studentType,'new'); assert.equal(old.tuitionAssigned,100);
+});
