@@ -2354,6 +2354,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const schoolId = classInfo.schoolId!;
 
+      const targetClass = await storage.getClassById(classId);
+      if (!targetClass) return res.status(404).json({ error: 'Class not found' });
+      if (user.role === 'sub-admin' && targetClass.schoolId !== user.schoolId) return res.status(403).json({ error: 'Access denied to this school' });
+      if (!hasPermission(user.role, user.permissions, 'tab_scores')) return res.status(403).json({ error: 'Scores permission required' });
+
       // Parse Excel file
       const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
@@ -3064,6 +3069,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(assessments)
         .where(eq(assessments.id, assessmentId))
         .limit(1);
+      if (!assessmentBefore) return res.status(404).json({ error: 'Assessment not found' });
+      const actor = (req as any).user;
+      const targetClass = await storage.getClassById(assessmentBefore.classId);
+      if (!targetClass) return res.status(404).json({ error: 'Class not found' });
+      if (actor.role === 'sub-admin' && targetClass.schoolId !== actor.schoolId) return res.status(403).json({ error: 'Access denied to this school' });
       await storage.deleteAssessment(assessmentId);
       const assessmentClass = assessmentBefore?.classId ? await storage.getClassById(assessmentBefore.classId) : undefined;
       await logActivity(req, {
@@ -3084,6 +3094,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const assessmentData = addScoreSchema.parse(req.body);
       
+      const actor = (req as any).user;
+      const targetClass = await storage.getClassById(assessmentData.classId);
+      if (!targetClass) return res.status(404).json({ error: 'Class not found' });
+      if (actor.role === 'sub-admin' && targetClass.schoolId !== actor.schoolId) return res.status(403).json({ error: 'Access denied to this school' });
+      const [targetStudent] = await db.select({ classId: students.classId }).from(students).where(eq(students.id, assessmentData.studentId)).limit(1);
+      if (!targetStudent || targetStudent.classId !== assessmentData.classId) return res.status(400).json({ error: 'Student is not assigned to this class' });
       console.log("[DEBUG] Assessment data received:", assessmentData);
       console.log("[DEBUG] Frontend classId being sent:", req.body.classId);
       
