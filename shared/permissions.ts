@@ -60,7 +60,7 @@ export function getEffectivePermissions(
 ): string[] {
   if (role === "admin") return ALL_PERMISSION_KEYS;
   if (role !== "sub-admin") return [];
-  return permissions && permissions.length > 0 ? permissions : DEFAULT_SUB_ADMIN_PERMISSIONS;
+  return permissions == null ? DEFAULT_SUB_ADMIN_PERMISSIONS : permissions;
 }
 
 export function hasPermission(
