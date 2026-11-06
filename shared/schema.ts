@@ -104,7 +104,8 @@ export const users = pgTable("users", {
   lastName: varchar("last_name", { length: 100 }).notNull(),
   middleName: varchar("middle_name", { length: 100 }),
   role: varchar("role", { length: 20 }).notNull().default("student"), // admin, sub-admin, student
-  schoolId: uuid("school_id").references(() => schools.id), // sub-admins and students are tied to specific schools
+  schoolId: uuid("school_id").references(() => schools.id), // sub-admins, teachers and students are tied to schools
+  assignedClassId: varchar("assigned_class_id", { length: 50 }).references(() => classes.id), // teacher class restriction
   isActive: boolean("is_active").default(true),
   passwordUpdatedAt: timestamp("password_updated_at").defaultNow(), // For session invalidation after password changes
   // Per-sub-admin tab/feature permission toggles. NULL means "use legacy default permissions"
