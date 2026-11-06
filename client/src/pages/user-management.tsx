@@ -81,6 +81,8 @@ export default function UserManagement() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  const [teacherForm, setTeacherForm] = useState({ firstName: "", lastName: "", email: "", password: "", schoolId: "", assignedClassId: "" });
+  const [isCreateTeacherOpen, setIsCreateTeacherOpen] = useState(false);
   
   // Password visibility state
   const [showPassword, setShowPassword] = useState(false);
@@ -108,6 +110,26 @@ export default function UserManagement() {
   const { data: schools = [] } = useQuery<SchoolType[]>({
     queryKey: ['/api/admin/schools'],
     enabled: user?.role === 'admin'
+  });
+
+  const { data: teacherClasses = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['/api/admin/classes', teacherForm.schoolId],
+    queryFn: () => apiRequest(`/api/admin/classes?schoolId=${encodeURIComponent(teacherForm.schoolId)}`),
+    enabled: user?.role === 'admin' && !!teacherForm.schoolId,
+  });
+
+  const createTeacherMutation = useMutation({
+    mutationFn: () => apiRequest('/api/admin/users', {
+      method: 'POST',
+      body: { ...teacherForm, role: 'teacher' },
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
+      setIsCreateTeacherOpen(false);
+      setTeacherForm({ firstName: "", lastName: "", email: "", password: "", schoolId: "", assignedClassId: "" });
+      toast({ title: 'Teacher account created' });
+    },
+    onError: (error: any) => toast({ title: 'Unable to create teacher', description: error.message, variant: 'destructive' }),
   });
 
   // Create sub-admin mutation
@@ -443,6 +465,30 @@ export default function UserManagement() {
                         {createMainAdminMutation.isPending ? "Creating..." : "Create Main Admin"}
                       </Button>
                     </div>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={isCreateTeacherOpen} onOpenChange={setIsCreateTeacherOpen}>
+                  <DialogTrigger asChild><Button variant="outline"><UserPlus className="w-4 h-4 mr-2" />Add Teacher</Button></DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Create Teacher</DialogTitle><DialogDescription>Teachers can view their assigned class and enter scores. They cannot add students or edit names.</DialogDescription></DialogHeader>
+                    <div className="grid gap-3 py-4">
+                      {(['firstName', 'lastName', 'email', 'password'] as const).map(field => <div key={field}>
+                        <Label htmlFor={`teacher-${field}`}>{({ firstName: 'First Name', lastName: 'Last Name', email: 'Email', password: 'Password' })[field]}</Label>
+                        <Input id={`teacher-${field}`} type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'} value={teacherForm[field]} onChange={e => setTeacherForm(prev => ({ ...prev, [field]: e.target.value }))} />
+                      </div>)}
+                      <Label htmlFor="teacher-school">School</Label>
+                      <select id="teacher-school" className="border rounded p-2" value={teacherForm.schoolId} onChange={e => setTeacherForm(prev => ({ ...prev, schoolId: e.target.value, assignedClassId: '' }))}>
+                        <option value="">Select school</option>
+                        {schools.map(school => <option key={school.id} value={school.id}>{school.name}</option>)}
+                      </select>
+                      <Label htmlFor="teacher-class">Assigned class</Label>
+                      <select id="teacher-class" className="border rounded p-2" value={teacherForm.assignedClassId} disabled={!teacherForm.schoolId} onChange={e => setTeacherForm(prev => ({ ...prev, assignedClassId: e.target.value }))}>
+                        <option value="">Select class</option>
+                        {teacherClasses.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                      </select>
+                    </div>
+                    <Button disabled={createTeacherMutation.isPending || Object.values(teacherForm).some(value => !value.trim())} onClick={() => createTeacherMutation.mutate()}>{createTeacherMutation.isPending ? 'Creating...' : 'Create Teacher'}</Button>
                   </DialogContent>
                 </Dialog>
 
