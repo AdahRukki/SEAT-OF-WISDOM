@@ -95,6 +95,7 @@ export default function UserManagement() {
     lastName: "",
     email: "",
     schoolId: "",
+    assignedClassId: "",
     isActive: true,
     password: "",
     confirmPassword: "",
@@ -116,6 +117,12 @@ export default function UserManagement() {
     queryKey: ['/api/admin/classes', teacherForm.schoolId],
     queryFn: () => apiRequest(`/api/admin/classes?schoolId=${encodeURIComponent(teacherForm.schoolId)}`),
     enabled: user?.role === 'admin' && !!teacherForm.schoolId,
+  });
+
+  const { data: editTeacherClasses = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ['/api/admin/classes', editUserForm.schoolId],
+    queryFn: () => apiRequest(`/api/admin/classes?schoolId=${encodeURIComponent(editUserForm.schoolId)}`),
+    enabled: user?.role === 'admin' && isEditUserDialogOpen && selectedUser?.role === 'teacher' && !!editUserForm.schoolId,
   });
 
   const createTeacherMutation = useMutation({
@@ -208,7 +215,7 @@ export default function UserManagement() {
   const editUserMutation = useMutation({
     mutationFn: async (data: any) => {
       return apiRequest(`/api/admin/users/${data.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         body: data
       });
     },
@@ -275,6 +282,7 @@ export default function UserManagement() {
       lastName: userData.lastName,
       email: userData.email,
       schoolId: userData.schoolId || "",
+      assignedClassId: userData.assignedClassId || "",
       isActive: userData.isActive ?? true,
       password: "",
       confirmPassword: "",
@@ -800,7 +808,7 @@ export default function UserManagement() {
                   <Label htmlFor="edit-school">School Assignment</Label>
                   <Select
                     value={editUserForm.schoolId}
-                    onValueChange={(value) => setEditUserForm(prev => ({ ...prev, schoolId: value }))}
+                    onValueChange={(value) => setEditUserForm(prev => ({ ...prev, schoolId: value, assignedClassId: prev.schoolId === value ? prev.assignedClassId : "" }))}
                   >
                     <SelectTrigger data-testid="select-edit-school">
                       <SelectValue placeholder="Select school" />
@@ -816,6 +824,19 @@ export default function UserManagement() {
                   </Select>
                 </div>
               </div>
+
+              {selectedUser?.role === 'teacher' && (
+                <div>
+                  <Label htmlFor="edit-teacher-class">Assigned Class</Label>
+                  <select id="edit-teacher-class" className="w-full border rounded p-2" value={editUserForm.assignedClassId}
+                    disabled={!editUserForm.schoolId}
+                    onChange={e => setEditUserForm(prev => ({ ...prev, assignedClassId: e.target.value }))}>
+                    <option value="">Select class</option>
+                    {editTeacherClasses.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">Teachers can view students and edit scores only. They cannot add students or change names.</p>
+                </div>
+              )}
 
               {/* Account Status */}
               <div className="flex items-center space-x-2">
@@ -928,6 +949,7 @@ export default function UserManagement() {
                     lastName: editUserForm.lastName,
                     email: editUserForm.email,
                     schoolId: editUserForm.schoolId || null,
+                    ...(selectedUser?.role === 'teacher' ? { assignedClassId: editUserForm.assignedClassId || null } : {}),
                     isActive: editUserForm.isActive,
                     ...(editUserForm.changePassword && editUserForm.password && {
                       password: editUserForm.password
@@ -936,7 +958,7 @@ export default function UserManagement() {
                   
                   editUserMutation.mutate(updateData);
                 }}
-                disabled={editUserMutation.isPending}
+                disabled={editUserMutation.isPending || (selectedUser?.role === "teacher" && (!editUserForm.schoolId || !editUserForm.assignedClassId))}
                 data-testid="button-save-edit"
               >
                 {editUserMutation.isPending ? "Saving..." : "Save Changes"}
