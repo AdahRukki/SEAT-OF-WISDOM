@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 
 type ClassInfo = { id: string; name: string };
 type StudentInfo = { id: string; firstName?: string; lastName?: string; studentId?: string; user?: { firstName?: string; lastName?: string } };
+type SubjectInfo = { id: string; name: string; customName?: string | null };
 type Assessment = { studentId: string; firstCA?: number; secondCA?: number; exam?: number };
 
 async function teacherRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
@@ -23,6 +24,7 @@ export default function TeacherDashboard() {
   const { user } = useAuth();
   const [assignedClass, setAssignedClass] = useState<ClassInfo | null>(null);
   const [students, setStudents] = useState<StudentInfo[]>([]);
+  const [subjects, setSubjects] = useState<SubjectInfo[]>([]);
   const [error, setError] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [term, setTerm] = useState("First Term");
@@ -36,9 +38,11 @@ export default function TeacherDashboard() {
     Promise.all([
       teacherRequest<ClassInfo>("/api/teacher/class", token),
       teacherRequest<StudentInfo[]>("/api/teacher/students", token),
-    ]).then(([classInfo, classStudents]) => {
+      teacherRequest<SubjectInfo[]>("/api/teacher/subjects", token),
+    ]).then(([classInfo, classStudents, classSubjects]) => {
       setAssignedClass(classInfo);
       setStudents(classStudents);
+      setSubjects(classSubjects);
     }).catch((err) => setError(err.message));
   }, [token, user?.role]);
 
@@ -84,7 +88,10 @@ export default function TeacherDashboard() {
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Scores</h2>
       <div className="flex flex-wrap gap-3">
-        <Input aria-label="Subject ID" placeholder="Subject ID" value={subjectId} onChange={e => setSubjectId(e.target.value)} />
+        <select aria-label="Subject" className="border rounded p-2" value={subjectId} onChange={e => setSubjectId(e.target.value)}>
+          <option value="">Select subject</option>
+          {subjects.map(subject => <option key={subject.id} value={subject.id}>{subject.customName || subject.name}</option>)}
+        </select>
         <select aria-label="Term" className="border rounded p-2" value={term} onChange={e => setTerm(e.target.value)}>
           {["First Term", "Second Term", "Third Term"].map(t => <option key={t}>{t}</option>)}
         </select>
