@@ -3062,6 +3062,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Teacher score writes use the class assignment from the authenticated user,
+  // never a class ID supplied by the browser.
+  app.post('/api/teacher/assessments', authenticate, requireAssignedTeacherClass, async (req, res) => {
+    try {
+      const actor = (req as any).user;
+      const assignedClass = (req as any).assignedTeacherClass;
+      const score = addScoreSchema.parse(req.body);
+      if (score.classId !== assignedClass.id) {
+        return res.status(403).json({ error: 'Scores can only be entered for your assigned class' });
+      }
+      const [student] = await db.select({ classId: students.classId })
+        .from(students).where(eq(students.id, score.studentId)).limit(1);
+      if (!student || student.classId !== assignedClass.id) {
+        return res.status(403).json({ error: 'Student is not in your assigned class' });
+      }
+      const classSubjects = await storage.getClassSubjects(assignedClass.id);
+      if (!classSubjects.some(subject => subject.id === score.subjectId)) {
+        return res.status(400).json({ error: 'Subject is not assigned to this class' });
+      }
+      const assessment = await storage.createOrUpdateAssessment({
+        studentId: score.studentId,
+        subjectId: score.subjectId,
+        classId: assignedClass.id,
+        term: score.term,
+        session: score.session,
+        firstCA: score.firstCA,
+        secondCA: score.secondCA,
+        exam: score.exam,
+      });
+      await logActivity(req, {
+        action: 'teacher_save_score',
+        entityType: 'assessment',
+        entityId: (assessment as any)?.id,
+        schoolId: actor.schoolId,
+        newData: assessment as any,
+      });
+      res.json(assessment);
+    } catch (error: any) {
+      console.error('Teacher score save error:', error);
+      res.status(400).json({ error: 'Failed to save teacher score' });
+    }
+  });
+
   // Get students by class (for teacher interface)
   app.get('/api/admin/students/by-class/:classId', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
