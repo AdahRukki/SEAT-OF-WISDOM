@@ -807,14 +807,14 @@ export default function UserManagement() {
                 <div>
                   <Label htmlFor="edit-school">School Assignment</Label>
                   <Select
-                    value={editUserForm.schoolId}
-                    onValueChange={(value) => setEditUserForm(prev => ({ ...prev, schoolId: value, assignedClassId: prev.schoolId === value ? prev.assignedClassId : "" }))}
+                    value={editUserForm.schoolId || "all"}
+                    onValueChange={(value) => setEditUserForm(prev => ({ ...prev, schoolId: value === "all" ? "" : value, assignedClassId: prev.schoolId === value ? prev.assignedClassId : "" }))}
                   >
                     <SelectTrigger data-testid="select-edit-school">
                       <SelectValue placeholder="Select school" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Schools (Admin)</SelectItem>
+                      <SelectItem value="all">All Schools (Admin)</SelectItem>
                       {schools.map((school) => (
                         <SelectItem key={school.id} value={school.id}>
                           {school.name}
