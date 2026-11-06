@@ -31,6 +31,7 @@ export default function TeacherDashboard() {
   const [session, setSession] = useState("");
   const [scores, setScores] = useState<Record<string, { firstCA: string; secondCA: string; exam: string }>>({});
   const [busy, setBusy] = useState(false);
+  const [savedMessage, setSavedMessage] = useState("");
   const [loadedContext, setLoadedContext] = useState("");
   const token = localStorage.getItem("auth_token") || "";
 
@@ -61,6 +62,7 @@ export default function TeacherDashboard() {
     if (!subjectId || !term || !session) return setError("Enter subject ID, term and session.");
     setError("");
     setLoadedContext("");
+    setSavedMessage("");
     try {
       const query = new URLSearchParams({ subjectId, term, session });
       const assessments = await teacherRequest<Assessment[]>(`/api/teacher/assessments?${query}`, token);
@@ -91,6 +93,7 @@ export default function TeacherDashboard() {
           firstCA: Number(value.firstCA || 0), secondCA: Number(value.secondCA || 0), exam: Number(value.exam || 0),
         }),
       });
+      setSavedMessage("Score saved successfully.");
     } catch (err: any) { setError(err.message); }
     finally { setBusy(false); }
   }
@@ -99,6 +102,7 @@ export default function TeacherDashboard() {
   return <main className="max-w-5xl mx-auto p-6 space-y-6">
     <header><h1 className="text-2xl font-bold">Score Entry</h1><p>Assigned class: {assignedClass?.name || "Loading..."}</p></header>
     {error && <p role="alert" className="text-red-600">{error}</p>}
+    {savedMessage && <p role="status" className="text-green-700">{savedMessage}</p>}
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Scores</h2>
       <div className="flex flex-wrap gap-3">
@@ -115,12 +119,13 @@ export default function TeacherDashboard() {
     </section>
     <section className="overflow-x-auto">
       <h2 className="text-lg font-semibold mb-3">Students ({students.length})</h2>
-      <table className="w-full text-sm border-collapse"><thead><tr className="border-b"><th className="text-left p-2">Student</th><th>1st CA</th><th>2nd CA</th><th>Exam</th><th>Action</th></tr></thead>
+      <table className="w-full text-sm border-collapse"><thead><tr className="border-b"><th className="text-left p-2">Student</th><th>1st CA</th><th>2nd CA</th><th>Exam</th><th>Total</th><th>Action</th></tr></thead>
         <tbody>{students.map(student => <tr className="border-b" key={student.id}>
           <td className="p-2">{[student.user?.firstName || student.firstName, student.user?.lastName || student.lastName].filter(Boolean).join(" ") || student.studentId || student.id}</td>
           {(["firstCA", "secondCA", "exam"] as const).map(field => <td className="p-1" key={field}>
             <Input type="number" min={0} aria-label={field + " for " + student.id} value={scores[student.id]?.[field] || ""} onChange={e => setScores(prev => ({ ...prev, [student.id]: { firstCA: prev[student.id]?.firstCA || "", secondCA: prev[student.id]?.secondCA || "", exam: prev[student.id]?.exam || "", [field]: e.target.value } }))} />
           </td>)}
+          <td className="p-2 text-center">{(() => { const v = scores[student.id]; return v ? Number(v.firstCA || 0) + Number(v.secondCA || 0) + Number(v.exam || 0) : "—"; })()}</td>
           <td className="p-2"><Button disabled={busy || !assignedClass || loadedContext !== [subjectId, term, session].join("|")} onClick={() => saveScore(student.id)}>Save</Button></td>
         </tr>)}</tbody>
       </table>
