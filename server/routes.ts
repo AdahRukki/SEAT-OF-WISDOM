@@ -620,6 +620,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/users', authenticate, requireMainAdmin, async (req, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
+      if (userData.role === 'teacher') {
+        if (!userData.schoolId || !userData.assignedClassId) return res.status(400).json({ error: 'Teacher requires a school and assigned class' });
+        const assignedClass = await storage.getClassById(userData.assignedClassId);
+        if (!assignedClass || assignedClass.schoolId !== userData.schoolId) return res.status(400).json({ error: 'Assigned class must belong to the selected school' });
+      } else if (userData.assignedClassId) {
+        return res.status(400).json({ error: 'Class assignment is only available for teachers' });
+      }
       const user = await storage.createUser(userData);
       await logActivity(req, {
         action: 'create_user',
