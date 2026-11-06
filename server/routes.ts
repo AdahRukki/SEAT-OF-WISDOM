@@ -3040,7 +3040,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const assignedClass = (req as any).assignedTeacherClass;
       const classStudents = await storage.getStudentsByClass(assignedClass.id);
-      res.json(classStudents);
+      // Teachers only need roster identity for score entry. Do not expose
+      // student contact information, credentials, finances, or editable profiles.
+      res.json(classStudents.map(student => ({
+        id: student.id,
+        studentId: student.studentId,
+        firstName: student.user?.firstName,
+        lastName: student.user?.lastName,
+        user: {
+          firstName: student.user?.firstName,
+          lastName: student.user?.lastName,
+        },
+      })));
     } catch (error) {
       console.error('Teacher students error:', error);
       res.status(500).json({ error: 'Failed to fetch assigned students' });
