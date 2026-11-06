@@ -8,8 +8,8 @@ export function ScoreEntryGrid({ filteredStudents, classAssessments, scoreInputs
  filteredStudents: any[];
  classAssessments: any[];
  scoreInputs: Record<string, {firstCA?: string; secondCA?: string; exam?: string}>;
- handleScoreChange: (studentId: string, field: string, value: string) => void;
- handleKeyDown: (event: any, studentId: string, field: string) => void;
+ handleScoreChange: (studentId: string, field: "firstCA" | "secondCA" | "exam", value: string) => void;
+ handleKeyDown: (event: any, studentId: string, field: "firstCA" | "secondCA" | "exam") => void;
  calculateGrade: (total: number) => {grade: string};
  onDelete?: (id: string) => void;
  deleting?: boolean;
