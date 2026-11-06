@@ -82,9 +82,13 @@ export default function TeacherDashboard() {
   async function saveScore(studentId: string) {
     if (!assignedClass || !subjectId || !session) return setError("Select a class, subject and session first.");
     if (loadedContext !== [subjectId, term, session].join("|")) return setError("Load scores for the selected subject, term and session before saving.");
+    const values = scores[studentId];
+    if (!values || [values.firstCA, values.secondCA, values.exam].every(value => value === "")) return setError("Enter at least one score before saving.");
+    if ([["firstCA", 20], ["secondCA", 20], ["exam", 60]].some(([field, maximum]) => { const value = values[field as keyof typeof values]; return value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > Number(maximum)); })) return setError("Scores must be within CA1 /20, CA2 /20, and Exam /60.");
     const value = scores[studentId] || { firstCA: "", secondCA: "", exam: "" };
     setBusy(true);
     setError("");
+    setSavedMessage("");
     try {
       await teacherRequest("/api/teacher/assessments", token, {
         method: "POST",
