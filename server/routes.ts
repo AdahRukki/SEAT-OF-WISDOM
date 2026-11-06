@@ -1383,6 +1383,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
       }
       
+      if (actor.role === 'admin' && existingUser.role === 'teacher' && ('assignedClassId' in updatePayload || 'schoolId' in updatePayload)) {
+        const nextSchoolId = updatePayload.schoolId ?? existingUser.schoolId;
+        const nextClassId = updatePayload.assignedClassId ?? existingUser.assignedClassId;
+        if (!nextSchoolId || !nextClassId) return res.status(400).json({ error: 'Teacher requires a school and class' });
+        const nextClass = await storage.getClassById(nextClassId);
+        if (!nextClass || nextClass.schoolId !== nextSchoolId) return res.status(400).json({ error: 'Teacher class must belong to assigned school' });
+      }
+      if (actor.role === 'admin' && existingUser.role !== 'teacher' && 'assignedClassId' in updatePayload && updatePayload.assignedClassId != null) return res.status(400).json({ error: 'Class assignment is only for teachers' });
+
       // Update password if provided
       if (password) {
         await storage.updateUserPassword(id, password);
