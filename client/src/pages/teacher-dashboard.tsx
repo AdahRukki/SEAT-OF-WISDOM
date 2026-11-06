@@ -27,12 +27,22 @@ export default function TeacherDashboard() {
   const [subjects, setSubjects] = useState<SubjectInfo[]>([]);
   const [error, setError] = useState("");
   const [subjectId, setSubjectId] = useState("");
-  const [term, setTerm] = useState("First Term");
+  const [term, setTerm] = useState("");
   const [session, setSession] = useState("");
   const [scores, setScores] = useState<Record<string, { firstCA: string; secondCA: string; exam: string }>>({});
   const [busy, setBusy] = useState(false);
   const [loadedContext, setLoadedContext] = useState("");
   const token = localStorage.getItem("auth_token") || "";
+
+  useEffect(() => {
+    if (!token || !user?.schoolId) return;
+    teacherRequest<{ currentTerm?: string; currentSession?: string }>(`/api/current-academic-info?schoolId=${user.schoolId}`, token)
+      .then(info => {
+        if (info.currentTerm) setTerm(info.currentTerm);
+        if (info.currentSession) setSession(info.currentSession);
+      })
+      .catch(err => setError(err.message));
+  }, [token, user?.schoolId]);
 
   useEffect(() => {
     if (!token || user?.role !== "teacher") return;
@@ -87,7 +97,7 @@ export default function TeacherDashboard() {
 
   if (!token) return <p className="p-6">Please sign in again.</p>;
   return <main className="max-w-5xl mx-auto p-6 space-y-6">
-    <header><h1 className="text-2xl font-bold">Teacher Dashboard</h1><p>Assigned class: {assignedClass?.name || "Loading..."}</p></header>
+    <header><h1 className="text-2xl font-bold">Score Entry</h1><p>Assigned class: {assignedClass?.name || "Loading..."}</p></header>
     {error && <p role="alert" className="text-red-600">{error}</p>}
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Scores</h2>
@@ -99,7 +109,7 @@ export default function TeacherDashboard() {
         <select aria-label="Term" className="border rounded p-2" value={term} onChange={e => { setTerm(e.target.value); setScores({}); }}>
           {["First Term", "Second Term", "Third Term"].map(t => <option key={t}>{t}</option>)}
         </select>
-        <Input aria-label="Session" placeholder="Session (e.g. 2026/2027)" value={session} onChange={e => { setSession(e.target.value); setScores({}); }} />
+        <Input aria-label="Session" placeholder="Academic session" value={session} readOnly />
         <Button onClick={loadScores}>Load scores</Button>
       </div>
     </section>
