@@ -2543,6 +2543,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/admin/assessments', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { classId, subjectId, term, session } = req.query;
+      if (typeof classId !== 'string' || !classId) return res.status(400).json({ error: 'classId is required' });
+      const actor = (req as any).user;
+      const requestedClass = await storage.getClassById(classId);
+      if (!requestedClass) return res.status(404).json({ error: 'Class not found' });
+      if (actor.role === 'sub-admin' && requestedClass.schoolId !== actor.schoolId) return res.status(403).json({ error: 'Access denied to this school' });
       const assessments = await storage.getClassAssessments(
         classId as string,
         subjectId as string,
@@ -2978,6 +2983,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/admin/students/by-class/:classId', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
       const { classId } = req.params;
+      const actor = (req as any).user;
+      const requestedClass = await storage.getClassById(classId);
+      if (!requestedClass) return res.status(404).json({ error: 'Class not found' });
+      if (actor.role === 'sub-admin' && requestedClass.schoolId !== actor.schoolId) return res.status(403).json({ error: 'Access denied to this school' });
       const students = await storage.getStudentsByClass(classId);
       res.json(students);
     } catch (error) {
