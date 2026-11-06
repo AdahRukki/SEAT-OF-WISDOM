@@ -120,7 +120,8 @@ function PortalRoutes() {
       ) : user?.role === 'teacher' ? (
         <>
           <Route path="/" component={TeacherDashboard} />
-          <Route path="/teacher" component={TeacherDashboard} />
+          <Route path="/scores" component={TeacherDashboard} />
+          <Route path="/teacher"><Redirect to="/portal/scores" replace /></Route>
           <Route path="/profile" component={Profile} />
         </>
       ) : (
