@@ -3081,8 +3081,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof subjectId !== 'string' || !subjectId || typeof term !== 'string' || !term || typeof session !== 'string' || !session) {
         return res.status(400).json({ error: 'subjectId, term, and session are required' });
       }
+      const classSubjects = await storage.getClassSubjects(assignedClass.id);
+      if (!classSubjects.some(subject => subject.id === subjectId)) {
+        return res.status(403).json({ error: 'Subject is not assigned to your class' });
+      }
       const classAssessments = await storage.getClassAssessments(assignedClass.id, subjectId, term, session);
-      res.json(classAssessments);
+      // Score entry only needs score fields; do not expose nested student profiles.
+      res.json(classAssessments.map(score => ({
+        studentId: score.studentId,
+        firstCA: score.firstCA,
+        secondCA: score.secondCA,
+        exam: score.exam,
+      })));
     } catch (error) {
       console.error('Teacher assessments error:', error);
       res.status(500).json({ error: 'Failed to fetch assigned class assessments' });
