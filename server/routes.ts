@@ -635,7 +635,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         schoolId: user.schoolId,
         newData: sanitizeUserForAudit(user),
       });
-      res.json(user);
+      // Never return the password hash or password-change metadata to the browser.
+      const { password: _passwordHash, passwordUpdatedAt: _passwordUpdatedAt, ...safeUser } = user;
+      res.json(safeUser);
     } catch (error) {
       console.error("Create user error:", error);
       res.status(400).json({ error: "Failed to create user" });
