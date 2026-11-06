@@ -31,6 +31,7 @@ export default function TeacherDashboard() {
   const [session, setSession] = useState("");
   const [scores, setScores] = useState<Record<string, { firstCA: string; secondCA: string; exam: string }>>({});
   const [busy, setBusy] = useState(false);
+  const [loadedContext, setLoadedContext] = useState("");
   const token = localStorage.getItem("auth_token") || "";
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function TeacherDashboard() {
   async function loadScores() {
     if (!subjectId || !term || !session) return setError("Enter subject ID, term and session.");
     setError("");
+    setLoadedContext("");
     try {
       const query = new URLSearchParams({ subjectId, term, session });
       const assessments = await teacherRequest<Assessment[]>(`/api/teacher/assessments?${query}`, token);
@@ -61,11 +63,13 @@ export default function TeacherDashboard() {
         };
       }
       setScores(values);
+      setLoadedContext([subjectId, term, session].join("|"));
     } catch (err: any) { setError(err.message); }
   }
 
   async function saveScore(studentId: string) {
     if (!assignedClass || !subjectId || !session) return setError("Select a class, subject and session first.");
+    if (loadedContext !== [subjectId, term, session].join("|")) return setError("Load scores for the selected subject, term and session before saving.");
     const value = scores[studentId] || { firstCA: "", secondCA: "", exam: "" };
     setBusy(true);
     setError("");
@@ -88,14 +92,14 @@ export default function TeacherDashboard() {
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Scores</h2>
       <div className="flex flex-wrap gap-3">
-        <select aria-label="Subject" className="border rounded p-2" value={subjectId} onChange={e => setSubjectId(e.target.value)}>
+        <select aria-label="Subject" className="border rounded p-2" value={subjectId} onChange={e => { setSubjectId(e.target.value); setScores({}); }}>
           <option value="">Select subject</option>
           {subjects.map(subject => <option key={subject.id} value={subject.id}>{subject.customName || subject.name}</option>)}
         </select>
-        <select aria-label="Term" className="border rounded p-2" value={term} onChange={e => setTerm(e.target.value)}>
+        <select aria-label="Term" className="border rounded p-2" value={term} onChange={e => { setTerm(e.target.value); setScores({}); }}>
           {["First Term", "Second Term", "Third Term"].map(t => <option key={t}>{t}</option>)}
         </select>
-        <Input aria-label="Session" placeholder="Session (e.g. 2026/2027)" value={session} onChange={e => setSession(e.target.value)} />
+        <Input aria-label="Session" placeholder="Session (e.g. 2026/2027)" value={session} onChange={e => { setSession(e.target.value); setScores({}); }} />
         <Button onClick={loadScores}>Load scores</Button>
       </div>
     </section>
@@ -107,7 +111,7 @@ export default function TeacherDashboard() {
           {(["firstCA", "secondCA", "exam"] as const).map(field => <td className="p-1" key={field}>
             <Input type="number" min={0} aria-label={field + " for " + student.id} value={scores[student.id]?.[field] || ""} onChange={e => setScores(prev => ({ ...prev, [student.id]: { firstCA: prev[student.id]?.firstCA || "", secondCA: prev[student.id]?.secondCA || "", exam: prev[student.id]?.exam || "", [field]: e.target.value } }))} />
           </td>)}
-          <td className="p-2"><Button disabled={busy || !assignedClass} onClick={() => saveScore(student.id)}>Save</Button></td>
+          <td className="p-2"><Button disabled={busy || !assignedClass || loadedContext !== [subjectId, term, session].join("|")} onClick={() => saveScore(student.id)}>Save</Button></td>
         </tr>)}</tbody>
       </table>
     </section>
