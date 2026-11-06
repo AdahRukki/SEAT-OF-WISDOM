@@ -1270,11 +1270,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const actor = (req as any).user;
       const adminOnly = req.query.adminOnly === 'true';
       const users = await storage.getAllUsers(adminOnly);
+      // The account-management screen must include teachers even when adminOnly is requested.
+      const teacherAccounts = adminOnly && actor.role === 'admin'
+        ? (await storage.getAllUsers(false)).filter(u => u.role === 'teacher')
+        : [];
+      const accounts = [...users, ...teacherAccounts.filter(t => !users.some(u => u.id === t.id))];
       // Sub-admins with the Users permission can manage other sub-admins/students
       // within their own school only — never main admin accounts or other schools' users.
       const visibleUsers = actor.role === 'sub-admin'
-        ? users.filter(u => u.role !== 'admin' && u.schoolId === actor.schoolId)
-        : users;
+        ? accounts.filter(u => u.role !== 'admin' && u.schoolId === actor.schoolId)
+        : accounts;
       const sanitizedUsers = visibleUsers.map(({ password, passwordUpdatedAt, ...user }) => user);
       res.json(sanitizedUsers);
     } catch (error) {
