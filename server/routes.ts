@@ -2571,6 +2571,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid scores data - expected array" });
       }
       
+      // Authorize the entire batch before writing any scores. A single unauthorized
+      // row must not cause partial updates to students in another school.
+      const actor = (req as any).user;
+      const classCache = new Map<string, any>();
+      for (const score of scores) {
+        if (!score || typeof score.classId !== 'string' || typeof score.studentId !== 'string') {
+          return res.status(400).json({ error: 'Each score requires a classId and studentId' });
+        }
+        let targetClass = classCache.get(score.classId);
+        if (!targetClass) {
+          targetClass = await storage.getClassById(score.classId);
+          if (!targetClass) return res.status(400).json({ error: 'Invalid classId in score batch' });
+          classCache.set(score.classId, targetClass);
+        }
+        if (actor.role === 'sub-admin' && targetClass.schoolId !== actor.schoolId) {
+          return res.status(403).json({ error: 'Score batch contains a class outside your school' });
+        }
+        const [targetStudent] = await db.select({ classId: students.classId })
+          .from(students).where(eq(students.id, score.studentId)).limit(1);
+        if (!targetStudent || targetStudent.classId !== score.classId) {
+          return res.status(400).json({ error: 'Score batch contains a student outside the specified class' });
+        }
+      }
+
       console.log(`Processing bulk score update for ${scores.length} students`);
       const results = [];
       const errors = [];
