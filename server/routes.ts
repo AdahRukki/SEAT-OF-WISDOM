@@ -3012,6 +3012,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Teacher-only, class-scoped read endpoints. Do not grant teachers general
+  // admin permissions: these endpoints independently validate school and class.
+  const requireAssignedTeacherClass = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const actor = (req as any).user;
+      if (!actor || actor.role !== 'teacher' || !actor.schoolId || !actor.assignedClassId) {
+        return res.status(403).json({ error: 'Assigned teacher access required' });
+      }
+      const assignedClass = await storage.getClassById(actor.assignedClassId);
+      if (!assignedClass || assignedClass.schoolId !== actor.schoolId) {
+        return res.status(403).json({ error: 'Invalid teacher class assignment' });
+      }
+      (req as any).assignedTeacherClass = assignedClass;
+      next();
+    } catch (error) {
+      console.error('Teacher assignment check failed:', error);
+      res.status(500).json({ error: 'Failed to validate teacher assignment' });
+    }
+  };
+
+  app.get('/api/teacher/class', authenticate, requireAssignedTeacherClass, (req, res) => {
+    res.json((req as any).assignedTeacherClass);
+  });
+
+  app.get('/api/teacher/students', authenticate, requireAssignedTeacherClass, async (req, res) => {
+    try {
+      const assignedClass = (req as any).assignedTeacherClass;
+      const classStudents = await storage.getStudentsByClass(assignedClass.id);
+      res.json(classStudents);
+    } catch (error) {
+      console.error('Teacher students error:', error);
+      res.status(500).json({ error: 'Failed to fetch assigned students' });
+    }
+  });
+
+  app.get('/api/teacher/assessments', authenticate, requireAssignedTeacherClass, async (req, res) => {
+    try {
+      const assignedClass = (req as any).assignedTeacherClass;
+      const { subjectId, term, session } = req.query;
+      if (typeof subjectId !== 'string' || !subjectId || typeof term !== 'string' || !term || typeof session !== 'string' || !session) {
+        return res.status(400).json({ error: 'subjectId, term, and session are required' });
+      }
+      const classAssessments = await storage.getClassAssessments(assignedClass.id, subjectId, term, session);
+      res.json(classAssessments);
+    } catch (error) {
+      console.error('Teacher assessments error:', error);
+      res.status(500).json({ error: 'Failed to fetch assigned class assessments' });
+    }
+  });
+
   // Get students by class (for teacher interface)
   app.get('/api/admin/students/by-class/:classId', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
