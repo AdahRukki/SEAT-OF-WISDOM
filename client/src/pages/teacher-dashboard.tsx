@@ -29,7 +29,7 @@ export default function TeacherDashboard() {
   const [session, setSession] = useState("");
   const [scores, setScores] = useState<Record<string, { firstCA: string; secondCA: string; exam: string }>>({});
   const [busy, setBusy] = useState(false);
-  const token = localStorage.getItem("token") || "";
+  const token = localStorage.getItem("auth_token") || "";
 
   useEffect(() => {
     if (!token || user?.role !== "teacher") return;
