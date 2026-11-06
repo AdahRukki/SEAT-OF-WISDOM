@@ -10,6 +10,7 @@ import AdminDashboard from "@/pages/admin-dashboard";
 import GeneralSchool, { SchoolSelection } from "@/pages/general-school";
 import AdminSchool from "@/pages/admin-school";
 import StudentDashboard from "@/pages/student-dashboard";
+import TeacherDashboard from "@/pages/teacher-dashboard";
 import UserManagement from "@/pages/user-management";
 import Profile from "@/pages/profile";
 import ResetPassword from "@/pages/reset-password";
@@ -114,6 +115,12 @@ function PortalRoutes() {
           <Route path="/admin/schools" component={SchoolSelection} />
           <Route path="/admin/school/:schoolId" component={AdminSchool} />
           <Route path="/users" component={UserManagement} />
+          <Route path="/profile" component={Profile} />
+        </>
+      ) : user?.role === 'teacher' ? (
+        <>
+          <Route path="/" component={TeacherDashboard} />
+          <Route path="/teacher" component={TeacherDashboard} />
           <Route path="/profile" component={Profile} />
         </>
       ) : (
