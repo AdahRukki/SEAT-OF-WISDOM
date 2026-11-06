@@ -3047,6 +3047,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/teacher/subjects', authenticate, requireAssignedTeacherClass, async (req, res) => {
+    try {
+      const assignedClass = (req as any).assignedTeacherClass;
+      const classSubjects = await storage.getClassSubjects(assignedClass.id);
+      res.json(classSubjects);
+    } catch (error) {
+      console.error('Teacher subjects error:', error);
+      res.status(500).json({ error: 'Failed to fetch assigned class subjects' });
+    }
+  });
+
   app.get('/api/teacher/assessments', authenticate, requireAssignedTeacherClass, async (req, res) => {
     try {
       const assignedClass = (req as any).assignedTeacherClass;
