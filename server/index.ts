@@ -106,6 +106,7 @@ async function runMigrations() {
       ALTER TABLE students ADD COLUMN IF NOT EXISTS status_term VARCHAR(50);
       -- Task #152: per-sub-admin tab/feature permission toggles.
       ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[];
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_class_id VARCHAR(50) REFERENCES classes(id);
       ALTER TABLE password_reset_tokens ADD COLUMN IF NOT EXISTS used_at TIMESTAMP;
       ALTER TABLE class_subjects ADD COLUMN IF NOT EXISTS custom_name TEXT;
       ALTER TABLE classes ADD COLUMN IF NOT EXISTS ignore_attendance BOOLEAN DEFAULT FALSE;
