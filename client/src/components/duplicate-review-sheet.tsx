@@ -160,6 +160,11 @@ export function DuplicateReviewSheet({ kind, id, open, onOpenChange }: Duplicate
         {ref && <div className="text-xs text-muted-foreground">Ref: {ref}</div>}
 
         <Badge variant="secondary" className="text-[10px] uppercase">{status}</Badge>
+        {kind === "transaction" && (
+          <Badge variant="outline" className="ml-1 text-[10px]">
+            {side.source === "email" ? "Email alert" : side.source === "sms" ? "SMS alert" : "Statement"}
+          </Badge>
+        )}
 
         {kind === "payment" && (
           <div className="pt-1 space-y-0.5 border-t border-dashed">
