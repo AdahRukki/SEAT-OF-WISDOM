@@ -782,6 +782,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   const [batchUploadFile, setBatchUploadFile] = useState<File | null>(null);
   const [batchUploadResults, setBatchUploadResults] = useState<any>(null);
   const [isClassDetailsDialogOpen, setIsClassDetailsDialogOpen] = useState(false);
+  const [classDetailsTab, setClassDetailsTab] = useState<"subjects" | "students" | "settings">("subjects");
+  const [classStudentSearch, setClassStudentSearch] = useState("");
   const [isSubjectManagementDialogOpen, setIsSubjectManagementDialogOpen] = useState(false);
   const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false);
   const [selectedClassForDetails, setSelectedClassForDetails] = useState<Class | null>(null);
@@ -6818,9 +6820,19 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 {selectedClassForDetails?.description}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-6">
+            <div className="flex gap-2 border-b pb-3" role="tablist" aria-label="Class details sections">
+              {(["subjects", "students", "settings"] as const).map(tab => (
+                <Button key={tab} type="button" size="sm"
+                  variant={classDetailsTab === tab ? "default" : "outline"}
+                  role="tab" aria-selected={classDetailsTab === tab}
+                  onClick={() => setClassDetailsTab(tab)}>
+                  {tab === "subjects" ? "Subjects" : tab === "students" ? `Students (${classStudents.length})` : "Settings"}
+                </Button>
+              ))}
+            </div>
+            <div className="min-h-0">
               {/* Subjects Section */}
-              <div className="space-y-4">
+              <div className={classDetailsTab === "subjects" ? "space-y-4" : "hidden"}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-semibold">Class Subjects</h3>
                   <div className="flex flex-wrap gap-2">
@@ -6955,7 +6967,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               </div>
 
               {/* Report Card Settings */}
-              <div className="border-t pt-4 flex items-center justify-between">
+              <div className={classDetailsTab === "settings" ? "border-t pt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" : "hidden"}>
                 <div>
                   <p className="text-sm font-medium">Skip Attendance on Report Cards</p>
                   <p className="text-xs text-gray-500">For finance-only or non-report-card classes</p>
@@ -6972,7 +6984,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               </div>
 
               {/* Students Section */}
-              <div className="space-y-4 border-t pt-6">
+              <div className={classDetailsTab === "students" ? "space-y-4 pt-3" : "hidden"}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-semibold">Students in this Class</h3>
                   <div className="flex flex-wrap items-center gap-3">
@@ -7012,6 +7024,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   </div>
                 </div>
               
+              <Input placeholder="Search students by name or ID" value={classStudentSearch} onChange={e => setClassStudentSearch(e.target.value)} />
               {classStudents.length > 0 ? (
                 <div className="border rounded-lg w-full max-w-full overflow-x-auto">
                   <table className="min-w-[650px] w-full">
@@ -7024,7 +7037,9 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {classStudents.map((student) => (
+                      {classStudents.filter(student => (
+                        `${formatStudentName(student.user)} ${student.studentId}`.toLowerCase().includes(classStudentSearch.toLowerCase())
+                      )).map((student) => (
                         <tr key={student.id}>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
                             {student.studentId}
@@ -7050,6 +7065,9 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   <p className="text-sm">Add students to see them here.</p>
                 </div>
               )}
+            </div>
+            <div className="sticky bottom-0 bg-background border-t pt-3 flex justify-end">
+              <Button type="button" variant="outline" onClick={() => setIsClassDetailsDialogOpen(false)}>Close</Button>
             </div>
           </DialogContent>
         </Dialog>
