@@ -147,6 +147,7 @@ import {
   ChevronDown,
   ChevronRight
 } from "lucide-react";
+import { BulkSubjectAssignments } from "@/components/bulk-subject-assignments";
 import { AttendanceManagement } from "@/components/attendance-management";
 import { InquiriesManagement } from "@/components/inquiries-management";
 import { ReportCardManagement } from "@/components/report-card-management";
@@ -7197,93 +7198,20 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
         {/* Subject Management Dialog */}
         <Dialog open={isSubjectManagementDialogOpen} onOpenChange={setIsSubjectManagementDialogOpen}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Manage Subjects for {selectedClassForDetails?.name}</DialogTitle>
-              <DialogDescription>
-                Add or remove subjects from this class
-              </DialogDescription>
+              <DialogDescription>Search, copy and assign subjects across classes.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium">Available Subjects</h4>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => setIsNewSubjectDialogOpen(true)}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Create New
-                </Button>
-              </div>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {subjects
-                  .filter(subject => !selectedClassSubjects.some(cs => cs.id === subject.id))
-                  .map((subject) => (
-                    <div key={subject.id} className="flex items-center justify-between p-2 border rounded gap-2">
-                      {editingSubjectId === subject.id ? (
-                        <div className="flex items-center gap-1 flex-1">
-                          <Input
-                            value={editingSubjectName}
-                            onChange={(e) => setEditingSubjectName(e.target.value)}
-                            className="h-7 text-sm"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') updateSubjectMutation.mutate({ id: subject.id, name: editingSubjectName });
-                              if (e.key === 'Escape') { setEditingSubjectId(null); setEditingSubjectName(""); }
-                            }}
-                          />
-                          <Button size="sm" className="h-7 px-2" onClick={() => updateSubjectMutation.mutate({ id: subject.id, name: editingSubjectName })} disabled={updateSubjectMutation.isPending || !editingSubjectName.trim()}>Save</Button>
-                          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setEditingSubjectId(null); setEditingSubjectName(""); }}>✕</Button>
-                        </div>
-                      ) : (
-                        <>
-                          <span className="text-sm flex-1">{subject.name.toUpperCase()}</span>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              onClick={() => { setEditingSubjectId(subject.id); setEditingSubjectName(subject.name); }}
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => {
-                                if (selectedClassForDetails?.id) {
-                                  addSubjectMutation.mutate({
-                                    classId: selectedClassForDetails.id,
-                                    subjectId: subject.id
-                                  });
-                                }
-                              }}
-                              disabled={addSubjectMutation.isPending}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              Add
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-              </div>
-              {subjects.filter(subject => !selectedClassSubjects.some(cs => cs.id === subject.id)).length === 0 && (
-                <div className="text-center py-4 text-gray-500">
-                  <p className="text-sm">All subjects are already assigned to this class.</p>
-                </div>
-              )}
-              <div className="flex justify-end pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsSubjectManagementDialogOpen(false)}
-                >
-                  Done
-                </Button>
-              </div>
-            </div>
+            {selectedClassForDetails && (
+              <BulkSubjectAssignments
+                currentClass={selectedClassForDetails}
+                classes={classes}
+                subjects={subjects}
+                onSaved={() => setIsSubjectManagementDialogOpen(false)}
+              />
+            )}
+            <Button variant="outline" type="button" onClick={() => setIsNewSubjectDialogOpen(true)}>Create New Subject</Button>
           </DialogContent>
         </Dialog>
 
