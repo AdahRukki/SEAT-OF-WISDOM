@@ -6811,7 +6811,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
       {/* Class Details Dialog */}
         <Dialog open={isClassDetailsDialogOpen} onOpenChange={setIsClassDetailsDialogOpen}>
-          <DialogContent className="max-w-2xl dialog-content-scrollable table-container">
+          <DialogContent className="w-[calc(100vw-1rem)] sm:w-full sm:max-w-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] overflow-y-auto overflow-x-hidden p-3 sm:p-6">
             <DialogHeader>
               <DialogTitle>Class Details: {selectedClassForDetails?.name}</DialogTitle>
               <DialogDescription>
@@ -6821,9 +6821,9 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
             <div className="space-y-6">
               {/* Subjects Section */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-semibold">Class Subjects</h3>
-                  <div className="flex space-x-2">
+                  <div className="flex flex-wrap gap-2">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -6872,7 +6872,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 </div>
                 
                 {/* Display current subjects */}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {selectedClassSubjects.map((subject) => (
                     <div key={subject.id} className="flex items-center justify-between p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
                       {editingClassSubjectId === subject.id ? (
@@ -6973,9 +6973,9 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
               {/* Students Section */}
               <div className="space-y-4 border-t pt-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-semibold">Students in this Class</h3>
-                  <div className="flex items-center space-x-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center space-x-2">
                       <Users className="h-4 w-4" />
                       <span className="text-sm text-gray-600">{classStudents.length} students</span>
@@ -7013,8 +7013,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 </div>
               
               {classStudents.length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
+                <div className="border rounded-lg w-full max-w-full overflow-x-auto">
+                  <table className="min-w-[650px] w-full">
                     <thead className="bg-gray-50 dark:bg-gray-800">
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-medium text-gray-900 dark:text-white">Student ID</th>
@@ -7198,7 +7198,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
         {/* Subject Management Dialog */}
         <Dialog open={isSubjectManagementDialogOpen} onOpenChange={setIsSubjectManagementDialogOpen}>
-          <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="w-[calc(100vw-1rem)] sm:w-full sm:max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] overflow-y-auto overflow-x-hidden p-3 sm:p-6">
             <DialogHeader>
               <DialogTitle>Manage Subjects for {selectedClassForDetails?.name}</DialogTitle>
               <DialogDescription>Search, copy and assign subjects across classes.</DialogDescription>
