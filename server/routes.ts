@@ -1219,6 +1219,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk subject assignments: optimistic concurrency prevents overwriting another admin's changes.
+  app.post('/api/admin/classes/bulk-subjects', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { classIds, subjectIds, mode, expected } = req.body ?? {};
+      if (!Array.isArray(classIds) || !Array.isArray(subjectIds) ||
+          !classIds.length || classIds.length > 100 ||
+          new Set(classIds).size !== classIds.length ||
+          new Set(subjectIds).size !== subjectIds.length ||
+          !classIds.every((id: unknown) => typeof id === 'string') ||
+          !subjectIds.every((id: unknown) => typeof id === 'string') ||
+          !['add', 'replace'].includes(mode) || !expected || typeof expected !== 'object') {
+        return res.status(400).json({ error: 'Invalid assignment request' });
+      }
+      const knownSubjects = new Set((await storage.getAllSubjects()).map(s => s.id));
+      if (subjectIds.some((id: string) => !knownSubjects.has(id))) {
+        return res.status(400).json({ error: 'Unknown subject' });
+      }
+      const snapshots: Array<{ classId: string; current: string[]; target: string[]; schoolId: string | null }> = [];
+      for (const classId of classIds as string[]) {
+        const cls = await storage.getClassById(classId);
+        if (!cls) return res.status(404).json({ error: 'Class not found' });
+        const current = (await storage.getClassSubjects(classId)).map(s => s.id).sort();
+        const supplied = expected[classId];
+        if (!Array.isArray(supplied) || supplied.some((x: unknown) => typeof x !== 'string') ||
+            JSON.stringify([...supplied].sort()) !== JSON.stringify(current)) {
+          return res.status(409).json({ error: 'Subject assignments changed. Refresh and review before saving.', classId });
+        }
+        const target = [...new Set(mode === 'add' ? [...current, ...subjectIds] : subjectIds)] as string[];
+        snapshots.push({ classId, current, target, schoolId: cls.schoolId });
+      }
+      for (const item of snapshots) {
+        for (const id of item.target.filter(id => !item.current.includes(id))) {
+          await storage.assignSubjectToClass(item.classId, id);
+        }
+        for (const id of item.current.filter(id => !item.target.includes(id))) {
+          await storage.removeSubjectFromClass(item.classId, id);
+        }
+        await logActivity(req, { action: 'bulk_assign_class_subjects', entityType: 'class', entityId: item.classId,
+          schoolId: item.schoolId, previousData: { subjectIds: item.current }, newData: { subjectIds: item.target, mode } });
+      }
+      res.json({ updated: snapshots.length });
+    } catch (error) {
+      console.error('Bulk subject assignment error:', error);
+      res.status(500).json({ error: 'Failed to update subject assignments' });
+    }
+  });
+
   // Remove subject from class
   app.delete('/api/admin/classes/:classId/subjects/:subjectId', authenticate, requireAdmin, async (req, res) => {
     try {
