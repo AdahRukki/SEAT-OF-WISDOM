@@ -4647,15 +4647,17 @@ export class DatabaseStorage implements IStorage {
       if (studentIds.size > 0) {
         // Also record which term/session the flip occurred in so ledger queries
         // can still apply the 'new' rate for the term that triggered the flip.
-        await db.execute(sql`
-          UPDATE students
-          SET student_type = 'returning',
-              student_type_flipped_term    = ${confirmedRecord.term ?? null},
-              student_type_flipped_session = ${confirmedRecord.session ?? null},
-              updated_at = NOW()
-          WHERE id = ANY(${Array.from(studentIds)})
-            AND student_type = 'new'
-        `);
+        await db.update(students)
+          .set({
+            studentType: 'returning',
+            studentTypeFlippedTerm: confirmedRecord.term ?? null,
+            studentTypeFlippedSession: confirmedRecord.session ?? null,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            inArray(students.id, [...studentIds]),
+            eq(students.studentType, 'new'),
+          ));
       }
     } catch (flipErr) {
       console.error('[confirmFeePayment] Failed to auto-flip student_type:', flipErr);
