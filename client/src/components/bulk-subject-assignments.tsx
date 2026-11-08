@@ -54,8 +54,8 @@ export function BulkSubjectAssignments({ currentClass, classes, subjects, onSave
     try {
       await apiRequest("/api/admin/classes/bulk-subjects", {
         method: "POST",
-        body: JSON.stringify({ classIds: targets, subjectIds: chosen, mode,
-          expected: Object.fromEntries(targets.map(id => [id, snapshots[id]])) })
+        body: { classIds: targets, subjectIds: chosen, mode,
+          expected: Object.fromEntries(targets.map(id => [id, snapshots[id]])) }
       });
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/classes"] });
       await queryClient.invalidateQueries({ queryKey: ["bulk-class-subjects"] });
