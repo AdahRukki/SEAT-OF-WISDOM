@@ -861,23 +861,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeSubjectFromClass(classId: string, subjectId: string): Promise<void> {
-    // First, get all students in this class
-    const classStudents = await db.select({ id: students.id })
-      .from(students)
-      .where(eq(students.classId, classId));
-    
-    // Delete all scores for these students for this subject
-    if (classStudents.length > 0) {
-      const studentIds = classStudents.map(s => s.id);
-      await db.delete(assessments).where(
-        and(
-          inArray(assessments.studentId, studentIds),
-          eq(assessments.subjectId, subjectId)
-        )
-      );
-    }
-    
-    // Then remove the class-subject mapping
+    // Unassign the subject only. Assessments are historical academic records
+    // and must survive changes to class subject assignments.
     await db.delete(classSubjects).where(
       and(
         eq(classSubjects.classId, classId),
