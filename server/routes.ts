@@ -1,3 +1,4 @@
+import { deactivateStudents } from './student-deactivation';
 import { parseTuitionRateUpdate } from './tuition-rate-updates';
 import { loadFinancePeriods } from './finance-history';
 import { historyContextSchema, promoteWithHistory, studentImportKey, StudentHistoryError, type HistoryContext } from './student-history';
@@ -944,6 +945,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Rollback student classes error:', error);
       res.status(500).json({ error: 'Failed to rollback student classes' });
+    }
+  });
+
+  app.post('/api/admin/students/deactivate-batch', authenticate, requirePermission('tab_students'), async (req, res) => {
+    try {
+      res.json(await deactivateStudents(db, (req as any).user, req.body));
+    } catch (error) {
+      res.status(error instanceof StudentHistoryError ? error.status : 400).json({ error: error instanceof Error ? error.message : 'Could not deactivate students' });
     }
   });
 

@@ -875,6 +875,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   const [reportSession, setReportSession] = useState("");
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false);
   const [studentsToPromote, setStudentsToPromote] = useState<string[]>([]);
+  const [deactivationSelection, setDeactivationSelection] = useState<{ classId: string; students: StudentWithDetails[] } | null>(null);
   const [selectedStudentsForClassChange, setSelectedStudentsForClassChange] = useState<Set<string>>(new Set());
   const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [showInactiveStudents, setShowInactiveStudents] = useState(false);
@@ -1446,6 +1447,19 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
     }
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   };
+
+  const deactivateStudentsMutation = useMutation({
+    mutationFn: (selection: { classId: string; students: StudentWithDetails[] }) => apiRequest('/api/admin/students/deactivate-batch', {
+      method: 'POST', body: { classId: selection.classId, studentIds: selection.students.map(s => s.id) }
+    }),
+    onSuccess: (result: { deactivatedCount: number }) => {
+      toast({ title: 'Students deactivated', description: `${result.deactivatedCount} student account(s) disabled. Records have been kept.` });
+      setDeactivationSelection(null);
+      setSelectedStudentsForClassChange(new Set());
+      ['/api/admin/students', '/api/admin/classes', '/api/admin/students/inactive', '/api/admin/financial-summary', '/api/payments/ledger'].forEach(key => queryClient.invalidateQueries({ queryKey: [key] }));
+    },
+    onError: (error: Error) => toast({ title: 'Could not deactivate students', description: error.message, variant: 'destructive' }),
+  });
 
   const withdrawStudentsMutation = useMutation({
     mutationFn: async (studentIds: string[]) => {
@@ -4551,7 +4565,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                     const classStudentsList = displayedClassStudents;
                     const allSelected = classStudentsList.length > 0 && classStudentsList.every(s => selectedStudentsForClassChange.has(s.id));
                     return (
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-3 mb-2">
                         <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-muted-foreground">
                           <input
                             type="checkbox"
@@ -4573,7 +4587,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                               type="checkbox"
                               className="w-4 h-4 rounded"
                               checked={showInactiveStudents}
-                              onChange={(e) => setShowInactiveStudents(e.target.checked)}
+                              onChange={(e) => { setShowInactiveStudents(e.target.checked); setSelectedStudentsForClassChange(new Set()); }}
                             />
                             Show inactive
                           </label>
@@ -4585,6 +4599,13 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                             onClick={() => { setTargetClassForChange(""); setIsChangeClassDialogOpen(true); }}
                           >
                             Change Class ({selectedStudentsForClassChange.size})
+                          </Button>
+                        )}
+                        {perm('tab_students') && selectedStudentsForClassChange.size > 0 && (
+                          <Button variant="destructive" size="sm" className="min-h-11" data-testid="button-batch-deactivate"
+                            disabled={deactivateStudentsMutation.isPending || !selectedClassStudents.some(s => selectedStudentsForClassChange.has(s.id) && s.user?.isActive !== false)}
+                            onClick={() => setDeactivationSelection({ classId: selectedClassForStudents, students: selectedClassStudents.filter(s => selectedStudentsForClassChange.has(s.id) && s.user?.isActive !== false) })}>
+                            Deactivate selected
                           </Button>
                         )}
                         {selectedStudentsForClassChange.size > 0 && (
@@ -9642,6 +9663,16 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deactivationSelection} onOpenChange={open => { if (!open && !deactivateStudentsMutation.isPending) setDeactivationSelection(null); }}>
+        <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Deactivate {deactivationSelection?.students.length} students?</DialogTitle>
+            <DialogDescription>These students will be unable to log in and will leave the active student list. Their scores, payments and class records will be kept. This does not mark them as withdrawn. You can reactivate them using Show inactive and Edit Student.</DialogDescription></DialogHeader>
+          <div className="max-h-52 overflow-y-auto space-y-2">{deactivationSelection?.students.map(s => <p key={s.id} className="text-sm break-words">{formatStudentName(s.user)} <span className="text-muted-foreground">({s.studentId})</span></p>)}</div>
+          <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" disabled={deactivateStudentsMutation.isPending} onClick={() => setDeactivationSelection(null)}>Cancel</Button>
+            <Button variant="destructive" disabled={deactivateStudentsMutation.isPending || !deactivationSelection?.students.length} onClick={() => deactivationSelection && deactivateStudentsMutation.mutate(deactivationSelection)}>{deactivateStudentsMutation.isPending ? 'Deactivating…' : 'Confirm deactivation'}</Button></div>
         </DialogContent>
       </Dialog>
 

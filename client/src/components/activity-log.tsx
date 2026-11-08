@@ -63,6 +63,7 @@ const ACTION_LABELS: Record<string, string> = {
   student_status_withdrawn: "Withdrew student",
   student_status_graduated: "Graduated student",
   withdraw_students: "Withdrew students",
+  deactivate_students: "Deactivated student accounts",
   promote_students: "Promoted students",
   bulk_promote_students: "Bulk-promoted students",
   batch_upload_students: "Batch-uploaded students",
