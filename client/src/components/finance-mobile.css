@@ -25,3 +25,21 @@
   .finance-payment-cards tr[data-saved-payment="true"] td[data-label="Depositor"],
   .finance-payment-cards tr[data-saved-payment="true"] td[data-label="Recorded by"] { display: none; }
 }
+
+/* Reconciliation-specific compact phone cards; desktop keeps native tables. */
+@media screen and (max-width: 639px) {
+  .finance-mobile { max-width: 100%; overflow-x: clip; }
+  .finance-mobile [role="tabpanel"], .finance-mobile .grid > *, .finance-mobile .flex-1 { min-width: 0; }
+  .finance-mobile .reconciliation-mobile-cards { display: block; width: 100%; min-width: 0; }
+  .finance-mobile .reconciliation-mobile-cards > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .finance-mobile .reconciliation-mobile-cards > tbody { display: block; width: 100%; }
+  .finance-mobile .reconciliation-mobile-cards > tbody > tr { display: block; width: 100%; border: 1px solid hsl(var(--border)); border-radius: 8px; margin-bottom: 10px; padding: 8px; }
+  .finance-mobile .reconciliation-mobile-cards td { display: block; width: 100%; max-width: 100%; padding: 6px; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+  .finance-mobile .reconciliation-mobile-cards td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; font-weight: 600; color: hsl(var(--muted-foreground)); margin-bottom: 3px; }
+  .finance-mobile .reconciliation-mobile-cards td[data-label="Actions"] > div { justify-content: flex-start; flex-wrap: wrap; }
+  .finance-mobile .reconciliation-mobile-cards td[data-label="Actions"] button { min-height: 44px; }
+  .finance-dialog { max-width: calc(100vw - 16px); max-height: calc(100dvh - 32px); overflow-y: auto; overflow-x: hidden; }
+  .finance-dialog [role="dialog"] { max-width: 100%; }
+  .finance-dialog [class*="grid-cols-2"] { grid-template-columns: minmax(0, 1fr); }
+  .finance-dialog [class*="justify-between"] { flex-wrap: wrap; }
+}
