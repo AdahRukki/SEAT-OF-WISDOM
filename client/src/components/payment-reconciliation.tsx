@@ -2679,7 +2679,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       </Tabs>
       <Dialog open={isConfirmDialogOpen} onOpenChange={(open) => { setIsConfirmDialogOpen(open); if (!open) setMatchSearch(""); }}>
         <DialogContent
-          className="finance-dialog max-w-2xl"
+          className="finance-dialog finance-match-dialog flex flex-col w-[calc(100vw-16px)] sm:w-full max-w-2xl max-h-[calc(100dvh-24px)] overflow-hidden p-4 sm:p-6"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -2690,7 +2690,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogHeader>
 
           {selectedPayment && (
-            <div className="space-y-4">
+            <div className="finance-match-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-4 pr-1">
               <div className="p-4 border rounded-lg bg-muted/50 space-y-1">
                 <p className="font-semibold">
                   {paymentStudentLabel(selectedPayment)}
@@ -2752,7 +2752,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                     );
                   }
                   return (
-                    <div className="max-h-[200px] overflow-y-auto space-y-2">
+                    <div className="max-h-[min(200px,30dvh)] overflow-y-auto space-y-2">
                       {filtered.map((tx) => (
                         <div
                           key={tx.id}
@@ -2786,11 +2786,12 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsConfirmDialogOpen(false); setMatchSearch(""); }}>
+          <DialogFooter className="finance-match-footer shrink-0 border-t pt-3 flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+            <Button className="w-full sm:w-auto" variant="outline" onClick={() => { setIsConfirmDialogOpen(false); setMatchSearch(""); }}>
               Cancel
             </Button>
             <Button
+              className="w-full sm:w-auto"
               onClick={handleConfirmPayment}
               disabled={!selectedTransaction || confirmMutation.isPending}
             >
@@ -2842,7 +2843,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="finance-match-footer shrink-0 border-t pt-3 flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setIsReverseDialogOpen(false)}>
               Cancel
             </Button>
@@ -2877,7 +2878,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         }}
       >
         <DialogContent
-          className="finance-dialog max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="finance-dialog finance-match-dialog flex flex-col w-[calc(100vw-16px)] sm:w-full max-w-2xl max-h-[calc(100dvh-24px)] overflow-hidden p-4 sm:p-6"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -2888,7 +2889,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </DialogHeader>
 
           {transactionToMatch && (
-            <div className="space-y-4">
+            <div className="finance-match-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-4 pr-1">
               <div className="p-4 border rounded-lg bg-muted/50">
                 <div className="flex justify-between items-start gap-3">
                   <div>
@@ -2939,7 +2940,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                     <p className="text-xs mt-1">Record the payment first or check a wider date window.</p>
                   </div>
                 ) : (
-                  <div className="max-h-[320px] overflow-y-auto space-y-2 border rounded-lg p-2">
+                  <div className="max-h-[min(320px,35dvh)] overflow-y-auto space-y-2 border rounded-lg p-2">
                     {matchTxCandidates.map((p) => {
                       const isSelected = selectedMatchPaymentId === p.id;
                       return (
@@ -3006,7 +3007,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="finance-match-footer shrink-0 border-t pt-3 flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
             <Button
               variant="outline"
               onClick={() => {
@@ -3018,6 +3019,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
               Cancel
             </Button>
             <Button
+              className="w-full sm:w-auto"
               onClick={handleConfirmMatchTx}
               disabled={!selectedMatchPaymentId || confirmMutation.isPending}
               data-testid="button-confirm-match-tx"
