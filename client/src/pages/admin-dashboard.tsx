@@ -963,6 +963,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   const [selectedFinanceTerm, setSelectedFinanceTerm] = useState("");
   const [selectedFinanceSession, setSelectedFinanceSession] = useState("");
   const [showFinanceDetails, setShowFinanceDetails] = useState(true);
+  const [financeSection, setFinanceSection] = useState<"overview" | "fees" | "payments" | "ledger" | "reconciliation">("overview");
   const [feeFilter, setFeeFilter] = useState("all"); // all, paid, pending, overdue
 
   // Fee type form
@@ -5455,6 +5456,27 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               </div>
             </div>
 
+            <div className="min-w-0 mb-5">
+              <div className="flex gap-2 overflow-x-auto pb-2 sm:flex-wrap" role="group" aria-label="Finance sections">
+                {([
+                  ["overview", "Overview"],
+                  ["fees", "Fee Management"],
+                  ["payments", "Payment Recording"],
+                  ["ledger", "Payment Ledger"],
+                  ...(perm('finance_bank_reconciliation') ? [["reconciliation", "Bank Reconciliation"]] : []),
+                ] as Array<[typeof financeSection, string]>).map(([value, label]) => (
+                  <Button key={value} type="button" size="sm"
+                    variant={financeSection === value ? "default" : "outline"}
+                    aria-pressed={financeSection === value}
+                    className="shrink-0 min-h-11 rounded-lg"
+                    onClick={() => setFinanceSection(value)}>
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {financeSection === "overview" && (<>
             <div className={`grid gap-2 sm:gap-4 mb-4 sm:mb-6 ${user?.role === 'admin' ? 'grid-cols-2 xl:grid-cols-5' : 'grid-cols-2'}`}>
               {perm('finance_total_revenue') && (
                 <Card>
@@ -5609,7 +5631,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               </div>
             )}
 
+            </>)}
+
             {/* Fee Types Management */}
+            {financeSection === "fees" && (<>
             {perm('finance_fee_types_management') && (<Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -5681,7 +5706,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
             )}
 
 
+            </>)}
+
             {/* Payment Recording & Reconciliation */}
+            {financeSection === "payments" && (<>
             <Card>
               <CardHeader>
                 <CardTitle>Payment Recording</CardTitle>
@@ -5701,6 +5729,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               </CardContent>
             </Card>
 
+            </>)}
+            {financeSection === "ledger" && (<>
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-3">
                 <div>
@@ -5751,8 +5781,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               )}
             </Card>
 
+            </>)}
+
             {/* Bank Statement Upload & Reconciliation */}
-            {perm('finance_bank_reconciliation') && (
+            {financeSection === "reconciliation" && perm('finance_bank_reconciliation') && (
               <Card>
                 <CardHeader>
                   <CardTitle>Bank Statement Reconciliation</CardTitle>
