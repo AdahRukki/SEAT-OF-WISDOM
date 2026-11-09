@@ -1244,7 +1244,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Upload History</CardTitle>
                 <CardDescription>Previously uploaded bank statements</CardDescription>
@@ -1264,7 +1264,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   No statements uploaded yet
                 </p>
               ) : (
-                <Table>
+                <Table className="reconciliation-mobile-cards">
                   <TableHeader>
                     <TableRow>
                       <TableHead>File Name</TableHead>
@@ -1278,26 +1278,26 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   </TableHeader>
                   <TableBody>
                     {statements.map((statement) => (
-                      <TableRow key={statement.id}>
-                        <TableCell className="font-medium">
+                      <TableRow data-finance-card key={statement.id}>
+                        <TableCell data-label="File Name" className="font-medium">
                           {statement.fileName}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Date Range">
                           {statement.dateRangeStart && statement.dateRangeEnd
                             ? `${formatRecoDate(statement.dateRangeStart)} - ${formatRecoDate(statement.dateRangeEnd)}`
                             : "N/A"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="New">
                           <Badge variant="outline" className="bg-green-50 text-green-700">
                             {statement.newTransactions || 0}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Duplicates">
                           <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
                             {statement.duplicatesSkipped || 0}
                           </Badge>
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Possible Dupes">
                           {(statement.possibleDuplicatesCount || 0) > 0 ? (
                             <Badge
                               variant="outline"
@@ -1315,10 +1315,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell data-label="Uploaded" className="text-muted-foreground">
                           {formatRecoDate(statement.createdAt)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Actions">
                           <div className="flex items-center gap-1">
                             {isAdmin && (
                               <Button
@@ -2098,7 +2098,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 Bank transactions not yet linked to any payment
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-1 min-w-0 max-w-sm">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto sm:flex-1 min-w-0 sm:max-w-sm">
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -2142,7 +2142,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
           ) : (
             <Card>
               <CardContent className="p-0">
-                <Table>
+                <Table className="reconciliation-mobile-cards">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
@@ -2169,18 +2169,18 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                         }
                         return true;
                       }).map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell>
+                      <TableRow data-finance-card key={tx.id}>
+                        <TableCell data-label="Date">
                           {formatRecoDate(tx.transactionDate)}
                         </TableCell>
-                        <TableCell className="font-medium text-green-600">
+                        <TableCell data-label="Amount" className="font-medium text-green-600">
                           ₦{parseFloat(tx.amount).toLocaleString()}
                         </TableCell>
-                        <TableCell className="max-w-[300px] break-words text-sm">
+                        <TableCell data-label="Description" className="max-w-[300px] break-words text-sm">
                           {tx.rawDescription}
                         </TableCell>
-                        <TableCell>{tx.reference || "-"}</TableCell>
-                        <TableCell>
+                        <TableCell data-label="Reference">{tx.reference || "-"}</TableCell>
+                        <TableCell data-label="Status">
                           <div className="flex flex-col gap-1">
                             <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
                               Unmatched
@@ -2227,7 +2227,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell data-label="Actions">
                           <div className="flex items-center gap-1 flex-wrap">
                             <Button
                               size="sm"
@@ -2464,7 +2464,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                         sort order, never visibility. */}
                     {sortedReviewLog.length > 0 ? (
                       <div className="rounded border overflow-auto max-h-96">
-                        <Table>
+                        <Table className="reconciliation-mobile-cards">
                           <TableHeader>
                             <TableRow className="text-xs">
                               <TableHead className="py-1.5 text-xs">Time</TableHead>
@@ -2489,10 +2489,10 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     : ""
                                 }
                               >
-                                <TableCell className="py-1.5 text-xs font-mono whitespace-nowrap">
+                                <TableCell data-label="Time" className="py-1.5 text-xs font-mono whitespace-nowrap">
                                   {formatLogTime(entry.processedAt)}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs">
+                                <TableCell data-label="Bank" className="py-1.5 text-xs">
                                   {entry.detectedBank}
                                   {entry.likelyTransaction && (
                                     <span className="ml-1 text-[10px] text-muted-foreground" title='Subject/body contains "credit" — sorted first, not filtered'>
@@ -2500,7 +2500,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     </span>
                                   )}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs">
+                                <TableCell data-label="School" className="py-1.5 text-xs">
                                   {entry.schoolId ? (
                                     schoolNameById.get(entry.schoolId) || "—"
                                   ) : entry.maskedAccount ? (
@@ -2515,7 +2515,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     <span className="text-muted-foreground">—</span>
                                   )}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs whitespace-nowrap">
+                                <TableCell data-label="Amount" className="py-1.5 text-xs whitespace-nowrap">
                                   {entry.amount
                                     ? `₦${Number(entry.amount).toLocaleString()}`
                                     : <span className="text-muted-foreground">—</span>}
@@ -2526,14 +2526,14 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                 >
                                   {entry.subject || <span className="text-muted-foreground italic">—</span>}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs">
+                                <TableCell data-label="Subject" className="py-1.5 text-xs">
                                   {entry.verified ? (
                                     <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800">Verified</Badge>
                                   ) : (
                                     <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">Unverified</Badge>
                                   )}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs">
+                                <TableCell data-label="Verified" className="py-1.5 text-xs">
                                   <Badge
                                     variant="outline"
                                     className={
@@ -2547,7 +2547,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     {entry.reviewStatus === "open" ? "Needs review" : entry.reviewStatus === "approved" ? "Approved" : "Dismissed"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="py-1.5 text-xs text-right whitespace-nowrap">
+                                <TableCell data-label="Status" className="py-1.5 text-xs text-right whitespace-nowrap">
                                   <Button
                                     variant="ghost" size="sm" className="h-6 w-6 p-0"
                                     onClick={() => setSelectedReviewItem(entry)}
@@ -2599,7 +2599,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   No bank accounts mapped yet. Add one above so incoming SMS can be filed automatically.
                 </div>
               ) : (
-                <Table>
+                <Table className="reconciliation-mobile-cards">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Bank</TableHead>
@@ -2612,19 +2612,19 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                   </TableHeader>
                   <TableBody>
                     {bankAccounts.map((acct) => (
-                      <TableRow key={acct.id} data-testid={`row-bank-account-${acct.id}`}>
-                        <TableCell>{acct.bankName}</TableCell>
-                        <TableCell className="font-mono">{acct.maskedAccountNumber}</TableCell>
-                        <TableCell>{schoolNameById.get(acct.schoolId) || "—"}</TableCell>
-                        <TableCell>{acct.accountLabel || "—"}</TableCell>
-                        <TableCell>
+                      <TableRow data-finance-card key={acct.id} data-testid={`row-bank-account-${acct.id}`}>
+                        <TableCell data-label="Bank">{acct.bankName}</TableCell>
+                        <TableCell data-label="Account Number" className="font-mono">{acct.maskedAccountNumber}</TableCell>
+                        <TableCell data-label="School">{schoolNameById.get(acct.schoolId) || "—"}</TableCell>
+                        <TableCell data-label="Label">{acct.accountLabel || "—"}</TableCell>
+                        <TableCell data-label="Status">
                           {acct.isActive ? (
                             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">Active</Badge>
                           ) : (
                             <Badge variant="outline" className="bg-gray-100 text-gray-600">Inactive</Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell data-label="Actions" className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button
                               size="sm"
