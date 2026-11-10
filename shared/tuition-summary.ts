@@ -1,4 +1,4 @@
-export function summarizeTuition(entries: Array<{tuitionAssigned:number;tuitionPaid:number;tuitionKnown:boolean;studentType?:string}>) {
+export function summarizeTuition(entries: Array<{tuitionAssigned:number;tuitionPaid:number;tuitionKnown:boolean;studentType?:string;balance?:number}>) {
   let expected=0, confirmed=0, collected=0, outstanding=0, studentsOwing=0, unverified=0, unknownType=0;
   const typeBreakdown={new:{totalFees:0,actualCollected:0,studentsOwing:0},returning:{totalFees:0,actualCollected:0,studentsOwing:0},unknown:{totalFees:0,actualCollected:0,studentsOwing:0}};
   for(const entry of entries){
@@ -7,7 +7,10 @@ export function summarizeTuition(entries: Array<{tuitionAssigned:number;tuitionP
     confirmed+=paid;
     if(!entry.tuitionKnown){unverified++;continue;}
     const due=Math.round((entry.tuitionAssigned||0)*100);
-    const applied=Math.min(paid,due), balance=Math.max(0,due-paid);
+    // Ledger entries already contain the authoritative per-student balance.
+    // Fallback supports older callers that supply only charge/payment facts.
+    const balance=entry.balance === undefined ? Math.max(0,due-paid) : Math.round(entry.balance*100);
+    const applied=due-balance;
     expected+=due;collected+=applied;outstanding+=balance;
     if(balance>0) studentsOwing++;
     const group=typeBreakdown[entry.studentType==='new'?'new':entry.studentType==='returning'?'returning':'unknown'];

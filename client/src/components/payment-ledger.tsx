@@ -1,3 +1,4 @@
+import { ledgerQueryOptions } from "@/lib/ledger-query";
 import { formatStudentName } from "@shared/student-name";
 import { FinanceDataDetails } from "./finance-data-details";
 import { BulkPaymentReceipts, receiptCandidates, type ReceiptCandidate } from "./bulk-payment-receipts";
@@ -173,7 +174,8 @@ interface LedgerMeta {
   hasScopedTuition: boolean; historical?: boolean;
 }
 
-interface LedgerResponse {
+export interface LedgerResponse {
+  summary: ReturnType<typeof import("@shared/tuition-summary").summarizeTuition>;
   entries: LedgerEntry[];
   meta: LedgerMeta;
 }
@@ -290,26 +292,12 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   if (confirmedFrom) params.set("confirmedFrom", confirmedFrom);
   if (confirmedTo) params.set("confirmedTo", confirmedTo);
 
-  const { data: ledgerResponse, isLoading, isError: ledgerError } = useQuery<LedgerResponse>({
-    queryKey: ["/api/payments/ledger", schoolId, selectedClassId, selectedTerm, selectedSession, confirmedFrom, confirmedTo, firstPaymentActive],
-    queryFn: async () => {
-      const token = localStorage.getItem("auth_token");
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`/api/payments/ledger?${params.toString()}`, { credentials: "include", headers });
-      if (!res.ok) throw new Error("Failed to fetch ledger");
-      const json = await res.json();
-      // Tolerate older array-shaped responses just in case.
-      if (Array.isArray(json)) {
-        return { entries: json, meta: { hasTuitionFeeType: false, hasGlobalTuition: false, hasScopedTuition: false } };
-      }
-      return json;
-    },
-    enabled: !!schoolId,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
-  });
-  const ledger: LedgerEntry[] = ledgerResponse?.entries ?? [];
+  // The unfiltered query is also observed by the Finance cards. Class selection
+  // filters these rows locally; date filters intentionally use a separate view.
+  const { data: ledgerResponse, isLoading, isError: ledgerError } = useQuery<LedgerResponse>(
+    ledgerQueryOptions(schoolId, selectedTerm, selectedSession, confirmedFrom, confirmedTo, firstPaymentActive, !invalidConfirmationRange)
+  );
+  const ledger: LedgerEntry[] = (ledgerResponse?.entries ?? []).filter(entry => selectedClassId === "all" || entry.classId === selectedClassId);
   useEffect(() => {
     setSelectedStudent(previous => previous
       ? ledgerResponse?.entries.find(entry => entry.studentDbId === previous.studentDbId) ?? null

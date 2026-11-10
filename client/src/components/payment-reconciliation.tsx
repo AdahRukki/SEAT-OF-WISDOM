@@ -517,7 +517,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
     onError: (error: Error) => {
       toast({
@@ -545,7 +544,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
     onError: (error: Error) => {
       toast({
@@ -592,7 +590,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
     onError: (error: Error) => toast({ title: "Failed", description: error.message, variant: "destructive" }),
   });
@@ -618,7 +615,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions/unmatched"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     },
     onError: (error: Error) => {
       toast({
@@ -892,7 +888,6 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-transactions"] });
     queryClient.invalidateQueries({ queryKey: ["/api/payments/ledger"] });
     queryClient.invalidateQueries({ queryKey: ["/api/admin/payment-broadsheet"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/financial-summary"] });
     toast({
       title: "Bulk Match Complete",
       description: failed.length === 0

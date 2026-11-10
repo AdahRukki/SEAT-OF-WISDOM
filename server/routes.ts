@@ -1,3 +1,4 @@
+import { summarizeTuition } from "../shared/tuition-summary";
 import { correctPaymentPurpose, previewPurposeCorrection, PurposeCorrectionError } from './payment-purpose-correction';
 import { deactivateStudents } from './student-deactivation';
 import { parseTuitionRateUpdate } from './tuition-rate-updates';
@@ -5382,10 +5383,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             entry.lastConfirmedAt = records.map(record => record.confirmedAt).filter((date): date is string => !!date).sort().pop() || null;
             entry.lastPaymentDate = records.map(record => record.paymentDate).filter((date): date is string => !!date).sort().pop() || null;
           }
-          return res.json({ ...ledger, paymentRecords });
+          return res.json({ ...ledger, summary: summarizeTuition(ledger.entries), paymentRecords });
         }
       }
-      res.json(ledger);
+      res.json({ ...ledger, summary: summarizeTuition(ledger.entries) });
     } catch (error) {
       console.error("Get payment ledger error:", error);
       res.status(500).json({ error: "Failed to fetch payment ledger" });

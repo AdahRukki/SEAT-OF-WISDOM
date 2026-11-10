@@ -1,3 +1,4 @@
+import { ledgerQueryOptions } from "@/lib/ledger-query";
 import { ScoreEntryGrid } from "@/components/score-entry-grid";
 import { tuitionPeriodOrder } from "@shared/historical-tuition";
 import { FinanceDataDetails } from "@/components/finance-data-details";
@@ -1477,7 +1478,6 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students/inactive'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/students/withdrawn'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
     },
     onError: () => {
@@ -1653,17 +1653,11 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
     enabled: !!selectedSchoolId || user?.role === 'sub-admin'
   });
 
-  const { data: financialSummary } = useQuery<any>({ 
-    queryKey: ['/api/admin/financial-summary', selectedSchoolId, selectedFinanceTerm, selectedFinanceSession],
-    queryFn: () => {
-      let url = '/api/admin/financial-summary?';
-      if (user?.role === 'admin' && selectedSchoolId) url += `schoolId=${selectedSchoolId}&`;
-      url += `term=${selectedFinanceTerm}&session=${selectedFinanceSession}`;
-      return apiRequest(url);
-    },
-    enabled: (!!selectedSchoolId || user?.role === 'sub-admin') && !!selectedFinanceTerm && !!selectedFinanceSession,
-    staleTime: 0
-  });
+  const { data: financeLedger, isError: financeLedgerError } = useQuery(ledgerQueryOptions(
+    user?.role === 'admin' ? selectedSchoolId : user?.schoolId,
+    selectedFinanceTerm, selectedFinanceSession
+  ));
+  const financialSummary = financeLedger?.summary;
 
   const ledgerCollectionRate: number | null = financialSummary?.collectionRate ?? null;
 
@@ -2872,7 +2866,6 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       if (user?.schoolId) {
         queryClient.invalidateQueries({ queryKey: ['/api/admin/students', user.schoolId] });
       }
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
       queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
       queryClient.invalidateQueries({ queryKey: ['/api/payments/tuition-balances'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary/by-class'] });
@@ -3016,7 +3009,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       setTuitionClassAmountsMap({});
       setIsFeeTypeDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/fee-types'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
     },
     onError: () => {
       toast({ 
@@ -3157,7 +3150,6 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
     setAssignFeeClassIds([]);
     setIsAssignFeeDialogOpen(false);
     queryClient.invalidateQueries({ queryKey: ['/api/admin/student-fees'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
     queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
     queryClient.invalidateQueries({ queryKey: ['/api/payments/tuition-balances'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary/by-class'] });
@@ -5486,7 +5478,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
                     <div className="text-lg sm:text-2xl font-bold truncate">
-                      ₦{(financialSummary?.totalPaid ?? 0).toLocaleString()}
+                      {financialSummary ? `₦${financialSummary.totalPaid.toLocaleString()}` : "—"}
                     </div>
                     <p className="text-[10px] sm:text-xs text-muted-foreground">{selectedFinanceTerm} confirmed</p>
                     <p className="text-[10px] sm:text-xs text-muted-foreground mt-1" data-testid="text-actual-tuition">
@@ -5517,16 +5509,18 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
               {perm('finance_outstanding_fees') && (
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
-                    <CardTitle className="text-xs sm:text-sm font-medium">Tuition Outstanding</CardTitle>
+                    <CardTitle className="text-xs sm:text-sm font-medium">{financialSummary?.tuitionUnverifiedCount ? "Verified Tuition Outstanding" : "Tuition Outstanding"}</CardTitle>
                     <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent className="p-3 sm:p-6 pt-0">
                     <div className="text-lg sm:text-2xl font-bold truncate">
                       {!financialSummary || financialSummary.tuitionUnverifiedCount > 0 && financialSummary.tuitionVerifiedCount === 0 ? "Not verified" : `₦${(financialSummary.totalOutstanding ?? 0).toLocaleString()}`}
                     </div>
+                    {!!financialSummary?.tuitionUnverifiedCount && <p className="text-xs text-muted-foreground">Excludes {financialSummary.tuitionUnverifiedCount} students with unverified charges.</p>}
                     <p className="text-[10px] sm:text-xs text-muted-foreground">
                       {financialSummary?.totalFees ? "Assigned tuition minus actual collected" : "No fees assigned"}
                     </p>
+                    {!!financialSummary?.typeBreakdown.unknown.totalFees && <p className="text-xs text-muted-foreground">Unclassified outstanding: ₦{(financialSummary.typeBreakdown.unknown.totalFees - financialSummary.typeBreakdown.unknown.actualCollected).toLocaleString()}</p>}
                     {financialSummary?.typeBreakdown && financialSummary.totalFees > 0 && (
                       <div className="mt-2 pt-2 border-t border-muted space-y-0.5">
                         <div className="flex justify-between text-[10px] text-muted-foreground">
@@ -5559,7 +5553,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                     {ledgerCollectionRate === null ? "—" : `${ledgerCollectionRate}%`}
                   </div>
                   <p className="text-[10px] sm:text-xs text-muted-foreground">
-                    {ledgerCollectionRate === null ? "No tuition assigned" : "Of assigned tuition collected"}
+                    {ledgerCollectionRate === null ? "Tuition totals not fully verified" : "Of verified tuition collected"}
                   </p>
                 </CardContent>
               </Card>
@@ -5571,7 +5565,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                 </CardHeader>
                 <CardContent className="p-3 sm:p-6 pt-0">
                   <div className="text-lg sm:text-2xl font-bold">
-                    {financialSummary?.studentsOwing ?? "0"}
+                    {financialSummary?.studentsOwing ?? "—"}
                   </div>
                   <p className="text-[10px] sm:text-xs text-muted-foreground">Tuition not fully paid this term</p>
                   {financialSummary?.typeBreakdown && financialSummary.studentsOwing > 0 && (
@@ -5602,6 +5596,8 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
             </div>
 
+            <p className="text-xs text-muted-foreground mb-3">School-wide totals for {selectedFinanceTerm}, {selectedFinanceSession}. Uses active accounts in the payment ledger; class, search and payment-date filters apply to the table only.</p>
+            {financeLedgerError && <p role="alert" className="text-sm text-destructive">Could not refresh the ledger and cards. Any displayed totals are from the last successful load.</p>}
             <FinanceDataDetails>
               <p>These cards show tuition only. Other payment purposes remain in payment records and the ledger. Pending payments do not count as confirmed collections.</p>
               {!!financialSummary?.studentTypeUnverifiedCount && <p>{financialSummary.studentTypeUnverifiedCount} student types are not historically verified. Their amounts are not classified as New or Returning.</p>}
@@ -8609,7 +8605,6 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                         },
                       });
                       queryClient.invalidateQueries({ queryKey: ['/api/admin/tuition-amounts', editingFeeType.id] });
-                      queryClient.invalidateQueries({ queryKey: ['/api/admin/financial-summary'] });
                       queryClient.invalidateQueries({ queryKey: ['/api/payments/ledger'] });
                       queryClient.invalidateQueries({ queryKey: ['/api/payments/tuition-balances'] });
                       queryClient.invalidateQueries({ queryKey: ['/api/admin/payment-broadsheet'] });
