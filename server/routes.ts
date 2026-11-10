@@ -1,3 +1,4 @@
+import { correctPaymentPurpose, previewPurposeCorrection, PurposeCorrectionError } from './payment-purpose-correction';
 import { deactivateStudents } from './student-deactivation';
 import { parseTuitionRateUpdate } from './tuition-rate-updates';
 import { loadFinancePeriods } from './finance-history';
@@ -6097,6 +6098,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reverse payment (admin only)
+  app.get('/api/admin/payments/:id/purpose-correction', authenticate, requireMainAdmin, async (req, res) => {
+    try { res.json(await previewPurposeCorrection(db, req.params.id, (req as any).user,
+      (schoolId, term, session) => storage.getStudentPaymentLedger(schoolId, undefined, term, session))); }
+    catch (error) { res.status(error instanceof PurposeCorrectionError ? error.status : 400).json({error:error instanceof Error ? error.message : 'Could not load payment'}); }
+  });
+  app.patch('/api/admin/payments/:id/purpose-correction', authenticate, requireMainAdmin, async (req, res) => {
+    try { res.json(await correctPaymentPurpose(db, req.params.id, req.body, (req as any).user,
+      (schoolId, term, session) => storage.getStudentPaymentLedger(schoolId, undefined, term, session))); }
+    catch (error) { res.status(error instanceof PurposeCorrectionError ? error.status : 400).json({error:error instanceof Error ? error.message : 'Could not correct payment'}); }
+  });
+
   app.post("/api/admin/payments/:id/reverse", authenticate, requireMainAdmin, async (req: Request, res: Response) => {
     try {
       const user = (req as any).user;

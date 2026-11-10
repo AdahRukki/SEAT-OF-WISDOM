@@ -1,3 +1,4 @@
+import { PaymentPurposeCorrection } from '@/components/payment-purpose-correction';
 import { formatStudentName } from "@shared/student-name";
 import "@/components/finance-mobile.css";
 
@@ -1203,6 +1204,7 @@ export function PaymentRecording({
                       <TableCell data-label="Depositor" className="text-sm text-muted-foreground">{p.depositorName || '—'}</TableCell>
                       <TableCell data-label="Recorded by" className="text-sm text-muted-foreground">—</TableCell>
                       <TableCell data-label="Actions" className="text-right">
+                        <PaymentPurposeCorrection paymentId={record.id} status={record.status} />
                         {status === 'failed' ? (
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => retryFailedPayment(p.offlineId)} title="Retry" data-testid={`button-retry-${p.offlineId}`}>

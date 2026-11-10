@@ -1,3 +1,4 @@
+import { PaymentPurposeCorrection } from '@/components/payment-purpose-correction';
 import { formatStudentName } from "@shared/student-name";
 import "@/components/finance-mobile.css";
 import { useState, useMemo, useEffect } from "react";
@@ -1624,6 +1625,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                                     Reversed
                                   </Badge>
                                 )}
+                                <PaymentPurposeCorrection paymentId={payment.id} status={payment.status} />
                                 {payment.status !== "reversed" && isAdmin && (
                                   <Button
                                     size="sm"

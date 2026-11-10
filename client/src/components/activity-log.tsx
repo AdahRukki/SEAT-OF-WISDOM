@@ -74,6 +74,8 @@ const ACTION_LABELS: Record<string, string> = {
   reprint_receipt: "Reprinted receipt",
   correct_receipt_name: "Corrected receipt student name",
   record_payment: "Recorded payment",
+  correct_payment_purpose: "Corrected payment purpose",
+  correct_receipt_purpose: "Corrected receipt purpose",
   confirm_payment: "Confirmed payment",
   unconfirm_payment: "Un-confirmed payment",
   reverse_payment: "Reversed payment",
