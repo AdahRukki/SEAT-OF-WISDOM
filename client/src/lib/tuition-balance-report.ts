@@ -17,17 +17,20 @@ export async function buildTuitionBalanceReport(
   scope: { school: string; term: string; session: string },
   classOrder: ReadonlyMap<string, number>,
 ): Promise<Blob | null> {
-  const groups = new Map<string, Entry[]>();
+  const groups = new Map<string, Array<Entry & { reportBalance: number }>>();
   let count = 0;
   let outstandingKobo = 0;
 
   for (const entry of entries) {
-    if (!entry.tuitionKnown || !(entry.tuitionPaid > 0) || !(entry.balance > 0)) continue;
+    if (!entry.tuitionKnown || !(entry.totalPaid > 0)) continue;
+    // The ledger's tuitionAssigned is already net of any applicable discount.
+    const balanceKobo = Math.round((entry.tuitionAssigned - entry.totalPaid) * 100);
+    if (!(balanceKobo > 0)) continue;
     const group = groups.get(entry.classId) ?? [];
-    group.push(entry);
+    group.push({ ...entry, reportBalance: balanceKobo / 100 });
     groups.set(entry.classId, group);
     count++;
-    outstandingKobo += Math.round(entry.balance * 100);
+    outstandingKobo += balanceKobo;
   }
   if (!count) return null;
 
@@ -49,10 +52,10 @@ export async function buildTuitionBalanceReport(
       keepNext: true,
     }));
     const rows = [
-      ["No.", "Student name", "SOWA ID", "Tuition paid", "Balance"],
+      ["No.", "Student name", "SOWA ID", "Total paid", "Balance"],
       ...students.map((student, index) => [
         String(index + 1), formatStudentName(student), student.studentId || "",
-        currency.format(student.tuitionPaid), currency.format(student.balance),
+        currency.format(student.totalPaid), currency.format(student.reportBalance),
       ]),
     ];
     children.push(new Table({

@@ -465,7 +465,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       const scope = { school: schoolName || "School", term: selectedTerm, session: selectedSession };
       const blob = await buildTuitionBalanceReport(entries, scope, classOrder);
       if (!blob) {
-        setExportError("No students in this selection have both a confirmed tuition payment and an outstanding verified balance.");
+        setExportError("No students in this selection have a verified tuition charge greater than their total paid and a payment above ₦0.");
         return;
       }
 
