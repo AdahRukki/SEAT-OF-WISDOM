@@ -175,6 +175,7 @@ interface LedgerMeta {
 }
 
 export interface LedgerResponse {
+  classBreakdown: ReturnType<typeof import("@shared/tuition-summary").summarizeTuitionByClass>;
   summary: ReturnType<typeof import("@shared/tuition-summary").summarizeTuition>;
   entries: LedgerEntry[];
   meta: LedgerMeta;

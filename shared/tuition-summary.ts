@@ -19,3 +19,22 @@ export function summarizeTuition(entries: Array<{tuitionAssigned:number;tuitionP
   for(const group of Object.values(typeBreakdown)){group.totalFees/=100;group.actualCollected/=100;}
   return {totalFees:expected/100,totalPaid:confirmed/100,actualTuitionCollected:collected/100,totalOutstanding:outstanding/100,studentsOwing,collectionRate:unverified>0?null:expected>0?Math.round(collected/expected*100):0,tuitionUnverifiedCount:unverified,tuitionVerifiedCount:entries.length-unverified,studentTypeUnverifiedCount:unknownType,typeBreakdown};
 }
+
+/** Group the exact operational ledger rows without fetching another population. */
+export function summarizeTuitionByClass(entries: Array<Parameters<typeof summarizeTuition>[0][number] & {classId:string;className:string}>) {
+  const groups = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const key = entry.classId || 'unverified';
+    const group = groups.get(key) || [];
+    group.push(entry);
+    groups.set(key, group);
+  }
+  return Array.from(groups, ([classId, rows]) => {
+    const summary = summarizeTuition(rows);
+    return {classId, className: rows[0].className || 'Class not verified', activeStudentCount: rows.length,
+      expectedTuition: summary.totalFees, tuitionCollected: summary.actualTuitionCollected,
+      tuitionConfirmed: summary.totalPaid, outstanding: summary.totalOutstanding,
+      studentsOwing: summary.studentsOwing, tuitionUnverifiedCount: summary.tuitionUnverifiedCount,
+      collectionRate: summary.collectionRate};
+  });
+}

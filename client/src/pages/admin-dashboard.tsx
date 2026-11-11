@@ -381,16 +381,6 @@ function BroadsheetTable({ schoolId, term, session, schoolName }: {
   );
 }
 
-type ClassTuitionRow = {
-  classId: string;
-  className: string;
-  activeStudentCount: number;
-  expectedTuition: number;
-  tuitionCollected: number;
-  tuitionUnverifiedCount?: number;
-  collectionRate: number | null;
-};
-
 function ClassTuitionBreakdownDialog({
   open,
   onOpenChange,
@@ -408,28 +398,19 @@ function ClassTuitionBreakdownDialog({
   session: string;
   sortClassesByOrder: <T extends { name: string }>(c: T[]) => T[];
 }) {
-  const { data: rows = [], isLoading, isError } = useQuery<ClassTuitionRow[]>({
-    queryKey: ['/api/admin/financial-summary/by-class',schoolId,term,session],
-    queryFn: () => apiRequest(`/api/admin/financial-summary/by-class?${new URLSearchParams({schoolId,term,session})}`),
-    enabled: open && !!schoolId && !!term && !!session,
-    staleTime: 0,
-  });
+  const { data, isLoading, isError } = useQuery(
+    ledgerQueryOptions(schoolId, term, session, "", "", false, open)
+  );
   const sortedRows = sortClassesByOrder(
-    rows.map(r => ({ ...r, name: r.className }))
+    (data?.classBreakdown ?? []).map(row => ({...row, name: row.className}))
   );
-
-  const totals = sortedRows.reduce(
-    (acc, r) => {
-      acc.activeStudentCount += r.activeStudentCount;
-      acc.expectedTuition += r.expectedTuition;
-      acc.tuitionCollected += r.tuitionCollected;
-      return acc;
-    },
-    { activeStudentCount: 0, expectedTuition: 0, tuitionCollected: 0 }
-  );
-  const totalRate = !rows.some(row => !!row.tuitionUnverifiedCount) && totals.expectedTuition > 0
-    ? Math.round((totals.tuitionCollected / totals.expectedTuition) * 100)
-    : null;
+  const totals = {
+    activeStudentCount: data?.entries.length ?? 0,
+    expectedTuition: data?.summary.totalFees ?? 0,
+    tuitionCollected: data?.summary.actualTuitionCollected ?? 0,
+    outstanding: data?.summary.totalOutstanding ?? 0,
+  };
+  const totalRate = data?.summary.collectionRate ?? null;
 
   const fmt = (n: number) => `₦${n.toLocaleString()}`;
 
@@ -441,14 +422,14 @@ function ClassTuitionBreakdownDialog({
             Tuition Collection by Class
           </DialogTitle>
           <DialogDescription>
-            {[schoolName, term, session].filter(Boolean).join(' · ')}
+            {[schoolName, term, session].filter(Boolean).join(' · ')} — active accounts, matching the Finance cards.
           </DialogDescription>
         </DialogHeader>
         {isError ? <p role="alert">Class tuition could not be loaded. Please reopen this report to retry.</p> : isLoading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
         ) : sortedRows.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            No classes found for this school.
+            No active ledger students found for this period.
           </div>
         ) : (
           <div className="border rounded-md">
@@ -456,9 +437,10 @@ function ClassTuitionBreakdownDialog({
               <TableHeader>
                 <TableRow>
                   <TableHead>Class</TableHead>
-                  <TableHead className="text-right">Students in period</TableHead>
+                  <TableHead className="text-right">Active students</TableHead>
                   <TableHead className="text-right">Expected Tuition</TableHead>
-                  <TableHead className="text-right">Tuition Collected</TableHead>
+                  <TableHead className="text-right">Applied to Tuition</TableHead>
+                  <TableHead className="text-right">Outstanding</TableHead>
                   <TableHead className="text-right">Collection %</TableHead>
                 </TableRow>
               </TableHeader>
@@ -469,6 +451,7 @@ function ClassTuitionBreakdownDialog({
                     <TableCell className="text-right">{r.activeStudentCount}</TableCell>
                     <TableCell className="text-right">{fmt(r.expectedTuition)}</TableCell>
                     <TableCell className="text-right">{fmt(r.tuitionCollected)}</TableCell>
+                    <TableCell className="text-right">{fmt(r.outstanding)}</TableCell>
                     <TableCell className="text-right">
                       {r.collectionRate === null ? '—' : `${r.collectionRate}%`}
                     </TableCell>
@@ -479,6 +462,7 @@ function ClassTuitionBreakdownDialog({
                   <TableCell className="text-right">{totals.activeStudentCount}</TableCell>
                   <TableCell className="text-right">{fmt(totals.expectedTuition)}</TableCell>
                   <TableCell className="text-right">{fmt(totals.tuitionCollected)}</TableCell>
+                  <TableCell className="text-right">{fmt(totals.outstanding)}</TableCell>
                   <TableCell className="text-right">
                     {totalRate === null ? '—' : `${totalRate}%`}
                   </TableCell>
