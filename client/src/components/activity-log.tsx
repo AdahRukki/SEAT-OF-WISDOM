@@ -40,6 +40,7 @@ interface ActivityLogEntry {
   schoolName: string | null;
   previousData: any;
   newData: any;
+  referenceNames?: Record<string, string>;
   createdAt: string;
 }
 
@@ -168,16 +169,17 @@ function formatAction(action: string) {
   return ACTION_LABELS[action] || readableLabel(action);
 }
 
-function ChangeDetails({ before, after }: { before: unknown; after: unknown }) {
+function ChangeDetails({ before, after, referenceNames = {} }: { before: unknown; after: unknown; referenceNames?: Record<string, string> }) {
   const changes = activityChanges(before, after);
+  const resolve = (value: string) => value.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}|SCH[\\w-]+/gi, match => referenceNames[match] || match);
   if (!changes.length) return <p className="text-sm text-muted-foreground py-2">No field changes were recorded for this action.</p>;
   return <div className="space-y-3 py-2">
     <p className="text-xs text-muted-foreground">Only recorded differences are shown. “Not recorded” means that value was not saved in this activity entry.</p>
     {changes.map((change, index) => <div key={index} className="rounded-md border p-3 min-w-0">
       <p className="text-sm font-semibold mb-2">{change.field}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-        <div className="min-w-0"><span className="text-xs text-muted-foreground block">Before</span><span className="whitespace-pre-wrap break-words">{change.before}</span></div>
-        <div className="min-w-0"><span className="text-xs text-muted-foreground block">After</span><span className="whitespace-pre-wrap break-words">{change.after}</span></div>
+        <div className="min-w-0"><span className="text-xs text-muted-foreground block">Before</span><span className="whitespace-pre-wrap break-words">{resolve(change.before)}</span></div>
+        <div className="min-w-0"><span className="text-xs text-muted-foreground block">After</span><span className="whitespace-pre-wrap break-words">{resolve(change.after)}</span></div>
       </div>
     </div>)}
   </div>;
@@ -190,6 +192,7 @@ export function ActivityLog() {
   const [schoolId, setSchoolId] = useState<string>("all");
   const [actionType, setActionType] = useState<string>("all");
   const [userFilter, setUserFilter] = useState<string>("all");
+  const [studentSearch, setStudentSearch] = useState('');
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [page, setPage] = useState(1);
@@ -224,13 +227,14 @@ export function ActivityLog() {
   if (isMainAdmin && schoolId !== "all") params.set("schoolId", schoolId);
   if (actionType !== "all") params.set("actionType", actionType);
   if (userFilter !== "all") params.set("userId", userFilter);
+  if (studentSearch.trim()) params.set('studentSearch', studentSearch.trim());
   if (dateFrom) params.set("dateFrom", dateFrom);
   if (dateTo) params.set("dateTo", dateTo);
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
 
   const { data, isLoading, error } = useQuery<ActivityLogResponse>({
-    queryKey: ["/api/admin/activity-logs", schoolId, actionType, userFilter, dateFrom, dateTo, page],
+    queryKey: ["/api/admin/activity-logs", schoolId, actionType, userFilter, studentSearch, dateFrom, dateTo, page],
     queryFn: () => apiRequest(`/api/admin/activity-logs?${params.toString()}`),
   });
 
@@ -249,6 +253,10 @@ export function ActivityLog() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-1">
+          <Label htmlFor="activity-student-search">Search student activity</Label>
+          <Input id="activity-student-search" placeholder="Student name or Student ID — searches all pages" value={studentSearch} onChange={e => { setStudentSearch(e.target.value); resetPage(); }} />
+        </div>
         {/* Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {isMainAdmin && (
@@ -358,6 +366,7 @@ export function ActivityLog() {
                   const cat = CATEGORY_BADGE[log.entityType] || { label: log.entityType, className: "bg-gray-100 text-gray-800" };
                   const expanded = expandedId === log.id;
                   const subject = activitySubject(log.previousData, log.newData);
+                  const readableSubject = log.referenceNames?.[subject] || subject;
                   const hasDetails = log.previousData != null || log.newData != null;
                   return (
                     <Fragment key={log.id}>
@@ -382,14 +391,14 @@ export function ActivityLog() {
                         </TableCell>
                         <TableCell className="text-sm min-w-[180px]">
                           <p className="font-medium">{formatAction(log.action)}</p>
-                          {subject && <p className="text-muted-foreground">{subject}</p>}
+                          {readableSubject && <p className="text-muted-foreground">{readableSubject}</p>}
                           {hasDetails && <Button variant="link" size="sm" className="h-auto p-0 mt-1" aria-expanded={expanded} onClick={event => {event.stopPropagation();setExpandedId(expanded ? null : log.id);}}>{expanded ? "Hide changes" : "View changes"}</Button>}
                         </TableCell>
                       </TableRow>
                       {expanded && hasDetails && (
                         <TableRow className="bg-muted/20">
                           <TableCell colSpan={7}>
-                            <ChangeDetails before={log.previousData} after={log.newData} />
+                            <ChangeDetails before={log.previousData} after={log.newData} referenceNames={log.referenceNames} />
                           </TableCell>
                         </TableRow>
                       )}
