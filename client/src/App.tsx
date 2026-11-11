@@ -1,3 +1,4 @@
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import AdminSidebar from "@/components/admin-sidebar";
 import { queryClient } from "./lib/queryClient";
@@ -156,6 +157,41 @@ function UpdateBanner() {
   );
 }
 
+
+// Prevent a single portal rendering exception from blanking the entire application.
+// The error reference helps administrators report reproducible failures.
+class AppRenderBoundary extends Component<{ children: ReactNode }, { error: Error | null; reference: string }> {
+  state = { error: null as Error | null, reference: "" };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error, reference: "" };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    const reference = new Date().toISOString();
+    console.error("[AppRenderBoundary] Portal rendering failed", { reference, error, componentStack: info.componentStack });
+    this.setState({ reference });
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <main role="alert" className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+        <div className="w-full max-w-xl rounded-lg border bg-white p-6 shadow-sm space-y-4">
+          <h1 className="text-xl font-semibold text-gray-900">This page encountered an error</h1>
+          <p className="text-gray-700">Your last action may have been saved. Check the payment ledger before submitting it again.</p>
+          <p className="text-sm text-gray-600 break-words">Error: {this.state.error.message}</p>
+          {this.state.reference && <p className="text-xs text-gray-500">Reference: {this.state.reference}</p>}
+          <div className="flex flex-wrap gap-3">
+            <button type="button" className="rounded bg-blue-700 px-4 py-2 text-white" onClick={() => this.setState({ error: null, reference: "" })}>Try again</button>
+            <button type="button" className="rounded border px-4 py-2" onClick={() => window.location.reload()}>Reload page</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+}
+
 // Main App Routes Component
 function AppRoutes() {
   return (
@@ -193,7 +229,7 @@ function App() {
         <AuthProvider>
           <Toaster />
           <OfflineBanner />
-          <AppRoutes />
+          <AppRenderBoundary><AppRoutes /></AppRenderBoundary>
           <UpdateBanner />
         </AuthProvider>
       </TooltipProvider>
