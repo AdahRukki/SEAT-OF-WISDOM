@@ -1,3 +1,4 @@
+import { activityChanges, activitySubject, readableLabel, activityValue } from "@shared/activity-display";
 import { formatStudentName } from "@shared/student-name";
 // Task #215: Full activity audit log viewer (read-only).
 // Main admin sees all schools; sub-admins are scoped server-side to their school.
@@ -50,6 +51,12 @@ interface ActivityLogResponse {
 }
 
 const ACTION_LABELS: Record<string, string> = {
+  move_students_class: "Moved students to another class",
+  record_payment_batch: "Recorded a payment with multiple allocations",
+  record_payment_multi: "Recorded a split payment",
+  teacher_save_score: "Saved student score",
+  update_class_subjects: "Changed class subject assignments",
+  name_change_request_submitted: "Requested a student name correction",
   // Scores
   update_scores: "Updated scores (bulk)",
   save_score: "Saved score",
@@ -158,19 +165,22 @@ const CATEGORY_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 function formatAction(action: string) {
-  return ACTION_LABELS[action] || action.replace(/_/g, " ");
+  return ACTION_LABELS[action] || readableLabel(action);
 }
 
-function JsonBlock({ title, data }: { title: string; data: any }) {
-  if (data === null || data === undefined) return null;
-  return (
-    <div className="min-w-0">
-      <p className="text-xs font-semibold mb-1 text-muted-foreground">{title}</p>
-      <pre className="text-xs bg-muted rounded-md p-2 overflow-x-auto max-h-56 whitespace-pre-wrap break-all">
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    </div>
-  );
+function ChangeDetails({ before, after }: { before: unknown; after: unknown }) {
+  const changes = activityChanges(before, after);
+  if (!changes.length) return <p className="text-sm text-muted-foreground py-2">No field changes were recorded for this action.</p>;
+  return <div className="space-y-3 py-2">
+    <p className="text-xs text-muted-foreground">Only recorded differences are shown. “Not recorded” means that value was not saved in this activity entry.</p>
+    {changes.map((change, index) => <div key={index} className="rounded-md border p-3 min-w-0">
+      <p className="text-sm font-semibold mb-2">{change.field}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+        <div className="min-w-0"><span className="text-xs text-muted-foreground block">Before</span><span className="whitespace-pre-wrap break-words">{change.before}</span></div>
+        <div className="min-w-0"><span className="text-xs text-muted-foreground block">After</span><span className="whitespace-pre-wrap break-words">{change.after}</span></div>
+      </div>
+    </div>)}
+  </div>;
 }
 
 export function ActivityLog() {
@@ -347,6 +357,7 @@ export function ActivityLog() {
                 {data.logs.map((log) => {
                   const cat = CATEGORY_BADGE[log.entityType] || { label: log.entityType, className: "bg-gray-100 text-gray-800" };
                   const expanded = expandedId === log.id;
+                  const subject = activitySubject(log.previousData, log.newData);
                   const hasDetails = log.previousData != null || log.newData != null;
                   return (
                     <Fragment key={log.id}>
@@ -361,23 +372,24 @@ export function ActivityLog() {
                             : <ChevronRight className="h-4 w-4 text-muted-foreground" />)}
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">
-                          {log.createdAt ? new Date(log.createdAt).toLocaleString() : "—"}
+                          {activityValue("createdAt", log.createdAt)}
                         </TableCell>
                         <TableCell className="text-sm">{log.userName}</TableCell>
-                        <TableCell className="text-xs capitalize">{log.userRole}</TableCell>
+                        <TableCell className="text-xs capitalize">{activityValue("role", log.userRole)}</TableCell>
                         <TableCell className="text-xs">{log.schoolName || "All / system"}</TableCell>
                         <TableCell>
                           <Badge className={`${cat.className} text-[10px]`}>{cat.label}</Badge>
                         </TableCell>
-                        <TableCell className="text-sm">{formatAction(log.action)}</TableCell>
+                        <TableCell className="text-sm min-w-[180px]">
+                          <p className="font-medium">{formatAction(log.action)}</p>
+                          {subject && <p className="text-muted-foreground">{subject}</p>}
+                          {hasDetails && <Button variant="link" size="sm" className="h-auto p-0 mt-1" aria-expanded={expanded} onClick={event => {event.stopPropagation();setExpandedId(expanded ? null : log.id);}}>{expanded ? "Hide changes" : "View changes"}</Button>}
+                        </TableCell>
                       </TableRow>
                       {expanded && hasDetails && (
                         <TableRow className="bg-muted/20">
                           <TableCell colSpan={7}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
-                              <JsonBlock title="Before" data={log.previousData} />
-                              <JsonBlock title="After" data={log.newData} />
-                            </div>
+                            <ChangeDetails before={log.previousData} after={log.newData} />
                           </TableCell>
                         </TableRow>
                       )}
