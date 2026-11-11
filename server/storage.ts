@@ -428,6 +428,7 @@ export interface IStorage {
     userId?: string;
     dateFrom?: Date;
     dateTo?: Date;
+    studentSearch?: string;
     page: number;
     pageSize: number;
   }): Promise<{ logs: any[]; total: number }>;
@@ -4914,6 +4915,7 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
     dateFrom?: Date;
     dateTo?: Date;
+    studentSearch?: string;
     page: number;
     pageSize: number;
   }): Promise<{ logs: any[]; total: number }> {
@@ -4925,6 +4927,32 @@ export class DatabaseStorage implements IStorage {
     if (filters.actionType) {
       const types = DatabaseStorage.ACTIVITY_CATEGORY_MAP[filters.actionType];
       if (types) conditions.push(inArray(paymentAuditLogs.entityType, types));
+    }
+    // Search the entire audit history before pagination. Match current student
+    // names/IDs as well as identifiers embedded in historical and batch snapshots.
+    const term = filters.studentSearch?.trim().slice(0, 120);
+    if (term) {
+      const pattern = '%' + term.replace(/[\\%_]/g, '\\    const where = conditions.length > 0 ? and(...conditions) : undefined;') + '%';
+      conditions.push(sql`(
+        EXISTS (
+          SELECT 1 FROM students st
+          JOIN users su ON su.id = st.user_id
+          WHERE (
+            concat_ws(' ', su.first_name, su.middle_name, su.last_name) ILIKE ${pattern} ESCAPE '\\'
+            OR st.student_id ILIKE ${pattern} ESCAPE '\\'
+          )
+          AND (
+            ${paymentAuditLogs.entityId} = st.id::text
+            OR ${paymentAuditLogs.entityId} = st.user_id::text
+            OR ${paymentAuditLogs.previousData}::text ILIKE ('%' || st.id::text || '%')
+            OR ${paymentAuditLogs.newData}::text ILIKE ('%' || st.id::text || '%')
+            OR ${paymentAuditLogs.previousData}::text ILIKE ('%' || st.student_id || '%')
+            OR ${paymentAuditLogs.newData}::text ILIKE ('%' || st.student_id || '%')
+          )
+        )
+        OR ${paymentAuditLogs.previousData}::text ILIKE ${pattern} ESCAPE '\\'
+        OR ${paymentAuditLogs.newData}::text ILIKE ${pattern} ESCAPE '\\'
+      )`);
     }
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -4949,6 +4977,24 @@ export class DatabaseStorage implements IStorage {
       .limit(filters.pageSize)
       .offset((filters.page - 1) * filters.pageSize);
 
+    // Resolve references for this page only. Keep the stored audit snapshots intact.
+    const allStudents = await db.select({
+      id: students.id, userId: students.userId, studentId: students.studentId,
+      firstName: users.firstName, middleName: users.middleName, lastName: users.lastName,
+    }).from(students).innerJoin(users, eq(students.userId, users.id));
+    const [allClasses, allSubjects, allSchools] = await Promise.all([
+      db.select({ id: classes.id, name: classes.name }).from(classes),
+      db.select({ id: subjects.id, name: subjects.name }).from(subjects),
+      db.select({ id: schools.id, name: schools.name }).from(schools),
+    ]);
+    const referenceNames: Record<string, string> = {};
+    for (const st of allStudents) {
+      const name = [st.firstName, st.middleName, st.lastName].filter(Boolean).join(' ');
+      referenceNames[st.id] = name + ' (' + st.studentId + ')';
+      referenceNames[st.userId] = name + ' (' + st.studentId + ')';
+    }
+    for (const item of [...allClasses, ...allSubjects, ...allSchools]) referenceNames[item.id] = item.name;
+
     const logs = rows.map((r) => ({
       id: r.log.id,
       action: r.log.action,
@@ -4963,6 +5009,7 @@ export class DatabaseStorage implements IStorage {
       schoolName: r.schoolName,
       previousData: r.log.previousData,
       newData: r.log.newData,
+      referenceNames,
       createdAt: r.log.createdAt,
     }));
 
