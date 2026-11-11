@@ -673,6 +673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 25));
 
       const { logs, total } = await storage.getActivityLogs({
+        studentSearch: typeof req.query.studentSearch === 'string' ? req.query.studentSearch : undefined,
         schoolId,
         actionType,
         userId,
