@@ -6,9 +6,6 @@ import crypto from "crypto";
 import type { IncomingMessage, ServerResponse } from "http";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-// Generate a unique cache version once per build/dev-server start
-const buildVersion = `sowa-${Date.now()}`;
-
 // Recursively collect all built JS/CSS/font asset URLs (relative to web root,
 // e.g. "/assets/index-abc123.js"). These become the "optional" precache list
 // that is fetched best-effort during SW install.
@@ -115,12 +112,18 @@ const swVersionPlugin = (): Plugin => ({
     const swOut = path.join(distRoot, 'service-worker.js');
     if (!fs.existsSync(swOut)) return;
 
-    const allAssets = collectBuiltAssets(distRoot);
+    const allAssets = collectBuiltAssets(distRoot).sort();
     const critical = collectCriticalAssetsFromHtml(distRoot);
     const criticalSet = new Set(critical);
     const optional = allAssets.filter(a => !criticalSet.has(a));
 
     const content = fs.readFileSync(swOut, 'utf-8');
+    // An identical frontend rebuild should produce a byte-identical worker.
+    const hash = crypto.createHash('sha256')
+      .update(applySwReplacements(content, '', critical, optional))
+      .update(fs.readFileSync(path.join(distRoot, 'index.html')))
+      .digest('hex').slice(0, 16);
+    const buildVersion = `sowa-${hash}`;
     const transformed = applySwReplacements(content, buildVersion, critical, optional);
 
     // Build-time assertion: every placeholder must be resolved, and the

@@ -6,20 +6,23 @@ export function usePwaUpdate() {
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
-    const handleUpdateReady = () => setUpdateReady(true);
+    let mounted = true;
+    const syncUpdateReady = () => {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (mounted) setUpdateReady(Boolean(reg?.waiting && navigator.serviceWorker.controller));
+      }).catch(() => {
+        if (mounted) setUpdateReady(false);
+      });
+    };
 
-    // Listen for the custom event fired by main.tsx when a new SW is waiting
-    window.addEventListener('sw-update-ready', handleUpdateReady);
-
-    // Also check immediately in case a waiting SW was detected before this component mounted
-    navigator.serviceWorker.getRegistration().then((reg) => {
-      if (reg?.waiting && navigator.serviceWorker.controller) {
-        setUpdateReady(true);
-      }
-    });
+    window.addEventListener('sw-update-ready', syncUpdateReady);
+    navigator.serviceWorker.addEventListener('controllerchange', syncUpdateReady);
+    syncUpdateReady();
 
     return () => {
-      window.removeEventListener('sw-update-ready', handleUpdateReady);
+      mounted = false;
+      window.removeEventListener('sw-update-ready', syncUpdateReady);
+      navigator.serviceWorker.removeEventListener('controllerchange', syncUpdateReady);
     };
   }, []);
 
@@ -34,8 +37,10 @@ export function usePwaUpdate() {
         }, { once: true });
 
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        setUpdateReady(false);
       }
-    });
+    }).catch(() => setUpdateReady(false));
   };
 
   return { updateReady, applyUpdate };
