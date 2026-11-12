@@ -1643,7 +1643,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
   ));
   const financialSummary = financeLedger?.summary;
 
-  const ledgerCollectionRate: number | null = financialSummary?.collectionRate ?? null;
+  const unverifiedTuitionCount = financialSummary?.tuitionUnverifiedCount ?? 0;
+  const ledgerCollectionRate = financialSummary && financialSummary.totalFees > 0
+    ? financialSummary.collectionRate ?? Math.round(financialSummary.actualTuitionCollected / financialSummary.totalFees * 100)
+    : null;
 
   // Mutations
   const createClassMutation = useMutation({
@@ -5537,7 +5540,12 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
                     {ledgerCollectionRate === null ? "—" : `${ledgerCollectionRate}%`}
                   </div>
                   <p className="text-[10px] sm:text-xs text-muted-foreground">
-                    {ledgerCollectionRate === null ? "Tuition totals not fully verified" : "Of verified tuition collected"}
+                    {financeLedgerError ? "Could not load tuition data"
+                      : !financialSummary ? "Loading tuition data…"
+                      : ledgerCollectionRate === null ? "No verified tuition charges"
+                      : unverifiedTuitionCount > 0
+                        ? `Verified tuition only · ${unverifiedTuitionCount} unverified ${unverifiedTuitionCount === 1 ? "charge" : "charges"} excluded`
+                        : "Of verified tuition collected"}
                   </p>
                 </CardContent>
               </Card>
