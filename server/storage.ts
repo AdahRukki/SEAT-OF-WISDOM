@@ -971,7 +971,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllSubjects(): Promise<Subject[]> {
-    return await db.select().from(subjects);
+    const available = await db.execute(sql`SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AS present`);
+    if (!(available.rows[0] as any)?.present) return await db.select().from(subjects);
+    return await db.select().from(subjects).where(sql`NOT EXISTS (SELECT 1 FROM subject_merge_snapshots m WHERE m.source_id = ${subjects.id})`);
   }
 
   async updateSubject(id: string, name: string): Promise<Subject> {
