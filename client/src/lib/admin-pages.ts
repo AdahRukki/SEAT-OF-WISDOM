@@ -4,6 +4,7 @@ export const ADMIN_GROUPS = ['Overview', 'Students', 'Academics', 'Finance', 'Ad
 export const ADMIN_PAGES = [
   { id: 'overview', label: 'School overview', group: 'Overview', icon: 'overview' },
   { id: 'students', label: 'Students', group: 'Students', icon: 'students' },
+  { id: 'subjects', label: 'Subject management', group: 'Academics', icon: 'scores' },
   { id: 'scores', label: 'Scores', group: 'Academics', icon: 'scores' },
   { id: 'grading', label: 'Ratings', group: 'Academics', icon: 'grading' },
   { id: 'finance', label: 'Finance', group: 'Finance', icon: 'finance' },
@@ -16,7 +17,7 @@ export const ADMIN_PAGES = [
 export type AdminPage = typeof ADMIN_PAGES[number]['id'];
 
 export function permittedAdminPages(role: string | undefined, permissions: string[] | null | undefined) {
-  return ADMIN_PAGES.filter(page => hasPermission(role, permissions, `tab_${page.id}`));
+  return ADMIN_PAGES.filter(page => page.id === 'subjects' ? role === 'admin' : hasPermission(role, permissions, `tab_${page.id}`));
 }
 
 export function selectedAdminPage(search: string, role: string | undefined, permissions: string[] | null | undefined): AdminPage | null {
