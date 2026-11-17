@@ -1,5 +1,5 @@
 import { assessmentRevision } from "./subject-merge-resolution";
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -8,7 +8,7 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
   if (!uuid.test(sourceId) || !uuid.test(targetId) || sourceId.toLowerCase() === targetId.toLowerCase()) {
     throw new Error("Select two different valid subject IDs");
   }
-  const client = await pool.connect();
+  const client = await connectSubjectDb();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const params = [sourceId, targetId];
