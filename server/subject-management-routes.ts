@@ -1,3 +1,4 @@
+import { recoverSubjectMerge } from "./subject-merge-recovery";
 import { executeSubjectMerge } from "./subject-merge-engine";
 import { saveMasterConfiguration, loadMasterConfigurations } from "./master-subject-storage";
 import { synchroniseMasterSubjects } from "./master-subject-sync";
@@ -108,5 +109,15 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
     try{res.json(await executeSubjectMerge(p.data.sourceId,p.data.targetId,actorId,p.data.choices,p.data.expectedRevision));}
     catch(e){console.error("Subject merge blocked",e);res.status(409).json({error:"Merge blocked; review subject history, assignments and dependencies"});}
   });
-  // Recovery execution remains disabled pending verification.
+  app.post(prefix+"/recovery/:operationId",authenticate,requireMainAdmin,async(req,res)=>{
+    res.setHeader("Cache-Control","no-store");
+    const id=z.string().uuid().safeParse(req.params.operationId);
+    const body=z.object({confirmed:z.literal(true)}).strict().safeParse(req.body);
+    const actorId=(req as any).user?.id;
+    if(typeof actorId!=="string"||!actorId)return res.status(401).json({error:"Missing authenticated user"});
+    if(!id.success||!body.success)return res.status(400).json({error:"Invalid recovery request"});
+    if(process.env.ENABLE_SUBJECT_MERGE_WRITES!=="true")return res.status(409).json({error:"Recovery execution is disabled"});
+    try{res.json(await recoverSubjectMerge(id.data,actorId));}
+    catch(e){console.error("Subject recovery blocked",e);res.status(409).json({error:"Recovery blocked; records may have changed since merge"});}
+  });
 }
