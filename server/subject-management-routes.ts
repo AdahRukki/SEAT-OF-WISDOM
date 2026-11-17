@@ -1,3 +1,4 @@
+import { previewMasterClassConfiguration } from "./master-subject-configuration";
 import type { Express, RequestHandler } from "express";
 import { auditSubjectManagement } from "./subject-management-audit";
 import { previewSubjectMerge } from "./subject-merge-preview";
@@ -37,6 +38,18 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
     } catch (e) {
       console.error("Recovery review failed",e);
       res.status(500).json({error:"Unable to review recovery"});
+    }
+  });
+  app.post(prefix+"/master-preview", authenticate, requireMainAdmin, async (req,res) => {
+    const parsed=z.object({referenceSchoolId:z.string().min(1).max(100),referenceClassId:z.string().min(1).max(100),selectedSubjectIds:z.array(z.string().uuid()).min(1).max(200)}).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({error:"Invalid master configuration"});
+    try {
+      res.setHeader("Cache-Control","no-store");
+      const p=parsed.data;
+      res.json(await previewMasterClassConfiguration(p.referenceSchoolId,p.referenceClassId,p.selectedSubjectIds));
+    } catch(e) {
+      console.error("Master configuration preview failed",e);
+      res.status(400).json({error:"Unable to preview configuration; check selected class and duplicate subjects"});
     }
   });
   // Execution endpoints intentionally omitted until report history, dependencies,
