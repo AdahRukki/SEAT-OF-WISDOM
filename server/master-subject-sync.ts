@@ -1,11 +1,11 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 import { createHash } from "crypto";
 const norm=(s:string)=>s.trim().replace(/\s+/g," ").toUpperCase();
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function synchroniseMasterSubjects(input:{versionId:string;actorId:string;requestKey:string;expectedRevision?:string;apply:boolean}) {
  if(!uuid.test(input.versionId)||!uuid.test(input.requestKey)||!input.actorId)throw new Error("Invalid sync request");
- const client=await pool.connect();
+ const client=await connectSubjectDb();
  try {
   await client.query(input.apply?"BEGIN":"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   await client.query("SET LOCAL lock_timeout = '5s'");
