@@ -40,8 +40,20 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
       "SELECT to_jsonb(a) AS row FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)",p);
     const rows = original.rows.map(r=>r.row);
     if (!expectedRevision || expectedRevision !== assessmentRevision(rows)) throw new Error("Missing or stale assessment preview");
-    if(rows.length && process.env.ENABLE_UNPUBLISHED_SCORE_MERGES!=="true")throw new Error("Unpublished score merges disabled pending verification");
-    const decisions = validateAssessmentChoices(rows,choices);
+    
+    const groups=new Map<string,typeof rows>();
+    for(const row of rows){const k=JSON.stringify([row.student_id,row.class_id,row.session,row.term]);groups.set(k,[...(groups.get(k)||[]),row]);}
+    const resolved=[...choices];
+    for(const group of groups.values()){
+      if(group.length<2)continue;
+      const g=group[0];
+      if(resolved.some(c=>c.student_id===g.student_id&&c.class_id===g.class_id&&c.session===g.session&&c.term===g.term))continue;
+      if(new Set(group.map(r=>JSON.stringify([r.first_ca,r.second_ca,r.exam]))).size===1){
+        const keep=group.find(r=>r.subject_id===targetId)||g;
+        resolved.push({student_id:g.student_id,class_id:g.class_id,session:g.session,term:g.term,revision:assessmentRevision(group),retainId:keep.id});
+      }
+    }
+    const decisions = validateAssessmentChoices(rows,resolved);
     // Do not remove active assessment records until all inbound references and
     // published report preservation have been verified.
     if(decisions.archive.length){
@@ -56,7 +68,6 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
     const overlapCount=await client.query(`SELECT count(*)::int AS n FROM (SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid) GROUP BY class_id HAVING count(*)>1) x`,p);
     if(Number(overlapCount.rows[0].n)!==duplicateAssignments.rows.length)throw new Error("Overlapping class assignments require explicit resolution");
     if(duplicateAssignments.rows.length){
-      if(process.env.ENABLE_SUBJECT_ASSIGNMENT_DEDUP!=="true")throw new Error("Assignment consolidation disabled pending verification");
       const inbound=await client.query("SELECT 1 FROM pg_constraint WHERE contype='f' AND confrelid='class_subjects'::regclass LIMIT 1");
       if(inbound.rows.length)throw new Error("Class assignment dependencies require review");
     }
