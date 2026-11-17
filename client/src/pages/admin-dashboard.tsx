@@ -1,3 +1,4 @@
+import SubjectManagementDashboard from "@/components/subject-management-dashboard";
 import { ledgerQueryOptions } from "@/lib/ledger-query";
 import { ScoreEntryGrid } from "@/components/score-entry-grid";
 import { tuitionPeriodOrder } from "@shared/historical-tuition";
@@ -4097,6 +4098,7 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
 
 
           {/* Overview Tab */}
+          {user.role === "admin" && activeTab === "subjects" && <SubjectManagementDashboard />}
           {perm('tab_overview') && <AdminPagePanel activePage={activeTab} value="overview" className="space-y-4 sm:space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <Card>
