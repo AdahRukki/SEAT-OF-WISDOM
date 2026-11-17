@@ -58,13 +58,13 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
     if(new Set(subjects.rows.map(s=>s.name.trim().replace(/\s+/g," ").toUpperCase())).size!==1)blockers.push("Only duplicate subject names can be merged.");
     const history=await client.query(`WITH affected AS (SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid) UNION SELECT class_id FROM assessments WHERE subject_id IN ($1::uuid,$2::uuid)) SELECT 1 FROM affected c WHERE EXISTS(SELECT 1 FROM published_scores p WHERE p.class_id=c.class_id) OR EXISTS(SELECT 1 FROM generated_report_cards r WHERE r.class_id=c.class_id) LIMIT 1`,params);
     if(history.rows.length)blockers.push("Affected classes have published or generated results; historical preservation is not yet supported.");
-    if(fullRows.length && process.env.ENABLE_UNPUBLISHED_SCORE_MERGES!=="true")blockers.push("Score transfers are disabled.");
-    if(overlaps.rows.length)blockers.push("Overlapping assessment records require supported conflict resolution.");
-    if(assignments.rows.some(a=>a.assignments.length>1))blockers.push("Overlapping class assignments require consolidation and recovery support.");
+
+    if(overlaps.rows.length && (await client.query("SELECT 1 FROM pg_constraint WHERE contype='f' AND confrelid='assessments'::regclass LIMIT 1")).rows.length)blockers.push("Assessment dependencies prevent conflict archival.");
+    if(assignments.rows.some(a=>a.assignments.length>1&&(a.assignments.length!==2||a.assignments[0].subjectId===a.assignments[1].subjectId||a.assignments[0].customName!==a.assignments[1].customName)))blockers.push("Conflicting class assignment names require review.");
     await client.query("COMMIT");
     return {
       sourceId,targetId,revision,subjects:subjects.rows,counts:counts.rows,
-      overlaps:reviewedOverlaps,assignments:assignments.rows,dependencies:dependencies.rows,
+      overlaps:reviewedOverlaps.filter(o=>Number(o.distinct_score_sets)>1),assignments:assignments.rows,dependencies:dependencies.rows,
       requiresAssessmentReview:overlaps.rows.length>0,
       requiresAssignmentReview:assignments.rows.some(row => row.assignments.length>1),
       executionEnabled:blockers.length===0,blockers,
