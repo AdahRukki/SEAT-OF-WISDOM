@@ -51,7 +51,7 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
   const content = useRef<HTMLDivElement>(null);
   const branch = path.startsWith('/admin/school/');
   const dashboard = branch || user.role === 'sub-admin' && (path === '/' || path === '/admin');
-  const activePage = dashboard ? selectedAdminPage(search, user.role, user.permissions) : null;
+  const activePage = path === "/admin/subjects" ? "subjects" : dashboard ? selectedAdminPage(search, user.role, user.permissions) : null;
   const activeGroup = ADMIN_PAGES.find(page => page.id === activePage)?.group ?? (path === '/users' || path === '/profile' ? 'Administration' : 'Overview');
   const activeKey = `${path}?${search}`;
   const pages = permittedAdminPages(user.role, user.permissions);
@@ -148,7 +148,7 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
               {item('General School', GENERAL_SCHOOL_PATH, Globe2, ['/', '/admin', GENERAL_SCHOOL_PATH].includes(path), collapsed)}
               {item('Choose a school', SCHOOL_SELECTION_PATH, Building2, path === SCHOOL_SELECTION_PATH, collapsed)}
             </>}
-            {entries.map(page => item(page.label, adminPageHref(schoolPath, page.id), icons[page.icon], activePage === page.id, collapsed))}
+            {entries.map(page => item(page.label, page.id === "subjects" ? "/admin/subjects" : adminPageHref(schoolPath, page.id), icons[page.icon], activePage === page.id, collapsed))}
             {administration && item('Users', '/users', Users, path === '/users', collapsed)}
           </div>}
         </section>;
@@ -180,7 +180,7 @@ function SidebarLayout({ user, children }: { user: NonNullable<ReturnType<typeof
       {quickPages.map(page => {
         const Icon = icons[page.icon];
         const active = activePage === page.id;
-        return <Link key={page.id} href={adminPageHref(schoolPath, page.id)} onClick={selected}
+        return <Link key={page.id} href={page.id === "subjects" ? "/admin/subjects" : adminPageHref(schoolPath, page.id)} onClick={selected}
           aria-current={active ? 'page' : undefined}
           className={cn('flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg border-t-4 px-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', active ? 'border-blue-700 bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-100' : 'border-transparent text-muted-foreground hover:bg-accent')}>
           <span className="relative"><Icon className="h-5 w-5" aria-hidden="true" />{page.id === 'students' && pendingNames > 0 && <span className="absolute -right-3 -top-2 rounded-full bg-amber-600 px-1 text-[10px] text-white" aria-label={`${pendingNames} pending name change requests`}>{pendingNames > 9 ? '9+' : pendingNames}</span>}</span>
