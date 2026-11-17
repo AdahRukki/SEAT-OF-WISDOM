@@ -49,7 +49,14 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
       SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid)
       GROUP BY class_id HAVING count(*)>1 LIMIT 1
     `, p);
-    if (assignments.rows.length) throw new Error("Overlapping class assignments require explicit resolution");
+    const duplicateAssignments=await client.query(`SELECT s.id FROM class_subjects s JOIN class_subjects t ON s.class_id=t.class_id AND t.subject_id=$2::uuid WHERE s.subject_id=$1::uuid AND s.custom_name IS NOT DISTINCT FROM t.custom_name AND (SELECT count(*) FROM class_subjects x WHERE x.class_id=s.class_id AND x.subject_id IN ($1::uuid,$2::uuid))=2`,p);
+    const overlapCount=await client.query(`SELECT count(*)::int AS n FROM (SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid) GROUP BY class_id HAVING count(*)>1) x`,p);
+    if(Number(overlapCount.rows[0].n)!==duplicateAssignments.rows.length)throw new Error("Overlapping class assignments require explicit resolution");
+    if(duplicateAssignments.rows.length){
+      if(process.env.ENABLE_SUBJECT_ASSIGNMENT_DEDUP!=="true")throw new Error("Assignment consolidation disabled pending verification");
+      const inbound=await client.query("SELECT 1 FROM pg_constraint WHERE contype='f' AND confrelid='class_subjects'::regclass LIMIT 1");
+      if(inbound.rows.length)throw new Error("Class assignment dependencies require review");
+    }
     // The audit table is created transactionally; original rows are retained in full.
     await client.query(`
       CREATE TABLE IF NOT EXISTS subject_merge_snapshots (
@@ -68,6 +75,7 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
         'assignments',(SELECT coalesce(jsonb_agg(to_jsonb(c)),'[]') FROM class_subjects c WHERE subject_id IN ($1::uuid,$2::uuid)))
     `, [sourceId,targetId,operationId,actorId]);
     const a = await client.query("UPDATE assessments SET subject_id=$2::uuid WHERE subject_id=$1::uuid",p);
+    if(duplicateAssignments.rows.length)await client.query("DELETE FROM class_subjects WHERE id=ANY($1::uuid[])",[duplicateAssignments.rows.map(r=>r.id)]);
     const c = await client.query("UPDATE class_subjects SET subject_id=$2::uuid WHERE subject_id=$1::uuid",p);
     const verification = await client.query(`
       WITH original AS (
@@ -87,7 +95,7 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
     if (Number(remaining.rows[0].remaining)!==0) throw new Error("Source references remain");
     // Do not delete source. UI and write-path archive enforcement are separate work.
     await client.query("COMMIT");
-    return { operationId, assessmentsMoved:a.rowCount, assignmentsMoved:c.rowCount, sourceRetained:true };
+    return { operationId, assessmentsMoved:a.rowCount, assignmentsMoved:c.rowCount,assignmentsConsolidated:duplicateAssignments.rows.length, sourceRetained:true };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
