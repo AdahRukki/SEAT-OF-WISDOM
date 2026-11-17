@@ -5,17 +5,19 @@ export async function auditSubjectManagement() {
   const client = await pool.connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    const archived=(await client.query("SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AS present")).rows[0].present;
+    const activeFilter=archived?"WHERE NOT EXISTS (SELECT 1 FROM subject_merge_snapshots m WHERE m.source_id=s.id)":"";
     const subjects = await client.query(`
       SELECT s.id, s.name,
         (SELECT count(*)::int FROM class_subjects cs WHERE cs.subject_id=s.id) AS assignments,
         (SELECT count(*)::int FROM assessments a WHERE a.subject_id=s.id) AS assessments
-      FROM subjects s ORDER BY upper(trim(s.name)), s.id
+      FROM subjects s ${activeFilter} ORDER BY upper(trim(s.name)), s.id
     `);
     const duplicates = await client.query(`
       SELECT upper(trim(name)) AS normalized_name,
         array_agg(id ORDER BY id) AS subject_ids,
         array_agg(name ORDER BY id) AS names
-      FROM subjects GROUP BY upper(trim(name)) HAVING count(*) > 1
+      FROM subjects s ${activeFilter} GROUP BY upper(trim(name)) HAVING count(*) > 1
       ORDER BY normalized_name
     `);
     const classes = await client.query(`
