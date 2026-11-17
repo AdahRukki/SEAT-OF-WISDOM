@@ -1,0 +1,10 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { assessmentRevision, validateAssessmentChoices } from "../../server/subject-merge-decisions";
+const a={id:"a",student_id:"student",class_id:"class",session:"2026/2027",term:"First Term",subject_id:"one",first_ca:0,second_ca:12,exam:40};
+const b={...a,id:"b",subject_id:"two",first_ca:15};
+const select={student_id:a.student_id,class_id:a.class_id,session:a.session,term:a.term,revision:assessmentRevision([a,b]),retainId:"a"};
+test("revision deterministic and detects score edits",()=>{assert.equal(assessmentRevision([a,b]),assessmentRevision([b,a]));assert.notEqual(assessmentRevision([a,b]),assessmentRevision([{...a,exam:41},b]));});
+test("zero score remains a valid explicit choice",()=>assert.deepEqual(validateAssessmentChoices([a,b],[select]),{retain:["a"],archive:["b"]}));
+test("missing, stale, invalid and duplicate choices rejected",()=>{for(const choices of [[],[{...select,revision:"stale"}],[{...select,retainId:"unknown"}],[select,select]])assert.throws(()=>validateAssessmentChoices([a,b],choices));});
+test("nonoverlapping row is retained without decision",()=>assert.deepEqual(validateAssessmentChoices([a],[]),{retain:["a"],archive:[]}));
