@@ -44,7 +44,10 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
     const decisions = validateAssessmentChoices(rows,choices);
     // Do not remove active assessment records until all inbound references and
     // published report preservation have been verified.
-    if (decisions.archive.length) throw new Error("Conflict decisions validated; archival execution not yet enabled");
+    if(decisions.archive.length){
+      const inbound=await client.query("SELECT 1 FROM pg_constraint WHERE contype='f' AND confrelid='assessments'::regclass LIMIT 1");
+      if(inbound.rows.length)throw new Error("Assessment dependencies prevent conflict archival");
+    }
     const assignments = await client.query(`
       SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid)
       GROUP BY class_id HAVING count(*)>1 LIMIT 1
@@ -74,6 +77,7 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
         'assessments',(SELECT coalesce(jsonb_agg(to_jsonb(a)),'[]') FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)),
         'assignments',(SELECT coalesce(jsonb_agg(to_jsonb(c)),'[]') FROM class_subjects c WHERE subject_id IN ($1::uuid,$2::uuid)))
     `, [sourceId,targetId,operationId,actorId]);
+    if(decisions.archive.length)await client.query("DELETE FROM assessments WHERE id=ANY($1::uuid[])",[decisions.archive]);
     const a = await client.query("UPDATE assessments SET subject_id=$2::uuid WHERE subject_id=$1::uuid",p);
     if(duplicateAssignments.rows.length)await client.query("DELETE FROM class_subjects WHERE id=ANY($1::uuid[])",[duplicateAssignments.rows.map(r=>r.id)]);
     const c = await client.query("UPDATE class_subjects SET subject_id=$2::uuid WHERE subject_id=$1::uuid",p);
@@ -84,18 +88,19 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
       )
       SELECT count(*)::int AS mismatches FROM original o
       LEFT JOIN assessments a ON a.id=(o.row->>'id')::uuid
-      WHERE a.id IS NULL OR a.subject_id<>$2::uuid
-        OR (to_jsonb(a)-'subject_id') IS DISTINCT FROM (o.row-'subject_id')
-    `, [operationId,targetId]);
+      WHERE NOT ((o.row->>'id')::uuid=ANY($3::uuid[])) AND (a.id IS NULL OR a.subject_id<>$2::uuid
+        OR (to_jsonb(a)-'subject_id') IS DISTINCT FROM (o.row-'subject_id'))
+    `, [operationId,targetId,decisions.archive]);
     if (Number(verification.rows[0].mismatches)!==0) throw new Error("Assessment verification failed");
     const remaining = await client.query(`
       SELECT (SELECT count(*) FROM assessments WHERE subject_id=$1::uuid)
         +(SELECT count(*) FROM class_subjects WHERE subject_id=$1::uuid) AS remaining
     `, [sourceId]);
     if (Number(remaining.rows[0].remaining)!==0) throw new Error("Source references remain");
+    await client.query("UPDATE subject_merge_snapshots SET snapshot=snapshot || jsonb_build_object('archivedAssessmentIds',$2::jsonb,'consolidatedAssignmentIds',$3::jsonb) WHERE operation_id=$1::uuid",[operationId,JSON.stringify(decisions.archive),JSON.stringify(duplicateAssignments.rows.map(r=>r.id))]);
     // Do not delete source. UI and write-path archive enforcement are separate work.
     await client.query("COMMIT");
-    return { operationId, assessmentsMoved:a.rowCount, assignmentsMoved:c.rowCount,assignmentsConsolidated:duplicateAssignments.rows.length, sourceRetained:true };
+    return { operationId, assessmentsMoved:a.rowCount, assignmentsMoved:c.rowCount,assignmentsConsolidated:duplicateAssignments.rows.length, assessmentsArchived:decisions.archive.length,sourceRetained:true };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
