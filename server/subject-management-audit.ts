@@ -47,8 +47,8 @@ export async function auditSubjectManagement() {
         FROM assessments a JOIN subjects s ON s.id=a.subject_id
         GROUP BY a.student_id,a.class_id,a.term,a.session,upper(trim(s.name))
         HAVING count(*)>1
-      ) overlaps JOIN (SELECT DISTINCT upper(trim(name)) AS name FROM subjects) s
-      ON s.name=overlaps.name GROUP BY upper(trim(s.name))
+      ) AS assessment_groups JOIN (SELECT DISTINCT upper(trim(name)) AS name FROM subjects) s
+      ON s.name=assessment_groups.name GROUP BY upper(trim(s.name))
     `);
     await client.query("COMMIT");
     return { subjects: subjects.rows, duplicates: duplicates.rows, classes: classes.rows,
