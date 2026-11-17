@@ -51,7 +51,7 @@ export async function auditSubjectManagement() {
       ON s.name=assessment_groups.name GROUP BY upper(trim(s.name))
     `);
     await client.query("COMMIT");
-    return { subjects: subjects.rows, duplicates: duplicates.rows, classes: classes.rows,
+    return { mergeWritesEnabled: process.env.ENABLE_SUBJECT_MERGE_WRITES === 'true', subjects: subjects.rows, duplicates: duplicates.rows, classes: classes.rows,
       dependencies: dependencies.rows, duplicateAssignments: duplicateAssignments.rows,
       overlappingAssessments: overlappingAssessments.rows };
   } catch (error) {
