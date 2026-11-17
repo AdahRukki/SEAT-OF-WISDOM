@@ -21,12 +21,13 @@ export async function recoverSubjectMerge(operationId: string, actorId: string) 
       const field = table==="class_subjects"?"assignments":table;
       const selector = table==="subjects"?"id":"subject_id";
       const expected = table==="subjects"?"v":"v || jsonb_build_object('subject_id',$2::uuid)";
+      const removed=table==="assessments"?m.snapshot.archivedAssessmentIds??[]:table==="class_subjects"?m.snapshot.consolidatedAssignmentIds??[]:[];
       const check = await client.query(`
         WITH expected AS (SELECT ${expected} AS row FROM jsonb_array_elements($3::jsonb) v),
         actual AS (SELECT to_jsonb(t) AS row FROM ${table} t WHERE ${selector} IN ($1::uuid,$2::uuid))
         SELECT EXISTS ((SELECT row FROM expected EXCEPT ALL SELECT row FROM actual)
           UNION ALL (SELECT row FROM actual EXCEPT ALL SELECT row FROM expected)) AS mismatch
-      `,[m.source_id,m.target_id,JSON.stringify(m.snapshot[field])]);
+      `,[m.source_id,m.target_id,JSON.stringify(m.snapshot[field].filter((v:any)=>!removed.includes(v.id)))]);
       if (check.rows[0].mismatch) throw new Error(table+" changed since merge; recovery blocked");
     }
     await client.query(`CREATE TABLE IF NOT EXISTS subject_merge_recoveries (
@@ -43,6 +44,8 @@ export async function recoverSubjectMerge(operationId: string, actorId: string) 
         FROM jsonb_array_elements($1::jsonb) v
         WHERE t.id=(v->>'id')::uuid AND t.subject_id IS DISTINCT FROM (v->>'subject_id')::uuid`,
         [JSON.stringify(m.snapshot[field])]);
+      const removed=table==="assessments"?m.snapshot.archivedAssessmentIds??[]:m.snapshot.consolidatedAssignmentIds??[];
+      if(removed.length)await client.query(`INSERT INTO ${table} SELECT * FROM jsonb_populate_recordset(NULL::${table},$1::jsonb)`,[JSON.stringify(m.snapshot[field].filter((v:any)=>removed.includes(v.id)))]);
       const verified = await client.query(`WITH expected AS (SELECT v AS row FROM jsonb_array_elements($3::jsonb) v),
         actual AS (SELECT to_jsonb(t) AS row FROM ${table} t WHERE subject_id IN ($1::uuid,$2::uuid))
         SELECT EXISTS ((SELECT row FROM expected EXCEPT ALL SELECT row FROM actual)
