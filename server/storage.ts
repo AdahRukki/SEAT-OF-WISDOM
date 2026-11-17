@@ -1,3 +1,4 @@
+import { loadReportPeriodSubjects } from "./report-subject-history";
 import { formatStudentName } from "../shared/student-name";
 import { setHistoryContext, authorizeStudentMutation, lockHistorySchools, claimHistoryCommand, type HistoryContext, StudentHistoryError } from './student-history';
 import { summarizeTuition } from "../shared/tuition-summary";
@@ -2952,7 +2953,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(subjects, eq(classSubjects.subjectId, subjects.id))
       .where(eq(classSubjects.classId, classId));
 
-    const assignedSubjects = classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
+    const assignedSubjects = (await loadReportPeriodSubjects(classId, session, term)) ?? classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
 
     // Get all assessments for this student in this term/session
     const studentAssessments = await db
@@ -3037,7 +3038,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(subjects, eq(classSubjects.subjectId, subjects.id))
       .where(eq(classSubjects.classId, classId));
 
-    const assignedSubjects = classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
+    const assignedSubjects = (await loadReportPeriodSubjects(classId, session, term)) ?? classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
 
     // Task #198: if the one-time bulk promotion already ran for this class's session,
     // students have MOVED to their next classes (or graduated and been deactivated).
