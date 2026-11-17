@@ -1,4 +1,4 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 import { randomUUID } from "crypto";
 import { validateAssessmentChoices, assessmentRevision, type AssessmentChoice } from "./subject-merge-resolution";
 
@@ -13,7 +13,7 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
   if (!uuid.test(sourceId) || !uuid.test(targetId) || sourceId.toLowerCase() === targetId.toLowerCase() || !actorId.trim()) {
     throw new Error("Invalid merge request");
   }
-  const client = await pool.connect();
+  const client = await connectSubjectDb();
   const operationId = randomUUID();
   try {
     await client.query("BEGIN");
