@@ -1,3 +1,4 @@
+import { registerSubjectManagementRoutes } from "./subject-management-routes";
 import { summarizeTuition, summarizeTuitionByClass } from "../shared/tuition-summary";
 import { correctPaymentPurpose, previewPurposeCorrection, PurposeCorrectionError } from './payment-purpose-correction';
 import { deactivateStudents } from './student-deactivation';
@@ -290,6 +291,7 @@ const requirePermission = (permissionKey: string) => (req: Request, res: Respons
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  registerSubjectManagementRoutes(app, authenticate, requireMainAdmin);
   registerAnalyticsRoutes(app, authenticate, requireMainAdmin,
     new GeneralSchoolAnalytics(db, (rows, term, session) => storage.buildTuitionResolver(rows, term, session)));
   // Serve static assets first (before other routes)
