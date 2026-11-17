@@ -1,9 +1,9 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 
 /** Internal only. Requires staging tests, authorization and report-impact approval before exposure. */
 export async function recoverSubjectMerge(operationId: string, actorId: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId) || !actorId.trim()) throw new Error("Invalid recovery request");
-  const client = await pool.connect();
+  const client = await connectSubjectDb();
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL lock_timeout = '5s'");
