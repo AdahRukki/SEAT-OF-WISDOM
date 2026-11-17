@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 type Subject = {id:string;name:string;assignments:number;assessments:number};
 type ClassRow = {id:string;name:string;school:string;school_id:string;subject_count:number;subjects:{id:string;name:string}[]};
 type Audit = {subjects:Subject[];classes:ClassRow[];duplicates:{normalized_name:string;subject_ids:string[];names:string[]}[]};
-type Preview = {revision:string;overlaps:{student_id:string;class_id:string;session:string;term:string;records:{id:string;subjectId:string;firstCA:number;secondCA:number;exam:number}[]}[];assignments:{class_id:string;class_name:string;school:string;assignments:{id:string;subjectId:string;customName:string|null}[]}[];counts:{subject_id:string;session:string;term:string;assessment_count:number}[];warnings:string[]};
+type Preview = {revision:string;overlaps:{revision:string;student_id:string;class_id:string;session:string;term:string;records:{id:string;subjectId:string;firstCA:number;secondCA:number;exam:number}[]}[];assignments:{class_id:string;class_name:string;school:string;assignments:{id:string;subjectId:string;customName:string|null}[]}[];counts:{subject_id:string;session:string;term:string;assessment_count:number}[];warnings:string[]};
 const prefix="/api/admin/subject-management";
 // Do not persist student assessment data or queue preview requests offline.
 async function request<T>(path:string,body?:unknown):Promise<T> {
@@ -46,7 +46,7 @@ export default function SubjectManagementDashboard() {
     if(!preview||busy||preview.counts.length||preview.overlaps.length||preview.assignments.some(a=>a.assignments.length>1))return;
     if(!window.confirm("Merge these subjects? Only result-free duplicates are currently supported."))return;
     setBusy(true);setError("");
-    try{await request("/merge-apply",{sourceId:source,targetId:target,expectedRevision:preview.revision,confirmed:true});await refresh();}
+    try{await request("/merge-apply",{sourceId:source,targetId:target,expectedRevision:preview.revision,confirmed:true,choices:preview.overlaps.filter(o=>choices[o.records[0].id]).map(o=>({student_id:o.student_id,class_id:o.class_id,session:o.session,term:o.term,revision:o.revision,retainId:choices[o.records[0].id]}))});await refresh();}
     catch(e){setError(e instanceof Error?e.message:"Merge blocked");setPreview(null);}
     finally{setBusy(false);}
   }
