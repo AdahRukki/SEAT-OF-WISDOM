@@ -100,12 +100,12 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
   });
   app.post(prefix+"/merge-apply",authenticate,requireMainAdmin,async(req,res)=>{
     res.setHeader("Cache-Control","no-store");
-    const p=z.object({sourceId:z.string().uuid(),targetId:z.string().uuid(),expectedRevision:z.string().regex(/^[a-f0-9]{64}$/),confirmed:z.literal(true)}).strict().safeParse(req.body);
+    const p=z.object({sourceId:z.string().uuid(),targetId:z.string().uuid(),expectedRevision:z.string().regex(/^[a-f0-9]{64}$/),confirmed:z.literal(true),choices:z.array(z.object({student_id:z.string().uuid(),class_id:z.string().min(1).max(50),session:z.string().min(1).max(50),term:z.string().min(1).max(50),revision:z.string().regex(/^[a-f0-9]{64}$/),retainId:z.string().uuid()}).strict()).max(10000).default([])}).strict().safeParse(req.body);
     const actorId=(req as any).user?.id;
     if(typeof actorId!=="string"||!actorId)return res.status(401).json({error:"Missing authenticated user"});
     if(!p.success)return res.status(400).json({error:"Invalid merge request"});
     if(process.env.ENABLE_SUBJECT_MERGE_WRITES!=="true")return res.status(503).json({error:"Merge execution disabled pending verification"});
-    try{res.json(await executeSubjectMerge(p.data.sourceId,p.data.targetId,actorId,[],p.data.expectedRevision));}
+    try{res.json(await executeSubjectMerge(p.data.sourceId,p.data.targetId,actorId,p.data.choices,p.data.expectedRevision));}
     catch(e){console.error("Subject merge blocked",e);res.status(409).json({error:"Merge blocked; review subject history, assignments and dependencies"});}
   });
   // Recovery execution remains disabled pending verification.
