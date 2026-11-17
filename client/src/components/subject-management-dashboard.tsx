@@ -14,7 +14,10 @@ async function request<T>(path:string,body?:unknown):Promise<T> {
   const timeout=setTimeout(()=>controller.abort(),20000);
   try {
   const response=await fetch(prefix+path,{method:body?"POST":"GET",cache:"no-store",signal:controller.signal,headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
-  if (!response.ok) throw new Error("Request failed ("+response.status+"). Refresh or sign in again.");
+  if (!response.ok) {
+    const details=await response.json().catch(()=>null);
+    throw new Error(details?.error || (response.status===503?"Merge execution is currently disabled by the server. No records were changed.":"Request failed ("+response.status+")."));
+  }
   if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("Subject Management API returned a webpage instead of data. Check that the running backend includes /api/admin/subject-management/audit. HTTP "+response.status+(response.redirected?" (redirected)":"")+".");
   return await response.json();
   } catch(e) { if(controller.signal.aborted)throw new Error("Subject Management request timed out after 20 seconds. Retry or check server logs."); throw e; } finally { clearTimeout(timeout); }
@@ -28,6 +31,7 @@ export default function SubjectManagementDashboard() {
   const [school,setSchool]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+  const [success,setSuccess]=useState<{operationId:string;assessmentsMoved:number;assignmentsMoved:number;assignmentsConsolidated?:number;retained:string}|null>(null);
   const [history,setHistory]=useState<{operation_id:string;source_name:string;target_name:string;created_at:string;assessment_count:number;assignment_count:number}[]>([]);
   const [recovery,setRecovery]=useState<unknown>(null);
   const [choices,setChoices]=useState<Record<string,string>>({});
@@ -51,7 +55,7 @@ export default function SubjectManagementDashboard() {
     if(!preview||busy||preview.overlaps.length||preview.assignments.some(a=>a.assignments.length>1))return;
     if(!window.confirm("Merge these subjects? Only non-conflicting, unpublished results are eligible; the server will check historical records."))return;
     setBusy(true);setError("");
-    try{await request("/merge-apply",{sourceId:source,targetId:target,expectedRevision:preview.revision,confirmed:true,choices:preview.overlaps.filter(o=>choices[o.records[0].id]).map(o=>({student_id:o.student_id,class_id:o.class_id,session:o.session,term:o.term,revision:o.revision,retainId:choices[o.records[0].id]}))});await refresh();}
+    try{const retained=audit?.subjects.find(s=>s.id===target)?.name ?? target;const result=await request<{operationId:string;assessmentsMoved:number;assignmentsMoved:number;assignmentsConsolidated?:number}>("/merge-apply",{sourceId:source,targetId:target,expectedRevision:preview.revision,confirmed:true,choices:preview.overlaps.filter(o=>choices[o.records[0].id]).map(o=>({student_id:o.student_id,class_id:o.class_id,session:o.session,term:o.term,revision:o.revision,retainId:choices[o.records[0].id]}))});setSuccess({...result,retained});await refresh();}
     catch(e){setError(e instanceof Error?e.message:"Merge blocked");setPreview(null);}
     finally{setBusy(false);}
   }
@@ -59,6 +63,7 @@ export default function SubjectManagementDashboard() {
   const btn="border rounded-md px-3 py-2 disabled:opacity-50";
   return <section className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl font-semibold">Subject Management</h2><p className="text-sm text-muted-foreground">Audit subjects across all schools and safely preview duplicate merges.</p></div><button className={btn} disabled={busy} onClick={refresh}>Refresh audit</button></div>
+    {success&&<div role="status" className="border rounded-lg p-4 space-y-2"><h3 className="font-semibold">Subjects merged successfully</h3><p>Retained subject: {success.retained}</p><p>Assessments transferred: {success.assessmentsMoved}</p><p>Class assignments transferred: {success.assignmentsMoved}</p><p>Duplicate assignments consolidated: {success.assignmentsConsolidated??0}</p><p>Operation reference: {success.operationId}</p><button className={btn} onClick={()=>setSuccess(null)}>Dismiss</button></div>}
     {error&&<p role="alert" className="text-red-600">{error}</p>}
     {busy&&<p role="status">Loading subject data...</p>}
     {audit&&<>
