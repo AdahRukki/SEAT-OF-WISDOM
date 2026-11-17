@@ -1,4 +1,4 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 const normalize=(s:string)=>s.trim().replace(/\s+/g," ").toUpperCase();
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -8,7 +8,7 @@ export async function saveMasterConfiguration(input:{referenceClassId:string;ses
  !input.actorId||!input.referenceClassId||!Number.isInteger(input.expectedVersion)||input.expectedVersion<0||
  !input.subjectIds.length||input.subjectIds.length>200||input.subjectIds.some(id=>!uuid.test(id)))throw new Error("Invalid configuration");
  const ids=Array.from(new Set(input.subjectIds.map(id=>id.toLowerCase()))).sort();
- const client=await pool.connect();
+ const client=await connectSubjectDb();
  try {
   await client.query("BEGIN");
   await client.query("SET LOCAL lock_timeout = '5s'");
@@ -32,7 +32,7 @@ export async function saveMasterConfiguration(input:{referenceClassId:string;ses
 }
 
 export async function loadMasterConfigurations(session:string) {
- const client=await pool.connect();
+ const client=await connectSubjectDb();
  try {
   const result=await client.query(`SELECT c.id AS configuration_id,c.class_key,c.session,v.id AS version_id,v.version,v.reference_class_id,v.actor_id,v.created_at,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i.subject_id,'name',i.subject_name) ORDER BY i.subject_name,i.subject_id) FROM master_subject_configuration_items i WHERE i.version_id=v.id),'[]'::jsonb) AS subjects
