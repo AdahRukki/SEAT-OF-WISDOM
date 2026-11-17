@@ -1,6 +1,6 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 export async function listSubjectMergeHistory(){
- const client=await pool.connect();
+ const client=await connectSubjectDb();
  try{
   if(!(await client.query("SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AS present")).rows[0].present)return [];
   return (await client.query(`SELECT operation_id,actor_id,source_id,target_id,created_at,
