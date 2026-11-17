@@ -48,11 +48,13 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
       FROM pg_constraint WHERE confrelid='subjects'::regclass AND contype='f'
     `);
     const full=await client.query("SELECT to_jsonb(a) AS row FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)",params);
-    const revision=assessmentRevision(full.rows.map(r=>r.row));
+    const fullRows=full.rows.map(r=>r.row);
+    const revision=assessmentRevision(fullRows);
+    const reviewedOverlaps=overlaps.rows.map(o=>({...o,revision:assessmentRevision(fullRows.filter(a=>a.student_id===o.student_id&&a.class_id===o.class_id&&a.session===o.session&&a.term===o.term))}));
     await client.query("COMMIT");
     return {
       sourceId,targetId,revision,subjects:subjects.rows,counts:counts.rows,
-      overlaps:overlaps.rows,assignments:assignments.rows,dependencies:dependencies.rows,
+      overlaps:reviewedOverlaps,assignments:assignments.rows,dependencies:dependencies.rows,
       requiresAssessmentReview:overlaps.rows.length>0,
       requiresAssignmentReview:assignments.rows.some(row => row.assignments.length>1),
       executionEnabled:false,
