@@ -25,7 +25,7 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
     if(new Set(selected.rows.map(s=>s.name.trim().replace(/\s+/g," ").toUpperCase())).size!==1)throw new Error("Only exact-name duplicates may be merged");
     const ready=await client.query("SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AND to_regclass('active_subjects') IS NOT NULL AS ready");
     if(!ready.rows[0].ready)throw new Error("Archive migration required");
-    const history=await client.query(`SELECT 1 FROM class_subjects cs WHERE cs.subject_id IN ($1::uuid,$2::uuid) AND (EXISTS(SELECT 1 FROM assessments a WHERE a.class_id=cs.class_id) OR EXISTS(SELECT 1 FROM published_scores p WHERE p.class_id=cs.class_id) OR EXISTS(SELECT 1 FROM generated_report_cards r WHERE r.class_id=cs.class_id)) LIMIT 1`,p);
+    const history=await client.query(`WITH affected AS (SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid) UNION SELECT class_id FROM assessments WHERE subject_id IN ($1::uuid,$2::uuid)) SELECT 1 FROM affected c WHERE EXISTS(SELECT 1 FROM published_scores p WHERE p.class_id=c.class_id) OR EXISTS(SELECT 1 FROM generated_report_cards r WHERE r.class_id=c.class_id) LIMIT 1`,p);
     if(history.rows.length)throw new Error("Class result history requires review");
     const deps = await client.query(`
       SELECT conrelid::regclass::text AS table_name, pg_get_constraintdef(oid) AS definition
@@ -40,7 +40,7 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
       "SELECT to_jsonb(a) AS row FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)",p);
     const rows = original.rows.map(r=>r.row);
     if (!expectedRevision || expectedRevision !== assessmentRevision(rows)) throw new Error("Missing or stale assessment preview");
-    if(rows.length)throw new Error("Assessment-bearing merges remain disabled pending historical rendering protection");
+    if(rows.length && process.env.ENABLE_UNPUBLISHED_SCORE_MERGES!=="true")throw new Error("Unpublished score merges disabled pending verification");
     const decisions = validateAssessmentChoices(rows,choices);
     // Do not remove active assessment records until all inbound references and
     // published report preservation have been verified.
