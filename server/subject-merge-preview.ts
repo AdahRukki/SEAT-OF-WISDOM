@@ -51,16 +51,26 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
     const fullRows=full.rows.map(r=>r.row);
     const revision=assessmentRevision(fullRows);
     const reviewedOverlaps=overlaps.rows.map(o=>({...o,revision:assessmentRevision(fullRows.filter(a=>a.student_id===o.student_id&&a.class_id===o.class_id&&a.session===o.session&&a.term===o.term))}));
+    const blockers:string[]=[];
+    const ready=(await client.query("SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AND to_regclass('active_subjects') IS NOT NULL AS ready")).rows[0].ready;
+    if(!ready)blockers.push("Database migration has not been installed.");
+    if(process.env.ENABLE_SUBJECT_MERGE_WRITES!=="true")blockers.push("Merge execution is disabled on this server.");
+    if(new Set(subjects.rows.map(s=>s.name.trim().replace(/\s+/g," ").toUpperCase())).size!==1)blockers.push("Only duplicate subject names can be merged.");
+    const history=await client.query(`WITH affected AS (SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid) UNION SELECT class_id FROM assessments WHERE subject_id IN ($1::uuid,$2::uuid)) SELECT 1 FROM affected c WHERE EXISTS(SELECT 1 FROM published_scores p WHERE p.class_id=c.class_id) OR EXISTS(SELECT 1 FROM generated_report_cards r WHERE r.class_id=c.class_id) LIMIT 1`,params);
+    if(history.rows.length)blockers.push("Affected classes have published or generated results; historical preservation is not yet supported.");
+    if(fullRows.length && process.env.ENABLE_UNPUBLISHED_SCORE_MERGES!=="true")blockers.push("Score transfers are disabled.");
+    if(overlaps.rows.length)blockers.push("Overlapping assessment records require supported conflict resolution.");
+    if(assignments.rows.some(a=>a.assignments.length>1))blockers.push("Overlapping class assignments require consolidation and recovery support.");
     await client.query("COMMIT");
     return {
       sourceId,targetId,revision,subjects:subjects.rows,counts:counts.rows,
       overlaps:reviewedOverlaps,assignments:assignments.rows,dependencies:dependencies.rows,
       requiresAssessmentReview:overlaps.rows.length>0,
       requiresAssignmentReview:assignments.rows.some(row => row.assignments.length>1),
-      executionEnabled:false,
+      executionEnabled:blockers.length===0,blockers,
       warnings:["Historical zero marks cannot be inferred as missing.",
         "Published report impact and live dependencies must be verified before execution.",
-        "Preview is informational; a future executor must revalidate under locks."]
+        "The executor revalidates the preview under database locks."]
     };
   } catch (error) {
     await client.query("ROLLBACK");
