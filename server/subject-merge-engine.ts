@@ -18,22 +18,29 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL lock_timeout = '5s'");
-    await client.query("LOCK TABLE subjects, class_subjects, assessments IN SHARE ROW EXCLUSIVE MODE");
+    await client.query("LOCK TABLE subjects, class_subjects, assessments, published_scores, generated_report_cards IN SHARE ROW EXCLUSIVE MODE");
     const p = [sourceId, targetId];
     const selected = await client.query("SELECT * FROM subjects WHERE id IN ($1::uuid,$2::uuid)", p);
     if (selected.rows.length !== 2) throw new Error("Subject not found or already merged");
+    if(new Set(selected.rows.map(s=>s.name.trim().replace(/\s+/g," ").toUpperCase())).size!==1)throw new Error("Only exact-name duplicates may be merged");
+    const ready=await client.query("SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AND to_regclass('active_subjects') IS NOT NULL AS ready");
+    if(!ready.rows[0].ready)throw new Error("Archive migration required");
+    const history=await client.query(`SELECT 1 FROM class_subjects cs WHERE cs.subject_id IN ($1::uuid,$2::uuid) AND (EXISTS(SELECT 1 FROM assessments a WHERE a.class_id=cs.class_id) OR EXISTS(SELECT 1 FROM published_scores p WHERE p.class_id=cs.class_id) OR EXISTS(SELECT 1 FROM generated_report_cards r WHERE r.class_id=cs.class_id)) LIMIT 1`,p);
+    if(history.rows.length)throw new Error("Class result history requires review");
     const deps = await client.query(`
       SELECT conrelid::regclass::text AS table_name, pg_get_constraintdef(oid) AS definition
       FROM pg_constraint WHERE confrelid='subjects'::regclass AND contype='f'
     `);
-    if (deps.rows.some(row => !["class_subjects","assessments"].includes(row.table_name)
+    if (deps.rows.some(row => !["class_subjects","assessments","master_subject_configuration_items"].includes(row.table_name)
       || !/^FOREIGN KEY \\(subject_id\\) REFERENCES subjects\\(id\\)/.test(row.definition))) {
       throw new Error("Unverified subject dependency; merge blocked");
     }
+    if((await client.query("SELECT to_regclass('master_subject_configuration_items') IS NOT NULL AS present")).rows[0].present && (await client.query("SELECT 1 FROM master_subject_configuration_items WHERE subject_id=$1 LIMIT 1",[sourceId])).rows.length)throw new Error("Source is referenced by a saved configuration");
     const original = await client.query(
       "SELECT to_jsonb(a) AS row FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)",p);
     const rows = original.rows.map(r=>r.row);
     if (!expectedRevision || expectedRevision !== assessmentRevision(rows)) throw new Error("Missing or stale assessment preview");
+    if(rows.length)throw new Error("Assessment-bearing merges remain disabled pending historical rendering protection");
     const decisions = validateAssessmentChoices(rows,choices);
     // Do not remove active assessment records until all inbound references and
     // published report preservation have been verified.
