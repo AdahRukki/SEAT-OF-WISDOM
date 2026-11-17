@@ -1,62 +1,6 @@
 import { pool } from "./db";
-import { createHash } from "crypto";
-
-export interface AssessmentChoice {
-  student_id: string;
-  class_id: string;
-  session: string;
-  term: string;
-  revision: string;
-  retainId: string;
-}
-
-type Assessment = { id: string; student_id: string; class_id: string; session: string; term: string; subject_id: string; [key: string]: unknown };
-const key = (r: Assessment) => JSON.stringify([r.student_id,r.class_id,r.session,r.term]);
-const stable = (v: unknown): string => {
-  if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
-  if (v && typeof v === "object") {
-    const o = v as Record<string,unknown>;
-    return "{" + Object.keys(o).sort().map(k => JSON.stringify(k)+":"+stable(o[k])).join(",") + "}";
-  }
-  return JSON.stringify(v) ?? "null";
-};
-export function assessmentRevision(rows: Assessment[]) {
-  return createHash("sha256").update(stable([...rows].sort((a,b)=>a.id.localeCompare(b.id)))).digest("hex");
-}
-
-/** Pure validation, called again on locked rows by a future executor.
- * Whole-record selection avoids interpreting zero as missing.
- * Every rejected row must be retained in the durable merge snapshot.
- */
-export function validateAssessmentChoices(rows: Assessment[], choices: AssessmentChoice[]) {
-  const groups = new Map<string,Assessment[]>();
-  for (const row of rows) {
-    const k = key(row);
-    groups.set(k,[...(groups.get(k) ?? []),row]);
-  }
-  const selections = new Map<string,AssessmentChoice>();
-  for (const choice of choices) {
-    const k = JSON.stringify([choice.student_id,choice.class_id,choice.session,choice.term]);
-    if (selections.has(k)) throw new Error("Duplicate conflict decision");
-    selections.set(k,choice);
-  }
-  const retain: string[] = [], archive: string[] = [];
-  for (const [k,group] of groups) {
-    if (group.length===1) {
-      retain.push(group[0].id);
-      continue;
-    }
-    const choice = selections.get(k);
-    if (!choice || choice.revision!==assessmentRevision(group)) throw new Error("Missing or stale conflict decision");
-    if (!group.some(r=>r.id===choice.retainId)) throw new Error("Selected assessment is not in conflict group");
-    retain.push(choice.retainId);
-    archive.push(...group.filter(r=>r.id!==choice.retainId).map(r=>r.id));
-    selections.delete(k);
-  }
-  if (selections.size) throw new Error("Unexpected conflict decision");
-  return {retain,archive};
-}
-
+import { stable } from "./subject-merge-decisions";
+export { assessmentRevision, validateAssessmentChoices, type AssessmentChoice } from "./subject-merge-decisions";
 /** Read-only recovery gate for the existing no-overlap merge engine.
  * Even an eligible result is not authorization to restore: a future recovery
  * transaction must repeat all checks under locks and review report dependencies.
