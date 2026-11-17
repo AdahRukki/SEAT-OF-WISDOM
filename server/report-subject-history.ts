@@ -1,7 +1,7 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 type ReportSubject = {id:string;name:string};
 export async function loadReportPeriodSubjects(classId:string,session:string,term:string):Promise<ReportSubject[]|null> {
- const client=await pool.connect();
+ const client=await connectSubjectDb();
  try {
   const available=await client.query("SELECT to_regclass('class_subject_period_snapshots') IS NOT NULL AS present");
   if(!available.rows[0].present)return null;
