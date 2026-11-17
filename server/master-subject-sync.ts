@@ -10,7 +10,7 @@ export async function synchroniseMasterSubjects(input:{versionId:string;actorId:
   await client.query(input.apply?"BEGIN":"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   await client.query("SET LOCAL lock_timeout = '5s'");
   if(input.apply){
-   await client.query("LOCK TABLE subjects, classes, class_subjects, assessments IN SHARE ROW EXCLUSIVE MODE");
+   await client.query("LOCK TABLE subjects, classes, class_subjects, assessments, schools, academic_sessions, academic_terms, published_scores, generated_report_cards, class_subject_period_snapshots IN SHARE ROW EXCLUSIVE MODE");
    await client.query("LOCK TABLE master_subject_configurations, master_subject_configuration_versions, master_subject_configuration_items, master_subject_sync_operations IN SHARE ROW EXCLUSIVE MODE");
    const previous=(await client.query("SELECT * FROM master_subject_sync_operations WHERE request_key=$1",[input.requestKey])).rows[0];
    if(previous){
@@ -34,14 +34,21 @@ export async function synchroniseMasterSubjects(input:{versionId:string;actorId:
    const conflicts=missing.filter(s=>rows.some(r=>norm(r.name)===norm(s.name)||(r.custom_name&&norm(r.custom_name)===norm(s.name))));
    return {classId:c.id,school:c.school,add:missing.filter(s=>!conflicts.some(x=>x.id===s.id)),conflicts};
   });
-  const revision=createHash("sha256").update(JSON.stringify({version,subjects,classes,existing,unmatched})).digest("hex");
-  const blocked=unmatched.length>0||changes.some(c=>c.conflicts.length>0);
-  const result={versionId:input.versionId,session:version.session,revision,changes,unmatched,blocked,applied:input.apply};
+  const active=(await client.query("SELECT s.session_year,t.term_name FROM academic_sessions s JOIN academic_terms t ON t.session_id=s.id WHERE s.is_active=true AND t.is_active=true ORDER BY s.id,t.id")).rows;
+  const affected=changes.filter(c=>c.add.length>0).map(c=>c.classId);
+  const protectedPeriods=(await client.query(`SELECT class_id,session,term FROM assessments WHERE class_id=ANY($1::varchar[]) UNION SELECT class_id,session,term FROM published_scores WHERE class_id=ANY($1::varchar[]) UNION SELECT class_id,session,term FROM generated_report_cards WHERE class_id=ANY($1::varchar[]) ORDER BY class_id,session,term`,[affected])).rows;
+  // Until every report rendering path is verified, only classes without result history are eligible.
+  const historyBlocked=protectedPeriods.length>0;
+  const sessionBlocked=active.length!==1||active[0].session_year!==version.session;
+  const revision=createHash("sha256").update(JSON.stringify({version,subjects,classes,existing,unmatched,active,protectedPeriods})).digest("hex");
+  const blocked=historyBlocked||sessionBlocked||unmatched.length>0||changes.some(c=>c.conflicts.length>0);
+  const result={versionId:input.versionId,session:version.session,revision,changes,unmatched,blocked,historyBlocked,sessionBlocked,protectedPeriods,active,applied:input.apply};
   if(input.apply){
    if(blocked||revision!==input.expectedRevision)throw new Error("Sync blocked or preview changed; review again");
-   // Assignments are not session-scoped in the current schema. Do not enable
-   // execution until the active academic session and historical report impact are verified.
-   throw new Error("Synchronisation execution disabled pending session-safety verification");
+   for(const change of changes)for(const subject of change.add){
+    await client.query("INSERT INTO class_subjects(class_id,subject_id) VALUES($1,$2)",[change.classId,subject.id]);
+   }
+   await client.query("INSERT INTO master_subject_sync_operations(version_id,actor_id,request_key,preview_revision,result) VALUES($1,$2,$3,$4,$5::jsonb)",[input.versionId,input.actorId,input.requestKey,revision,JSON.stringify(result)]);
   }
   await client.query("COMMIT");return result;
  }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
