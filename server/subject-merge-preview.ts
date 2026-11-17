@@ -1,3 +1,4 @@
+import { assessmentRevision } from "./subject-merge-resolution";
 import { pool } from "./db";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -46,9 +47,11 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
       SELECT conrelid::regclass::text AS linked_table,pg_get_constraintdef(oid) AS definition
       FROM pg_constraint WHERE confrelid='subjects'::regclass AND contype='f'
     `);
+    const full=await client.query("SELECT to_jsonb(a) AS row FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)",params);
+    const revision=assessmentRevision(full.rows.map(r=>r.row));
     await client.query("COMMIT");
     return {
-      sourceId,targetId,subjects:subjects.rows,counts:counts.rows,
+      sourceId,targetId,revision,subjects:subjects.rows,counts:counts.rows,
       overlaps:overlaps.rows,assignments:assignments.rows,dependencies:dependencies.rows,
       requiresAssessmentReview:overlaps.rows.length>0,
       requiresAssignmentReview:assignments.rows.some(row => row.assignments.length>1),
