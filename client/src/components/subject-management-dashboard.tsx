@@ -10,10 +10,14 @@ const prefix="/api/admin/subject-management";
 async function request<T>(path:string,body?:unknown):Promise<T> {
   const token=localStorage.getItem("auth_token");
   if (!token) throw new Error("Sign in as main administrator");
-  const response=await fetch(prefix+path,{method:body?"POST":"GET",cache:"no-store",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),20000);
+  try {
+  const response=await fetch(prefix+path,{method:body?"POST":"GET",cache:"no-store",signal:controller.signal,headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   if (!response.ok) throw new Error("Request failed ("+response.status+"). Refresh or sign in again.");
   if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("Subject Management API returned a webpage instead of data. Check that the running backend includes /api/admin/subject-management/audit. HTTP "+response.status+(response.redirected?" (redirected)":"")+".");
-  return response.json();
+  return await response.json();
+  } catch(e) { if(controller.signal.aborted)throw new Error("Subject Management request timed out after 20 seconds. Retry or check server logs."); throw e; } finally { clearTimeout(timeout); }
 }
 export default function SubjectManagementDashboard() {
   const [audit,setAudit]=useState<Audit|null>(null);
