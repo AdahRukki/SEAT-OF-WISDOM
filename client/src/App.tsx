@@ -1,3 +1,4 @@
+import SubjectManagementDashboard from "@/components/subject-management-dashboard";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import AdminSidebar from "@/components/admin-sidebar";
@@ -112,6 +113,7 @@ function PortalRoutes() {
         <>
           <Route path="/">{user?.role === 'admin' ? <GeneralSchool /> : <AdminDashboard />}</Route>
           <Route path="/admin">{user?.role === 'admin' ? <GeneralSchool /> : <AdminDashboard />}</Route>
+          <Route path="/admin/subjects">{user?.role === "admin" ? <main className="p-4 sm:p-6"><SubjectManagementDashboard /></main> : <p role="alert">Main administrator access required.</p>}</Route>
           <Route path="/admin/general"><GeneralSchool /></Route>
           <Route path="/admin/schools" component={SchoolSelection} />
           <Route path="/admin/school/:schoolId" component={AdminSchool} />
