@@ -1,4 +1,4 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 import { stable } from "./subject-merge-decisions";
 export { assessmentRevision, validateAssessmentChoices, type AssessmentChoice } from "./subject-merge-decisions";
 /** Read-only recovery gate for the existing no-overlap merge engine.
@@ -7,7 +7,7 @@ export { assessmentRevision, validateAssessmentChoices, type AssessmentChoice } 
  */
 export async function checkSubjectMergeRecovery(operationId: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId)) throw new Error("Invalid operation ID");
-  const client = await pool.connect();
+  const client = await connectSubjectDb();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const result = await client.query(`
