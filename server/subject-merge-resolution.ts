@@ -31,8 +31,8 @@ export async function checkSubjectMergeRecovery(operationId: string) {
       stable([...current].sort((a,b)=>a.id.localeCompare(b.id)));
     const reasons: string[] = [];
     if (r.later_merges) reasons.push("A subsequent merge affects these subjects");
-    if (!unchanged(r.snapshot.assessments,r.current_assessments,true)) reasons.push("Assessments changed since merge");
-    if (!unchanged(r.snapshot.assignments,r.current_assignments,true)) reasons.push("Class assignments changed since merge");
+    if (!unchanged(r.snapshot.assessments.filter((v:any)=>!(r.snapshot.archivedAssessmentIds??[]).includes(v.id)),r.current_assessments,true)) reasons.push("Assessments changed since merge");
+    if (!unchanged(r.snapshot.assignments.filter((v:any)=>!(r.snapshot.consolidatedAssignmentIds??[]).includes(v.id)),r.current_assignments,true)) reasons.push("Class assignments changed since merge");
     if (!unchanged(r.snapshot.subjects,r.current_subjects,false)) reasons.push("Subject records changed since merge");
     await client.query("COMMIT");
     return {operationId,eligibleForReview:reasons.length===0,reasons,executionEnabled:false};
