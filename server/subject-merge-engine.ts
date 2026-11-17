@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { randomUUID } from "crypto";
+import { validateAssessmentChoices, assessmentRevision, type AssessmentChoice } from "./subject-merge-resolution";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -8,7 +9,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * preservation, preview revision checks and integration tests are implemented.
  * Refuses all overlapping assessments and custom-name conflicts.
  */
-export async function executeSubjectMerge(sourceId: string, targetId: string, actorId: string) {
+export async function executeSubjectMerge(sourceId: string, targetId: string, actorId: string, choices: AssessmentChoice[] = [], expectedRevision?: string) {
   if (!uuid.test(sourceId) || !uuid.test(targetId) || sourceId.toLowerCase() === targetId.toLowerCase() || !actorId.trim()) {
     throw new Error("Invalid merge request");
   }
@@ -29,11 +30,14 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
       || !/^FOREIGN KEY \\(subject_id\\) REFERENCES subjects\\(id\\)/.test(row.definition))) {
       throw new Error("Unverified subject dependency; merge blocked");
     }
-    const overlaps = await client.query(`
-      SELECT 1 FROM assessments WHERE subject_id IN ($1::uuid,$2::uuid)
-      GROUP BY student_id,class_id,session,term HAVING count(*)>1 LIMIT 1
-    `, p);
-    if (overlaps.rows.length) throw new Error("Overlapping assessments require explicit resolution");
+    const original = await client.query(
+      "SELECT to_jsonb(a) AS row FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)",p);
+    const rows = original.rows.map(r=>r.row);
+    if (!expectedRevision || expectedRevision !== assessmentRevision(rows)) throw new Error("Missing or stale assessment preview");
+    const decisions = validateAssessmentChoices(rows,choices);
+    // Do not remove active assessment records until all inbound references and
+    // published report preservation have been verified.
+    if (decisions.archive.length) throw new Error("Conflict decisions validated; archival execution not yet enabled");
     const assignments = await client.query(`
       SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid)
       GROUP BY class_id HAVING count(*)>1 LIMIT 1
@@ -61,13 +65,13 @@ export async function executeSubjectMerge(sourceId: string, targetId: string, ac
     const verification = await client.query(`
       WITH original AS (
         SELECT jsonb_array_elements(snapshot->'assessments') AS row
-        FROM subject_merge_snapshots WHERE operation_id=$3::uuid
+        FROM subject_merge_snapshots WHERE operation_id=$1::uuid
       )
       SELECT count(*)::int AS mismatches FROM original o
       LEFT JOIN assessments a ON a.id=(o.row->>'id')::uuid
       WHERE a.id IS NULL OR a.subject_id<>$2::uuid
         OR (to_jsonb(a)-'subject_id') IS DISTINCT FROM (o.row-'subject_id')
-    `, [sourceId,targetId,operationId]);
+    `, [operationId,targetId]);
     if (Number(verification.rows[0].mismatches)!==0) throw new Error("Assessment verification failed");
     const remaining = await client.query(`
       SELECT (SELECT count(*) FROM assessments WHERE subject_id=$1::uuid)
