@@ -12,6 +12,7 @@ async function request<T>(path:string,body?:unknown):Promise<T> {
   if (!token) throw new Error("Sign in as main administrator");
   const response=await fetch(prefix+path,{method:body?"POST":"GET",cache:"no-store",headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   if (!response.ok) throw new Error("Request failed ("+response.status+"). Refresh or sign in again.");
+  if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("Subject Management API returned a webpage instead of data. Check that the running backend includes /api/admin/subject-management/audit. HTTP "+response.status+(response.redirected?" (redirected)":"")+".");
   return response.json();
 }
 export default function SubjectManagementDashboard() {
