@@ -1,6 +1,7 @@
 import { saveMasterConfiguration, loadMasterConfigurations } from "./master-subject-storage";
 import { synchroniseMasterSubjects } from "./master-subject-sync";
 import { previewMasterClassConfiguration } from "./master-subject-configuration";
+import { listSubjectMergeHistory } from "./subject-merge-history";
 import type { Express, RequestHandler } from "express";
 import { auditSubjectManagement } from "./subject-management-audit";
 import { previewSubjectMerge } from "./subject-merge-preview";
@@ -90,6 +91,11 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
     if(process.env.ENABLE_MASTER_SUBJECT_WRITES!=="true")return res.status(503).json({error:"Synchronisation writes are disabled pending verification"});
     try{res.json(await synchroniseMasterSubjects({...p.data,actorId,apply:true}));}
     catch(e){console.error("Master sync failed",e);res.status(409).json({error:"Synchronisation failed or blocked; refresh preview before retrying"});}
+  });
+  app.get(prefix+"/merge-history",authenticate,requireMainAdmin,async(_req,res)=>{
+    res.setHeader("Cache-Control","no-store");
+    try{res.json(await listSubjectMergeHistory());}
+    catch(e){console.error("Merge history failed",e);res.status(500).json({error:"Unable to load merge history"});}
   });
   // Merge and recovery execution remain disabled pending verification.
 }
