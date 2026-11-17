@@ -1,8 +1,8 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 
 /** Read-only audit. No mutation or automatic score reconciliation. */
 export async function auditSubjectManagement() {
-  const client = await pool.connect();
+  const client = await connectSubjectDb();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const archived=(await client.query("SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AS present")).rows[0].present;
