@@ -1,4 +1,4 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const normalize = (name:string) => name.trim().replace(/\s+/g," ").toUpperCase();
@@ -8,7 +8,7 @@ export async function previewMasterClassConfiguration(referenceSchoolId:string, 
   if (!referenceSchoolId.trim() || !referenceClassId.trim() || !selectedSubjectIds.length ||
       selectedSubjectIds.some(id=>!uuid.test(id))) throw new Error("Invalid class configuration");
   const ids=Array.from(new Set(selectedSubjectIds.map(id=>id.toLowerCase())));
-  const client=await pool.connect();
+  const client=await connectSubjectDb();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const classes=await client.query(`SELECT c.id,c.name,c.school_id,sc.name AS school
