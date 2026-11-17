@@ -1,6 +1,6 @@
-import { pool } from "./db";
+import { connectSubjectDb } from "./subject-db-client";
 export async function inspectSubjectHistory(classIds:string[]) {
- const client=await pool.connect();
+ const client=await connectSubjectDb();
  try {
   await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   const periods=(await client.query(`SELECT class_id,session,term FROM assessments WHERE class_id=ANY($1::varchar[])
@@ -16,7 +16,7 @@ export async function inspectSubjectHistory(classIds:string[]) {
 }
 export async function captureVerifiedSubjectHistory(input:{classId:string;session:string;term:string;actorId:string;subjects:{id:string;name:string}[];confirmed:boolean}) {
  if(!input.confirmed||!input.actorId||!input.classId||!input.session||!input.term||!input.subjects.length||input.subjects.some(s=>!s.id||!s.name.trim())||new Set(input.subjects.map(s=>s.id)).size!==input.subjects.length)throw new Error("Verified historical subject list required");
- const client=await pool.connect();
+ const client=await connectSubjectDb();
  try{
   await client.query("BEGIN");
   await client.query("SET LOCAL lock_timeout = '5s'");
