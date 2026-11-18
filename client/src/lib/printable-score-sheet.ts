@@ -60,6 +60,78 @@ function page(input: ScoreSheetInput, students: ScoreSheetStudent[], start: numb
   });
   return out;
 }
+
+ // Conservative character-width bound for Helvetica, including bold.
+ const wrap = (s: string, width: number, size: number): string[] => {
+   const limit = Math.max(1, Math.floor(width / size));
+   const result: string[] = [];
+   let rest = s.trim();
+   while (rest.length > limit) {
+     const space = rest.lastIndexOf(" ", limit);
+     const cut = space > 0 ? space : limit;
+     result.push(rest.slice(0, cut));
+     rest = rest.slice(cut).trimStart();
+   }
+   if (rest || !result.length) result.push(rest);
+   return result;
+ };
+ const P_LEFT = 24, P_RIGHT = PAGE_W - 24, P_TOP = 530;
+ const P_SERIAL = 30, P_NAME = 236, P_ID = 110;
+ const P_BASE = P_LEFT + P_SERIAL + P_NAME + P_ID;
+ const P_BOTTOM = 24, P_HEAD2 = 24;
+ const primaryRowHeight = (s: ScoreSheetStudent) => Math.max(24, 8 + 13 * Math.max(wrap(s.name, P_NAME - 10, 11).length, wrap(s.studentId, P_ID - 10, 11).length));
+ const primaryHeaderHeight = (subjects: string[]) => Math.max(36, 10 + 13 * Math.max(...subjects.map(s => wrap(s, (P_RIGHT - P_BASE) / subjects.length - 10, 11).length)));
+ function primaryPage(input: ScoreSheetInput, students: ScoreSheetStudent[], start: number, subjects: string[], index: number, total: number): string {
+   const head1 = primaryHeaderHeight(subjects), split = P_TOP - head1, body = split - P_HEAD2;
+   const sw = (P_RIGHT - P_BASE) / (subjects.length * 3);
+   const bottom = body - students.reduce((n,s) => n + primaryRowHeight(s), 0);
+   let out = "0 G 0.65 w\n";
+   out += cmdText("SEAT OF WISDOM ACADEMY", P_LEFT, 565, 16, true);
+   out += cmdText(`School: ${input.school}    Class: ${input.className}    Session: ${input.session}    Term: ${input.term || ""}`, P_LEFT, 545, 11);
+   out += cmdText(`Page ${index} of ${total}`, P_RIGHT - 85, 565, 10);
+   for (const x of [P_LEFT, P_LEFT+P_SERIAL, P_LEFT+P_SERIAL+P_NAME, P_BASE]) out += line(x,P_TOP,x,bottom);
+   for(let j=1;j<=subjects.length*3;j++){
+     const x=P_BASE+j*sw;
+     out += line(x,j%3===0?P_TOP:split,x,bottom);
+   }
+   out += line(P_LEFT,P_TOP,P_RIGHT,P_TOP);
+   out += line(P_BASE,split,P_RIGHT,split);
+   out += line(P_LEFT,body,P_RIGHT,body);
+   out += cmdText("S/N",P_LEFT+4,body+10,10,true);
+   out += cmdText("Student Name",P_LEFT+P_SERIAL+5,body+10,11,true);
+   out += cmdText("SOWA ID",P_LEFT+P_SERIAL+P_NAME+5,body+10,11,true);
+   subjects.forEach((subject,g)=>{
+     const x=P_BASE+g*3*sw;
+     wrap(subject,3*sw-10,11).forEach((t,i)=>{out+=cmdText(t,x+5,P_TOP-15-i*13,11,true);});
+     ["1st CA","2nd CA","Exam"].forEach((t,j)=>{out+=cmdText(t,x+j*sw+4,split-16,10,true);});
+   });
+   let y=body;
+   students.forEach((s,i)=>{
+     out+=cmdText(String(start+i+1),P_LEFT+4,y-16,11);
+     wrap(s.name,P_NAME-10,11).forEach((t,j)=>{out+=cmdText(t,P_LEFT+P_SERIAL+5,y-16-j*13,11);});
+     wrap(s.studentId,P_ID-10,11).forEach((t,j)=>{out+=cmdText(t,P_LEFT+P_SERIAL+P_NAME+5,y-16-j*13,11);});
+     y-=primaryRowHeight(s);
+     out+=line(P_LEFT,y,P_RIGHT,y);
+   });
+   return out;
+ }
+ function primaryStreams(input: ScoreSheetInput): string[] {
+   const pages: {students: ScoreSheetStudent[]; start:number; subjects:string[]}[]=[];
+   for(let g=0;g<input.subjects.length;g+=3){
+     const subjects=input.subjects.slice(g,g+3);
+     const capacity=P_TOP-primaryHeaderHeight(subjects)-P_HEAD2-P_BOTTOM;
+     let rows: ScoreSheetStudent[]=[], used=0, start=0;
+     input.students.forEach((s,i)=>{
+       const h=primaryRowHeight(s);
+       if(h>capacity) throw new Error("Student name or subject heading exceeds printable page");
+       if(rows.length && used+h>capacity){pages.push({students:rows,start,subjects});rows=[];used=0;start=i;}
+       rows.push(s);used+=h;
+     });
+     if(rows.length) pages.push({students:rows,start,subjects});
+   }
+   return pages.map((p,i)=>primaryPage(input,p.students,p.start,p.subjects,i+1,pages.length));
+ }
+
 function serializePdf(streams: string[]): Blob {
   const objects: string[] = [];
   const add = (v: string) => { objects.push(v); return objects.length; };
@@ -92,11 +164,10 @@ function serializePdf(streams: string[]): Blob {
 export function createPrintableScoreSheet(input: ScoreSheetInput): Blob {
   if (!input.students.length) throw new Error("No students in the selected class");
   if (!input.subjects.length) throw new Error("No subjects selected");
+  if (input.level === "primary") return serializePdf(primaryStreams(input));
   const batches: ScoreSheetStudent[][] = [];
   for (let i = 0; i < input.students.length; i += MAX_ROWS) batches.push(input.students.slice(i, i + MAX_ROWS));
-  const groups = input.level === "primary"
-    ? Array.from({ length: Math.ceil(input.subjects.length / 3) }, (_, i) => input.subjects.slice(i * 3, i * 3 + 3))
-    : input.subjects.map(s => [s]);
+  const groups = input.subjects.map(s => [s]);
   const total = batches.length * groups.length;
   const streams: string[] = [];
   groups.forEach(group => batches.forEach((students, i) => {
