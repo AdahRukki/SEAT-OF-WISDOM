@@ -4,9 +4,11 @@ import { ADMIN_PAGES, ADMIN_GROUPS, mobileAdminPages, permittedAdminPages, selec
 import { TAB_PERMISSIONS } from '../../shared/permissions';
 
 test('all existing pages retain their permissions and logical groups', () => {
-  assert.deepEqual(ADMIN_PAGES.map(page => `tab_${page.id}`).sort(), TAB_PERMISSIONS.map(permission => permission.key).sort());
+  assert.deepEqual(ADMIN_PAGES.filter(page => page.id !== 'subjects').map(page => `tab_${page.id}`).sort(), TAB_PERMISSIONS.map(permission => permission.key).sort());
   assert.deepEqual([...ADMIN_GROUPS], ['Overview', 'Students', 'Academics', 'Finance', 'Administration']);
-  assert.equal(permittedAdminPages('admin', []).length, 10);
+  assert.equal(permittedAdminPages('admin', []).length, 11);
+  assert.equal(selectedAdminPage('?tab=subjects', 'admin', null), 'subjects');
+  assert.equal(selectedAdminPage('?tab=subjects', 'sub-admin', ['tab_subjects']), null);
   assert.deepEqual(permittedAdminPages('sub-admin', null).map(page => page.id), ['students', 'scores', 'grading', 'finance']);
   assert.deepEqual(permittedAdminPages('student', null), []);
 });
