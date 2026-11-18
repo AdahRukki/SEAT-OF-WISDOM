@@ -1,10 +1,7 @@
 import { connectSubjectDb } from "./subject-db-client";
 import { stable } from "./subject-merge-decisions";
 export { assessmentRevision, validateAssessmentChoices, type AssessmentChoice } from "./subject-merge-decisions";
-/** Read-only recovery gate for the existing no-overlap merge engine.
- * Even an eligible result is not authorization to restore: a future recovery
- * transaction must repeat all checks under locks and review report dependencies.
- */
+/** Check recovery eligibility without modifying the merge result. */
 export async function checkSubjectMergeRecovery(operationId: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId)) throw new Error("Invalid operation ID");
   const client = await connectSubjectDb();
@@ -35,7 +32,7 @@ export async function checkSubjectMergeRecovery(operationId: string) {
     if (!unchanged(r.snapshot.assignments.filter((v:any)=>!(r.snapshot.consolidatedAssignmentIds??[]).includes(v.id)),r.current_assignments,true)) reasons.push("Class assignments changed since merge");
     if (!unchanged(r.snapshot.subjects,r.current_subjects,false)) reasons.push("Subject records changed since merge");
     await client.query("COMMIT");
-    return {operationId,eligibleForReview:reasons.length===0,reasons,executionEnabled:false};
+    return {operationId,eligibleForReview:reasons.length===0,reasons,executionEnabled:reasons.length===0};
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

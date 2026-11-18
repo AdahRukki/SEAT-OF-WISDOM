@@ -1,4 +1,4 @@
-import { loadReportPeriodSubjects } from "./report-subject-history";
+import { loadReportPeriodSubjects, loadPreservedSubjectReport } from "./report-subject-history";
 import { formatStudentName } from "../shared/student-name";
 import { setHistoryContext, authorizeStudentMutation, lockHistorySchools, claimHistoryCommand, type HistoryContext, StudentHistoryError } from './student-history';
 import { summarizeTuition } from "../shared/tuition-summary";
@@ -2955,10 +2955,11 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(subjects, eq(classSubjects.subjectId, subjects.id))
       .where(eq(classSubjects.classId, classId));
 
-    const assignedSubjects = (await loadReportPeriodSubjects(classId, session, term)) ?? classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
+    const preservedReport = await loadPreservedSubjectReport(classId, session, term);
+    const assignedSubjects = preservedReport?.subjects ?? (await loadReportPeriodSubjects(classId, session, term)) ?? classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
 
     // Get all assessments for this student in this term/session
-    const studentAssessments = await db
+    const studentAssessments = preservedReport?.scores.filter(score => score.studentId === studentId) ?? await db
       .select()
       .from(assessments)
       .where(
@@ -3040,7 +3041,8 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(subjects, eq(classSubjects.subjectId, subjects.id))
       .where(eq(classSubjects.classId, classId));
 
-    const assignedSubjects = (await loadReportPeriodSubjects(classId, session, term)) ?? classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
+    const preservedReport = await loadPreservedSubjectReport(classId, session, term);
+    const assignedSubjects = preservedReport?.subjects ?? (await loadReportPeriodSubjects(classId, session, term)) ?? classSubjectsQuery.map(cs => cs.subject).filter(Boolean) as Subject[];
 
     // Task #198: if the one-time bulk promotion already ran for this class's session,
     // students have MOVED to their next classes (or graduated and been deactivated).
@@ -3095,7 +3097,7 @@ export class DatabaseStorage implements IStorage {
 
     const studentIds = classStudents.map(s => s.id);
 
-    const allAssessments = await db
+    const allAssessments = preservedReport?.scores ?? await db
       .select()
       .from(assessments)
       .where(

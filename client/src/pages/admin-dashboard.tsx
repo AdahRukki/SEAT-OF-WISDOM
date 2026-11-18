@@ -3760,14 +3760,23 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
       ? { total: studentAttendance.totalDays, present: studentAttendance.presentDays }
       : null;
 
-    // Only show subjects that have scores
-    const subjectsWithScores = subjects.filter(subject => {
-      const a = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+    let reportData: {subjects: typeof subjects; scores: typeof classAssessments};
+    try {
+      const params = new URLSearchParams({classId: student.classId, term, session});
+      reportData = await apiRequest(`/api/admin/report-subject-data?${params}`);
+    } catch {
+      reportWindow.close();
+      toast({ title: "Could not load report scores", variant: "destructive" });
+      return;
+    }
+
+    const subjectsWithScores = reportData.subjects.filter(subject => {
+      const a = reportData.scores.find(a => a.studentId === student.id && a.subjectId === subject.id);
       return ((a?.firstCA || 0) + (a?.secondCA || 0) + (a?.exam || 0)) > 0;
     });
 
     const subjectRows: ReportSubjectRow[] = subjectsWithScores.map(subject => {
-      const a = classAssessments.find(a => a.studentId === student.id && a.subjectId === subject.id);
+      const a = reportData.scores.find(a => a.studentId === student.id && a.subjectId === subject.id);
       const firstCA = Number(a?.firstCA || 0);
       const secondCA = Number(a?.secondCA || 0);
       const exam = Number(a?.exam || 0);

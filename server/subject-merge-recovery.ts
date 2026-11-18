@@ -1,13 +1,13 @@
-import { connectSubjectDb } from "./subject-db-client";
+import { connectSubjectDb, preserveSubjectReports, logSubjectActivity } from "./subject-db-client";
 
-/** Internal only. Requires staging tests, authorization and report-impact approval before exposure. */
+/** Restore the original records after verifying the live merge result under locks. */
 export async function recoverSubjectMerge(operationId: string, actorId: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId) || !actorId.trim()) throw new Error("Invalid recovery request");
   const client = await connectSubjectDb();
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL lock_timeout = '5s'");
-    await client.query("LOCK TABLE subjects, class_subjects, assessments, subject_merge_snapshots IN SHARE ROW EXCLUSIVE MODE");
+    await client.query("LOCK TABLE subjects, class_subjects, assessments, published_scores, generated_report_cards, academic_sessions, academic_terms, subject_merge_snapshots IN SHARE ROW EXCLUSIVE MODE");
     const found = await client.query("SELECT * FROM subject_merge_snapshots WHERE operation_id=$1::uuid",[operationId]);
     if (found.rows.length !== 1) throw new Error("Active merge not found");
     const m = found.rows[0];
@@ -30,9 +30,11 @@ export async function recoverSubjectMerge(operationId: string, actorId: string) 
       `,[m.source_id,m.target_id,JSON.stringify(m.snapshot[field].filter((v:any)=>!removed.includes(v.id)))]);
       if (check.rows[0].mismatch) throw new Error(table+" changed since merge; recovery blocked");
     }
-    await client.query(`CREATE TABLE IF NOT EXISTS subject_merge_recoveries (
-      operation_id uuid PRIMARY KEY, actor_id text NOT NULL,
-      recovered_at timestamptz NOT NULL DEFAULT now(), merge_record jsonb NOT NULL)`);
+    const affected = Array.from(new Set<string>([
+      ...m.snapshot.assessments.map((row: {class_id:string}) => row.class_id),
+      ...m.snapshot.assignments.map((row: {class_id:string}) => row.class_id),
+    ]));
+    await preserveSubjectReports(client, affected);
     await client.query(`INSERT INTO subject_merge_recoveries(operation_id,actor_id,merge_record)
       SELECT operation_id,$2,to_jsonb(m) FROM subject_merge_snapshots m WHERE operation_id=$1::uuid`,[operationId,actorId]);
     // Remove active archive marker only after retaining the entire merge record.
@@ -53,6 +55,7 @@ export async function recoverSubjectMerge(operationId: string, actorId: string) 
         [m.source_id,m.target_id,JSON.stringify(m.snapshot[field])]);
       if (verified.rows[0].mismatch) throw new Error("Recovery verification failed");
     }
+    await logSubjectActivity(client, actorId, "recover_subject_merge", operationId, {sourceId:m.source_id,targetId:m.target_id});
     await client.query("COMMIT");
     return {operationId,recovered:true};
   } catch (error) {

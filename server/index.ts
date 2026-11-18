@@ -1,3 +1,4 @@
+import { migrateSubjectManagement } from "./subject-migrations";
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
@@ -349,6 +350,14 @@ app.use('/api', (_req, res, next) => {
 
 (async () => {
   await runMigrations();
+  try {
+    await migrateSubjectManagement();
+  } catch (error) {
+    console.error("Subject management migration failed", error);
+    process.exitCode = 1;
+    await pool.end();
+    return;
+  }
 
   // Start the IMAP email bank-alert poller (no-op if env vars are absent).
   startEmailPoller();

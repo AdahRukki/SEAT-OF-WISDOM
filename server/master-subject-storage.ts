@@ -1,4 +1,4 @@
-import { connectSubjectDb } from "./subject-db-client";
+import { connectSubjectDb, logSubjectActivity } from "./subject-db-client";
 const normalize=(s:string)=>s.trim().replace(/\s+/g," ").toUpperCase();
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -26,6 +26,7 @@ export async function saveMasterConfiguration(input:{referenceClassId:string;ses
   if(current!==input.expectedVersion)throw new Error("Configuration changed; reload before saving");
   const version=(await client.query("INSERT INTO master_subject_configuration_versions(configuration_id,version,reference_class_id,actor_id) VALUES($1,$2,$3,$4) RETURNING *",[config.id,current+1,cls.id,input.actorId])).rows[0];
   for(const subject of subjects)await client.query("INSERT INTO master_subject_configuration_items(version_id,subject_id,subject_name) VALUES($1,$2,$3)",[version.id,subject.id,subject.name]);
+  await logSubjectActivity(client, input.actorId, "save_master_subjects", version.id, {session,classKey:key,version:current+1,subjects});
   await client.query("COMMIT");
   return {configurationId:config.id,versionId:version.id,version:current+1,classKey:key,session,subjects};
  }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
@@ -35,7 +36,7 @@ export async function loadMasterConfigurations(session:string) {
  const client=await connectSubjectDb();
  try {
   const result=await client.query(`SELECT c.id AS configuration_id,c.class_key,c.session,v.id AS version_id,v.version,v.reference_class_id,v.actor_id,v.created_at,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i.subject_id,'name',i.subject_name) ORDER BY i.subject_name,i.subject_id) FROM master_subject_configuration_items i WHERE i.version_id=v.id),'[]'::jsonb) AS subjects
+  COALESCE((SELECT jsonb_agg(DISTINCT jsonb_build_object('id',s.id,'name',s.name)) FROM master_subject_configuration_items i JOIN canonical_subject_ids m ON m.original_id=i.subject_id JOIN subjects s ON s.id=m.subject_id WHERE i.version_id=v.id),'[]'::jsonb) AS subjects
   FROM master_subject_configurations c JOIN LATERAL (SELECT * FROM master_subject_configuration_versions WHERE configuration_id=c.id ORDER BY version DESC LIMIT 1) v ON true
   WHERE c.session=$1 ORDER BY c.class_key`,[session.trim()]);
   return result.rows;

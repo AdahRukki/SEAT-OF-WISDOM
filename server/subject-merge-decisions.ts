@@ -18,8 +18,11 @@ export const stable = (v: unknown): string => {
   }
   return JSON.stringify(v) ?? "null";
 };
+export function mergeRevision(input: unknown) {
+  return createHash("sha256").update(stable(input)).digest("hex");
+}
 export function assessmentRevision(rows: Assessment[]) {
-  return createHash("sha256").update(stable([...rows].sort((a,b)=>a.id.localeCompare(b.id)))).digest("hex");
+  return mergeRevision([...rows].sort((a,b)=>a.id.localeCompare(b.id)));
 }
 
 /** Pure validation, called again on locked rows by a future executor.
@@ -39,7 +42,7 @@ export function validateAssessmentChoices(rows: Assessment[], choices: Assessmen
     selections.set(k,choice);
   }
   const retain: string[] = [], archive: string[] = [];
-  for (const [k,group] of groups) {
+  for (const [k,group] of Array.from(groups)) {
     if (group.length===1) {
       retain.push(group[0].id);
       continue;

@@ -1,9 +1,9 @@
-import { assessmentRevision } from "./subject-merge-resolution";
-import { connectSubjectDb } from "./subject-db-client";
+import { assessmentRevision, mergeRevision } from "./subject-merge-decisions";
+import { connectSubjectDb, readMergeInputs } from "./subject-db-client";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Read-only preview. All overlaps require explicit review; zero is never treated as missing. */
+/** Preview the records and separate conflicting marks from identical records. */
 export async function previewSubjectMerge(sourceId: string, targetId: string) {
   if (!uuid.test(sourceId) || !uuid.test(targetId) || sourceId.toLowerCase() === targetId.toLowerCase()) {
     throw new Error("Select two different valid subject IDs");
@@ -11,11 +11,10 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
   const client = await connectSubjectDb();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-    const params = [sourceId, targetId];
-    const subjects = await client.query(`
-      SELECT id,name FROM subjects WHERE id IN ($1::uuid,$2::uuid)
-    `, params);
-    if (subjects.rows.length !== 2) throw new Error("Subject not found");
+    const params: [string, string] = [sourceId.toLowerCase(), targetId.toLowerCase()];
+    const original = await readMergeInputs(client, params);
+    const subjects = original.subjects.map(({id,name}) => ({id,name}));
+    if (subjects.length !== 2) throw new Error("Subject not found or already merged");
     const counts = await client.query(`
       SELECT a.subject_id, a.session, a.term, c.school_id,
         count(*)::int AS assessment_count, count(DISTINCT a.student_id)::int AS student_count
@@ -25,14 +24,16 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
       ORDER BY a.session,a.term,c.school_id,a.subject_id
     `, params);
     const overlaps = await client.query(`
-      SELECT student_id,class_id,session,term,
+      SELECT a.student_id,a.class_id,a.session,a.term,s.student_id AS student_number,
+        concat_ws(' ', u.first_name,u.middle_name,u.last_name) AS student_name,
         count(*)::int AS record_count,
         count(DISTINCT jsonb_build_array(first_ca,second_ca,exam))::int AS distinct_score_sets,
-        jsonb_agg(jsonb_build_object('id',id,'subjectId',subject_id,
-          'firstCA',first_ca,'secondCA',second_ca,'exam',exam) ORDER BY id) AS records
-      FROM assessments WHERE subject_id IN ($1::uuid,$2::uuid)
-      GROUP BY student_id,class_id,session,term HAVING count(*)>1
-      ORDER BY session,term,class_id,student_id
+        jsonb_agg(jsonb_build_object('id',a.id,'subjectId',a.subject_id,
+          'firstCA',first_ca,'secondCA',second_ca,'exam',exam) ORDER BY a.id) AS records
+      FROM assessments a JOIN students s ON s.id=a.student_id JOIN users u ON u.id=s.user_id
+      WHERE a.subject_id IN ($1::uuid,$2::uuid)
+      GROUP BY a.student_id,a.class_id,a.session,a.term,s.student_id,u.first_name,u.middle_name,u.last_name HAVING count(*)>1
+      ORDER BY a.session,a.term,a.class_id,a.student_id
     `, params);
     const assignments = await client.query(`
       SELECT cs.class_id,c.name AS class_name,sc.name AS school,
@@ -47,29 +48,21 @@ export async function previewSubjectMerge(sourceId: string, targetId: string) {
       SELECT conrelid::regclass::text AS linked_table,pg_get_constraintdef(oid) AS definition
       FROM pg_constraint WHERE confrelid='subjects'::regclass AND contype='f'
     `);
-    const full=await client.query("SELECT to_jsonb(a) AS row FROM assessments a WHERE subject_id IN ($1::uuid,$2::uuid)",params);
-    const fullRows=full.rows.map(r=>r.row);
-    const revision=assessmentRevision(fullRows);
-    const reviewedOverlaps=overlaps.rows.map(o=>({...o,revision:assessmentRevision(fullRows.filter(a=>a.student_id===o.student_id&&a.class_id===o.class_id&&a.session===o.session&&a.term===o.term))}));
+    const fullRows = original.assessments;
+    const revision = mergeRevision(original);
+    const reviewedOverlaps=overlaps.rows.map(o=>({...o,distinct_score_sets:o.distinct_score_sets,revision:assessmentRevision(fullRows.filter(a=>a.student_id===o.student_id&&a.class_id===o.class_id&&a.session===o.session&&a.term===o.term))}));
     const blockers:string[]=[];
-    const ready=(await client.query("SELECT to_regclass('subject_merge_snapshots') IS NOT NULL AND to_regclass('active_subjects') IS NOT NULL AS ready")).rows[0].ready;
-    if(!ready)blockers.push("Database migration has not been installed.");
-    if(process.env.ENABLE_SUBJECT_MERGE_WRITES!=="true")blockers.push("Merge execution is disabled on this server.");
-    if(new Set(subjects.rows.map(s=>s.name.trim().replace(/\s+/g," ").toUpperCase())).size!==1)blockers.push("Only duplicate subject names can be merged.");
-    const history=await client.query(`WITH affected AS (SELECT class_id FROM class_subjects WHERE subject_id IN ($1::uuid,$2::uuid) UNION SELECT class_id FROM assessments WHERE subject_id IN ($1::uuid,$2::uuid)) SELECT 1 FROM affected c WHERE EXISTS(SELECT 1 FROM published_scores p WHERE p.class_id=c.class_id) OR EXISTS(SELECT 1 FROM generated_report_cards r WHERE r.class_id=c.class_id) LIMIT 1`,params);
-    if(history.rows.length)blockers.push("Affected classes have published or generated results; historical preservation is not yet supported.");
+    if(new Set(subjects.map(s=>s.name.trim().replace(/\s+/g," ").toUpperCase())).size!==1)blockers.push("Only duplicate subject names can be merged.");
 
     if(overlaps.rows.length && (await client.query("SELECT 1 FROM pg_constraint WHERE contype='f' AND confrelid='assessments'::regclass LIMIT 1")).rows.length)blockers.push("Assessment dependencies prevent conflict archival.");
-    if(assignments.rows.some(a=>a.assignments.length>1&&(a.assignments.length!==2||a.assignments[0].subjectId===a.assignments[1].subjectId||a.assignments[0].customName!==a.assignments[1].customName)))blockers.push("Conflicting class assignment names require review.");
     await client.query("COMMIT");
     return {
-      sourceId,targetId,revision,subjects:subjects.rows,counts:counts.rows,
+      sourceId,targetId,revision,subjects,counts:counts.rows,
       overlaps:reviewedOverlaps.filter(o=>Number(o.distinct_score_sets)>1),assignments:assignments.rows,dependencies:dependencies.rows,
-      requiresAssessmentReview:overlaps.rows.length>0,
-      requiresAssignmentReview:assignments.rows.some(row => row.assignments.length>1),
+      requiresAssessmentReview:overlaps.rows.some(o => Number(o.distinct_score_sets)>1),
+      requiresAssignmentReview:false,
       executionEnabled:blockers.length===0,blockers,
       warnings:["Historical zero marks cannot be inferred as missing.",
-        "Published report impact and live dependencies must be verified before execution.",
         "The executor revalidates the preview under database locks."]
     };
   } catch (error) {

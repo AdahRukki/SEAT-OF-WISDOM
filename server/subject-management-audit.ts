@@ -11,13 +11,13 @@ export async function auditSubjectManagement() {
       SELECT s.id, s.name,
         (SELECT count(*)::int FROM class_subjects cs WHERE cs.subject_id=s.id) AS assignments,
         (SELECT count(*)::int FROM assessments a WHERE a.subject_id=s.id) AS assessments
-      FROM subjects s ${activeFilter} ORDER BY upper(trim(s.name)), s.id
+      FROM subjects s ${activeFilter} ORDER BY upper(btrim(regexp_replace(s.name, '[[:space:]]+', ' ', 'g'))), s.id
     `);
     const duplicates = await client.query(`
-      SELECT upper(trim(name)) AS normalized_name,
+      SELECT upper(btrim(regexp_replace(name, '[[:space:]]+', ' ', 'g'))) AS normalized_name,
         array_agg(id ORDER BY id) AS subject_ids,
         array_agg(name ORDER BY id) AS names
-      FROM subjects s ${activeFilter} GROUP BY upper(trim(name)) HAVING count(*) > 1
+      FROM subjects s ${activeFilter} GROUP BY upper(btrim(regexp_replace(name, '[[:space:]]+', ' ', 'g'))) HAVING count(*) > 1
       ORDER BY normalized_name
     `);
     const classes = await client.query(`
@@ -40,18 +40,18 @@ export async function auditSubjectManagement() {
       FROM class_subjects GROUP BY class_id,subject_id HAVING count(*)>1
     `);
     const overlappingAssessments = await client.query(`
-      SELECT upper(trim(s.name)) AS normalized_name, count(*)::int AS affected_groups
+      SELECT upper(btrim(regexp_replace(s.name, '[[:space:]]+', ' ', 'g'))) AS normalized_name, count(*)::int AS affected_groups
       FROM (
-        SELECT a.student_id,a.class_id,a.term,a.session,upper(trim(s.name)) AS name,
+        SELECT a.student_id,a.class_id,a.term,a.session,upper(btrim(regexp_replace(s.name, '[[:space:]]+', ' ', 'g'))) AS name,
           count(*) AS records
         FROM assessments a JOIN subjects s ON s.id=a.subject_id
-        GROUP BY a.student_id,a.class_id,a.term,a.session,upper(trim(s.name))
+        GROUP BY a.student_id,a.class_id,a.term,a.session,upper(btrim(regexp_replace(s.name, '[[:space:]]+', ' ', 'g')))
         HAVING count(*)>1
-      ) AS assessment_groups JOIN (SELECT DISTINCT upper(trim(name)) AS name FROM subjects) s
-      ON s.name=assessment_groups.name GROUP BY upper(trim(s.name))
+      ) AS assessment_groups JOIN (SELECT DISTINCT upper(btrim(regexp_replace(name, '[[:space:]]+', ' ', 'g'))) AS name FROM subjects) s
+      ON s.name=assessment_groups.name GROUP BY upper(btrim(regexp_replace(s.name, '[[:space:]]+', ' ', 'g')))
     `);
     await client.query("COMMIT");
-    return { mergeWritesEnabled: process.env.ENABLE_SUBJECT_MERGE_WRITES === 'true', subjects: subjects.rows, duplicates: duplicates.rows, classes: classes.rows,
+    return { mergeWritesEnabled: true, subjects: subjects.rows, duplicates: duplicates.rows, classes: classes.rows,
       dependencies: dependencies.rows, duplicateAssignments: duplicateAssignments.rows,
       overlappingAssessments: overlappingAssessments.rows };
   } catch (error) {

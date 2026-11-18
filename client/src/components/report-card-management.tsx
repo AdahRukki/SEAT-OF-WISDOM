@@ -939,30 +939,17 @@ export function ReportCardManagement({
         throw new Error("Student not found");
       }
 
-      // Fetch subjects first
-      const subjects = await apiRequest(
-        `/api/admin/classes/${report.classId}/subjects`,
-      );
-
-      // Fetch assessments for each subject for this student
-      const assessmentPromises = subjects.map((subject: any) =>
-        apiRequest(
-          `/api/admin/assessments?classId=${report.classId}&subjectId=${subject.id}&term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`,
-        ),
-      );
-
-      const [assessmentArrays, attendance, behavioralRatings] = await Promise.all([
-        Promise.all(assessmentPromises),
+      const params = new URLSearchParams({classId: report.classId, term: report.term, session: report.session});
+      const [{subjects, scores: allAssessments}, attendance, behavioralRatings] = await Promise.all([
+        apiRequest(`/api/admin/report-subject-data?${params}`),
         apiRequest(
           `/api/admin/attendance/class/${report.classId}?term=${encodeURIComponent(report.term)}&session=${encodeURIComponent(report.session)}`,
         ),
         apiRequest(
           `/api/admin/non-academic-ratings/${report.classId}/${encodeURIComponent(report.term)}/${encodeURIComponent(report.session)}`,
-        ).catch(() => []) // Return empty array if no ratings found
+        ).catch(() => []),
       ]);
 
-      // Flatten assessments and filter for this student
-      const allAssessments = assessmentArrays.flat();
       const assessments = allAssessments.filter(
         (a: any) => a.studentId === report.studentId,
       );

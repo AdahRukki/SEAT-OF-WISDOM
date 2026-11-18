@@ -1,3 +1,4 @@
+import { loadPreservedSubjectReport } from "./report-subject-history";
 import { registerSubjectManagementRoutes } from "./subject-management-routes";
 import { summarizeTuition, summarizeTuitionByClass } from "../shared/tuition-summary";
 import { correctPaymentPurpose, previewPurposeCorrection, PurposeCorrectionError } from './payment-purpose-correction';
@@ -2616,6 +2617,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/admin/report-subject-data', authenticate, requireAdmin, async (req, res) => {
+    try {
+      const {classId, session, term} = req.query;
+      if (typeof classId !== 'string' || typeof session !== 'string' || typeof term !== 'string') {
+        return res.status(400).json({error: 'Class, session and term are required'});
+      }
+      const actor = (req as any).user;
+      if (!['tab_reports', 'tab_scores'].some(key => hasPermission(actor.role, actor.permissions, key))) {
+        return res.status(403).json({error: 'Report or score access required'});
+      }
+      const cls = await storage.getClassById(classId);
+      if (!cls) return res.status(404).json({error: 'Class not found'});
+      if (actor.role === 'sub-admin' && actor.schoolId !== cls.schoolId) {
+        return res.status(403).json({error: 'Access denied to this school'});
+      }
+      const preserved = await loadPreservedSubjectReport(classId, session, term);
+      if (preserved) return res.json(preserved);
+      const [subjects, scores] = await Promise.all([
+        storage.getClassSubjects(classId),
+        storage.getAssessmentsByClassTermSession(classId, term, session),
+      ]);
+      res.json({subjects, scores});
+    } catch (error) {
+      console.error('Report subject data error:', error);
+      res.status(500).json({error: 'Failed to fetch report subject data'});
+    }
+  });
+
   // Get assessments for class and subject
   app.get('/api/admin/assessments', authenticate, requirePermission('tab_scores'), async (req, res) => {
     try {
@@ -2818,6 +2847,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      const preserved = await loadPreservedSubjectReport(useClassId, session as string, term as string);
+      if (preserved) {
+        const assigned = new Set(preserved.subjects.map(subject => subject.id));
+        return res.json(preserved.scores.filter(score => score.studentId === student.id && assigned.has(score.subjectId)));
+      }
       const assessments = await storage.getStudentAssessments(
         student.id, 
         term as string, 
@@ -2985,7 +3019,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const useClassId = classId as string || student.classId;
 
       // Get all assessments for this class/term/session
-      const allAssessments = await storage.getAssessmentsByClassTermSession(
+      const allAssessments = (await loadPreservedSubjectReport(useClassId, session as string, term as string))?.scores ?? await storage.getAssessmentsByClassTermSession(
         useClassId,
         term as string,
         session as string
@@ -3042,7 +3076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "classId, term, and session are required" });
       }
 
-      const allAssessments = await storage.getAssessmentsByClassTermSession(
+      const allAssessments = (await loadPreservedSubjectReport(classId as string, session as string, term as string))?.scores ?? await storage.getAssessmentsByClassTermSession(
         classId as string,
         term as string,
         session as string

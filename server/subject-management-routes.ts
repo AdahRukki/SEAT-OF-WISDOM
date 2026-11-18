@@ -71,7 +71,6 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
     if(!actorId)return res.status(401).json({error:"Missing authenticated user"});
     if(!p.success)return res.status(400).json({error:"Invalid configuration"});
     res.setHeader("Cache-Control","no-store");
-    if(process.env.ENABLE_MASTER_SUBJECT_WRITES!=="true")return res.status(503).json({error:"Master configuration writes are disabled pending verification"});
     try{res.json(await saveMasterConfiguration({...p.data,actorId}));}
     catch(e){console.error("Master save failed",e);res.status(409).json({error:"Unable to save; reload configuration and verify subjects"});}
   });
@@ -90,7 +89,6 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
     if(!actorId)return res.status(401).json({error:"Missing authenticated user"});
     if(!p.success)return res.status(400).json({error:"Invalid sync request"});
     res.setHeader("Cache-Control","no-store");
-    if(process.env.ENABLE_MASTER_SUBJECT_WRITES!=="true")return res.status(503).json({error:"Synchronisation writes are disabled pending verification"});
     try{res.json(await synchroniseMasterSubjects({...p.data,actorId,apply:true}));}
     catch(e){console.error("Master sync failed",e);res.status(409).json({error:"Synchronisation failed or blocked; refresh preview before retrying"});}
   });
@@ -105,7 +103,6 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
     const actorId=(req as any).user?.id;
     if(typeof actorId!=="string"||!actorId)return res.status(401).json({error:"Missing authenticated user"});
     if(!p.success)return res.status(400).json({error:"Invalid merge request"});
-    if(process.env.ENABLE_SUBJECT_MERGE_WRITES!=="true")return res.status(503).json({error:"Merge execution disabled pending verification"});
     try{res.json(await executeSubjectMerge(p.data.sourceId,p.data.targetId,actorId,p.data.choices,p.data.expectedRevision));}
     catch(e){console.error("Subject merge blocked",e);res.status(409).json({error:"Merge blocked; review subject history, assignments and dependencies"});}
   });
@@ -116,7 +113,6 @@ export function registerSubjectManagementRoutes(app: Express, authenticate: Requ
     const actorId=(req as any).user?.id;
     if(typeof actorId!=="string"||!actorId)return res.status(401).json({error:"Missing authenticated user"});
     if(!id.success||!body.success)return res.status(400).json({error:"Invalid recovery request"});
-    if(process.env.ENABLE_SUBJECT_MERGE_WRITES!=="true")return res.status(409).json({error:"Recovery execution is disabled"});
     try{res.json(await recoverSubjectMerge(id.data,actorId));}
     catch(e){console.error("Subject recovery blocked",e);res.status(409).json({error:"Recovery blocked; records may have changed since merge"});}
   });
