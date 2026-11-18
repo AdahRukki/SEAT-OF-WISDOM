@@ -1,7 +1,7 @@
 /**
  * Print-only assessment sheets. No database writes.
  * Student order is supplied by the Score Tab and must never be sorted here.
- * A4 landscape; up to 40 pupils per page, repeated for each subject group.
+ * A4 landscape; primary rows paginate by height, secondary retains 40 pupils per page.
  *
  * Uses PDF's built-in Helvetica. Names containing characters outside
  * WinAnsi should use an embedded Unicode font in a future renderer upgrade.
@@ -76,7 +76,7 @@ function page(input: ScoreSheetInput, students: ScoreSheetStudent[], start: numb
    return result;
  };
  const P_LEFT = 24, P_RIGHT = PAGE_W - 24, P_TOP = 530;
- const P_SERIAL = 30, P_NAME = 236, P_ID = 110;
+ const P_SERIAL = 30, P_NAME = 218, P_ID = 145;
  const P_BASE = P_LEFT + P_SERIAL + P_NAME + P_ID;
  const P_BOTTOM = 24, P_HEAD2 = 24;
  const primaryRowHeight = (s: ScoreSheetStudent) => Math.max(24, 8 + 13 * Math.max(wrap(s.name, P_NAME - 10, 11).length, wrap(s.studentId, P_ID - 10, 11).length));
