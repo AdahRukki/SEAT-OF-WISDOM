@@ -31,7 +31,7 @@ await check({
   ...base,
   level: "primary",
   subjects: ["Mathematics", "English Studies", "Basic Science", "History"],
-}, 6, ["Mathematics", "English Studies", "Basic Science", "History", "1st CA", "2nd CA", "Exam"]);
+}, 10, ["Mathematics", "English Studies", "Basic Science", "History", "1st CA", "2nd CA", "Exam"]);
 await check({
   ...base,
   className: "JSS 2",
@@ -40,4 +40,21 @@ await check({
 }, 6, ["First Term", "Second Term", "Third Term", "Mathematics", "English"]);
 assert.throws(() => createPrintableScoreSheet({ ...base, level: "primary", subjects: [], students }), /No subjects/);
 assert.throws(() => createPrintableScoreSheet({ ...base, level: "primary", subjects: ["Math"], students: [] }), /No students/);
+for (const count of [1, 19, 26, 40, 50, 83]) {
+  for (const subjectCount of [1, 2, 3, 4, 12]) {
+    const roster = students.slice(0, count);
+    const subjects = Array.from({length: subjectCount}, (_, i) => "Subject " + (i+1));
+    const pdf = await createPrintableScoreSheet({...base, students: roster, subjects, level: "primary"}).text();
+    for (const student of roster) {
+      assert.equal(pdf.split("(" + student.studentId + ")").length-1, Math.ceil(subjectCount/3));
+    }
+    const streams = [...pdf.matchAll(/stream\n([\s\S]*?)endstream/g)].map(m=>m[1]);
+    for (const page of streams) {
+      assert.ok(page.includes("11 Tf"));
+      const vertical = [...page.matchAll(/([\d.]+) ([\d.]+) m \1 ([\d.]+) l S/g)];
+      assert.ok(vertical.every(m=>Number(m[3])>=24));
+      assert.ok(vertical.some(m=>Number(m[2])===494));
+    }
+  }
+}
 console.log("Printable score sheet PDF smoke tests passed");
