@@ -1189,6 +1189,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/admin/classes/:classId/subjects', authenticate, requireAdmin, async (req, res) => {
     try {
       const { classId } = req.params;
+      const actor = (req as any).user;
+      if (actor.role === 'sub-admin') {
+        const cls = await storage.getClassById(classId);
+        if (!cls) return res.status(404).json({ error: 'Class not found' });
+        if (!actor.schoolId || cls.schoolId !== actor.schoolId) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
+      }
       const subjects = await storage.getClassSubjects(classId);
       res.json(subjects);
     } catch (error) {
@@ -1242,10 +1250,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (subjectIds.some((id: string) => !knownSubjects.has(id))) {
         return res.status(400).json({ error: 'Unknown subject' });
       }
+      const actor = (req as any).user;
       const snapshots: Array<{ classId: string; current: string[]; target: string[]; schoolId: string | null }> = [];
       for (const classId of classIds as string[]) {
         const cls = await storage.getClassById(classId);
         if (!cls) return res.status(404).json({ error: 'Class not found' });
+        if (actor.role === 'sub-admin' && (!actor.schoolId || cls.schoolId !== actor.schoolId)) {
+          return res.status(403).json({ error: "Access denied to this school's data" });
+        }
         const current = (await storage.getClassSubjects(classId)).map(s => s.id).sort();
         const supplied = expected[classId];
         if (!Array.isArray(supplied) || supplied.some((x: unknown) => typeof x !== 'string') ||

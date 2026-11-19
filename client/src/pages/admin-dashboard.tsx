@@ -7246,8 +7246,10 @@ export default function AdminDashboard({ schoolId }: { schoolId?: string } = {})
             </DialogHeader>
             {selectedClassForDetails && (
               <BulkSubjectAssignments
+                key={selectedClassForDetails.id}
                 currentClass={selectedClassForDetails}
                 classes={classes}
+                schools={schools}
                 subjects={subjects}
                 onSaved={() => setIsSubjectManagementDialogOpen(false)}
               />
