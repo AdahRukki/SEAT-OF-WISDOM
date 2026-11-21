@@ -46,7 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Eye, Search, Loader2, Printer, FileSpreadsheet, Columns3, Wallet } from "lucide-react";
+import { Users, Eye, Search, Loader2, Printer, FileText, FileSpreadsheet, Columns3, Wallet } from "lucide-react";
 import { DuplicateReviewSheet } from "@/components/duplicate-review-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -152,10 +152,12 @@ interface LedgerEntry {
 interface SchoolClass {
   id: string;
   name: string;
+  sortOrder?: number | null;
 }
 
 interface PaymentRecord {
   id: string;
+  paymentRecordId?: string;
   amount: string;
   purpose: string | null;
   paymentMethod: string | null;
@@ -202,6 +204,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [firstPaymentOnly, setFirstPaymentOnly] = useState(false);
   const [exportingRecords, setExportingRecords] = useState(false);
+  const [exportingTuitionReport, setExportingTuitionReport] = useState(false);
   const [exportError, setExportError] = useState("");
   const [receiptChoices,setReceiptChoices] = useState<ReceiptCandidate[] | null>(null);
   const [confirmedFrom, setConfirmedFrom] = useState("");
@@ -449,6 +452,39 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
     XLSX.writeFile(wb, fname);
   };
 
+  const handleExportTuitionReport = async () => {
+    if (exportingTuitionReport || confirmationFiltered || !schoolId || !selectedTerm || !selectedSession) return;
+    setExportingTuitionReport(true);
+    setExportError("");
+    try {
+      const [{ buildTuitionBalanceReport }, data] = await Promise.all([
+        import("@/lib/tuition-balance-report"),
+        ledgerQueryOptions(schoolId, selectedTerm, selectedSession).queryFn(),
+      ]);
+      const entries = filterEntries(data.entries.filter(entry => selectedClassId === "all" || entry.classId === selectedClassId));
+      const classOrder = new Map(schoolClasses.map(cls => [cls.id, cls.sortOrder ?? Infinity]));
+      const scope = { school: schoolName || "School", term: selectedTerm, session: selectedSession };
+      const blob = await buildTuitionBalanceReport(entries, scope, classOrder);
+      if (!blob) {
+        setExportError("No students matching these filters have both a recorded payment and a verified outstanding tuition balance.");
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `tuition-balances-${[scope.school, printClassName, scope.term, scope.session].map(sanitizeFilenamePart).join("-")}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch {
+      setExportError("Could not download the tuition balance report. Please try again.");
+    } finally {
+      setExportingTuitionReport(false);
+    }
+  };
+
   const handleExportWithRecords = async () => {
     if (exportingRecords) return;
     setExportingRecords(true); setExportError("");
@@ -525,6 +561,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
 
 <PaymentDateFilters from={confirmedFrom} to={confirmedTo} firstOnly={firstPaymentOnly} onFirstChange={setFirstPaymentOnly} scopeReady={!!selectedTerm && !!selectedSession} onApply={(from, to) => { setConfirmedFrom(from); setConfirmedTo(to); setSelectedStudent(null); }} />
       {firstPaymentActive && <p className="text-sm font-medium" role="status">First payment in selected dates · {selectedTerm}, {selectedSession}</p>}
+      {exportingTuitionReport && <p className="text-sm" role="status">Preparing tuition balance report…</p>}
       {exportingRecords && <p className="text-sm" role="status">Preparing ledger and payment records…</p>}
       {exportError && <p className="text-sm text-destructive" role="alert">{exportError}</p>}
       {confirmationFiltered && <p className="text-sm text-muted-foreground" role="status">Confirmed collections · {confirmationRangeLabel(confirmedFrom, confirmedTo)} · Nigerian time. Only amounts confirmed in this range are shown; full-term balances and payment status are hidden.</p>}
@@ -543,11 +580,21 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
           </Select>
         </div>
         <Button variant="outline" className="min-h-11 sm:hidden" aria-expanded={showAdvancedFilters} aria-controls="ledger-advanced-filters" onClick={() => setShowAdvancedFilters(value => !value)}>Filters</Button>
+        <Button variant="outline" className="min-h-11 w-full sm:w-auto"
+          onClick={handleExportTuitionReport}
+          disabled={exportingTuitionReport || confirmationFiltered || !schoolId || !selectedTerm || !selectedSession}
+          data-testid="download-student-balances">
+          <FileText className="h-4 w-4 mr-2 shrink-0" />{exportingTuitionReport ? "Preparing download…" : "Download student balances (Word)"}
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="outline" className="min-h-11 ml-auto">Actions <span aria-hidden="true" className="ml-2">▾</span></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
             <DropdownMenuItem className="min-h-11" onSelect={handlePrint} disabled={!filteredLedger.length}><Printer className="h-4 w-4 mr-2" />Print</DropdownMenuItem>
             <DropdownMenuItem className="min-h-11" onSelect={handleExportExcel} disabled={!filteredLedger.length}><FileSpreadsheet className="h-4 w-4 mr-2" />Export Excel</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-11" onSelect={handleExportTuitionReport}
+              disabled={exportingTuitionReport || confirmationFiltered || !schoolId || !selectedTerm || !selectedSession}>
+              <FileText className="h-4 w-4 mr-2" />Download Tuition Balance Report (Word)
+            </DropdownMenuItem>
             <DropdownMenuItem className="min-h-11" onSelect={prepareReceipts} disabled={exportingRecords || isLoading || !filteredLedger.length}><Printer className="h-4 w-4 mr-2"/>Print / download student receipts</DropdownMenuItem>
             <DropdownMenuItem className="min-h-11" onSelect={handleExportWithRecords} disabled={exportingRecords || isLoading || !filteredLedger.length}><FileSpreadsheet className="h-4 w-4 mr-2" />{exportingRecords ? "Preparing download…" : "Ledger with payment records"}</DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -561,7 +608,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
             </DropdownMenuSub>
           </DropdownMenuContent>
         </DropdownMenu>
-        {confirmationFiltered && <p id="ledger-status-help" className="w-full text-xs text-muted-foreground">Clear confirmation dates to filter by tuition payment status.</p>}
+        {confirmationFiltered && <p id="ledger-status-help" className="w-full text-xs text-muted-foreground">Clear confirmation dates to filter by tuition payment status or download student balances.</p>}
       </div>
       <p className="text-sm text-muted-foreground sm:hidden print:hidden">{selectedTerm} · {selectedSession} · {printClassName}</p>
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 items-start sm:items-end print:hidden">
