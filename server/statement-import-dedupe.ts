@@ -38,6 +38,7 @@ export interface SkippedStatementCredit {
   amount: number;
   description: string;
   existingTransactionId: string;
+  existingSource?: string;
   reason: "exact_fingerprint" | "existing_bank_credit";
 }
 export interface StatementImportPlan {
@@ -137,6 +138,7 @@ export function planStatementImport(
       skipped.push({
         date: tx.date, amount: tx.credit, description: tx.rawDescription,
         existingTransactionId: found.id,
+        existingSource: found.source ?? "statement",
         reason: exact ? "exact_fingerprint" : "existing_bank_credit",
       });
     } else {
