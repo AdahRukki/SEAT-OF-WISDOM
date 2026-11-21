@@ -219,6 +219,15 @@ interface PaymentReconciliationProps {
 
 export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [lastImport, setLastImport] = useState<{
+    totalTransactions: number;
+    newTransactions: number;
+    duplicatesSkipped: number;
+    skipped: Array<{
+      date: string; amount: number; description: string;
+      existingTransactionId: string; reason: string;
+    }>;
+  } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStartedAt, setUploadStartedAt] = useState<number | null>(null);
   const [uploadElapsedMs, setUploadElapsedMs] = useState(0);
@@ -409,13 +418,15 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
       const summary = data.summary ?? data;
       const newTransactions = summary.newTransactions ?? 0;
       const duplicatesSkipped = summary.duplicatesSkipped ?? 0;
-      const possibleDuplicatesFlagged = summary.possibleDuplicatesFlagged ?? 0;
-      const dupSuffix = possibleDuplicatesFlagged > 0
-        ? ` ${possibleDuplicatesFlagged} flagged as possible duplicates — review in Reconcile.`
-        : "";
+      setLastImport({
+        totalTransactions: summary.totalTransactions ?? newTransactions + duplicatesSkipped,
+        newTransactions,
+        duplicatesSkipped,
+        skipped: data.skipped ?? [],
+      });
       toast({
-        title: "Statement Uploaded",
-        description: `Processed ${newTransactions} new transactions. ${duplicatesSkipped} duplicates skipped.${dupSuffix}`,
+        title: "Statement Processed",
+        description: `${newTransactions} new transactions saved. ${duplicatesSkipped} duplicates automatically skipped — not saved.`,
       });
       setSelectedFile(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/bank-statements"] });
@@ -819,6 +830,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
         });
         return;
       }
+      setLastImport(null);
       setSelectedFile(file);
     }
   };
@@ -1233,11 +1245,53 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
                   Expected columns: Date, Description, Amount (or Credit/Debit), Reference.
-                  Duplicate transactions are automatically detected and skipped.
+                  Identified duplicate credits are skipped BEFORE saving. Existing payments and matches are unchanged.
                 </AlertDescription>
               </Alert>
             </CardContent>
           </Card>
+
+          {lastImport && (
+            <Card data-testid="statement-import-results">
+              <CardHeader>
+                <CardTitle>Import Results</CardTitle>
+                <CardDescription>Skipped duplicates were not recorded in the transactions ledger.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2 flex-wrap">
+                  <Badge variant="outline">Found: {lastImport.totalTransactions}</Badge>
+                  <Badge variant="outline" className="bg-green-50 text-green-800">New: {lastImport.newTransactions}</Badge>
+                  <Badge variant="outline" className="bg-amber-50 text-amber-800">Duplicates skipped: {lastImport.duplicatesSkipped}</Badge>
+                </div>
+                {lastImport.skipped.length > 0 && (
+                  <div className="max-h-64 overflow-auto border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Duplicate bank narration</TableHead>
+                          <TableHead>Existing transaction</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {lastImport.skipped.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="whitespace-nowrap">{item.date}</TableCell>
+                            <TableCell className="whitespace-nowrap">₦{item.amount.toLocaleString()}</TableCell>
+                            <TableCell className="min-w-48 break-words">{item.description}</TableCell>
+                            <TableCell className="max-w-40 break-all text-xs">
+                              {item.existingTransactionId || "Existing fingerprint"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
