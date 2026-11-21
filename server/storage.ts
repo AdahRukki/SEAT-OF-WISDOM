@@ -1,4 +1,5 @@
 import { formatStudentName } from "../shared/student-name";
+import { planStatementImport, creditDateKey, type StatementCredit, type SkippedStatementCredit } from "./statement-import-dedupe";
 import { setHistoryContext, authorizeStudentMutation, lockHistorySchools, claimHistoryCommand, type HistoryContext, StudentHistoryError } from './student-history';
 import { summarizeTuition } from "../shared/tuition-summary";
 import { resolveHistoricalTuition } from "../shared/historical-tuition";
@@ -435,6 +436,14 @@ export interface IStorage {
 
   // Bank Statement Upload & Management
   uploadBankStatement(data: { fileName: string; fileType: string; bankFormat?: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement>;
+  importStatementWithoutDuplicates(data: {
+    fileName: string; fileType: string; bankFormat?: string;
+    uploadedBy: string; schoolId?: string; transactions: StatementCredit[];
+  }): Promise<{
+    statement: BankStatement;
+    summary: { totalTransactions: number; newTransactions: number; duplicatesSkipped: number; possibleDuplicatesFlagged: number };
+    skipped: SkippedStatementCredit[];
+  }>;
   getBankStatements(schoolId?: string): Promise<BankStatement[]>;
   updateBankStatementCounts(id: string, totalTransactions: number, newTransactions: number, duplicatesSkipped: number): Promise<BankStatement>;
 
@@ -5014,6 +5023,128 @@ export class DatabaseStorage implements IStorage {
     }));
 
     return { logs, total };
+  }
+
+  /**
+   * Import a whole statement atomically, BEFORE accepting any of its credits.
+   * Existing email/SMS/statement rows are read under a per-school lock; only
+   * reliably identified duplicates are skipped. Never deletes/updates any
+   * existing bank transaction, payment or allocation.
+   */
+  async importStatementWithoutDuplicates(data: {
+    fileName: string; fileType: string; bankFormat?: string;
+    uploadedBy: string; schoolId?: string; transactions: StatementCredit[];
+  }): Promise<{
+    statement: BankStatement;
+    summary: { totalTransactions: number; newTransactions: number; duplicatesSkipped: number; possibleDuplicatesFlagged: number };
+    skipped: SkippedStatementCredit[];
+  }> {
+    const { transactions } = data;
+    if (!transactions.length) throw new Error("Statement contains no credit transactions");
+    const dates = transactions.map(t => creditDateKey(t.date));
+    if (dates.some(d => !/^\d{4}-\d{2}-\d{2}$/.test(d))) {
+      throw new Error("Statement contains an invalid transaction date");
+    }
+    const minDate = dates.reduce((a, b) => a < b ? a : b);
+    const maxDate = dates.reduce((a, b) => a > b ? a : b);
+
+    return db.transaction(async tx => {
+      // Serializes two uploads for the same school so neither can plan
+      // against a stale snapshot. Does not change confirmed payments.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"statement-import:" + (data.schoolId ?? "unassigned")}))`);
+
+      const schoolCondition = data.schoolId
+        ? eq(bankTransactions.schoolId, data.schoolId)
+        : isNull(bankTransactions.schoolId);
+      const existing = await tx
+        .select({
+          id: bankTransactions.id,
+          schoolId: bankTransactions.schoolId,
+          transactionDate: bankTransactions.transactionDate,
+          amount: bankTransactions.amount,
+          transactionType: bankTransactions.transactionType,
+          rawDescription: bankTransactions.rawDescription,
+          fingerprint: bankTransactions.fingerprint,
+          source: bankTransactions.source,
+          smsAccount: bankTransactions.smsAccount,
+          emailFrom: bankTransactions.emailFrom,
+          emailSubject: bankTransactions.emailSubject,
+          bankFormat: bankStatements.bankFormat,
+        })
+        .from(bankTransactions)
+        .leftJoin(bankStatements, eq(bankTransactions.statementId, bankStatements.id))
+        .where(and(
+          schoolCondition,
+          eq(bankTransactions.transactionType, "credit"),
+          sql`DATE(${bankTransactions.transactionDate}) BETWEEN ${minDate}::date AND ${maxDate}::date`,
+        ));
+
+      const accounts = data.schoolId
+        ? await tx.select({
+          maskedAccountNumber: schoolBankAccounts.maskedAccountNumber,
+          bankName: schoolBankAccounts.bankName,
+        }).from(schoolBankAccounts).where(eq(schoolBankAccounts.schoolId, data.schoolId))
+        : [];
+
+      const planned = planStatementImport(transactions, existing, {
+        schoolId: data.schoolId, bankFormat: data.bankFormat, accounts,
+      });
+
+      const [statement] = await tx.insert(bankStatements).values({
+        fileName: data.fileName,
+        fileType: data.fileType,
+        bankFormat: data.bankFormat,
+        uploadedBy: data.uploadedBy,
+        schoolId: data.schoolId,
+        dateRangeStart: new Date(minDate + "T00:00:00.000Z"),
+        dateRangeEnd: new Date(maxDate + "T00:00:00.000Z"),
+        totalTransactions: transactions.length,
+        newTransactions: 0,
+        duplicatesSkipped: 0,
+        processedAt: new Date(),
+      }).returning();
+
+      let newCount = 0;
+      const skipped = [...planned.skipped];
+      for (const t of planned.imports) {
+        const [yyyy, mm, dd] = creditDateKey(t.date).split("-");
+        // DB's unique SHA constraint remains a second-line defence in case
+        // the same exact row was inserted by a concurrent email poll.
+        const [created] = await tx.insert(bankTransactions).values({
+          statementId: statement.id,
+          schoolId: data.schoolId,
+          transactionDate: new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`),
+          amount: t.credit.toString(),
+          transactionType: "credit",
+          rawDescription: t.rawDescription,
+          normalizedDescription: t.rawDescription.toLowerCase().trim(),
+          fingerprint: t.fingerprint,
+          source: "statement",
+          status: "unmatched",
+          classification: t.rawDescription.length < 20 ? "code_only" : "named",
+        }).onConflictDoNothing({ target: bankTransactions.fingerprint }).returning();
+        if (created) {
+          newCount++;
+        } else {
+          skipped.push({
+            date: t.date, amount: t.credit, description: t.rawDescription,
+            existingTransactionId: "", reason: "exact_fingerprint",
+          });
+        }
+      }
+
+      const summary = {
+        totalTransactions: transactions.length,
+        newTransactions: newCount,
+        duplicatesSkipped: skipped.length,
+        possibleDuplicatesFlagged: 0,
+      };
+      const [updated] = await tx.update(bankStatements).set({
+        newTransactions: newCount,
+        duplicatesSkipped: skipped.length,
+      }).where(eq(bankStatements.id, statement.id)).returning();
+      return { statement: updated, summary, skipped };
+    });
   }
 
   async uploadBankStatement(data: { fileName: string; fileType: string; bankFormat?: string; uploadedBy: string; schoolId?: string; dateRangeStart?: Date; dateRangeEnd?: Date; }): Promise<BankStatement> {
