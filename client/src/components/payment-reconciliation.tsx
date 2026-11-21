@@ -225,7 +225,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
     duplicatesSkipped: number;
     skipped: Array<{
       date: string; amount: number; description: string;
-      existingTransactionId: string; reason: string;
+      existingTransactionId: string; existingSource?: string; reason: string;
     }>;
   } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -1281,7 +1281,7 @@ export function PaymentReconciliation({ schoolId }: PaymentReconciliationProps) 
                             <TableCell className="whitespace-nowrap">₦{item.amount.toLocaleString()}</TableCell>
                             <TableCell className="min-w-48 break-words">{item.description}</TableCell>
                             <TableCell className="max-w-40 break-all text-xs">
-                              {item.existingTransactionId || "Existing fingerprint"}
+                              {(item.existingSource ? item.existingSource.toUpperCase() + ": " : "") + (item.existingTransactionId || "Existing fingerprint")}
                             </TableCell>
                           </TableRow>
                         ))}
