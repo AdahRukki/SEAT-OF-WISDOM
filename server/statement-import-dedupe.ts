@@ -117,9 +117,9 @@ export function planStatementImport(
   // Prefer identifying an earlier email over an older uploaded statement.
   // Preserve one-to-one matching for genuine repeated credits.
   const rank = (s: string | null) => s === "email" ? 0 : s === "sms" ? 1 : 2;
-  for (const group of existingByCredit.values()) {
-    group.sort((a, b) => rank(a.source) - rank(b.source));
-  }
+  existingByCredit.forEach((group: ExistingCredit[]) => {
+    group.sort((a: ExistingCredit, b: ExistingCredit) => rank(a.source) - rank(b.source));
+  });
 
   const imports: StatementCredit[] = [];
   const skipped: SkippedStatementCredit[] = [];
