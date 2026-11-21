@@ -5792,103 +5792,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Create bank statement record
-      const dateRangeStart = transactions.length > 0 ? new Date(transactions[0].date.split('/').reverse().join('-')) : undefined;
-      const dateRangeEnd = transactions.length > 0 ? new Date(transactions[transactions.length - 1].date.split('/').reverse().join('-')) : undefined;
-
-      const statement = await storage.uploadBankStatement({
+      // All reads, duplicate decisions and new inserts happen in one
+      // transaction, BEFORE credits are admitted to reconciliation.
+      // A matching email/old-statement row is kept; the uploaded copy is
+      // counted as skipped and NEVER added as a second bank transaction.
+      const { statement, summary, skipped } = await storage.importStatementWithoutDuplicates({
         fileName: file.originalname,
         fileType,
         bankFormat,
         uploadedBy: user.id,
         schoolId: schoolId || undefined,
-        dateRangeStart,
-        dateRangeEnd,
+        transactions,
       });
 
-      // Insert transactions with duplicate detection
-      let newCount = 0;
-      let duplicateCount = 0;
-      const insertedTxIds: string[] = [];
-
-      for (const tx of transactions) {
-        try {
-          // Parse date from DD/MM/YYYY format
-          const dateParts = tx.date.split('/');
-          const transactionDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
-
-          const created = await storage.createBankTransaction({
-            statementId: statement.id,
-            schoolId: schoolId || undefined,
-            transactionDate,
-            amount: tx.credit.toString(),
-            transactionType: "credit",
-            rawDescription: tx.rawDescription,
-            normalizedDescription: tx.rawDescription.toLowerCase().trim(),
-            fingerprint: tx.fingerprint,
-            status: "unmatched",
-            classification: tx.rawDescription.length < 20 ? "code_only" : "named",
-          });
-          insertedTxIds.push(created.id);
-          newCount++;
-        } catch (insertError: any) {
-          // Duplicate fingerprint - skip
-          if (insertError.message?.includes('unique') || insertError.code === '23505') {
-            duplicateCount++;
-            console.log('[Upload] Duplicate transaction skipped:', tx.fingerprint.substring(0, 8));
-          } else {
-            console.error('[Upload] Transaction insert error:', insertError);
-          }
-        }
-      }
-
-      // Update statement counts
-      await storage.updateBankStatementCounts(
-        statement.id,
-        transactions.length,
-        newCount,
-        duplicateCount
-      );
-
-      // Task #128: flag similar (not exact-fingerprint) duplicates among the
-      // freshly inserted rows. Same school, same calendar day, same amount,
-      // same normalized depositor as an EARLIER existing transaction.
-      let possibleDuplicateCount = 0;
+      // The skipped rows are recorded in the audit trail, NOT in
+      // bank_transactions, so they cannot be matched/confirmed twice.
+      // Logging must not make an already committed import look like a failed
+      // upload and encourage retry.
       try {
-        possibleDuplicateCount = await storage.flagBankTransactionDuplicates(insertedTxIds);
-      } catch (flagErr) {
-        console.warn('[Upload] flagBankTransactionDuplicates failed (non-fatal):', flagErr);
+        await storage.createPaymentAuditLog({
+          action: 'upload_statement',
+          entityType: 'bank_statement',
+          entityId: statement.id,
+          userId: user.id,
+          schoolId: schoolId || undefined,
+          newData: {
+            fileName: file.originalname,
+            fileType,
+            bankFormat,
+            ...summary,
+            skipped: skipped.map(row => ({
+              date: row.date,
+              amount: row.amount,
+              description: row.description,
+              existingTransactionId: row.existingTransactionId,
+              existingSource: row.existingSource,
+              reason: row.reason,
+            })),
+          },
+        });
+      } catch (auditError) {
+        console.error('[Upload] Statement imported but audit logging failed:', auditError);
       }
 
-      // Create audit log
-      await storage.createPaymentAuditLog({
-        action: 'upload_statement',
-        entityType: 'bank_statement',
-        entityId: statement.id,
-        userId: user.id,
-        schoolId: schoolId || undefined,
-        newData: {
-          fileName: file.originalname,
-          fileType,
-          totalTransactions: transactions.length,
-          newTransactions: newCount,
-          duplicatesSkipped: duplicateCount,
-          possibleDuplicatesFlagged: possibleDuplicateCount,
-        },
-      });
-
-      console.log('[Upload] Complete - Total:', transactions.length, 'New:', newCount, 'Duplicates:', duplicateCount, 'PossibleDuplicates:', possibleDuplicateCount);
-
+      console.log('[Upload] Import complete:', summary);
       res.json({
         success: true,
         statementId: statement.id,
-        message: `Successfully processed ${transactions.length} transactions`,
-        summary: {
-          totalTransactions: transactions.length,
-          newTransactions: newCount,
-          duplicatesSkipped: duplicateCount,
-          possibleDuplicatesFlagged: possibleDuplicateCount,
-        }
+        message: `Processed ${summary.totalTransactions} credits; imported ${summary.newTransactions}, skipped ${summary.duplicatesSkipped} duplicates`,
+        summary,
+        skipped,
       });
     } catch (error: any) {
       console.error("[POST /api/admin/bank-statements/upload] Error:", error);

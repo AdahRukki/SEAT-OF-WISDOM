@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import { firstPaymentStudents, inConfirmationRange, type LedgerPayment } from '../../shared/ledger-payments';
 import { buildLedgerWorkbook } from '../../client/src/lib/ledger-workbook';
+import { summarizeTuition, summarizeTuitionByClass } from '../../shared/tuition-summary';
 const from = '2026-09-20T23:00:00.000Z';
 const to = '2026-09-21T23:00:00.000Z';
 const record = (studentDbId: string, confirmedAt: string | null, overrides: Partial<LedgerPayment> = {}): LedgerPayment => ({
@@ -68,7 +69,7 @@ function ledgerHandler(storage: any, getLedgerPayments: any) {
   };
   visit(source); assert.ok(handler);
   const code = ts.transpileModule('const handler = ' + handler.getText(source) + ';', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
-  return new Function('storage','getLedgerPayments','firstPaymentStudents','inConfirmationRange','z', code + '; return handler;')(storage,getLedgerPayments,firstPaymentStudents,inConfirmationRange,z);
+  return new Function('storage','getLedgerPayments','firstPaymentStudents','inConfirmationRange','z','summarizeTuition','summarizeTuitionByClass', code + '; return handler;')(storage,getLedgerPayments,firstPaymentStudents,inConfirmationRange,z,summarizeTuition,summarizeTuitionByClass);
 }
 test('ledger API keeps bursar school scope, filters first-payment students and reconciles export amounts', async () => {
   const calls: string[] = [];
