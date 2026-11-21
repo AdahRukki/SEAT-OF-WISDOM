@@ -5826,6 +5826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               amount: row.amount,
               description: row.description,
               existingTransactionId: row.existingTransactionId,
+              existingSource: row.existingSource,
               reason: row.reason,
             })),
           },
