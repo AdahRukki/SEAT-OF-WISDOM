@@ -334,7 +334,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
       && (!confirmedFrom || value >= Date.parse(confirmedFrom + "T00:00:00+01:00"))
       && (!confirmedTo || value < Date.parse(confirmedTo + "T00:00:00+01:00") + 86400000);
   });
-  const filterEntries = (ledger: LedgerEntry[]) => {
+  const filterEntries = (ledger: LedgerEntry[], useTotalPaid = false) => {
     const searchedLedger = nameSearch.trim()
       ? (Array.isArray(ledger) ? ledger : []).filter((e) => {
           const q = nameSearch.toLowerCase();
@@ -344,16 +344,13 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         })
       : (Array.isArray(ledger) ? ledger : []);
 
-    // Payment status uses the existing tuition-paid values, independent of
-    // payments for other items. Type filter narrows to new or returning students.
-    // Both flow through to the table, count, Excel export, Print view, and
-    // admin grand total because they all read from filteredLedger.
+    // The Word report uses total payments for its payment status filter.
     return (() => {
       let result = searchedLedger.filter((e) => {
         if (e.accountActive === false) return false;
         if (confirmationFiltered) return e.paymentCount > 0;
         const assigned = e.tuitionAssigned;
-        const paid = e.tuitionPaid;
+        const paid = useTotalPaid ? e.totalPaid : e.tuitionPaid;
         if (paymentStatusFilter === "no-payment") return paid === 0;
         if (paymentStatusFilter === "partial") return e.tuitionKnown && paid > 0 && paid < assigned;
         if (paymentStatusFilter === "fully-paid") return e.tuitionKnown && assigned > 0 && paid >= assigned;
@@ -461,7 +458,7 @@ export function PaymentLedger({ schoolId, schoolName, currentTerm, currentSessio
         import("@/lib/tuition-balance-report"),
         ledgerQueryOptions(schoolId, selectedTerm, selectedSession).queryFn(),
       ]);
-      const entries = filterEntries(data.entries.filter(entry => selectedClassId === "all" || entry.classId === selectedClassId));
+      const entries = filterEntries(data.entries.filter(entry => selectedClassId === "all" || entry.classId === selectedClassId), true);
       const classOrder = new Map(schoolClasses.map(cls => [cls.id, cls.sortOrder ?? Infinity]));
       const scope = { school: schoolName || "School", term: selectedTerm, session: selectedSession };
       const blob = await buildTuitionBalanceReport(entries, scope, classOrder);

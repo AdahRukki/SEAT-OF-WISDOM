@@ -17,21 +17,23 @@ async function xml(rows: Entry[]) {
   assert.ok(blob);
   return (await JSZip.loadAsync(await blob.arrayBuffer())).file('word/document.xml')!.async('string');
 }
-test('Word report uses ledger balance, not total paid subtraction, and full names', async () => {
+test('Word report subtracts total paid from the tuition charge and uses full names', async () => {
   const text = await xml([entry()]);
   assert.match(text, /Okoro Ada Joy/);
-  assert.match(text, /30,000/);
-  assert.doesNotMatch(text, />5,000</);
-  assert.match(text, /20,000/);
+  assert.match(text, /₦5,000 outstanding/);
+  assert.match(text, />₦5,000</);
+  assert.match(text, />₦45,000</);
+  assert.match(text, />Total paid</);
+  assert.doesNotMatch(text, /30,000|20,000/);
 });
 test('excludes zero payments, fully paid, inactive and unverified rows', async () => {
   assert.equal(await buildTuitionBalanceReport([
-    entry({ totalPaid: 0 }), entry({ balance: 0 }), entry({ accountActive: false }), entry({ tuitionKnown: false }),
+    entry({ totalPaid: 0 }), entry({ totalPaid: 50000 }), entry({ totalPaid: 51000 }), entry({ accountActive: false }), entry({ tuitionKnown: false }),
   ], scope, new Map()), null);
 });
-test('includes other-fee payers without using those fees to reduce tuition', async () => {
+test('includes other-fee payers and deducts their payments', async () => {
   const text = await xml([entry({ tuitionPaid: 0, totalPaid: 5000, balance: 50000 })]);
-  assert.match(text, /50,000/);
+  assert.match(text, /₦45,000 outstanding/);
 });
 test('groups by class order and sorts student names within each class', async () => {
   const text = await xml([entry({ firstName: 'Zoe' }), entry(), entry({ classId: 'c2', className: 'Nursery', firstName: 'Ben' })]);

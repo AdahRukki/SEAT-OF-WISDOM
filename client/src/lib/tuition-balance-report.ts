@@ -17,24 +17,27 @@ export async function buildTuitionBalanceReport(
   scope: { school: string; term: string; session: string },
   classOrder: ReadonlyMap<string, number>,
 ): Promise<Blob | null> {
-  const groups = new Map<string, Entry[]>();
+  const groups = new Map<string, Array<Entry & { reportBalanceKobo: number }>>();
   let count = 0;
   let outstandingKobo = 0;
 
   for (const entry of entries) {
-    if (entry.accountActive === false || !entry.tuitionKnown || !Number.isFinite(entry.balance) || !(entry.totalPaid > 0) || !(entry.balance > 0)) continue;
+    if (entry.accountActive === false || !entry.tuitionKnown || !Number.isFinite(entry.tuitionAssigned)
+      || !Number.isFinite(entry.totalPaid) || entry.totalPaid <= 0) continue;
+    const reportBalanceKobo = Math.round(entry.tuitionAssigned * 100) - Math.round(entry.totalPaid * 100);
+    if (reportBalanceKobo <= 0) continue;
     const group = groups.get(entry.classId) ?? [];
-    group.push(entry);
+    group.push({ ...entry, reportBalanceKobo });
     groups.set(entry.classId, group);
     count++;
-    outstandingKobo += Math.round(entry.balance * 100);
+    outstandingKobo += reportBalanceKobo;
   }
   if (!count) return null;
 
   const children: Array<Paragraph | Table> = [
     new Paragraph({ children: [new TextRun({ text: "Outstanding Tuition Balances", size: 44, bold: true })], spacing: { after: 140 }, keepNext: true }),
     new Paragraph({ text: `${scope.term} ${scope.session}`, keepNext: true }),
-    new Paragraph({ text: "Students who have made a payment and still owe tuition. Other payments do not reduce tuition balances.", keepNext: true }),
+    new Paragraph({ text: "Balance equals the tuition charge minus total payments recorded for the term.", keepNext: true }),
     new Paragraph({ children: [new TextRun({ text: `${count} ${count === 1 ? "student" : "students"}  •  ${currency.format(outstandingKobo / 100)} outstanding`, bold: true })], keepNext: true }),
   ];
 
@@ -50,10 +53,10 @@ export async function buildTuitionBalanceReport(
       keepNext: true,
     }));
     const rows = [
-      ["No.", "Student name", "SOWA ID", "Tuition paid", "Balance"],
+      ["No.", "Student name", "SOWA ID", "Total paid", "Balance"],
       ...students.map((student, index) => [
         String(index + 1), formatStudentName(student), student.studentId || "",
-        currency.format(student.tuitionPaid), currency.format(student.balance),
+        currency.format(student.totalPaid), currency.format(student.reportBalanceKobo / 100),
       ]),
     ];
     children.push(new Table({
