@@ -1,7 +1,7 @@
 import { formatStudentName } from "@shared/student-name";
 import { AdminMenuButton } from "@/components/admin-sidebar";
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -61,6 +61,9 @@ import {
 import logoImage from "@assets/4oWHptM_1754171230437.gif";
 import type { User, School as SchoolType } from "@shared/schema";
 
+type TeacherDraft = { firstName: string; lastName: string; email: string; password: string; schoolId: string; assignedClassId: string };
+const emptyTeacherDraft = (schoolId = ""): TeacherDraft => ({ firstName: "", lastName: "", email: "", password: "", schoolId, assignedClassId: "" });
+
 export default function UserManagement() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
@@ -83,6 +86,11 @@ export default function UserManagement() {
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
   const [teacherForm, setTeacherForm] = useState({ firstName: "", lastName: "", email: "", password: "", schoolId: "", assignedClassId: "" });
   const [isCreateTeacherOpen, setIsCreateTeacherOpen] = useState(false);
+  const [batchTeacherRows, setBatchTeacherRows] = useState<TeacherDraft[]>([emptyTeacherDraft()]);
+  const [isBatchCreateOpen, setIsBatchCreateOpen] = useState(false);
+  const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
+  const [batchEditRows, setBatchEditRows] = useState<Array<TeacherDraft & { id: string; isActive: boolean }>>([]);
+  const [selectedBatchEditIds, setSelectedBatchEditIds] = useState<Set<string>>(new Set());
   
   // Password visibility state
   const [showPassword, setShowPassword] = useState(false);
@@ -113,6 +121,15 @@ export default function UserManagement() {
     enabled: user?.role === 'admin'
   });
 
+  const classQueries = useQueries({ queries: schools.map(school => ({
+    queryKey: ['/api/admin/classes', school.id],
+    queryFn: () => apiRequest(`/api/admin/classes?schoolId=${encodeURIComponent(school.id)}`),
+    enabled: user?.role === 'admin',
+  })) });
+  const classesBySchool = useMemo(() => Object.fromEntries(schools.map((school, index) => [
+    school.id, (classQueries[index]?.data ?? []) as Array<{ id: string; name: string }>
+  ])), [schools, classQueries]);
+
   const { data: teacherClasses = [] } = useQuery<Array<{ id: string; name: string }>>({
     queryKey: ['/api/admin/classes', teacherForm.schoolId],
     queryFn: () => apiRequest(`/api/admin/classes?schoolId=${encodeURIComponent(teacherForm.schoolId)}`),
@@ -137,6 +154,31 @@ export default function UserManagement() {
       toast({ title: 'Teacher account created' });
     },
     onError: (error: any) => toast({ title: 'Unable to create teacher', description: error.message, variant: 'destructive' }),
+  });
+
+  const batchTeacherMutation = useMutation({
+    mutationFn: (payload: { mode: 'create' | 'edit'; rows: any[] }) => apiRequest('/api/admin/teachers/batch', { method: 'POST', body: payload }),
+    onSuccess: (result: { succeeded: number; failed: number; results: Array<{ index: number; ok: boolean; error?: string }> }, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/users?adminOnly=true'] });
+      const failures = result.results.filter(row => !row.ok).map(row => `Row ${row.index + 1}: ${row.error}`).join(' · ');
+      toast({ title: `${result.succeeded} teacher account(s) saved${result.failed ? `; ${result.failed} failed` : ''}`, description: failures || undefined, variant: result.failed ? 'destructive' : 'default' });
+      if (variables.mode === 'create' && result.failed) {
+        const failedIndexes = new Set(result.results.filter(row => !row.ok).map(row => row.index));
+        setBatchTeacherRows(variables.rows.filter((_, index) => failedIndexes.has(index)));
+      }
+      if (variables.mode === 'edit') {
+        const succeededIds = new Set(result.results.filter(row => row.ok).map(row => variables.rows[row.index]?.id).filter(Boolean));
+        setSelectedBatchEditIds(prev => new Set(Array.from(prev).filter(id => !succeededIds.has(id))));
+      }
+      if (result.failed === 0) {
+        setBatchTeacherRows([emptyTeacherDraft()]);
+        setIsBatchCreateOpen(false);
+        setIsCreateTeacherOpen(false);
+        setIsBatchEditOpen(false);
+        setSelectedBatchEditIds(new Set());
+      }
+    },
+    onError: (error: any) => toast({ title: 'Batch update failed', description: error.message, variant: 'destructive' }),
   });
 
   // Create sub-admin mutation
@@ -266,6 +308,7 @@ export default function UserManagement() {
     switch (role) {
       case 'admin': return 'bg-blue-600';
       case 'sub-admin': return 'bg-purple-600';
+      case 'teacher': return 'bg-emerald-600';
       default: return 'bg-gray-600';
     }
   };
@@ -273,6 +316,21 @@ export default function UserManagement() {
   const getSchoolName = (schoolId: string) => {
     const school = schools.find(s => s.id === schoolId);
     return school?.name || 'Unknown School';
+  };
+
+  const teacherUsers = useMemo(() => users.filter(account => account.role === 'teacher'), [users]);
+  const sortedUsers = useMemo(() => [...users].sort((a, b) =>
+    (a.lastName || '').localeCompare(b.lastName || '', undefined, { sensitivity: 'base' }) ||
+    (a.firstName || '').localeCompare(b.firstName || '', undefined, { sensitivity: 'base' }) ||
+    a.email.localeCompare(b.email, undefined, { sensitivity: 'base' })
+  ), [users]);
+  const openBatchEdit = () => {
+    setBatchEditRows(teacherUsers.map(account => ({
+      id: account.id, firstName: account.firstName, lastName: account.lastName, email: account.email,
+      password: '', schoolId: account.schoolId || '', assignedClassId: account.assignedClassId || '', isActive: account.isActive ?? true,
+    })));
+    setSelectedBatchEditIds(new Set());
+    setIsBatchEditOpen(true);
   };
 
   const openEditUser = (userData: User) => {
@@ -388,7 +446,7 @@ export default function UserManagement() {
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
                 <span className="text-lg font-semibold">
-                  {users.length} Admin Accounts
+                  {users.length} Accounts · {teacherUsers.length} Teachers
                 </span>
               </div>
               <div className="flex gap-2">
@@ -497,6 +555,44 @@ export default function UserManagement() {
                       </select>
                     </div>
                     <Button disabled={createTeacherMutation.isPending || Object.values(teacherForm).some(value => !value.trim())} onClick={() => createTeacherMutation.mutate()}>{createTeacherMutation.isPending ? 'Creating...' : 'Create Teacher'}</Button>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={isBatchCreateOpen} onOpenChange={(open) => { setIsBatchCreateOpen(open); if (open) setBatchTeacherRows([emptyTeacherDraft()]); }}>
+                  <DialogTrigger asChild><Button variant="outline"><Users className="w-4 h-4 mr-2" />Batch Create Teachers</Button></DialogTrigger>
+                  <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Batch Create Teacher Accounts</DialogTitle><DialogDescription>Add several teachers at once. Each row needs its own login, school, class, and password. Failed rows will be listed so you can correct and resubmit them.</DialogDescription></DialogHeader>
+                    <div className="overflow-x-auto">
+                      <Table><TableHeader><TableRow><TableHead>First name</TableHead><TableHead>Last name</TableHead><TableHead>Email / username</TableHead><TableHead>Password</TableHead><TableHead>School</TableHead><TableHead>Assigned class</TableHead><TableHead /></TableRow></TableHeader>
+                        <TableBody>{batchTeacherRows.map((row, index) => <TableRow key={index}>
+                          <TableCell><Input value={row.firstName} onChange={e => setBatchTeacherRows(prev => prev.map((item, i) => i === index ? { ...item, firstName: e.target.value } : item))} /></TableCell>
+                          <TableCell><Input value={row.lastName} onChange={e => setBatchTeacherRows(prev => prev.map((item, i) => i === index ? { ...item, lastName: e.target.value } : item))} /></TableCell>
+                          <TableCell><Input type="email" value={row.email} onChange={e => setBatchTeacherRows(prev => prev.map((item, i) => i === index ? { ...item, email: e.target.value } : item))} /></TableCell>
+                          <TableCell><Input type="password" value={row.password} onChange={e => setBatchTeacherRows(prev => prev.map((item, i) => i === index ? { ...item, password: e.target.value } : item))} /></TableCell>
+                          <TableCell><select className="min-w-40 border rounded p-2 bg-background" value={row.schoolId} onChange={e => setBatchTeacherRows(prev => prev.map((item, i) => i === index ? { ...item, schoolId: e.target.value, assignedClassId: '' } : item))}><option value="">Select school</option>{schools.map(school => <option key={school.id} value={school.id}>{school.name}</option>)}</select></TableCell>
+                          <TableCell><select className="min-w-36 border rounded p-2 bg-background" value={row.assignedClassId} disabled={!row.schoolId} onChange={e => setBatchTeacherRows(prev => prev.map((item, i) => i === index ? { ...item, assignedClassId: e.target.value } : item))}><option value="">Select class</option>{(classesBySchool[row.schoolId] || []).map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}</select></TableCell>
+                          <TableCell><Button variant="ghost" size="sm" disabled={batchTeacherRows.length === 1} onClick={() => setBatchTeacherRows(prev => prev.filter((_, i) => i !== index))}>Remove</Button></TableCell>
+                        </TableRow>)}</TableBody>
+                      </Table>
+                    </div>
+                    <div className="flex justify-between"><Button variant="outline" disabled={batchTeacherRows.length >= 100} onClick={() => setBatchTeacherRows(prev => [...prev, emptyTeacherDraft()])}>Add row</Button>
+                      <Button disabled={batchTeacherMutation.isPending || batchTeacherRows.some(row => Object.values(row).some(value => !value.trim()))} onClick={() => batchTeacherMutation.mutate({ mode: 'create', rows: batchTeacherRows })}>{batchTeacherMutation.isPending ? 'Saving…' : `Create ${batchTeacherRows.length} account(s)`}</Button></div>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={isBatchEditOpen} onOpenChange={setIsBatchEditOpen}>
+                  <Button variant="outline" disabled={!teacherUsers.length} onClick={openBatchEdit}>Batch Edit Teachers</Button>
+                  <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Batch Edit Teacher Accounts</DialogTitle><DialogDescription>Select the teachers to save. Leave a password blank to keep it unchanged. Changes are saved row by row, with any failures reported.</DialogDescription></DialogHeader>
+                    <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Select</TableHead><TableHead>First name</TableHead><TableHead>Last name</TableHead><TableHead>Email / username</TableHead><TableHead>New password</TableHead><TableHead>School</TableHead><TableHead>Class</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                      <TableBody>{batchEditRows.map((row, index) => <TableRow key={row.id}><TableCell><input type="checkbox" checked={selectedBatchEditIds.has(row.id)} onChange={e => setSelectedBatchEditIds(prev => { const next = new Set(prev); e.target.checked ? next.add(row.id) : next.delete(row.id); return next; })} /></TableCell>
+                        {(['firstName', 'lastName', 'email', 'password'] as const).map(field => <TableCell key={field}><Input type={field === 'password' ? 'password' : field === 'email' ? 'email' : 'text'} value={row[field]} onChange={e => setBatchEditRows(prev => prev.map((item, i) => i === index ? { ...item, [field]: e.target.value } : item))} /></TableCell>)}
+                        <TableCell><select className="min-w-40 border rounded p-2 bg-background" value={row.schoolId} onChange={e => setBatchEditRows(prev => prev.map((item, i) => i === index ? { ...item, schoolId: e.target.value, assignedClassId: '' } : item))}>{schools.map(school => <option key={school.id} value={school.id}>{school.name}</option>)}</select></TableCell>
+                        <TableCell><select className="min-w-36 border rounded p-2 bg-background" value={row.assignedClassId} onChange={e => setBatchEditRows(prev => prev.map((item, i) => i === index ? { ...item, assignedClassId: e.target.value } : item))}>{(classesBySchool[row.schoolId] || []).map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}</select></TableCell>
+                        <TableCell><select className="border rounded p-2 bg-background" value={row.isActive ? 'active' : 'inactive'} onChange={e => setBatchEditRows(prev => prev.map((item, i) => i === index ? { ...item, isActive: e.target.value === 'active' } : item))}><option value="active">Active</option><option value="inactive">Inactive</option></select></TableCell>
+                      </TableRow>)}</TableBody></Table></div>
+                    <div className="flex justify-between items-center"><label className="text-sm"><input type="checkbox" checked={batchEditRows.length > 0 && selectedBatchEditIds.size === batchEditRows.length} onChange={e => setSelectedBatchEditIds(e.target.checked ? new Set(batchEditRows.map(row => row.id)) : new Set())} /> Select all ({selectedBatchEditIds.size} selected)</label>
+                      <Button disabled={!selectedBatchEditIds.size || batchTeacherMutation.isPending} onClick={() => batchTeacherMutation.mutate({ mode: 'edit', rows: batchEditRows.filter(row => selectedBatchEditIds.has(row.id)) })}>{batchTeacherMutation.isPending ? 'Saving…' : `Save selected (${selectedBatchEditIds.size})`}</Button></div>
                   </DialogContent>
                 </Dialog>
 
@@ -611,12 +707,13 @@ export default function UserManagement() {
                       <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>School</TableHead>
+                      <TableHead>Class</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((user) => (
+                    {sortedUsers.map((user) => (
                       <TableRow key={user.id}>
                         <TableCell className="font-medium">
                           {formatStudentName(user)}
@@ -630,6 +727,7 @@ export default function UserManagement() {
                         <TableCell>
                           {user.schoolId ? getSchoolName(user.schoolId) : 'All Schools'}
                         </TableCell>
+                        <TableCell>{user.role === 'teacher' ? (classesBySchool[user.schoolId || ''] || []).find(cls => cls.id === user.assignedClassId)?.name || '—' : '—'}</TableCell>
                         <TableCell>
                           <Badge variant={user.isActive ? 'default' : 'secondary'}>
                             {user.isActive ? 'Active' : 'Inactive'}

@@ -650,6 +650,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Batch create or edit teacher accounts. Each row is validated and saved
+  // independently so one bad row does not discard valid teacher changes.
+  app.post('/api/admin/teachers/batch', authenticate, requireMainAdmin, async (req, res) => {
+    const { mode, rows } = req.body ?? {};
+    if (!['create', 'edit'].includes(mode) || !Array.isArray(rows) || rows.length < 1 || rows.length > 100) {
+      return res.status(400).json({ error: 'Choose create or edit and provide 1–100 teacher rows' });
+    }
+    const results: Array<{ index: number; ok: boolean; id?: string; name?: string; error?: string }> = [];
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index] ?? {};
+      try {
+        if (mode === 'create') {
+          const data = insertUserSchema.parse({ ...row, role: 'teacher' });
+          if (!data.schoolId || !data.assignedClassId) throw new Error('School and assigned class are required');
+          const assignedClass = await storage.getClassById(data.assignedClassId);
+          if (!assignedClass || assignedClass.schoolId !== data.schoolId) throw new Error('Class does not belong to the selected school');
+          const created = await storage.createUser(data);
+          await logActivity(req, { action: 'create_user', entityType: 'user', entityId: created.id, schoolId: created.schoolId, newData: sanitizeUserForAudit(created) });
+          results.push({ index, ok: true, id: created.id, name: [created.firstName, created.lastName].filter(Boolean).join(' ') });
+        } else {
+          const existing = typeof row.id === 'string' ? await storage.getUserById(row.id) : undefined;
+          if (!existing || existing.role !== 'teacher') throw new Error('Teacher account not found');
+          const { id: _id, password, ...fields } = row;
+          const update = Object.fromEntries(Object.entries(fields).filter(([key, value]) =>
+            ['firstName', 'middleName', 'lastName', 'email', 'schoolId', 'assignedClassId', 'isActive'].includes(key) && value !== undefined
+          ));
+          const schoolId = (update.schoolId as string | undefined) ?? existing.schoolId;
+          const assignedClassId = (update.assignedClassId as string | undefined) ?? existing.assignedClassId;
+          if (!schoolId || !assignedClassId) throw new Error('School and assigned class are required');
+          const assignedClass = await storage.getClassById(assignedClassId);
+          if (!assignedClass || assignedClass.schoolId !== schoolId) throw new Error('Class does not belong to the selected school');
+          if (!Object.keys(update).length && !password) throw new Error('No changes provided');
+          const updated = Object.keys(update).length ? await storage.updateUserProfile(existing.id, update) : existing;
+          if (typeof password === 'string' && password.length) await storage.updateUserPassword(existing.id, password);
+          await logActivity(req, {
+            action: 'update_user', entityType: 'user', entityId: existing.id, schoolId: updated.schoolId,
+            previousData: sanitizeUserForAudit(existing),
+            newData: { ...sanitizeUserForAudit(updated), ...(password ? { passwordChanged: true } : {}) },
+          });
+          results.push({ index, ok: true, id: existing.id, name: [updated.firstName, updated.lastName].filter(Boolean).join(' ') });
+        }
+      } catch (error: any) {
+        results.push({ index, ok: false, error: error?.issues?.[0]?.message || error?.message || 'Unable to save this row' });
+      }
+    }
+    res.json({ results, succeeded: results.filter(row => row.ok).length, failed: results.filter(row => !row.ok).length });
+  });
+
   // Task #215: unified Activity Log viewer (read-only).
   // Main admin can query all schools; sub-admins are always scoped to theirs.
   app.get('/api/admin/activity-logs', authenticate, requirePermission('tab_activity'), async (req, res) => {
